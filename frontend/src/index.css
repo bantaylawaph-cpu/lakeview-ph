@@ -34,6 +34,9 @@ body {
   place-items: center;
   min-width: 320px;
   min-height: 100vh;
+  overflow-x: hidden;  /* ✅ Prevents side panels from extending viewport */
+  width: 100%;
+  height: 100%;
 }
 
 /* ------------------------------- */
@@ -356,7 +359,7 @@ button:focus-visible {
 /* ------------------------------- */
 /* Sidebar */
 .sidebar {
-  position: absolute;
+  position: fixed;   /* ✅ fixed so it doesn’t push page */
   top: 0;
   left: -260px;
   width: 260px;
@@ -443,87 +446,127 @@ button:focus-visible {
   border-top: 1px solid #ddd;
 }
 .sidebar.pinned {
-  position: fixed;
   left: 0 !important;
 }
 
 /* ------------------------------- */
-/* Measurement Tooltips */
-.leaflet-tooltip.glass-panel {
-  background: rgba(255, 255, 255, 0.25);
+/* Lake Info Panel (Right Sidebar) */
+.lake-info-panel {
+  position: fixed;   /* ✅ fixed instead of absolute */
+  top: 0;
+  right: -340px; /* off-screen */
+  width: 340px;
+  height: 100%;
+  background: rgba(30, 60, 120, 0.65); /* translucent blue */
   backdrop-filter: blur(12px) saturate(180%);
   -webkit-backdrop-filter: blur(12px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  border-radius: 10px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-  padding: 4px 8px;
-  font-size: 12px;
-  font-weight: 500;
-  white-space: nowrap;
-  color: #fff;
-}
-.map-light .leaflet-tooltip.glass-panel {
-  color: #222;
-}
-.map-dark .leaflet-tooltip.glass-panel {
-  color: #fff;
-}
-
-/* ------------------------------- */
-/* Measurement Labels */
-.measure-label.glass-panel {
-  background: rgba(255, 255, 255, 0.25);
-  backdrop-filter: blur(12px) saturate(180%);
-  -webkit-backdrop-filter: blur(12px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  border-radius: 10px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-  padding: 4px 8px;
-  font-size: 12px;
-  font-weight: 500;
-  white-space: nowrap;
-  text-align: center;
-  display: inline-block;
-  color: #fff;
-}
-.map-light .measure-label.glass-panel {
-  color: #222;
-}
-.map-dark .measure-label.glass-panel {
-  color: #fff;
-}
-
-/* ------------------------------- */
-/* Glass Popups */
-.leaflet-popup-content-wrapper.glass-popup,
-.glass-popup .leaflet-popup-content-wrapper {
-  background: rgba(255, 255, 255, 0.2) !important;
-  backdrop-filter: blur(12px);
-  border-radius: 10px;
-  padding: 4px 8px;
-  color: #fff;
-  border: 1px solid rgba(255,255,255,0.25);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
-  min-width: auto;
-}
-.glass-popup .leaflet-popup-content {
-  margin: 0;
-  padding: 4px 6px;
-  line-height: 1.3;
-  font-size: 13px;
-  color: inherit;
-}
-.leaflet-popup-tip {
-  background: rgba(255, 255, 255, 0.2) !important;
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255,255,255,0.25);
-}
-.popup-content {
+  border-top-left-radius: 16px;
+  border-bottom-left-radius: 16px;
+  box-shadow: -2px 0 8px rgba(0,0,0,0.3);
+  transition: right 0.35s ease, opacity 0.35s ease;
+  z-index: 1300;
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  color: #fff;
+  opacity: 0;
 }
-.popup-icon {
-  font-size: 1rem;
-  color: #90caf9;
+.lake-info-panel.open {
+  right: 0;
+  opacity: 1;
+}
+.lake-info-panel.closing {
+  right: -340px;
+  opacity: 0;
+}
+
+.lake-info-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(255,255,255,0.3);
+}
+.lake-info-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: bold;
+  color: #fff;
+}
+.close-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #fff;
+  padding: 6px;
+  border-radius: 6px;
+  transition: background 0.2s;
+}
+.close-btn:hover {
+  background: rgba(255,255,255,0.15);
+}
+
+.lake-info-image {
+  width: 100%;
+  height: 180px;
+  overflow: hidden;
+}
+.lake-info-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.lake-info-content {
+  padding: 16px;
+  font-size: 14px;
+  color: #f0f0f0;
+  overflow-y: auto;
+}
+
+/* Tabs inside Lake Info Panel */
+.lake-info-tabs {
+  display: flex;
+  border-bottom: 1px solid rgba(255,255,255,0.3);
+}
+.lake-tab {
+  flex: 1;
+  padding: 10px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: #ddd;
+  transition: background 0.2s, color 0.2s;
+}
+.lake-tab:hover {
+  background: rgba(255,255,255,0.1);
+}
+.lake-tab.active {
+  background: rgba(255,255,255,0.2);
+  color: #fff;
+  font-weight: bold;
+}
+
+/* Insight Cards */
+.insight-card {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255,255,255,0.25);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-top: 10px;
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.4;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+}
+.insight-card h4 {
+  margin: 0 0 6px 0;
+  font-size: 14px;
+  color: #ffeb3b;
+}
+
+/* Allow UI controls inside map to be clickable */
+.leaflet-control {
+  pointer-events: auto !important;
 }

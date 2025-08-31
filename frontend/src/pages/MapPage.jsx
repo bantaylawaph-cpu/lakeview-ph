@@ -15,7 +15,7 @@
 // ----------------------------------------------------
 
 import React, { useState } from "react";
-import { MapContainer, TileLayer, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, useMap, Marker, Tooltip } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 
 // Local Components
@@ -26,7 +26,8 @@ import MapControls from "../components/MapControls";
 import ScreenshotButton from "../components/ScreenshotButton";
 import Sidebar from "../components/Sidebar";
 import ContextMenu from "../components/ContextMenu";
-import MeasureTool from "../components/MeasureTool"; // Unified measuring tool
+import MeasureTool from "../components/MeasureTool"; 
+import LakeInfoPanel from "../components/LakeInfoPanel";// Unified measuring tool
 
 // ----------------------------------------------------
 // Utility: Context Menu Wrapper
@@ -48,6 +49,24 @@ function MapPage() {
   // Sidebar toggle and pinned state
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarPinned, setSidebarPinned] = useState(false);
+
+  // Sidebar toggle for lake information panel
+  const [selectedLake, setSelectedLake] = useState(null);
+  const [lakePanelOpen, setLakePanelOpen] = useState(false);
+  
+  /* Dummy Data */}
+  const lakeBunot = {
+    name: "Lake Bunot",
+    location: "San Pablo City, Laguna, Philippines",
+    area: "30.5 hectares",
+    depth: "Average 23 m",
+    description:
+      "Lake Bunot is one of the Seven Lakes of San Pablo in Laguna. It is known for its deep waters and for tilapia and fish farming. The lake is a popular local fishing and sightseeing spot.",
+    image:
+      "https://upload.wikimedia.org/wikipedia/commons/7/76/Lake_Bunot.jpg" // ✅ static picture
+  };
+
+
 
   // Measurement tool (distance / area)
   const [measureActive, setMeasureActive] = useState(false);
@@ -105,6 +124,21 @@ function MapPage() {
           attribution={attribution}
           noWrap={true}
         />
+        {/* Dummy Marker */}
+        {/* Lake Bunot marker */}
+        <Marker
+          position={[14.08111, 121.34389]}
+          eventHandlers={{
+            click: () => {
+              setSelectedLake(lakeBunot);
+              setLakePanelOpen(true);
+            }
+          }}
+        >
+          <Tooltip direction="top" offset={[0, -20]} permanent>
+            Lake Bunot
+          </Tooltip>
+        </Marker>
 
         {/* Map Utilities */}
         <CoordinatesScale /> {/* Shows coordinates + scale */}
@@ -153,7 +187,15 @@ function MapPage() {
           onFinish={() => setMeasureActive(false)}
         />
       </MapContainer>
-
+      <LakeInfoPanel
+        isOpen={lakePanelOpen}
+        onClose={() => setLakePanelOpen(false)}
+        lake={selectedLake}
+        onToggleHeatmap={(on, distanceKm) => {
+          // implement in MapPage: toggles your heatmap layer (see below)
+          togglePopulationHeatmap(on, distanceKm);
+        }}
+      />
       {/* UI Overlays outside MapContainer */}
       <SearchBar onMenuClick={() => setSidebarOpen(true)} /> {/* Top-left search */}
       <LayerControl selectedView={selectedView} setSelectedView={setSelectedView} /> {/* Basemap switcher */}
