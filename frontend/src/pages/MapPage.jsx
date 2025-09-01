@@ -53,20 +53,6 @@ function MapPage() {
   // Sidebar toggle for lake information panel
   const [selectedLake, setSelectedLake] = useState(null);
   const [lakePanelOpen, setLakePanelOpen] = useState(false);
-  
-  /* Dummy Data */}
-  const lakeBunot = {
-    name: "Lake Bunot",
-    location: "San Pablo City, Laguna, Philippines",
-    area: "30.5 hectares",
-    depth: "Average 23 m",
-    description:
-      "Lake Bunot is one of the Seven Lakes of San Pablo in Laguna. It is known for its deep waters and for tilapia and fish farming. The lake is a popular local fishing and sightseeing spot.",
-    image:
-      "https://upload.wikimedia.org/wikipedia/commons/7/76/Lake_Bunot.jpg" // ✅ static picture
-  };
-
-
 
   // Measurement tool (distance / area)
   const [measureActive, setMeasureActive] = useState(false);
@@ -90,10 +76,10 @@ function MapPage() {
     "Earthstar Geographics, GIS User Community, " +
     '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> contributors';
 
-  // Map bounds (world extent)
+  // Map bounds (Philippines extent)
   const worldBounds = [
-    [-85, -180],
-    [85, 180],
+    [4.6, 116.4],  // Southwest (Mindanao sea area)
+    [21.1, 126.6], // Northeast (Batanes area)
   ];
 
   // Theme class toggled depending on basemap
@@ -114,7 +100,7 @@ function MapPage() {
         maxBounds={worldBounds}
         maxBoundsViscosity={1.0}
         maxZoom={18}
-        minZoom={3}
+        minZoom={6}
         zoomControl={false} // We provide custom controls
         style={{ height: "100%", width: "100%" }}
       >
@@ -124,21 +110,6 @@ function MapPage() {
           attribution={attribution}
           noWrap={true}
         />
-        {/* Dummy Marker */}
-        {/* Lake Bunot marker */}
-        <Marker
-          position={[14.08111, 121.34389]}
-          eventHandlers={{
-            click: () => {
-              setSelectedLake(lakeBunot);
-              setLakePanelOpen(true);
-            }
-          }}
-        >
-          <Tooltip direction="top" offset={[0, -20]} permanent>
-            Lake Bunot
-          </Tooltip>
-        </Marker>
 
         {/* Map Utilities */}
         <CoordinatesScale /> {/* Shows coordinates + scale */}
@@ -203,5 +174,4 @@ function MapPage() {
     </div>
   );
 }
-
 export default MapPage;

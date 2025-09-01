@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Polyline, Polygon, Marker, Pane, Tooltip, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet-geometryutil";
@@ -13,7 +13,8 @@ export default function MeasureTool({ active, mode = "distance", onFinish }) {
   const [paused, setPaused] = useState(false);
   const [closed, setClosed] = useState(false);
 
-  // Reset when toggled off
+  const initialCursorRef = useRef("");
+
   useEffect(() => {
     if (!active) {
       setPoints([]);
@@ -21,13 +22,32 @@ export default function MeasureTool({ active, mode = "distance", onFinish }) {
       setPaused(false);
       setClosed(false);
     } else {
+      setPoints([]);
+      setMousePos(null);
       setPaused(false);
       setClosed(false);
-      setMousePos(null);
     }
   }, [active, mode]);
 
-  // Formatters
+  useEffect(() => {
+    if (!map) return;
+    const container = map.getContainer();
+
+    if (active && initialCursorRef.current === "") {
+      initialCursorRef.current = container.style.cursor || "";
+    }
+
+    if (active && !paused) {
+      container.style.cursor = "crosshair";
+    } else {
+      container.style.cursor = initialCursorRef.current || "";
+    }
+
+    return () => {
+      container.style.cursor = initialCursorRef.current || "";
+    };
+  }, [map, active, paused]);
+
   const formatDistance = (meters) => {
     if (unitSystem === "metric") {
       return meters >= 1000
@@ -56,7 +76,6 @@ export default function MeasureTool({ active, mode = "distance", onFinish }) {
     }
   };
 
-  // Calculations
   const totalDistance = useMemo(() => {
     if (points.length < 2) return 0;
     return points.reduce((sum, p, i) => {
@@ -68,7 +87,7 @@ export default function MeasureTool({ active, mode = "distance", onFinish }) {
   const polygonAreaM2 = useMemo(() => {
     if (mode !== "area" || points.length < 3) return 0;
     const coords = points.map((p) => [p.lng, p.lat]);
-    coords.push(coords[0]); // close polygon
+    coords.push(coords[0]);
     try {
       const polygon = turf.polygon([coords]);
       return turf.area(polygon);
@@ -86,7 +105,6 @@ export default function MeasureTool({ active, mode = "distance", onFinish }) {
     }
   }, [points]);
 
-  // Map events
   useEffect(() => {
     if (!map || !active) return;
 
@@ -100,7 +118,6 @@ export default function MeasureTool({ active, mode = "distance", onFinish }) {
           setClosed(true);
           setPaused(true);
           setMousePos(null);
-          M?.toast({ html: "Polygon closed", classes: "green darken-2" });
           return;
         }
       }
@@ -114,10 +131,6 @@ export default function MeasureTool({ active, mode = "distance", onFinish }) {
     map.on("click", handleClick);
     map.on("mousemove", handleMouseMove);
 
-    const container = map.getContainer();
-    const prevCursor = container.style.cursor;
-    container.style.cursor = paused ? "" : "crosshair";
-
     const keyHandler = (e) => {
       const k = e.key?.toLowerCase?.();
       if (k === "escape") {
@@ -126,13 +139,10 @@ export default function MeasureTool({ active, mode = "distance", onFinish }) {
         if (!paused) {
           setPaused(true);
           setMousePos(null);
-          M?.toast({ html: "Measuring paused — Esc again to clear", classes: "orange darken-2" });
         } else {
           setPoints([]);
           setMousePos(null);
-          setPaused(false);
           setClosed(false);
-          M?.toast({ html: "Measurement cleared", classes: "blue darken-2" });
           onFinish?.();
         }
       } else if (k === "u") {
@@ -145,20 +155,17 @@ export default function MeasureTool({ active, mode = "distance", onFinish }) {
       map.off("click", handleClick);
       map.off("mousemove", handleMouseMove);
       window.removeEventListener("keydown", keyHandler, true);
-      container.style.cursor = prevCursor || "";
     };
   }, [map, active, mode, paused, points]);
 
   if (!active && points.length === 0) return null;
 
-  // Preview line
   let renderPoints = points;
   if (!paused && mousePos && points.length > 0) {
     if (mode === "distance") renderPoints = [...points, mousePos];
     else if (mode === "area" && !closed) renderPoints = [...points, mousePos];
   }
 
-  // Glass label icon
   const makeGlassIcon = (text) =>
     L.divIcon({
       className: "measure-label glass-panel",
@@ -166,7 +173,6 @@ export default function MeasureTool({ active, mode = "distance", onFinish }) {
       iconSize: "auto",
     });
 
-  // Vertex marker with halo
   const vertexIcon = new L.DivIcon({
     className: "",
     html: `<div style="
@@ -206,7 +212,6 @@ export default function MeasureTool({ active, mode = "distance", onFinish }) {
             },
             contextmenu: () => {
               setPoints((prev) => prev.filter((_, idx) => idx !== i));
-              M?.toast({ html: "Point removed", classes: "red darken-2" });
             },
           }}
         >
