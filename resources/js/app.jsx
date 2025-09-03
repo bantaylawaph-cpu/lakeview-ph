@@ -1,13 +1,13 @@
-import './bootstrap';
+import './pages/bootstrap';
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import MapPage from "./MapPage";
-import AboutPage from "./AboutPage";
-import UserManual from "./UserManual";
-import SubmitFeedback from "./SubmitFeedback";
-import AboutData from "./AboutData";
-import Settings from "./Settings";
+import MapPage from "./pages/MapPage";
+import AboutPage from "./pages/AboutPage";
+import UserManual from "./pages/UserManual";
+import SubmitFeedback from "./pages/SubmitFeedback";
+import AboutData from "./pages/AboutData";
+import Settings from "./pages/Settings";
 import '../css/index.css';
 
 function App() {

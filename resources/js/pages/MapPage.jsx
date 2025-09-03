@@ -19,15 +19,15 @@ import { MapContainer, TileLayer, useMap, Marker, Tooltip } from "react-leaflet"
 import "leaflet/dist/leaflet.css";
 
 // Local Components
-import SearchBar from "./components/SearchBar";
-import LayerControl from "./components/LayerControl";
-import CoordinatesScale from "./components/CoordinatesScale";
-import MapControls from "./components/MapControls";
-import ScreenshotButton from "./components/ScreenshotButton";
-import Sidebar from "./components/Sidebar";
-import ContextMenu from "./components/ContextMenu";
-import MeasureTool from "./components/MeasureTool"; // Unified measuring tool
-import LakeInfoPanel from "./components/LakeInfoPanel";
+import SearchBar from "../components/SearchBar";
+import LayerControl from "../components/LayerControl";
+import CoordinatesScale from "../components/CoordinatesScale";
+import MapControls from "../components/MapControls";
+import ScreenshotButton from "../components/ScreenshotButton";
+import Sidebar from "../components/Sidebar";
+import ContextMenu from "../components/ContextMenu";
+import MeasureTool from "../components/MeasureTool"; // Unified measuring tool
+import LakeInfoPanel from "../components/LakeInfoPanel";
 
 // ----------------------------------------------------
 // Utility: Context Menu Wrapper
