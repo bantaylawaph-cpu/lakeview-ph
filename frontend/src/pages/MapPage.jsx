@@ -26,8 +26,8 @@ import MapControls from "../components/MapControls";
 import ScreenshotButton from "../components/ScreenshotButton";
 import Sidebar from "../components/Sidebar";
 import ContextMenu from "../components/ContextMenu";
-import MeasureTool from "../components/MeasureTool"; 
-import LakeInfoPanel from "../components/LakeInfoPanel";// Unified measuring tool
+import MeasureTool from "../components/MeasureTool"; // Unified measuring tool
+import LakeInfoPanel from "../components/LakeInfoPanel";
 
 // ----------------------------------------------------
 // Utility: Context Menu Wrapper
