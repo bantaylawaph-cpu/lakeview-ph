@@ -465,214 +465,76 @@ button:focus-visible {
   left: 0 !important;
 }
 
-/* ====================================================================== */
-/* 💧 LAKE INFO PANEL (RIGHT SIDEBAR) */
-/* ====================================================================== */
-.lake-info-panel {
-  position: fixed;   /* ✅ fixed instead of absolute */
-  top: 0;
-  right: -340px; /* off-screen */
-  width: 340px;
-  height: 100%;
-  background: rgba(30, 60, 120, 0.65); /* translucent blue */
-  backdrop-filter: blur(12px) saturate(180%);
-  -webkit-backdrop-filter: blur(12px) saturate(180%);
-  border-top-left-radius: 16px;
-  border-bottom-left-radius: 16px;
-  box-shadow: -2px 0 8px rgba(0,0,0,0.3);
-  transition: right 0.35s ease, opacity 0.35s ease;
-  z-index: 1300;
-  display: flex;
-  flex-direction: column;
-  color: #fff;
-  opacity: 0;
-}
-.lake-info-panel.open {
-  right: 0;
-  opacity: 1;
-}
-.lake-info-panel.closing {
-  right: -340px;
-  opacity: 0;
-}
-.lake-info-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 14px 18px;
-  border-bottom: 1px solid rgba(255,255,255,0.3);
-}
-.lake-info-title {
-  margin: 0;
-  font-size: 18px;
-  font-weight: bold;
-  color: #fff;
-}
-.close-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: #fff;
-  padding: 6px;
-  border-radius: 6px;
-  transition: background 0.2s;
-}
-.close-btn:hover {
-  background: rgba(255,255,255,0.15);
-}
-.lake-info-image {
-  width: 100%;
-  height: 180px;
-  overflow: hidden;
-}
-.lake-info-image img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.lake-info-content {
-  padding: 16px;
-  font-size: 14px;
-  color: #f0f0f0;
-  overflow-y: auto;
-}
-
-/* Tabs inside Lake Info Panel */
-.lake-info-tabs {
-  display: flex;
-  border-bottom: 1px solid rgba(255,255,255,0.3);
-}
-.lake-tab {
-  flex: 1;
-  padding: 10px;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  color: #ddd;
-  transition: background 0.2s, color 0.2s;
-}
-.lake-tab:hover {
-  background: rgba(255,255,255,0.1);
-}
-.lake-tab.active {
-  background: rgba(255,255,255,0.2);
-  color: #fff;
-  font-weight: bold;
-}
-
-/* Insight Cards */
-.insight-card {
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px solid rgba(255,255,255,0.25);
-  border-radius: 10px;
-  padding: 10px 12px;
-  margin-top: 10px;
-  color: #fff;
-  font-size: 13px;
-  line-height: 1.4;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.25);
-}
-.insight-card h4 {
-  margin: 0 0 6px 0;
-  font-size: 14px;
-  color: #ffeb3b;
-}
-
-/* ====================================================================== */
-/* 🌍 LEAFLET FIXES & TOOLTIP OVERRIDES */
-/* ====================================================================== */
-
-/* Allow UI controls inside map to be clickable */
-.leaflet-control {
-  pointer-events: auto !important;
-}
-
-/* Force all Leaflet tooltips to use glass-panel */
-.leaflet-tooltip,
-.leaflet-tooltip.glass-panel {
-  background: rgba(255, 255, 255, 0.25);
-  backdrop-filter: blur(12px) saturate(180%);
-  -webkit-backdrop-filter: blur(12px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  border-radius: 10px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.25);
-  font-weight: 500;
-  font-size: 13px;
-  color: #fff;
-  padding: 4px 8px;
-}
-
-/* Dark mode text fix */
-.map-light .leaflet-tooltip,
-.map-light .leaflet-tooltip.glass-panel {
-  color: #222;
-}
-
 /* Full-page background */
 .auth-page {
   height: 100vh;
   width: 100vw;
-  background-color: #a8f4f8; /* light aqua background */
+  background: #fff; /* white backdrop */
   display: flex;
   justify-content: center;
   align-items: center;
   font-family: "Arial", sans-serif;
 }
 
-/* Main box */
+/* Main card container (split layout) */
 .auth-box {
-  background-color: #0c3d72; /* deep blue */
-  color: white;
-  padding: 30px 40px;
-  border-radius: 15px;
-  width: 360px;
+  background: rgba(30, 41, 59, 1); /* translucent blue, same as sidebar */
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  color: #fff;
+  border-radius: 16px;
+  width: 800px;
+  max-width: 95%;
+  min-height: 450px;
+  display: flex;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
   position: relative;
-  text-align: center;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
 }
 
-/* Close button (top-right) */
-.auth-close {
-  position: absolute;
-  top: 12px;
-  right: 15px;
-  background: none;
-  border: none;
-  color: white;
-  font-size: 20px;
-  cursor: pointer;
+/* Left side illustration */
+.auth-illustration {
+  flex: 1;
+  background: url("/login-illustration.png") center center no-repeat;
+  background-size: cover;
+  display: none; /* hidden on mobile */
+}
+
+@media (min-width: 768px) {
+  .auth-illustration {
+    display: block;
+  }
+}
+
+/* Right side form */
+.auth-form {
+  flex: 1;
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 /* Headings */
-.auth-box h2 {
-  margin: 10px 0 5px;
-  font-size: 20px;
+.auth-form h2 {
+  margin-bottom: 10px;
+  font-size: 24px;
   font-weight: bold;
 }
+
 .auth-subtitle {
-  font-size: 12px;
+  font-size: 14px;
   margin-bottom: 20px;
   color: #e0e0e0;
 }
 
-/* Logo (Login page) */
-.auth-logo img {
-  width: 60px;
-  height: 60px;
-  margin: 10px auto;
-  display: block;
-  border-radius: 50%;
-}
-
 /* Inputs */
-.auth-box input,
-.auth-box select {
-  width: 100%;
-  padding: 10px;
-  margin: 8px 0;
-  border-radius: 8px;
+.auth-form input,
+.auth-form select {
+  width: 90%;
+  padding: 12px;
+  margin: 10px 10px 10px;
+  border-radius: 10px;
   border: none;
   outline: none;
   font-size: 14px;
@@ -682,51 +544,44 @@ button:focus-visible {
 .auth-checkbox {
   display: flex;
   align-items: center;
-  font-size: 12px;
+  font-size: 13px;
   margin: 10px 0;
   color: #e0e0e0;
-  text-align: left;
   gap: 8px;
-}
-.auth-checkbox input {
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
-  transform: scale(1.1); /* makes checkbox a bit bigger */
-}
-.auth-checkbox span {
-  line-height: 1.4;
 }
 
 /* Buttons */
 .auth-btn {
   width: 100%;
   padding: 12px;
-  background-color: #63d2e3; /* aqua button */
+  background: #63d2e3;
   border: none;
-  border-radius: 8px;
-  margin-top: 10px;
+  border-radius: 10px;
+  margin-top: 15px;
   font-weight: bold;
   color: #0c3d72;
+  font-size: 15px;
   cursor: pointer;
   transition: background 0.3s ease;
 }
+
 .auth-btn:hover {
-  background-color: #4fc4d6;
+  background: #4fc4d6;
 }
 
-/* Links and switch text */
+/* Links */
 .auth-switch {
-  margin-top: 15px;
+  margin-top: 20px;
   font-size: 13px;
-  color: #d0d0d0;
+  color: #ddd;
 }
+
 .auth-link {
   color: #63d2e3;
   font-weight: bold;
   text-decoration: none;
-  cursor: pointer;
 }
+
 .auth-link:hover {
   text-decoration: underline;
 }
@@ -735,13 +590,15 @@ button:focus-visible {
 .auth-forgot {
   text-align: right;
   font-size: 12px;
-  color: #e0e0e0;
+  color: #ccc;
   margin: 5px 0 10px;
   cursor: pointer;
 }
+
 .auth-forgot:hover {
   text-decoration: underline;
 }
+
 
 /* ====================================================================== */
 /* 🛠️ DASHBOARD LAYOUT (Minimal & Professional) */
