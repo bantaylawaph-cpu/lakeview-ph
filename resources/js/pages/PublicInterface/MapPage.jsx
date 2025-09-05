@@ -14,8 +14,8 @@
 // - Map utilities are modular components imported from /components
 // ----------------------------------------------------
 
-import React, { useState } from "react";
-import { MapContainer, TileLayer, useMap, Marker, Tooltip } from "react-leaflet";
+import React, { useState, useEffect } from "react";
+import { MapContainer, TileLayer, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 
 // Local Components
@@ -50,7 +50,7 @@ function MapPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarPinned, setSidebarPinned] = useState(false);
 
-  // Sidebar toggle for lake information panel
+  // Lake Info Panel state
   const [selectedLake, setSelectedLake] = useState(null);
   const [lakePanelOpen, setLakePanelOpen] = useState(false);
 
@@ -78,12 +78,62 @@ function MapPage() {
 
   // Map bounds (Philippines extent)
   const worldBounds = [
-    [4.6, 116.4],  // Southwest (Mindanao sea area)
+    [4.6, 116.4], // Southwest (Mindanao sea area)
     [21.1, 126.6], // Northeast (Batanes area)
   ];
 
   // Theme class toggled depending on basemap
   const themeClass = selectedView === "satellite" ? "map-dark" : "map-light";
+
+  // ----------------------------------------------------
+  // TEMP: Hotkeys (L to toggle panel, Esc to close)
+  // ----------------------------------------------------
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      const tag = (e.target?.tagName || "").toLowerCase();
+      // Avoid triggering hotkeys while typing in inputs/textareas/selects
+      if (tag === "input" || tag === "textarea" || tag === "select") return;
+
+      const k = e.key?.toLowerCase?.();
+
+      // Toggle Lake Info Panel with "L"
+      if (k === "l") {
+        setLakePanelOpen((prev) => {
+          const opening = !prev;
+          if (opening) {
+            // Prefill mock lake data on open (replace with real selection later)
+            setSelectedLake({
+              name: "Laguna de Bay",
+              location: "Luzon, Philippines",
+              area: "≈ 911 km²",
+              depth: "≈ 2.8 m (avg)",
+              description:
+                "The largest inland water body in the Philippines. Used for fisheries, recreation, and water supply.",
+              image: "/laguna-de-bay.jpg", // optional; add asset if available
+            });
+          }
+          return opening;
+        });
+      }
+
+      // Close panel with Escape
+      if (k === "escape") {
+        setLakePanelOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, []);
+
+  // ----------------------------------------------------
+  // TEMP: Population heatmap toggle (stub)
+  // ----------------------------------------------------
+  const togglePopulationHeatmap = (on, distanceKm) => {
+    // TODO: wire to real heatmap layer
+    // For now, just log the intent so you can verify the panel is calling it.
+    console.log("[Heatmap]", on ? "ON" : "OFF", "distance:", distanceKm, "km");
+  };
 
   // ----------------------------------------------------
   // Component Render
@@ -95,7 +145,7 @@ function MapPage() {
     >
       {/* Main Map Container */}
       <MapContainer
-        center={[14.3409, 121.23477]} // Default center (Laguna de Bay area?)
+        center={[14.3409, 121.23477]} // Default center (Laguna de Bay area)
         zoom={11}
         maxBounds={worldBounds}
         maxBoundsViscosity={1.0}
@@ -105,15 +155,11 @@ function MapPage() {
         style={{ height: "100%", width: "100%" }}
       >
         {/* Basemap Layer */}
-        <TileLayer
-          url={basemaps[selectedView]}
-          attribution={attribution}
-          noWrap={true}
-        />
+        <TileLayer url={basemaps[selectedView]} attribution={attribution} noWrap />
 
         {/* Map Utilities */}
         <CoordinatesScale /> {/* Shows coordinates + scale */}
-        <MapControls /> {/* Zoom, reset view, etc. */}
+        <MapControls /> {/* Zoom, geolocate/reset view */}
 
         {/* Sidebar (with minimap + links) */}
         <Sidebar
@@ -158,20 +204,22 @@ function MapPage() {
           onFinish={() => setMeasureActive(false)}
         />
       </MapContainer>
+
+      {/* Lake Info Panel (hotkey-controlled) */}
       <LakeInfoPanel
         isOpen={lakePanelOpen}
         onClose={() => setLakePanelOpen(false)}
         lake={selectedLake}
-        onToggleHeatmap={(on, distanceKm) => {
-          // implement in MapPage: toggles your heatmap layer (see below)
-          togglePopulationHeatmap(on, distanceKm);
-        }}
+        onToggleHeatmap={(on, distanceKm) => togglePopulationHeatmap(on, distanceKm)}
       />
+
       {/* UI Overlays outside MapContainer */}
       <SearchBar onMenuClick={() => setSidebarOpen(true)} /> {/* Top-left search */}
-      <LayerControl selectedView={selectedView} setSelectedView={setSelectedView} /> {/* Basemap switcher */}
+      <LayerControl selectedView={selectedView} setSelectedView={setSelectedView} />{" "}
+      {/* Basemap switcher */}
       <ScreenshotButton /> {/* Bottom-center screenshot */}
     </div>
   );
 }
+
 export default MapPage;
