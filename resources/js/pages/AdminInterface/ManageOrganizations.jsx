@@ -1,13 +1,13 @@
-// resources/js/pages/admin/ManageOrganizations.jsx
 import React from "react";
-import Table from "../../components/layouts/TableLayout";
+import { FiEdit2, FiTrash2 } from "react-icons/fi";
+import Table from "../../layouts/TableLayout";
 
 export default function ManageOrganizations() {
   const columns = [
-    { header: "Organization Name", accessor: "name" },
-    { header: "Lakes Assigned", accessor: "lakes" },
-    { header: "Contact Person", accessor: "contact" },
-    { header: "Date Created", accessor: "dateCreated" },
+    { header: "Organization Name", accessor: "name", width: "28%" },
+    { header: "Lakes Assigned", accessor: "lakes", width: "22%" },
+    { header: "Contact Person", accessor: "contact", width: "25%" },
+    { header: "Date Created", accessor: "dateCreated", width: "25%" },
   ];
 
   const organizations = [
@@ -44,8 +44,8 @@ export default function ManageOrganizations() {
   ];
 
   const actions = [
-    { label: "Edit", type: "edit", onClick: (row) => alert(`Edit ${row.name}`) },
-    { label: "Delete", type: "delete", onClick: (row) => alert(`Delete ${row.name}`) },
+    { label: "Edit", type: "edit", icon: <FiEdit2 />, onClick: (row) => alert(`Edit ${row.name}`) },
+    { label: "Delete", type: "delete", icon: <FiTrash2 />, onClick: (row) => alert(`Delete ${row.name}`) },
   ];
 
   return (

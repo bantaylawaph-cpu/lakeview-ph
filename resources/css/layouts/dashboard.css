@@ -235,3 +235,114 @@
   border-color: #3b82f6;
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
 }
+/* ===== Scrollable nav ===== */
+.dashboard-sidebar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-logo {
+  position: relative;
+}
+
+.sidebar-toggle {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: #cbd5e1;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 8px;
+}
+.sidebar-toggle:hover { background: rgba(255,255,255,0.06); }
+
+/* Make just the link list scroll while header and footer stay fixed */
+.dashboard-nav-links {
+  overflow-y: auto;
+  max-height: calc(100vh - 180px); /* adjust if header/footer height changes */
+  padding-right: 6px;              /* tiny gutter for scrollbar */
+}
+
+/* Optional scrollbar styling (WebKit) */
+.dashboard-nav-links::-webkit-scrollbar { width: 8px; }
+.dashboard-nav-links::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 8px;
+}
+.dashboard-nav-links::-webkit-scrollbar-track { background: transparent; }
+
+/* ===== Collapsed (icons-only) mode ===== */
+.dashboard-sidebar.collapsed {
+  width: 72px;                 /* compact width */
+}
+.dashboard-sidebar.collapsed .dashboard-logo-text,
+.dashboard-sidebar.collapsed .dashboard-user-info .user-name,
+.dashboard-sidebar.collapsed .dashboard-signout .signout-text,
+.dashboard-sidebar.collapsed .dashboard-nav-links li a .link-text {
+  display: none !important;    /* hide text, keep icons */
+}
+
+.dashboard-sidebar.collapsed .dashboard-logo {
+  justify-content: center;
+  gap: 0;
+}
+.dashboard-sidebar.collapsed .dashboard-logo img {
+  margin-right: 0;
+}
+
+.dashboard-sidebar.collapsed .dashboard-nav-links li a {
+  justify-content: center;
+  padding: 14px 0;
+}
+.dashboard-sidebar.collapsed .dashboard-nav-links li a svg {
+  margin-right: 0;
+}
+
+.dashboard-sidebar.collapsed .dashboard-user-section {
+  align-items: center;
+}
+/* --- Sidebar must account for its own outer margin (16px) --- */
+.dashboard-sidebar {
+  /* original styles kept */
+  display: flex;
+  flex-direction: column;
+  /* 100vh minus the vertical margins (16px top + 16px bottom) */
+  height: calc(100vh - 32px);
+}
+
+/* Top block (logo + nav) needs to flex and allow the list to scroll */
+.dashboard-sidebar > div:first-child {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0; /* 👈 allows the scrolling region to actually shrink */
+}
+
+/* Make the nav list the scroll container; remove fixed max-height */
+.dashboard-nav-links {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+/* Keep the bottom user section visible; never let it shrink away */
+.dashboard-user-section {
+  flex-shrink: 0;
+}
+
+/* Optional: improve scrollbars a bit */
+.dashboard-nav-links::-webkit-scrollbar { width: 8px; }
+.dashboard-nav-links::-webkit-scrollbar-thumb { background: #475569; border-radius: 8px; }
+.dashboard-nav-links::-webkit-scrollbar-track { background: transparent; }
+
+/* Collapsed mode still works */
+.dashboard-sidebar.collapsed { width: 72px; }
+.dashboard-sidebar.collapsed .dashboard-logo-text,
+.dashboard-sidebar.collapsed .dashboard-user-info .user-name,
+.dashboard-sidebar.collapsed .dashboard-signout .signout-text,
+.dashboard-sidebar.collapsed .dashboard-nav-links li a .link-text {
+  display: none !important;
+}
+.dashboard-sidebar.collapsed .dashboard-nav-links li a { justify-content: center; padding: 14px 0; }
+.dashboard-sidebar.collapsed .dashboard-nav-links li a svg { margin-right: 0; }
