@@ -21,6 +21,9 @@ import ContributorDashboard from "./pages/ContributorInterface/ContributorDashbo
 // 🎨 Global Styles
 import "../css/app.css";
 
+//Component
+import RequireRole from "../css/components/RequireRole.jsx";
+
 function App() {
   return (
     <Router>
@@ -36,9 +39,15 @@ function App() {
         <Route path="/register" element={<RegistrationPage />} />
 
         {/* 📊 Dashboards */}
-        <Route path="/admin-dashboard/*" element={<AdminDashboard />} />
-        <Route path="/org-dashboard/*" element={<OrgDashboard />} />
-        <Route path="/contrib-dashboard/*" element={<ContributorDashboard />} />
+        <Route path="/admin-dashboard/*" element={
+          <RequireRole allowed={['superadmin']}><AdminDashboard /></RequireRole>
+        } />
+        <Route path="/org-dashboard/*" element={
+          <RequireRole allowed={['org_admin']}><OrgDashboard /></RequireRole>
+        } />
+        <Route path="/contrib-dashboard/*" element={
+          <RequireRole allowed={['contributor']}><ContributorDashboard /></RequireRole>
+        } />
       </Routes>
     </Router>
   );
