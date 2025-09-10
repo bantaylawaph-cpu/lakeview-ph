@@ -20,12 +20,15 @@
 .wizard-step.done { background: #ecfdf5; border-color: #86efac; color: #15803d; }
 
 .dropzone {
-  border: 2px dashed #d1d5db; border-radius: 12px; padding: 24px;
-  text-align: center; background: #fff; position: relative;
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 24px;
+  text-align: center;
+  color: #475569;
+  cursor: pointer;
+  background: #fff;
 }
-.dropzone input[type="file"] {
-  position: absolute; inset: 0; opacity: 0; cursor: pointer;
-}
+.dropzone:hover { background: #f8fafc; }
 
 .file-list { margin-top: 12px; }
 .file-row {
@@ -53,6 +56,8 @@
 .wizard-nav {
   display: flex; align-items: center; gap: 10px; margin-top: 12px;
 }
+@keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+
 /* Map preview container already uses inline styles; add this only if you prefer classes */
 .map-preview {
   height: 360px;

@@ -1,113 +1,159 @@
-// resources/js/components/TableLayout.jsx
-import React, { useMemo, useState } from "react";
-import { FiChevronLeft, FiChevronRight } from "react-icons/fi";
+import React, { useEffect, useMemo, useState } from "react";
 
-export default function TableLayout({ columns, data = [], pageSize = 10, actions }) {
+/**
+ * TableLayout: resizable columns, icon-only actions, pagination
+ *
+ * Props:
+ * - tableId: string (localStorage key for widths)
+ * - columns: [{ id, header, accessor?, render?, width?, className? }]
+ * - data: array
+ * - pageSize: number
+ * - actions: [{ label, title, icon, onClick(row), type? }] // type can be 'edit' | 'delete'
+ * - resetSignal: number  // increment to reset widths
+ */
+export default function TableLayout({
+  tableId = "lv-table",
+  columns = [],
+  data = [],
+  pageSize = 10,
+  actions = [],
+  resetSignal = 0,
+}) {
+  // Normalize columns with ids
+  const normalizedCols = useMemo(() => {
+    return columns.map((c, i) => ({ id: c.id || c.accessor || `col_${i}`, ...c }));
+  }, [columns]);
+
+  // Persist column widths
+  const WID_KEY = `${tableId}::widths`;
+  const [widths, setWidths] = useState(() => {
+    try {
+      const raw = localStorage.getItem(WID_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    const init = {};
+    normalizedCols.forEach((c) => { if (c.width) init[c.id] = c.width; });
+    return init;
+  });
+  useEffect(() => {
+    try { localStorage.setItem(WID_KEY, JSON.stringify(widths)); } catch {}
+  }, [widths]);
+  useEffect(() => { setWidths({}); }, [resetSignal]);
+
+  // Resize handlers
+  const startResize = (colId, e) => {
+    e.preventDefault(); e.stopPropagation();
+    const th = e.target.closest("th");
+    const startX = e.clientX;
+    const startWidth = parseInt(getComputedStyle(th).width, 10);
+    const min = 96;
+    const onMove = (ev) => {
+      const delta = ev.clientX - startX;
+      const nw = Math.max(min, startWidth + delta);
+      setWidths((w) => ({ ...w, [colId]: nw }));
+    };
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
+
+  // Pagination
   const [page, setPage] = useState(1);
   const totalPages = Math.max(1, Math.ceil(data.length / pageSize));
-  const boundedPage = Math.min(Math.max(1, page), totalPages);
-  const startIndex = (boundedPage - 1) * pageSize;
+  const paged = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return data.slice(start, start + pageSize);
+  }, [data, page, pageSize]);
+  useEffect(() => { if (page > totalPages) setPage(totalPages); }, [totalPages, page]);
 
-  const currentData = useMemo(
-    () => data.slice(startIndex, startIndex + pageSize),
-    [data, startIndex, pageSize]
-  );
-
-  const headerText = (col) =>
-    col.label ?? (typeof col.header === "string" ? col.header : "");
+  const getCellContent = (row, col) => {
+    if (col.render) return col.render(row._raw ?? row, row);
+    if (col.accessor) return row[col.accessor];
+    return "";
+  };
 
   return (
-    <div className="table-wrapper">
-      <table className="custom-table">
-        <thead>
-          <tr>
-            {columns.map((col, idx) => (
-              <th key={idx} style={{ width: col.width }} className={col.className}>
-                {col.header}
-              </th>
-            ))}
-            {actions && <th className="th-actions">Actions</th>}
-          </tr>
-        </thead>
+    <div className="lv-table-wrap">
+      <div className="lv-table-scroller">
+        <table className="lv-table">
+          <thead>
+            <tr>
+              {normalizedCols.map((col) => (
+                <th
+                  key={col.id}
+                  className={`lv-th ${col.className || ""}`}
+                  style={{ width: widths[col.id] ? `${widths[col.id]}px` : undefined }}
+                >
+                  <div className="lv-th-inner">
+                    <span className="lv-th-label">{col.header}</span>
+                    <span className="lv-resizer" onMouseDown={(e) => startResize(col.id, e)} />
+                  </div>
+                </th>
+              ))}
+              {actions?.length ? (
+                <th className="lv-th lv-th-actions sticky-right">
+                  <div className="lv-th-inner">
+                    <span className="lv-th-label">Actions</span>
+                  </div>
+                </th>
+              ) : null}
+            </tr>
+          </thead>
 
-        <tbody>
-          {currentData.length > 0 ? (
-            currentData.map((row, rIdx) => (
-              <tr key={rIdx}>
-                {columns.map((col, cIdx) => {
-                  const value = col.render
-                    ? col.render(row)
-                    : Array.isArray(row[col.accessor])
-                      ? row[col.accessor].join(", ")
-                      : row[col.accessor];
-
-                  const text = value ?? "—";
-                  const label = headerText(col);
-
-                  return (
-                    <td
-                      key={cIdx}
-                      title={typeof text === "string" ? text : undefined}
-                      className={col.className}
-                      data-label={label}
-                    >
-                      <div className="cell-ellipsis">{text}</div>
-                    </td>
-                  );
-                })}
-
-                {actions && (
-                  <td className="table-actions" data-label="Actions">
-                    <div className="actions-row">
-                      {actions.map((action, aIdx) => (
+          <tbody>
+            {paged.map((row, idx) => (
+              <tr key={row.id ?? idx}>
+                {normalizedCols.map((col) => (
+                  <td
+                    key={col.id}
+                    className={`lv-td ${col.className || ""}`}
+                    style={{ width: widths[col.id] ? `${widths[col.id]}px` : undefined }}
+                  >
+                    {getCellContent(row, col)}
+                  </td>
+                ))}
+                {actions?.length ? (
+                  <td className="lv-td sticky-right lv-td-actions">
+                    <div className="lv-actions-inline">
+                      {actions.map((act, i) => (
                         <button
-                          key={aIdx}
-                          type="button"
-                          className={`action-btn ${action.type || "default"}`}
-                          onClick={() => action.onClick?.(row)}
-                          title={action.label}
+                          key={i}
+                          className={`icon-btn simple ${act.type === "delete" ? "danger" : act.type === "edit" ? "accent" : ""}`}
+                          title={act.title || act.label}
+                          onClick={() => act.onClick?.(row._raw ?? row)}
+                          aria-label={act.title || act.label}
                         >
-                          {action.icon && <span className="btn-icon">{action.icon}</span>}
-                          <span className="btn-text">{action.label}</span>
+                          {act.icon}
                         </button>
                       ))}
                     </div>
                   </td>
-                )}
+                ) : null}
               </tr>
-            ))
-          ) : (
-            <tr>
-              <td colSpan={columns.length + (actions ? 1 : 0)} className="no-data">
-                No records found
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+            ))}
+
+            {!paged.length && (
+              <tr>
+                <td className="lv-empty" colSpan={normalizedCols.length + (actions?.length ? 1 : 0)}>
+                  No records found.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
 
       {/* Pagination */}
-      <div className="pagination">
-        <button
-          type="button"
-          className="page-btn"
-          disabled={boundedPage === 1}
-          onClick={() => setPage((p) => Math.max(1, p - 1))}
-        >
-          <FiChevronLeft />
-          <span className="hide-xs">Prev</span>
+      <div className="lv-table-pager">
+        <button className="pill-btn ghost sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+          ‹ Prev
         </button>
-
-        <span className="page-indicator">Page {boundedPage} of {totalPages}</span>
-
-        <button
-          type="button"
-          className="page-btn"
-          disabled={boundedPage === totalPages}
-          onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-        >
-          <span className="hide-xs">Next</span>
-          <FiChevronRight />
+        <span className="pager-text">Page {page} of {totalPages}</span>
+        <button className="pill-btn ghost sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+          Next ›
         </button>
       </div>
     </div>
