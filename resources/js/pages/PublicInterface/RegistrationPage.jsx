@@ -91,8 +91,8 @@ export default function RegistrationPage() {
 
           <p className="auth-switch">
             Already have an account?{" "}
-            <Link to="/signin" className="auth-link">
-              Sign In
+            <Link to="/login" className="auth-link">
+              Log In
             </Link>
           </p>
           <div className="auth-back-row">

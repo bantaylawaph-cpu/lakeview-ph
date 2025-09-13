@@ -21,6 +21,6 @@ export default function RequireRole({ allowed = [], children }) {
   }, []);
 
   if (checking) return null; // or spinner
-  if (!ok) { nav('/signin'); return null; }
+  if (!ok) { nav('/login'); return null; }
   return children;
 }

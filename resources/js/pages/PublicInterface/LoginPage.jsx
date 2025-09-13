@@ -83,7 +83,7 @@ export default function LoginPage() {
             <div className="auth-forgot">Forgot your password?</div>
 
             <button type="submit" className="auth-btn" disabled={loading}>
-              {loading ? "Signing in..." : "LOG IN"}
+              {loading ? "Logging in..." : "LOG IN"}
             </button>
           </form>
 

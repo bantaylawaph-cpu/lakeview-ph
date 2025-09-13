@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 
 // 🌍 Public Pages
 import AboutData from  "./pages/PublicInterface/AboutData";
@@ -35,7 +35,8 @@ function App() {
         <Route path="/feedback" element={<SubmitFeedback />} />
         <Route path="/data" element={<AboutData />} />
         <Route path="/settings" element={<Settings />} />
-        <Route path="/signin" element={<LoginPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/signin" element={<Navigate to="/login" replace />} />
         <Route path="/register" element={<RegistrationPage />} />
 
         {/* 📊 Dashboards */}

@@ -61,7 +61,7 @@ function MapPage() {
   const [measureActive, setMeasureActive] = useState(false);
   const [measureMode, setMeasureMode] = useState("distance"); // "distance" | "area"
 
-  // Determine if a signed-in user with a dashboard is present
+  // Determine if a logged-in user with a dashboard is present
   const [userRole, setUserRole] = useState(null);
   const navigate = useNavigate();
   useEffect(() => {
@@ -243,7 +243,7 @@ function MapPage() {
       {/* Basemap switcher */}
       <ScreenshotButton /> {/* Bottom-center screenshot */}
 
-      {/* Back to Dashboard button for signed-in roles */}
+      {/* Back to Dashboard button for logged-in roles */}
       {userRole && (
         <button
           className="map-back-btn"

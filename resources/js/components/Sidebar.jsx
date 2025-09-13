@@ -76,7 +76,7 @@ function Sidebar({ isOpen, onClose, pinned, setPinned }) {
     (async () => {
       try {
         const u = await api('/auth/me');
-        if (mounted) setMe(u);
+        if (mounted) setMe(u && (u.id ? u : null));
       } catch {
         if (mounted) setMe(null);
       }
@@ -169,9 +169,9 @@ function Sidebar({ isOpen, onClose, pinned, setPinned }) {
             <span>Settings</span>
           </Link>
         </li>
-        {me ? (
+        {me?.id ? (
           <>
-            <li aria-label="Signed-in user" title={me.name}>
+            <li aria-label="Logged-in user" title={me.name}>
               <div className="sidebar-row" style={{ cursor: 'default' }}>
                 <FiUser className="sidebar-icon" />
                 <span>{me.name}</span>
@@ -183,8 +183,9 @@ function Sidebar({ isOpen, onClose, pinned, setPinned }) {
                 onClick={async () => {
                   try { await api('/auth/logout', { method: 'POST' }); } catch {}
                   clearToken();
+                  setMe(null);
                   if (!pinned) onClose?.();
-                  navigate('/signin');
+                  navigate('/login');
                 }}
               >
                 <FiLogOut className="sidebar-icon" />
@@ -194,9 +195,9 @@ function Sidebar({ isOpen, onClose, pinned, setPinned }) {
           </>
         ) : (
           <li>
-            <Link className="sidebar-row" to="/signin" onClick={!pinned ? onClose : undefined}>
+            <Link className="sidebar-row" to="/login" onClick={!pinned ? onClose : undefined}>
               <FiLogIn className="sidebar-icon" />
-              <span>Sign-in</span>
+              <span>Log in</span>
             </Link>
           </li>
         )}
