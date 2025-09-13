@@ -5,9 +5,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 // 🌍 Public Pages
 import AboutData from  "./pages/PublicInterface/AboutData";
 import AboutPage from "./pages/PublicInterface/AboutPage";
-import LoginPage from "./pages/PublicInterface/LoginPage";
 import MapPage from "./pages/PublicInterface/MapPage";
-import RegistrationPage from "./pages/PublicInterface/RegistrationPage";
 import Settings from "./pages/PublicInterface/Settings.jsx";
 import SubmitFeedback from "./pages/PublicInterface/SubmitFeedback.jsx";
 import UserManual from "./pages/PublicInterface/UserManual";
@@ -35,9 +33,9 @@ function App() {
         <Route path="/feedback" element={<SubmitFeedback />} />
         <Route path="/data" element={<AboutData />} />
         <Route path="/settings" element={<Settings />} />
-        <Route path="/login" element={<LoginPage />} />
+        <Route path="/login" element={<MapPage />} />
         <Route path="/signin" element={<Navigate to="/login" replace />} />
-        <Route path="/register" element={<RegistrationPage />} />
+        <Route path="/register" element={<MapPage />} />
 
         {/* 📊 Dashboards */}
         <Route path="/admin-dashboard/*" element={

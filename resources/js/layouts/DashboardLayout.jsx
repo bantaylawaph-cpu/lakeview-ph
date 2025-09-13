@@ -72,7 +72,7 @@ export default function DashboardLayout({ links, user, children }) {
             onClick={async () => {
               try { await api('/auth/logout', { method: 'POST' }); } catch {}
               clearToken();
-              navigate('/login');
+              navigate('/');
             }}
           >
             <FiLogOut size={18} /> <span className="signout-text">Sign out</span>

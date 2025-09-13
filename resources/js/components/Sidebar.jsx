@@ -67,7 +67,7 @@ function MiniMapWrapper() {
   return <MiniMap parentMap={map} />;
 }
 
-function Sidebar({ isOpen, onClose, pinned, setPinned }) {
+function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth }) {
   const [me, setMe] = useState(null);
   const navigate = useNavigate();
 
@@ -185,7 +185,7 @@ function Sidebar({ isOpen, onClose, pinned, setPinned }) {
                   clearToken();
                   setMe(null);
                   if (!pinned) onClose?.();
-                  navigate('/login');
+                  navigate('/');
                 }}
               >
                 <FiLogOut className="sidebar-icon" />
@@ -195,10 +195,23 @@ function Sidebar({ isOpen, onClose, pinned, setPinned }) {
           </>
         ) : (
           <li>
-            <Link className="sidebar-row" to="/login" onClick={!pinned ? onClose : undefined}>
-              <FiLogIn className="sidebar-icon" />
-              <span>Log in</span>
-            </Link>
+            {onOpenAuth ? (
+              <button
+                className="sidebar-row"
+                onClick={() => {
+                  onOpenAuth("login");
+                  if (!pinned) onClose?.();
+                }}
+              >
+                <FiLogIn className="sidebar-icon" />
+                <span>Log in</span>
+              </button>
+            ) : (
+              <Link className="sidebar-row" to="/login" onClick={!pinned ? onClose : undefined}>
+                <FiLogIn className="sidebar-icon" />
+                <span>Log in</span>
+              </Link>
+            )}
           </li>
         )}
       </ul>

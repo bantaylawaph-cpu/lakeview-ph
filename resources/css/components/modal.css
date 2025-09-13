@@ -19,6 +19,15 @@
   overflow: hidden;
 }
 
+/* Variants for embedding custom UIs (like auth card) */
+.lv-modal-card.no-bg {
+  background: transparent;
+  box-shadow: none;
+}
+.lv-modal-card.no-padding .lv-modal-body {
+  padding: 0;
+}
+
 .lv-modal-header {
   display: flex;
   align-items: center;

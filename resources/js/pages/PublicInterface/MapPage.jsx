@@ -15,7 +15,7 @@
 // ----------------------------------------------------
 
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { FiArrowLeft } from "react-icons/fi";
 import { api } from "../../lib/api";
 import { MapContainer, TileLayer, useMap } from "react-leaflet";
@@ -31,6 +31,7 @@ import Sidebar from "../../components/Sidebar";
 import ContextMenu from "../../components/ContextMenu";
 import MeasureTool from "../../components/MeasureTool"; // Unified measuring tool
 import LakeInfoPanel from "../../components/LakeInfoPanel";
+import AuthModal from "../../components/AuthModal";
 
 // ----------------------------------------------------
 // Utility: Context Menu Wrapper
@@ -64,6 +65,7 @@ function MapPage() {
   // Determine if a logged-in user with a dashboard is present
   const [userRole, setUserRole] = useState(null);
   const navigate = useNavigate();
+  const location = useLocation();
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -81,6 +83,22 @@ function MapPage() {
     })();
     return () => { mounted = false; };
   }, []);
+
+  // Auth modal visibility and mode, controlled by URL path or sidebar action
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState("login");
+
+  // Open modal if route is /login or /register
+  useEffect(() => {
+    const p = location.pathname;
+    if (p === "/login") {
+      setAuthMode("login");
+      setAuthOpen(true);
+    } else if (p === "/register") {
+      setAuthMode("register");
+      setAuthOpen(true);
+    }
+  }, [location.pathname]);
 
   // ----------------------------------------------------
   // Map Layer Configurations
@@ -191,6 +209,10 @@ function MapPage() {
           onClose={() => setSidebarOpen(false)}
           pinned={sidebarPinned}
           setPinned={setSidebarPinned}
+          onOpenAuth={(m) => {
+            setAuthMode(m || "login");
+            setAuthOpen(true);
+          }}
         />
 
         {/* Context Menu (right-click actions) */}
@@ -264,6 +286,19 @@ function MapPage() {
           <FiArrowLeft />
         </button>
       )}
+
+      {/* Auth Modal */}
+      <AuthModal
+        open={authOpen}
+        mode={authMode}
+        onClose={() => {
+          setAuthOpen(false);
+          // If modal was opened via /login or /register, navigate back to /
+          if (location.pathname === "/login" || location.pathname === "/register") {
+            navigate("/", { replace: true });
+          }
+        }}
+      />
     </div>
   );
 }

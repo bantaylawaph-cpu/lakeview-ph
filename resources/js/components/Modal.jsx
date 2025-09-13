@@ -10,20 +10,26 @@ export default function Modal({
   footer,
   width = 720,
   ariaLabel = "Dialog",
+  header = true,
+  cardClassName = "",
+  bodyClassName = "",
+  style = {},
 }) {
   if (!open) return null;
 
   return createPortal(
     <div className="lv-modal-overlay" role="dialog" aria-modal="true" aria-label={ariaLabel}>
-      <div className="lv-modal-card" style={{ width, maxWidth: "95vw" }}>
-        <div className="lv-modal-header">
-          <h3 className="lv-modal-title">{title}</h3>
-          <button className="lv-icon-btn" onClick={onClose} aria-label="Close dialog">
-            <FiX />
-          </button>
-        </div>
+      <div className={`lv-modal-card ${cardClassName}`} style={{ width, maxWidth: "95vw", ...style }}>
+        {header && (
+          <div className="lv-modal-header">
+            <h3 className="lv-modal-title">{title}</h3>
+            <button className="lv-icon-btn" onClick={onClose} aria-label="Close dialog">
+              <FiX />
+            </button>
+          </div>
+        )}
 
-        <div className="lv-modal-body">{children}</div>
+        <div className={`lv-modal-body ${bodyClassName}`}>{children}</div>
 
         {footer && <div className="lv-modal-footer">{footer}</div>}
       </div>
