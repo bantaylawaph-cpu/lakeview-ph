@@ -24,6 +24,10 @@
   border-radius: 12px;
 }
 
+/* Fallback styling for simple tables that only set .lv-table on <table> */
+.lv-table thead th { background: #f8fafc; font-weight: 600; padding: 10px 12px; border-bottom: 1px solid #eef2f7; color: #111827; }
+.lv-table tbody td { padding: 10px 12px; border-bottom: 1px solid #eef2f7; color: #111827; }
+
 .lv-th, .lv-td {
   padding: 10px 12px;
   border-bottom: 1px solid #eef2f7;

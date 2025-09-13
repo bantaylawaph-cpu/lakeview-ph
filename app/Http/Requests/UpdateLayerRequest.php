@@ -24,9 +24,6 @@ class UpdateLayerRequest extends FormRequest
             'version'     => 'sometimes|integer|min:1',
             'notes'       => 'sometimes|nullable|string',
             'source_type' => 'sometimes|string|in:geojson,json,shp,kml,gpkg,wkt',
-            'file_hash'   => 'sometimes|nullable|string|max:128',
-            'file_size_bytes' => 'sometimes|nullable|integer|min:0',
-            'metadata'    => 'sometimes|array',
 
             // Optional geometry replacement
             'geom_geojson' => 'sometimes|string',

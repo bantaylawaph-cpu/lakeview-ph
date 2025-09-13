@@ -1,7 +1,8 @@
 // resources/js/pages/AdminInterface/AdminWaterCat.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { FiEye, FiEdit2, FiTrash2, FiMap, FiLayers } from "react-icons/fi";
-import { MapContainer, TileLayer, GeoJSON } from "react-leaflet";
+import { GeoJSON } from "react-leaflet";
+import AppMap from "../../components/AppMap";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -45,8 +46,7 @@ export default function AdminWaterCat() {
   const [showOutflow, setShowOutflow] = useState(false);
   const [lakeFeature, setLakeFeature] = useState(null);
   const [lakeBounds, setLakeBounds] = useState(null);
-  const defaultCenter = [12.8797, 121.7740];
-  const defaultZoom = 6;
+  // Initial view handled by AppMap (Philippines extent)
 
   /* ----------------------------- Modals ----------------------------- */
   const [formOpen, setFormOpen] = useState(false);
@@ -58,6 +58,7 @@ export default function AdminWaterCat() {
   /* ----------------------------- Columns ----------------------------- */
   const baseColumns = useMemo(() => ([
     { id: "name", header: "Name", accessor: "name" },
+    { id: "alt_name", header: "Other Name", accessor: "alt_name", width: 180, render: (r) => (r.alt_name ? <em>{r.alt_name}</em> : "") },
     { id: "region", header: "Region", accessor: "region", width: 140, className: "col-md-hide" },
     { id: "province", header: "Province", accessor: "province", width: 160, className: "col-md-hide" },
     { id: "municipality", header: "Municipality", accessor: "municipality", width: 180, className: "col-sm-hide" },
@@ -65,14 +66,13 @@ export default function AdminWaterCat() {
     // Optional/toggleable:
     { id: "elevation_m", header: "Elevation (m)", accessor: "elevation_m", width: 150, className: "col-md-hide", _optional: true },
     { id: "mean_depth_m", header: "Mean Depth (m)", accessor: "mean_depth_m", width: 160, className: "col-md-hide", _optional: true },
-    { id: "max_depth_m", header: "Max Depth (m)", accessor: "max_depth_m", width: 160, className: "col-md-hide", _optional: true },
     { id: "watershed", header: "Watershed", accessor: "watershed", width: 220, _optional: true },
     { id: "created_at", header: "Created", accessor: "created_at", width: 140, className: "col-md-hide", _optional: true },
     { id: "updated_at", header: "Updated", accessor: "updated_at", width: 140, className: "col-sm-hide", _optional: true },
   ]), []);
 
   const defaultsVisible = useMemo(() => {
-    const on = { name: true, region: true, province: true, municipality: true, surface_area_km2: true };
+    const on = { name: true, alt_name: true, region: true, province: true, municipality: true, surface_area_km2: true };
     baseColumns.forEach(c => { if (!(c.id in on)) on[c.id] = false; });
     return on;
   }, [baseColumns]);
@@ -117,13 +117,14 @@ export default function AdminWaterCat() {
     rows.map((r) => ({
       id: r.id,
       name: r.name,
+      alt_name: r.alt_name ?? "",
       region: r.region ?? "",
       province: r.province ?? "",
       municipality: r.municipality ?? "",
       surface_area_km2: fmtNum(r.surface_area_km2, 2),
       elevation_m: fmtNum(r.elevation_m, 1),
       mean_depth_m: fmtNum(r.mean_depth_m, 1),
-      max_depth_m: fmtNum(r.max_depth_m, 1),
+      // max_depth_m removed
       watershed: r.watershed?.name ?? "",
       created_at: fmtDt(r.created_at),
       updated_at: fmtDt(r.updated_at),
@@ -161,10 +162,9 @@ export default function AdminWaterCat() {
     const [minArea, maxArea]   = adv.area_km2    ?? [null, null];
     const [minEl,   maxEl]     = adv.elevation_m ?? [null, null];
     const [minMd,   maxMd]     = adv.mean_depth_m ?? [null, null];
-    const [minMx,   maxMx]     = adv.max_depth_m ?? [null, null];
 
     const filtered = allLakes.filter((row) => {
-      const hay = `${row.name} ${row.location} ${row.watershed}`.toLowerCase();
+      const hay = `${row.name} ${row.alt_name || ""} ${row.location} ${row.watershed}`.toLowerCase();
 
       if (q && !hay.includes(q)) return false;
       if (reg  && (row.region || "").toLowerCase()       !== reg) return false;
@@ -183,9 +183,7 @@ export default function AdminWaterCat() {
       if (minMd != null && !(md != null && Number(md) >= Number(minMd))) return false;
       if (maxMd != null && !(md != null && Number(md) <= Number(maxMd))) return false;
 
-      const mx = row._raw?.max_depth_m ?? null;
-      if (minMx != null && !(mx != null && Number(mx) >= Number(minMx))) return false;
-      if (maxMx != null && !(mx != null && Number(mx) <= Number(maxMx))) return false;
+      // max_depth_m removed
 
       return true;
     });
@@ -228,8 +226,8 @@ export default function AdminWaterCat() {
       surface_area_km2: r._raw?.surface_area_km2 ?? r.surface_area_km2 ?? "",
       elevation_m: r._raw?.elevation_m ?? r.elevation_m ?? "",
       mean_depth_m: r._raw?.mean_depth_m ?? r.mean_depth_m ?? "",
-      max_depth_m: r._raw?.max_depth_m ?? r.max_depth_m ?? "",
-      alt_name: r._raw?.alt_name ?? "",
+      // max_depth_m removed
+      alt_name: r.alt_name ?? "",
     });
     setFormOpen(true);
   };
@@ -244,7 +242,7 @@ export default function AdminWaterCat() {
   /* ----------------------------- Save/Delete ----------------------------- */
   const parsePayload = (src) => {
     const nx = { ...src };
-    ["surface_area_km2","elevation_m","mean_depth_m","max_depth_m","watershed_id"].forEach((k) => {
+    ["surface_area_km2","elevation_m","mean_depth_m","watershed_id"].forEach((k) => {
       nx[k] = nx[k] === "" || nx[k] === null || nx[k] === undefined ? null : Number(nx[k]);
       if (Number.isNaN(nx[k])) nx[k] = null;
     });
@@ -425,17 +423,11 @@ export default function AdminWaterCat() {
         </div>
 
         <div style={{ height: 500, borderRadius: 12, overflow: "hidden" }}>
-          <MapContainer
-            center={defaultCenter}
-            zoom={defaultZoom}
+          <AppMap
+            view="osm"
             style={{ height: "100%", width: "100%" }}
             whenCreated={(map) => (mapRef.current = map)}
-            scrollWheelZoom
           >
-            <TileLayer
-              attribution="&copy; OpenStreetMap contributors"
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
             {showLakePoly && lakeFeature ? (
               <GeoJSON
                 key={JSON.stringify(lakeFeature).length}
@@ -443,7 +435,7 @@ export default function AdminWaterCat() {
                 style={{ weight: 2, fillOpacity: 0.1 }}
               />
             ) : null}
-          </MapContainer>
+          </AppMap>
         </div>
       </div>
 

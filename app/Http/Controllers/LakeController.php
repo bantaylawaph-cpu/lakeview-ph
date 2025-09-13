@@ -12,16 +12,19 @@ class LakeController extends Controller
     {
         return Lake::select(
             'id','watershed_id','name','alt_name','region','province','municipality',
-            'surface_area_km2','elevation_m','mean_depth_m','max_depth_m','created_at','updated_at'
+            'surface_area_km2','elevation_m','mean_depth_m','created_at','updated_at'
         )->with('watershed:id,name')->orderBy('name')->get();
     }
 
     public function show(Lake $lake)
     {
-        // include GeoJSON only here (optional)
+        // include GeoJSON from the active layer (default geometry)
         $lake->load('watershed:id,name');
-        $geo = \DB::table('lakes')->selectRaw('ST_AsGeoJSON(geom) as geom_geojson')->where('id',$lake->id)->first();
-        return array_merge($lake->toArray(), ['geom_geojson' => $geo->geom_geojson ?? null]);
+        $active = $lake->activeLayer()
+            ->select('id')
+            ->selectRaw('ST_AsGeoJSON(geom) as geom_geojson')
+            ->first();
+        return array_merge($lake->toArray(), ['geom_geojson' => $active->geom_geojson ?? null]);
     }
 
     public function store(Request $req)
@@ -36,7 +39,6 @@ class LakeController extends Controller
             'surface_area_km2' => ['nullable','numeric'],
             'elevation_m' => ['nullable','numeric'],
             'mean_depth_m' => ['nullable','numeric'],
-            'max_depth_m' => ['nullable','numeric'],
         ]);
         $lake = Lake::create($data);
         return response()->json($lake->load('watershed:id,name'), 201);
@@ -54,7 +56,6 @@ class LakeController extends Controller
             'surface_area_km2' => ['nullable','numeric'],
             'elevation_m' => ['nullable','numeric'],
             'mean_depth_m' => ['nullable','numeric'],
-            'max_depth_m' => ['nullable','numeric'],
         ]);
         $lake->update($data);
         return $lake->load('watershed:id,name');

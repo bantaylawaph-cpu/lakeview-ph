@@ -8,7 +8,7 @@ import {
   FiActivity,     // Recent Activity header icon
 } from "react-icons/fi";
 
-import { MapContainer, TileLayer } from "react-leaflet";
+import AppMap from "../../components/AppMap";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -59,23 +59,11 @@ function KPIGrid() {
    (Basemap only; no markers/features preloaded.)
    ============================================================ */
 function OverviewMap() {
-  const defaultCenter = useMemo(() => [14.4, 121.0], []);
-  const defaultZoom = 8;
-
   return (
     <div className="map-container">
-      <MapContainer
-        center={defaultCenter}
-        zoom={defaultZoom}
-        style={{ height: "100%", width: "100%" }}
-        scrollWheelZoom
-      >
-        <TileLayer
-          attribution="&copy; OpenStreetMap contributors"
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
+      <AppMap view="osm" style={{ height: "100%", width: "100%" }}>
         {/* Add GeoJSON layers or markers once data is available */}
-      </MapContainer>
+      </AppMap>
     </div>
   );
 }

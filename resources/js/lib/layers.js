@@ -46,7 +46,7 @@ export const fetchLayersForBody = async (bodyType, bodyId) => {
   const res = await api(
     `/layers?body_type=${encodeURIComponent(bodyType)}&body_id=${encodeURIComponent(
       bodyId
-    )}&include=bounds`
+    )}&include=geom,bounds`
   );
   return pluck(res);
 };
@@ -62,3 +62,23 @@ export const toggleLayerVisibility = (row) => {
 };
 
 export const deleteLayer = (id) => api(`/layers/${id}`, { method: "DELETE" });
+
+/** Fetch body name for header display */
+export const fetchBodyName = async (bodyType, id) => {
+  try {
+    if (!bodyType || !id) return "";
+    if (bodyType === "lake") {
+      const r = await api(`/lakes/${id}`);
+      return r?.name || "";
+    }
+    // Watershed: no show endpoint; fetch list and find
+    const ws = await api('/watersheds');
+    const rows = pluck(ws);
+    const found = rows.find((w) => Number(w.id) === Number(id));
+    return found?.name || "";
+  } catch (_) { return ""; }
+};
+
+/** Update layer metadata (no geometry) */
+export const updateLayer = (id, payload) =>
+  api(`/layers/${id}`, { method: 'PATCH', body: payload });

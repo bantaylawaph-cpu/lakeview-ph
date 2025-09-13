@@ -1,6 +1,6 @@
 // src/components/MapControls.jsx
 import React, { useState } from "react";
-import { useMap, Marker, Tooltip } from "react-leaflet"; // ✅ use Tooltip instead of Popup
+import { useMap, Marker, Tooltip } from "react-leaflet"; // use Tooltip instead of Popup
 import { FiBarChart2, FiCrosshair, FiPlus, FiMinus } from "react-icons/fi";
 import { FaLocationDot } from "react-icons/fa6"; // filled location dot
 import L from "leaflet";
@@ -11,21 +11,17 @@ import ReactDOMServer from "react-dom/server";
 const locationIcon = new L.DivIcon({
   className: "custom-location-icon",
   html: ReactDOMServer.renderToString(
-    <FaLocationDot size={30} color="#e53935" /> // ✅ Bright red for visibility
+    <FaLocationDot size={30} color="#e53935" /> // Bright red for visibility
   ),
   iconSize: [30, 30],
   iconAnchor: [15, 30],
   popupAnchor: [0, -28],
 });
 
-function MapControls() {
+function MapControls({ defaultCenter = [12.8797, 121.7740], defaultZoom = 6, defaultBounds = null }) {
   const map = useMap();
   const [geolocated, setGeolocated] = useState(false);
   const [position, setPosition] = useState(null);
-
-  // ✅ Default view (from your MapContainer)
-  const defaultCenter = [14.3409, 121.23477];
-  const defaultZoom = 11;
 
   const handleZoomIn = () => map.zoomIn();
   const handleZoomOut = () => map.zoomOut();
@@ -45,8 +41,9 @@ function MapControls() {
         );
       }
     } else {
-      // ✅ Reset to default view
-      map.setView(defaultCenter, defaultZoom);
+      // Reset to default view
+      if (defaultBounds) map.fitBounds(defaultBounds);
+      else map.setView(defaultCenter, defaultZoom);
       setPosition(null);
       setGeolocated(false);
     }
@@ -92,3 +89,4 @@ function MapControls() {
 }
 
 export default MapControls;
+

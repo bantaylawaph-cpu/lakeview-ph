@@ -13,15 +13,13 @@ class Layer extends Model
         'body_type','body_id','uploaded_by',
         'name','type','category','srid',
         'visibility','is_active','status','version','notes',
-        'source_type','file_hash','file_size_bytes','metadata',
+        'source_type',
         // 'geom','bbox','area_km2' are managed via PostGIS/trigger; leave out of mass-assign by default
     ];
 
     protected $casts = [
         'is_active'        => 'boolean',
-        'file_size_bytes'  => 'integer',
         'version'          => 'integer',
-        'metadata'         => 'array',
         'created_at'       => 'datetime',
         'updated_at'       => 'datetime',
     ];

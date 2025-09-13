@@ -26,9 +26,6 @@ class StoreLayerRequest extends FormRequest
             'version'     => 'nullable|integer|min:1',
             'notes'       => 'nullable|string',
             'source_type' => 'nullable|string|in:geojson,json,shp,kml,gpkg,wkt',
-            'file_hash'   => 'nullable|string|max:128',
-            'file_size_bytes' => 'nullable|integer|min:0',
-            'metadata'    => 'nullable|array',
 
             // The geometry payload (Polygon or MultiPolygon), or a Feature with geometry
             'geom_geojson' => 'required|string',

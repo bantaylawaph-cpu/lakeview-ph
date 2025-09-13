@@ -1,13 +1,13 @@
-// resources/js/components/layers/LayerWizard.jsx
 import React, { useEffect, useRef, useState } from "react";
-import { MapContainer, TileLayer, GeoJSON } from "react-leaflet";
+import { GeoJSON } from "react-leaflet";
+import AppMap from "../../components/AppMap";
 import "leaflet/dist/leaflet.css";
 import {
   FiUploadCloud, FiCheckCircle, FiMap, FiGlobe, FiAlertTriangle, FiInfo,
 } from "react-icons/fi";
 
 import Wizard from "../../components/Wizard";
-import BodySelect from "./BodySelect";
+// BodySelect removed to keep the UX uniform (dropdown for both)
 
 import {
   boundsFromGeom,
@@ -15,12 +15,16 @@ import {
   reprojectMultiPolygonTo4326,
 } from "../../utils/geo";
 
-import { createLayer } from "../../lib/layers";
+import { createLayer, fetchLakeOptions, fetchWatershedOptions } from "../../lib/layers";
 
 export default function LayerWizard({
   defaultBodyType = "lake",
   defaultVisibility = "public",
   allowSetActive = true,
+  // Reusability knobs (kept for compatibility, but both types use dropdowns now)
+  allowedBodyTypes = ["lake", "watershed"],
+  selectionModeLake = "dropdown",
+  selectionModeWatershed = "dropdown",
   onPublished,             // (layerResponse) => void
 }) {
   const [data, setData] = useState({
@@ -32,19 +36,21 @@ export default function LayerWizard({
     sourceSrid: 4326,
 
     // link
-    bodyType: defaultBodyType,  // 'lake' | 'watershed'
+    bodyType: allowedBodyTypes.includes(defaultBodyType) ? defaultBodyType : allowedBodyTypes[0] || "lake",
     bodyId: "",
 
     // meta
     name: "",
-    category: "Hydrology",
+    category: "",
     notes: "",
     visibility: defaultVisibility, // 'admin' | 'public'
-    isActive: !!allowSetActive,
+    isActive: false,
   });
 
   const [error, setError] = useState("");
   const mapRef = useRef(null);
+  const [lakeOptions, setLakeOptions] = useState([]);
+  const [watershedOptions, setWatershedOptions] = useState([]);
 
   // fit map when preview changes
   useEffect(() => {
@@ -54,9 +60,41 @@ export default function LayerWizard({
     if (b && b.isValid()) map.fitBounds(b.pad(0.2));
   }, [data.previewGeom]);
 
-    const worldBounds = [
-    [4.6, 116.4], // Southwest (Mindanao sea area)
-    [21.1, 126.6], // Northeast (Batanes area)
+  // Load lake options (names only) when selecting a lake
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (data.bodyType !== "lake") return;
+      try {
+        const rows = await fetchLakeOptions("");
+        if (!cancelled) setLakeOptions(Array.isArray(rows) ? rows : []);
+      } catch (e) {
+        console.error('[LayerWizard] Failed to load lake options', e);
+        if (!cancelled) setLakeOptions([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [data.bodyType]);
+
+  // Load watershed options (names only) when selecting a watershed
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (data.bodyType !== "watershed") return;
+      try {
+        const rows = await fetchWatershedOptions("");
+        if (!cancelled) setWatershedOptions(Array.isArray(rows) ? rows : []);
+      } catch (e) {
+        console.error('[LayerWizard] Failed to load watershed options', e);
+        if (!cancelled) setWatershedOptions([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [data.bodyType]);
+
+  const worldBounds = [
+    [4.6, 116.4],
+    [21.1, 126.6],
   ];
 
   // -------- file handlers ----------
@@ -86,6 +124,7 @@ export default function LayerWizard({
       const parsed = JSON.parse(text);
       handleParsedGeoJSON(parsed, file.name);
     } catch (e) {
+      console.error('[LayerWizard] Failed to parse GeoJSON file', e);
       setError(e?.message || "Failed to parse GeoJSON file.");
     }
   };
@@ -122,22 +161,22 @@ export default function LayerWizard({
         body_id: Number(data.bodyId),
         name: data.name,
         type: "base",
-        category: data.category || null,
+        category: data.category,
         srid: Number(data.sourceSrid) || 4326,
         visibility: data.visibility,          // 'admin' | 'public'
         is_active: !!data.isActive,
         status: "ready",
         notes: data.notes || null,
         source_type: "geojson",
-        geom_geojson: JSON.stringify(data.uploadGeom), // send original geometry (source SRID)
+        geom_geojson: JSON.stringify(data.uploadGeom),
       };
 
       const res = await createLayer(payload);
       if (typeof onPublished === "function") onPublished(res);
 
-      // keep preview on map; just show a gentle confirmation
       alert("Layer created successfully.");
     } catch (e) {
+      console.error('[LayerWizard] Publish failed', e);
       setError(e?.message || "Failed to publish layer.");
     }
   };
@@ -226,24 +265,15 @@ export default function LayerWizard({
               <FiInfo /> The map shows a <strong>WGS84 (EPSG:4326)</strong> preview. Your original geometry will be saved with the detected/selected SRID.
             </div>
             <div style={{ height: 420, borderRadius: 12, overflow: "hidden", border: "1px solid #e5e7eb" }}>
-              <MapContainer
-                center={[14.3409, 121.23477]} // Default center (Laguna de Bay area)
-                zoom={9}
-                maxBounds={worldBounds}
-                maxBoundsViscosity={1.0}
-                maxZoom={18}
-                minZoom={6}
-                zoomControl={false} // We provide custom controls
+              <AppMap
+                view="osm"
                 style={{ height: "100%", width: "100%" }}
+                whenCreated={(m) => { if (m && !mapRef.current) mapRef.current = m; }}
               >
-                <TileLayer
-                  attribution="&copy; OpenStreetMap contributors"
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                />
                 {data.previewGeom && (
                   <GeoJSON key="geom" data={{ type: "Feature", geometry: data.previewGeom }} />
                 )}
-              </MapContainer>
+              </AppMap>
             </div>
 
             <div className="org-form" style={{ marginTop: 10 }}>
@@ -257,7 +287,7 @@ export default function LayerWizard({
                 />
               </div>
               <div className="alert-note">
-                <FiAlertTriangle /> If the file declares a CRS (e.g., <code>EPSG::32651</code> or <code>CRS84</code>),
+                <FiAlertTriangle /> If the file declares a CRS e.g., EPSG::32651 or CRS84,
                 it’s auto-detected. Adjust only if detection was wrong.
               </div>
             </div>
@@ -266,7 +296,7 @@ export default function LayerWizard({
       ),
     },
 
-    // Step 3: Link to Body
+    // Step 3: Link to Body (UNIFIED: dropdown for both Lake & Watershed)
     {
       key: "link",
       title: "Link to Body",
@@ -280,48 +310,70 @@ export default function LayerWizard({
           </div>
           <div className="dashboard-card-body">
             <div className="org-form">
-              <div className="form-group">
-                <label>Body Type</label>
-                <select
-                  value={data.bodyType}
-                  onChange={(e) =>
-                    setData((d) => ({ ...d, bodyType: e.target.value, bodyId: "" }))
-                  }
-                >
-                  <option value="lake">Lake</option>
-                  <option value="watershed">Watershed</option>
-                </select>
-              </div>
+              {allowedBodyTypes.length > 1 && (
+                <div className="form-group">
+                  <label>Body Type</label>
+                  <select
+                    value={data.bodyType}
+                    onChange={(e) =>
+                      setData((d) => ({ ...d, bodyType: e.target.value, bodyId: "" }))
+                    }
+                  >
+                    {allowedBodyTypes.includes("lake") && (<option value="lake">Lake</option>)}
+                    {allowedBodyTypes.includes("watershed") && (<option value="watershed">Watershed</option>)}
+                  </select>
+                </div>
+              )}
 
-              <BodySelect
-                bodyType={data.bodyType}
-                bodyId={data.bodyId}
-                onChange={(id) => setData((d) => ({ ...d, bodyId: id }))}
-                searchable
-                allowManualId
-                required
-                className="bodyselect"
-              />
-            </div>
-
-            <div className="info-row" style={{ marginTop: 8 }}>
-              <FiInfo /> The <strong>active</strong> layer becomes the default geometry for the selected body.
+              {data.bodyType === "lake" ? (
+                <div className="form-group" style={{ minWidth: 260 }}>
+                  <label>Select Lake</label>
+                  <select
+                    value={data.bodyId}
+                    onChange={(e) => setData((d) => ({ ...d, bodyId: e.target.value }))}
+                    required
+                  >
+                    <option value="" disabled>Choose a lake</option>
+                    {lakeOptions.map((o) => (
+                      <option key={`lake-${o.id}`} value={o.id}>
+                        {o.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className="form-group" style={{ minWidth: 260 }}>
+                  <label>Select Watershed</label>
+                  <select
+                    value={data.bodyId}
+                    onChange={(e) => setData((d) => ({ ...d, bodyId: e.target.value }))}
+                    required
+                  >
+                    <option value="" disabled>Select category…</option>
+                    {watershedOptions.map((o) => (
+                      <option key={`ws-${o.id}`} value={o.id}>
+                        {o.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           </div>
         </div>
       ),
     },
 
-    // Step 4: Metadata & Publish
+    // Step 4: Metadata
     {
       key: "meta",
-      title: "Metadata & Publish",
+      title: "Metadata",
       render: () => (
         <div className="dashboard-card">
           <div className="dashboard-card-header">
             <div className="dashboard-card-title">
               <FiGlobe />
-              <span>Metadata & Publish</span>
+              <span>Metadata</span>
             </div>
           </div>
           <div className="dashboard-card-body">
@@ -342,11 +394,10 @@ export default function LayerWizard({
                   value={data.category}
                   onChange={(e) => setData((d) => ({ ...d, category: e.target.value }))}
                 >
-                  <option>Hydrology</option>
-                  <option>Administrative</option>
-                  <option>Boundaries</option>
-                  <option>Bathymetry</option>
-                  <option>Reference</option>
+                  <option value="" disabled>Select category…</option>
+                  <option value="Profile">Profile</option>
+                  <option value="Boundary">Boundary</option>
+                  <option value="Bathymetry">Bathymetry</option>
                 </select>
               </div>
 
@@ -360,8 +411,25 @@ export default function LayerWizard({
                 />
               </div>
             </div>
+          </div>
+        </div>
+      ),
+    },
 
-            <div className="org-form" style={{ marginTop: 8 }}>
+    // Step 5: Publish & Visibility
+    {
+      key: "publish",
+      title: "Publish",
+      render: () => (
+        <div className="dashboard-card">
+          <div className="dashboard-card-header">
+            <div className="dashboard-card-title">
+              <FiGlobe />
+              <span>Publish</span>
+            </div>
+          </div>
+          <div className="dashboard-card-body">
+            <div className="org-form">
               <div className="form-group">
                 <label>Visibility</label>
                 <select
@@ -375,22 +443,20 @@ export default function LayerWizard({
 
               {allowSetActive && (
                 <div className="form-group">
-                  <label>Set as Active</label>
-                  <label
-                    className="auth-checkbox"
-                    style={{ display: "inline-flex", gap: 8, alignItems: "center" }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={!!data.isActive}
-                      onChange={(e) => setData((d) => ({ ...d, isActive: e.target.checked }))}
-                    />
-                    <span>Make this the default geometry</span>
-                  </label>
+                  <label>Default Layer</label>
+                  <div>
+                    <button
+                      type="button"
+                      className={`pill-btn ${data.isActive ? 'primary' : 'ghost'}`}
+                      onClick={() => setData((d) => ({ ...d, isActive: !d.isActive }))}
+                      title="Toggle default layer"
+                    >
+                      {data.isActive ? 'Default Enabled' : 'Set as Default'}
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
-
             {error && (
               <div className="alert-note" style={{ marginTop: 8 }}>
                 <FiAlertTriangle /> {error}

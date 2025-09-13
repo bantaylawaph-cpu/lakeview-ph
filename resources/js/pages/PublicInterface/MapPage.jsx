@@ -18,14 +18,15 @@ import React, { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { FiArrowLeft } from "react-icons/fi";
 import { api } from "../../lib/api";
-import { MapContainer, TileLayer, useMap } from "react-leaflet";
+import { useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
+import AppMap from "../../components/AppMap";
+import MapControls from "../../components/MapControls";
 
 // Local Components
 import SearchBar from "../../components/SearchBar";
 import LayerControl from "../../components/LayerControl";
-import CoordinatesScale from "../../components/CoordinatesScale";
-import MapControls from "../../components/MapControls";
+// CoordinatesScale and MapControls are included in AppMap
 import ScreenshotButton from "../../components/ScreenshotButton";
 import Sidebar from "../../components/Sidebar";
 import ContextMenu from "../../components/ContextMenu";
@@ -100,28 +101,10 @@ function MapPage() {
     }
   }, [location.pathname]);
 
-  // ----------------------------------------------------
-  // Map Layer Configurations
-  // ----------------------------------------------------
-  const basemaps = {
-    satellite:
-      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    street:
-      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
-    topographic:
-      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
-    osm: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-  };
-
-  const attribution =
-    '&copy; <a href="https://www.esri.com/">Esri</a>, ' +
-    "Earthstar Geographics, GIS User Community, " +
-    '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> contributors';
-
-  // Map bounds (Philippines extent)
+  // Map basemap and bounds come from AppMap
   const worldBounds = [
-    [4.6, 116.4], // Southwest (Mindanao sea area)
-    [21.1, 126.6], // Northeast (Batanes area)
+    [4.6, 116.4], // SW
+    [21.1, 126.6], // NE
   ];
 
   // Theme class toggled depending on basemap
@@ -186,22 +169,7 @@ function MapPage() {
       style={{ height: "100vh", width: "100vw", margin: 0, padding: 0 }}
     >
       {/* Main Map Container */}
-      <MapContainer
-        center={[14.3409, 121.23477]} // Default center (Laguna de Bay area)
-        zoom={11}
-        maxBounds={worldBounds}
-        maxBoundsViscosity={1.0}
-        maxZoom={18}
-        minZoom={6}
-        zoomControl={false} // We provide custom controls
-        style={{ height: "100%", width: "100%" }}
-      >
-        {/* Basemap Layer */}
-        <TileLayer url={basemaps[selectedView]} attribution={attribution} noWrap />
-
-        {/* Map Utilities */}
-        <CoordinatesScale /> {/* Shows coordinates + scale */}
-        <MapControls /> {/* Zoom, geolocate/reset view */}
+      <AppMap view={selectedView} zoomControl={false}>
 
         {/* Sidebar (with minimap + links) */}
         <Sidebar
@@ -249,7 +217,10 @@ function MapPage() {
           mode={measureMode}
           onFinish={() => setMeasureActive(false)}
         />
-      </MapContainer>
+
+        {/* Right-side floating controls (only on MapPage) */}
+        <MapControls defaultBounds={worldBounds} />
+      </AppMap>
 
       {/* Lake Info Panel (hotkey-controlled) */}
       <LakeInfoPanel

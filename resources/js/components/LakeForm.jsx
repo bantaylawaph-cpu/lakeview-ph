@@ -12,7 +12,6 @@ const EMPTY = {
   surface_area_km2: "",
   elevation_m: "",
   mean_depth_m: "",
-  max_depth_m: "",
 };
 
 export default function LakeForm({
@@ -141,15 +140,7 @@ export default function LakeForm({
           />
         </label>
 
-        <label className="lv-field">
-          <span>Max Depth (m)</span>
-          <input
-            type="number"
-            step="0.001"
-            value={form.max_depth_m}
-            onChange={(e) => setForm({ ...form, max_depth_m: e.target.value })}
-          />
-        </label>
+        
       </form>
     </Modal>
   );

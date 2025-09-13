@@ -7,7 +7,7 @@ class Lake extends Model
 {
     protected $fillable = [
         'watershed_id','name','alt_name','region','province','municipality',
-        'surface_area_km2','elevation_m','mean_depth_m','max_depth_m'
+        'surface_area_km2','elevation_m','mean_depth_m'
     ];
 
     // A lake belongs to a watershed (nullable is okay)

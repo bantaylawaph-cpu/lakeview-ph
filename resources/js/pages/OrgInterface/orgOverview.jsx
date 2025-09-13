@@ -13,7 +13,7 @@ import {
 } from "react-icons/fi";
 
 import { Link } from "react-router-dom";
-import { MapContainer, TileLayer } from "react-leaflet";
+import AppMap from "../../components/AppMap";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -100,26 +100,14 @@ function QuickActions() {
    - Shows only logged test locations (none yet)
    ============================================================ */
 function TestsMap() {
-  const defaultCenter = useMemo(() => [14.4, 121.0], []);
-  const defaultZoom = 8;
-
   return (
     <div className="map-container" style={{ marginBottom: 16 }}>
-      <MapContainer
-        center={defaultCenter}
-        zoom={defaultZoom}
-        style={{ height: "100%", width: "100%" }}
-        scrollWheelZoom
-      >
-        <TileLayer
-          attribution="&copy; OpenStreetMap contributors"
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
+      <AppMap view="osm" style={{ height: "100%", width: "100%" }}>
         {/*
           TODO: Once data exists, place markers for this org's logged tests here.
           e.g. tests.map(t => <Marker position={[t.lat,t.lng]} />)
         */}
-      </MapContainer>
+      </AppMap>
     </div>
   );
 }
