@@ -39,7 +39,7 @@ class LayerController extends Controller
         elseif (isset($decoded['type']) && isset($decoded['coordinates'])) {
             $geom = $decoded;
         }
-        // FeatureCollection not handled in MVP (to keep SQL simple). Dissolve client-side or send as a single dissolved geometry.
+        // FeatureCollection not handled in MVP (to keep SQL simple).
         elseif (($decoded['type'] ?? '') === 'FeatureCollection') {
             abort(422, 'FeatureCollection not supported yet. Please upload a dissolved Polygon/MultiPolygon GeoJSON.');
         }
@@ -67,13 +67,17 @@ class LayerController extends Controller
             'include'   => 'nullable|string'
         ]);
 
-        $include = collect(explode(',', (string) $request->query('include')))->map(fn($s) => trim($s))->filter()->values();
-        $query   = Layer::query()
+        $include = collect(explode(',', (string) $request->query('include')))
+            ->map(fn($s) => trim($s))->filter()->values();
+
+        $query = Layer::query()
             ->leftJoin('users', 'users.id', '=', 'layers.uploaded_by')
             ->where([
-            'body_type' => $request->query('body_type'),
-            'body_id'   => (int) $request->query('body_id'),
-        ])->orderByDesc('is_active')->orderByDesc('created_at');
+                'body_type' => $request->query('body_type'),
+                'body_id'   => (int) $request->query('body_id'),
+            ])
+            ->orderByDesc('is_active')
+            ->orderByDesc('created_at');
 
         // Select base columns
         $query->select('layers.*');
@@ -140,38 +144,38 @@ class LayerController extends Controller
             $srid     = (int)($data['srid'] ?? 4326);
 
             DB::update(
-            // Set SRID first, then transform when needed. Extract polygons (type=3) and force Multi.
-            "UPDATE layers
-              SET geom =
-                    CASE
-                      WHEN ? = 4326 THEN
-                        ST_Multi(
-                          ST_CollectionExtract(
-                            ST_ForceCollection(
-                              ST_MakeValid(
-                                ST_SetSRID(ST_GeomFromGeoJSON(?), 4326)
+                // Set SRID first, then transform when needed. Extract polygons (type=3) and force Multi.
+                "UPDATE layers
+                   SET geom =
+                        CASE
+                          WHEN ? = 4326 THEN
+                            ST_Multi(
+                              ST_CollectionExtract(
+                                ST_ForceCollection(
+                                  ST_MakeValid(
+                                    ST_SetSRID(ST_GeomFromGeoJSON(?), 4326)
+                                  )
+                                ), 3
                               )
-                            ), 3
-                          )
-                        )
-                      ELSE
-                        ST_Transform(
-                          ST_Multi(
-                            ST_CollectionExtract(
-                              ST_ForceCollection(
-                                ST_MakeValid(
-                                  ST_SetSRID(ST_GeomFromGeoJSON(?), ?)
-                                )
-                              ), 3
                             )
-                          ),
-                          4326
-                        )
-                    END,
-                  srid = 4326,
-                  updated_at = now()
-            WHERE id = ?",
-            [$srid, $geomJson, $geomJson, $srid, $layer->id]
+                          ELSE
+                            ST_Transform(
+                              ST_Multi(
+                                ST_CollectionExtract(
+                                  ST_ForceCollection(
+                                    ST_MakeValid(
+                                      ST_SetSRID(ST_GeomFromGeoJSON(?), ?)
+                                    )
+                                  ), 3
+                                )
+                              ),
+                              4326
+                            )
+                        END,
+                       srid = 4326,
+                       updated_at = now()
+                 WHERE id = ?",
+                [$srid, $geomJson, $geomJson, $srid, $layer->id]
             );
 
             // If requested active, deactivate siblings (no DB trigger dependency)
@@ -210,6 +214,7 @@ class LayerController extends Controller
             'notes'       => $data['notes']       ?? $layer->notes,
             'is_active'   => isset($data['is_active']) ? (bool)$data['is_active'] : $layer->is_active,
         ]);
+
         return DB::transaction(function () use ($layer, $data) {
             $activating = array_key_exists('is_active', $data) && (bool)$data['is_active'] === true;
             $layer->save();
@@ -221,35 +226,35 @@ class LayerController extends Controller
 
                 DB::update(
                     "UPDATE layers
-              SET geom =
-                    CASE
-                      WHEN ? = 4326 THEN
-                        ST_Multi(
-                          ST_CollectionExtract(
-                            ST_ForceCollection(
-                              ST_MakeValid(
-                                ST_SetSRID(ST_GeomFromGeoJSON(?), 4326)
-                              )
-                            ), 3
-                          )
-                        )
-                      ELSE
-                        ST_Transform(
-                          ST_Multi(
-                            ST_CollectionExtract(
-                              ST_ForceCollection(
-                                ST_MakeValid(
-                                  ST_SetSRID(ST_GeomFromGeoJSON(?), ?)
+                        SET geom =
+                            CASE
+                              WHEN ? = 4326 THEN
+                                ST_Multi(
+                                  ST_CollectionExtract(
+                                    ST_ForceCollection(
+                                      ST_MakeValid(
+                                        ST_SetSRID(ST_GeomFromGeoJSON(?), 4326)
+                                      )
+                                    ), 3
+                                  )
                                 )
-                              ), 3
-                            )
-                          ),
-                          4326
-                        )
-                    END,
-                  srid = 4326,
-                  updated_at = now()
-            WHERE id = ?",
+                              ELSE
+                                ST_Transform(
+                                  ST_Multi(
+                                    ST_CollectionExtract(
+                                      ST_ForceCollection(
+                                        ST_MakeValid(
+                                          ST_SetSRID(ST_GeomFromGeoJSON(?), ?)
+                                        )
+                                      ), 3
+                                    )
+                                  ),
+                                  4326
+                                )
+                            END,
+                            srid = 4326,
+                            updated_at = now()
+                      WHERE id = ?",
                     [$srid, $geomJson, $geomJson, $srid, $layer->id]
                 );
             }

@@ -82,3 +82,10 @@ export const fetchBodyName = async (bodyType, id) => {
 /** Update layer metadata (no geometry) */
 export const updateLayer = (id, payload) =>
   api(`/layers/${id}`, { method: 'PATCH', body: payload });
+
+export async function setLayerDefault(layerId, isActive) {
+  return api(`/layers/${layerId}/default`, {
+    method: 'PATCH',
+    body: { is_active: !!isActive },
+  });
+}
