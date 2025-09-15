@@ -1,3 +1,4 @@
+// resources/js/layouts/DashboardLayout.jsx
 import React, { useEffect, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
@@ -7,7 +8,8 @@ import {
   FiChevronsLeft,
   FiChevronsRight,
 } from "react-icons/fi";
-import { api, clearToken } from "../lib/api";
+import { api, clearToken, getToken } from "../lib/api";
+import { confirm, alertSuccess } from "../utils/alerts"; // ⬅️ SweetAlert2 helpers
 
 export default function DashboardLayout({ links, user, children }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -19,11 +21,10 @@ export default function DashboardLayout({ links, user, children }) {
     let mounted = true;
     (async () => {
       try {
-        const u = await api('/auth/me');
+        if (!getToken()) return; // gate
+        const u = await api("/auth/me");
         if (mounted) setMe(u);
-      } catch {
-        // ignore; user not authenticated or token invalid
-      }
+      } catch {}
     })();
     return () => { mounted = false; };
   }, []);
@@ -32,6 +33,29 @@ export default function DashboardLayout({ links, user, children }) {
   const activeLink = links.find(
     (l) => location.pathname === l.path || (l.exact && location.pathname === l.path)
   );
+
+  // 🔔 SweetAlert2-powered signout
+  async function handleSignOut() {
+    const ok = await confirm(
+      "Sign out?",
+      "You will be logged out of LakeView PH.",
+      "Yes, sign out"
+    );
+    if (!ok) return;
+
+    try {
+      await api("/auth/logout", { method: "POST" });
+    } catch {
+      // ignore API errors; we still clear local state
+    }
+
+    clearToken();
+
+    // Show success toast BEFORE navigation so it’s visible
+    await alertSuccess("Signed out", "You have been signed out successfully.");
+
+    navigate("/");
+  }
 
   return (
     <div className="dashboard-container">
@@ -59,21 +83,16 @@ export default function DashboardLayout({ links, user, children }) {
 
         {/* User Section */}
         <div className="dashboard-user-section">
-          <div className="dashboard-user-info" title={(me?.name || "")}>
+          <div className="dashboard-user-info" title={me?.name || ""}>
             <FiUser size={18} />
-            {me?.name ? (
-              <span className="user-name">{me.name}</span>
-            ) : null}
+            {me?.name ? <span className="user-name">{me.name}</span> : null}
           </div>
           <div
             className="dashboard-signout"
             role="button"
             tabIndex={0}
-            onClick={async () => {
-              try { await api('/auth/logout', { method: 'POST' }); } catch {}
-              clearToken();
-              navigate('/');
-            }}
+            onClick={handleSignOut}
+            onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && handleSignOut()}
           >
             <FiLogOut size={18} /> <span className="signout-text">Sign out</span>
           </div>

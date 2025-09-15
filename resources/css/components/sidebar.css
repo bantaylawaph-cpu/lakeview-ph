@@ -131,3 +131,19 @@
   font: inherit;
   text-align: left;
 }
+
+/* Role badge next to user name */
+.role-chip {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 12px;
+  line-height: 1;
+  background: #e5e7eb; /* gray-200 */
+  color: #111827;      /* gray-900 */
+}
+
+.role-superadmin { background: #fee2e2; color: #991b1b; }   /* red-ish */
+.role-org_admin  { background: #dbeafe; color: #1e3a8a; }   /* blue-ish */
+.role-contributor{ background: #ecfccb; color: #365314; }   /* green-ish */
+.role-public     { background: #f3f4f6; color: #374151; }   /* neutral */

@@ -1,3 +1,4 @@
+// resources/js/components/Sidebar.jsx
 import React, { useEffect, useState, useRef } from "react";
 import {
   FiX,
@@ -14,9 +15,11 @@ import {
 } from "react-icons/fi";
 import { MapContainer, TileLayer, Rectangle, useMap } from "react-leaflet";
 import { Link, useNavigate } from "react-router-dom";
-import { api, clearToken } from "../lib/api";
+import { api, clearToken, getToken } from "../lib/api";
 import "leaflet/dist/leaflet.css";
+import { confirm, alertSuccess } from "../utils/alerts";
 
+// ─────────────────────────────────────────────────────────────────────────────
 // MiniMap that stays centered and updates live
 function MiniMap({ parentMap }) {
   const [bounds, setBounds] = useState(parentMap.getBounds());
@@ -67,22 +70,41 @@ function MiniMapWrapper() {
   return <MiniMap parentMap={map} />;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
 function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth }) {
-  const [me, setMe] = useState(null);
+  const [me, setMe] = useState(null); // { id, name, role }
   const navigate = useNavigate();
 
+  // Centralized fetch for /auth/me
+  const fetchMe = async () => {
+    try {
+      const u = await api("/auth/me");
+      setMe(u && u.id ? u : null);
+    } catch {
+      setMe(null);
+    }
+  };
+
   useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const u = await api('/auth/me');
-        if (mounted) setMe(u && (u.id ? u : null));
-      } catch {
-        if (mounted) setMe(null);
-      }
-    })();
-    return () => { mounted = false; };
+    const fetchMe = async () => {
+      try { setMe(await api("/auth/me")); } catch { setMe(null); }
+    };
+    if (getToken()) fetchMe(); // gate initial fetch
+
+    const onAuthChange = () => (getToken() ? fetchMe() : setMe(null));
+    const onFocus = () => (getToken() ? fetchMe() : setMe(null));
+
+    window.addEventListener("lv-auth-change", onAuthChange);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.removeEventListener("lv-auth-change", onAuthChange);
+      window.removeEventListener("focus", onFocus);
+    };
   }, []);
+
+
+  const isLoggedIn = !!me?.id;
+  const isPublic = isLoggedIn && (me.role === "public" || !me.role);
 
   return (
     <div className={`sidebar ${isOpen ? "open" : ""} ${pinned ? "pinned" : ""}`}>
@@ -94,7 +116,7 @@ function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth }) {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-          {/* Pin button */}
+          {/* Pin */}
           <button
             className={`sidebar-icon-btn ${pinned ? "active" : ""}`}
             onClick={() => setPinned(!pinned)}
@@ -103,7 +125,7 @@ function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth }) {
             <FiMapPin size={18} />
           </button>
 
-          {/* Close button (hidden if pinned) */}
+          {/* Close (hidden if pinned) */}
           {!pinned && (
             <button
               className="sidebar-icon-btn"
@@ -123,6 +145,8 @@ function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth }) {
 
       {/* Menu Links */}
       <ul className="sidebar-menu">
+        
+
         <li>
           <Link className="sidebar-row" to="/about" onClick={!pinned ? onClose : undefined}>
             <FiInfo className="sidebar-icon" />
@@ -169,23 +193,37 @@ function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth }) {
             <span>Settings</span>
           </Link>
         </li>
-        {me?.id ? (
+
+        {isLoggedIn ? (
           <>
-            <li aria-label="Logged-in user" title={me.name}>
-              <div className="sidebar-row" style={{ cursor: 'default' }}>
+            {/* (Optional) Keep a compact user row near Sign out */}
+            <li aria-label="Logged-in user" title={me?.name || ""}>
+              <div className="sidebar-row" style={{ cursor: "default" }}>
                 <FiUser className="sidebar-icon" />
-                <span>{me.name}</span>
+                <span>{me?.name}</span>
               </div>
             </li>
+
             <li>
               <button
                 className="sidebar-row"
                 onClick={async () => {
-                  try { await api('/auth/logout', { method: 'POST' }); } catch {}
-                  clearToken();
+                  const ok = await confirm(
+                    "Sign out?",
+                    "You will be logged out of LakeView PH.",
+                    "Yes, sign out"
+                  );
+                  if (!ok) return;
+
+                  try {
+                    await api("/auth/logout", { method: "POST" });
+                  } catch {}
+                  clearToken(); // dispatches lv-auth-change if you patched api.js
                   setMe(null);
                   if (!pinned) onClose?.();
-                  navigate('/');
+
+                  await alertSuccess("Signed out", "You have been signed out successfully.");
+                  navigate("/");
                 }}
               >
                 <FiLogOut className="sidebar-icon" />

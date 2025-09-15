@@ -14,21 +14,26 @@ class AuthController extends Controller
     public function register(Request $request)
     {
         $data = $request->validate([
-            "email"    => "required|email|unique:users,email",
-            "password" => "required|min:8",
-            "name"     => "nullable|string|max:255",
+            "email"                 => "required|email|unique:users,email",
+            "password"              => "required|min:8|confirmed",
+            "password_confirmation" => "required",
+            "name"                  => "nullable|string|max:255",
+            "occupation"            => "nullable|string|in:student,researcher,gov_staff,ngo_worker,fisherfolk,local_resident,faculty,consultant,tourist,other",
+            "occupation_other"      => "nullable|string|max:255|required_if:occupation,other",
         ]);
 
         $resolvedName = $data["name"] ?? strtok($data["email"], "@");
 
         $user = User::create([
-            "email"    => $data["email"],
-            "password" => Hash::make($data["password"]),
-            "name"     => $resolvedName, // users.name is NOT NULL in your DB
+            "email"             => $data["email"],
+            "password"          => Hash::make($data["password"]),
+            "name"              => $resolvedName,
+            "occupation"        => $data["occupation"] ?? null,
+            "occupation_other"  => ($data["occupation"] ?? null) === "other" ? ($data["occupation_other"] ?? null) : null,
         ]);
 
-        // Assign PUBLIC role by default
-        if ($public = Role::where("name","public")->first()) {
+        // Assign PUBLIC role
+        if ($public = Role::where("name", "public")->first()) {
             UserTenant::create([
                 "user_id"   => $user->id,
                 "tenant_id" => null,
@@ -37,15 +42,17 @@ class AuthController extends Controller
             ]);
         }
 
-        $token = $user->createToken("lv_token", ["public"])->plainTextToken;
+        // $token = $user->createToken("lv_token", ["public"], now()->addDays(30))->plainTextToken;
 
         return response()->json([
-            "token" => $token,
+            'message' => 'Account created. Please log in.',
             "user"  => [
-                "id"    => $user->id,
-                "email" => $user->email,
-                "name"  => $user->name,
-                "role"  => $user->highestRoleName(),
+                "id"                => $user->id,
+                "email"             => $user->email,
+                "name"              => $user->name,
+                "role"              => $user->highestRoleName(),
+                "occupation"        => $user->occupation,
+                "occupation_other"  => $user->occupation_other,
             ],
         ], 201);
     }
@@ -55,14 +62,15 @@ class AuthController extends Controller
         $credentials = $request->validate([
             "email"    => "required|email",
             "password" => "required",
+            "remember" => "sometimes|boolean",
         ]);
 
         $user = User::where("email", $credentials["email"])->first();
 
         if (!$user || !Hash::check($credentials["password"], $user->password)) {
-            throw ValidationException::withMessages([
-                "email" => ["The provided credentials are incorrect."],
-            ]);
+            return response()->json([
+                'message' => 'Invalid email or password.'
+            ], 401);
         }
 
         $role = $user->highestRoleName();
@@ -73,10 +81,13 @@ class AuthController extends Controller
             default       => ["public"],
         };
 
-        // Optional: clear any old tokens
+        $remember = (bool)($credentials["remember"] ?? false);
+        $expiry = $remember ? now()->addDays(30) : now()->addHours(2);
+
+        // Clear old tokens if you want single-session
         $user->tokens()->delete();
 
-        $token = $user->createToken("lv_token", $abilities)->plainTextToken;
+        $token = $user->createToken("lv_token", $abilities, $expiry)->plainTextToken;
 
         return response()->json([
             "token" => $token,
@@ -85,6 +96,8 @@ class AuthController extends Controller
                 "email" => $user->email,
                 "name"  => $user->name,
                 "role"  => $role,
+                "occupation" => $user->occupation,
+                "occupation_other" => $user->occupation_other,
             ],
         ]);
     }
@@ -97,6 +110,8 @@ class AuthController extends Controller
             "email" => $u->email,
             "name"  => $u->name,
             "role"  => $u->highestRoleName(),
+            "occupation" => $u->occupation,
+            "occupation_other" => $u->occupation_other,
         ]);
     }
 
