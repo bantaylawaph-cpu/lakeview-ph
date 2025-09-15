@@ -40,6 +40,7 @@ export default function AdminWaterCat() {
 
   /* ----------------------------- Map ----------------------------- */
   const mapRef = useRef(null);
+  const lakeGeoRef = useRef(null);
   const [showLakePoly, setShowLakePoly] = useState(false);
   const [showWatershed, setShowWatershed] = useState(false);
   const [showInflow, setShowInflow] = useState(false);
@@ -194,8 +195,16 @@ export default function AdminWaterCat() {
   /* ----------------------------- Map fit on selected bounds ----------------------------- */
   useEffect(() => {
     if (!mapRef.current || !lakeBounds) return;
-    mapRef.current.fitBounds(lakeBounds, { padding: [24, 24] });
+    // Teleport to bounds that fit the lake entirely; limit over-zoom
+    mapRef.current.fitBounds(lakeBounds, { padding: [24, 24], maxZoom: 14, animate: false });
   }, [lakeBounds]);
+
+  // Bring polygon to front after render (nice visual emphasis)
+  useEffect(() => {
+    if (lakeGeoRef.current && showLakePoly) {
+      try { lakeGeoRef.current.bringToFront(); } catch {}
+    }
+  }, [lakeFeature, showLakePoly]);
 
   /* ----------------------------- Row actions ----------------------------- */
   const viewLake = async (row) => {
@@ -206,16 +215,25 @@ export default function AdminWaterCat() {
       let feature = null;
       if (detail?.geom_geojson) { try { feature = JSON.parse(detail.geom_geojson); } catch {} }
       setLakeFeature(feature);
+
       if (feature) {
         const layer = L.geoJSON(feature);
         const b = layer.getBounds();
-        if (b?.isValid?.() === true) setLakeBounds(b);
-      } else setLakeBounds(null);
+        if (b?.isValid?.() === true) {
+          setLakeBounds(b);
+          setShowLakePoly(true); // ensure visible when clicking View
+        } else {
+          setLakeBounds(null);
+        }
+      } else {
+        setLakeBounds(null);
+      }
     } catch (e) {
       console.error(e); setErrorMsg("Failed to load lake details.");
       setLakeFeature(null); setLakeBounds(null);
     } finally { setLoading(false); }
   };
+
   const openCreate = () => { setFormMode("create"); setFormInitial({}); setFormOpen(true); };
   const openEdit = (row) => {
     const r = row?._raw ?? row;
@@ -430,9 +448,10 @@ export default function AdminWaterCat() {
           >
             {showLakePoly && lakeFeature ? (
               <GeoJSON
+                ref={lakeGeoRef}
                 key={JSON.stringify(lakeFeature).length}
                 data={lakeFeature}
-                style={{ weight: 2, fillOpacity: 0.1 }}
+                style={{ weight: 2, color: "#2563eb", fillOpacity: 0.1 }}
               />
             ) : null}
           </AppMap>

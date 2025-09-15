@@ -3,11 +3,10 @@ import {
   FiLayers, FiLoader, FiEye, FiToggleRight, FiLock, FiUnlock, FiTrash2, FiEdit2,
 } from "react-icons/fi";
 
-// BodySelect removed from UI to unify with lake dropdown UX
 import Modal from "../Modal";
 import {
   fetchLayersForBody,
-  activateLayer,
+  // activateLayer,  // no longer used
   toggleLayerVisibility,
   deleteLayer,
   fetchBodyName,
@@ -117,16 +116,6 @@ function LayerList({
     } catch (_) {}
   }, [previewLayer]);
 
-  const doActivate = async (id) => {
-    try {
-      await activateLayer(id);
-      await refresh();
-    } catch (e) {
-      console.error('[LayerList] Activate layer failed', e);
-      alert(e?.message || "Failed to activate layer");
-    }
-  };
-
   const doToggleVisibility = async (row) => {
     try {
       await toggleLayerVisibility(row);
@@ -145,6 +134,32 @@ function LayerList({
     } catch (e) {
       console.error('[LayerList] Delete failed', e);
       alert(e?.message || "Failed to delete layer");
+    }
+  };
+
+  // NEW: default toggle with “one-at-a-time” guard (no auto-unset others)
+  const doToggleDefault = async (row) => {
+    try {
+      if (row.is_active) {
+        // Turn OFF current default
+        await updateLayer(row.id, { is_active: false });
+        await refresh();
+        return;
+      }
+      // Trying to turn ON -> block if another layer is already default
+      const existing = layers.find((l) => l.is_active && l.id !== row.id);
+      if (existing) {
+        alert(
+          `“${existing.name}” is already set as the default layer.\n\n` +
+          `Please turn it OFF first, then set “${row.name}” as the default.`
+        );
+        return;
+      }
+      await updateLayer(row.id, { is_active: true });
+      await refresh();
+    } catch (e) {
+      console.error('[LayerList] Toggle default failed', e);
+      alert(e?.message || "Failed to toggle default");
     }
   };
 
@@ -293,18 +308,13 @@ function LayerList({
                             <FiEdit2 />
                           </button>
 
-                          {allowActivate && !row.is_active && (
+                          {allowActivate && (
                             <button
-                              className="icon-btn simple accent"
-                              title="Set as Default"
-                              aria-label="Make Active"
-                              onClick={() => doActivate(row.id)}
+                              className={`icon-btn simple ${row.is_active ? "accent" : ""}`}
+                              title={row.is_active ? "Unset Default" : "Set as Default"}
+                              aria-label={row.is_active ? "Unset Default" : "Set as Default"}
+                              onClick={() => doToggleDefault(row)}
                             >
-                              <FiToggleRight />
-                            </button>
-                          )}
-                          {allowActivate && row.is_active && (
-                            <button className="icon-btn simple" title="Default" aria-label="Default" disabled>
                               <FiToggleRight />
                             </button>
                           )}
