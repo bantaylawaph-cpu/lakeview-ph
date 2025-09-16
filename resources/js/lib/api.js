@@ -37,8 +37,24 @@ export function clearToken() {
   notifyAuthChange();
 }
 
+/**
+ * Build a query string from a params object.
+ * Example: buildQuery({ a: 1, q: "laguna de bay" }) -> "?a=1&q=laguna%20de%20bay"
+ */
+export function buildQuery(params = {}) {
+  const entries = Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== "");
+  if (entries.length === 0) return "";
+  const usp = new URLSearchParams();
+  for (const [k, v] of entries) {
+    if (Array.isArray(v)) v.forEach((vv) => usp.append(k, String(vv)));
+    else usp.append(k, String(v));
+  }
+  const s = usp.toString();
+  return s ? `?${s}` : "";
+}
+
 export async function api(path, { method = "GET", body, headers = {}, auth = true } = {}) {
-  const hadToken = !!getToken(); // <-- new
+  const hadToken = !!getToken(); // <-- existing behavior, just kept here
   const res = await fetch(`${API_BASE}${path}`, {
     method,
     headers: {
@@ -65,4 +81,12 @@ export async function api(path, { method = "GET", body, headers = {}, auth = tru
   }
 
   return res.json().catch(() => ({}));
+}
+
+/**
+ * Public (no-auth) API wrapper — same as api() but always omits Authorization.
+ * Usage: apiPublic(`/public/layers${buildQuery({ body_type: 'lake', body_id: 1 })}`)
+ */
+export function apiPublic(path, opts = {}) {
+  return api(path, { ...opts, auth: false });
 }

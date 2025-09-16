@@ -103,6 +103,7 @@ class LakeController extends Controller
                     'type' => 'Feature',
                     'geometry' => $geom,
                     'properties' => [
+                        'id'               => $r->id,
                         'name'             => $r->name,
                         'alt_name'         => $r->alt_name,
                         'region'           => $r->region,

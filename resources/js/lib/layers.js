@@ -1,5 +1,5 @@
 // resources/js/lib/layers.js
-import { api } from "./api";
+import { api, apiPublic, buildQuery } from "./api";
 
 /** Normalize array responses: array | {data: array} | {data:{data: array}} */
 const pluck = (r) => {
@@ -40,7 +40,32 @@ export const fetchWatershedOptions = async (q = "") => {
   return [];
 };
 
-/** ---- Layers CRUD ---- */
+/** ---- Layers (PUBLIC list for LakeInfoPanel) ---- */
+export async function fetchPublicLayers({ bodyType, bodyId, includeBounds = false } = {}) {
+  if (!bodyType || !bodyId) return [];
+  const qs = buildQuery({
+    body_type: bodyType,
+    body_id: bodyId,
+    include: includeBounds ? "bounds" : "",
+  });
+  const res = await apiPublic(`/public/layers${qs}`);
+  return pluck(res);
+}
+
+/** NEW: fetch a single public layer with geometry */
+export async function fetchPublicLayerGeo(id, { includeBounds = true } = {}) {
+  if (!id) return null;
+  const include = ["geom"];
+  if (includeBounds) include.push("bounds");
+  const qs = buildQuery({ include: include.join(",") });
+  try {
+    const r = await apiPublic(`/public/layers/${encodeURIComponent(id)}${qs}`);
+    return r?.data || null;
+  } catch (_) {
+    return null;
+  }
+}
+/** ---- Layers CRUD (auth) ---- */
 export const fetchLayersForBody = async (bodyType, bodyId) => {
   if (!bodyType || !bodyId) return [];
   const res = await api(
@@ -90,7 +115,6 @@ export const fetchBodyName = async (bodyType, id) => {
       const r = await api(`/lakes/${id}`);
       return r?.name || "";
     }
-    // Watershed: no show endpoint; fetch list and find
     const ws = await api('/watersheds');
     const rows = pluck(ws);
     const found = rows.find((w) => Number(w.id) === Number(id));

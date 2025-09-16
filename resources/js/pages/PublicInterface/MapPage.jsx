@@ -1,11 +1,11 @@
-// src/pages/MapPage.jsx
 // ----------------------------------------------------
 // Main Map Page Component for LakeView PH
 // ----------------------------------------------------
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { FiArrowLeft } from "react-icons/fi";
 import { api } from "../../lib/api";
+import { fetchPublicLayers, fetchLakeOptions, fetchPublicLayerGeo } from "../../lib/layers";
 import { useMap, GeoJSON } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
@@ -21,11 +21,16 @@ import MeasureTool from "../../components/MeasureTool";
 import LakeInfoPanel from "../../components/LakeInfoPanel";
 import AuthModal from "../../components/AuthModal";
 
-// Utility: Context Menu Wrapper
 function MapWithContextMenu({ children }) {
   const map = useMap();
   return children(map);
 }
+
+// Extract a lake id from a Feature robustly
+const getLakeIdFromFeature = (feat) => {
+  const p = feat?.properties || {};
+  return feat?.id ?? p.id ?? p.lake_id ?? p.lakeId ?? p.lakeID ?? null;
+};
 
 function MapPage() {
   // ---------------- State ----------------
@@ -34,7 +39,16 @@ function MapPage() {
   const [sidebarPinned, setSidebarPinned] = useState(false);
 
   const [selectedLake, setSelectedLake] = useState(null);
+  const [selectedLakeId, setSelectedLakeId] = useState(null);
+  const [selectedLakeName, setSelectedLakeName] = useState(null);
   const [lakePanelOpen, setLakePanelOpen] = useState(false);
+
+  const [lakeLayers, setLakeLayers] = useState([]);
+  const [lakeActiveLayerId, setLakeActiveLayerId] = useState(null);
+
+  // Overlay feature to show (and trigger hiding of the base feature)
+  const [overlayFeature, setOverlayFeature] = useState(null);
+  const [baseKey, setBaseKey] = useState(0); // force base GeoJSON remount when needed
 
   const [measureActive, setMeasureActive] = useState(false);
   const [measureMode, setMeasureMode] = useState("distance");
@@ -43,7 +57,6 @@ function MapPage() {
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState("login");
 
-  // Public FeatureCollection of lakes (active Public layer only)
   const [publicFC, setPublicFC] = useState(null);
 
   const navigate = useNavigate();
@@ -76,7 +89,7 @@ function MapPage() {
       if (fc?.type === "FeatureCollection") {
         setPublicFC(fc);
 
-        // Fit to all lakes
+        // Fit to all lakes initially
         if (mapRef.current && fc.features?.length) {
           const gj = L.geoJSON(fc);
           const b = gj.getBounds();
@@ -92,8 +105,100 @@ function MapPage() {
       setPublicFC({ type: "FeatureCollection", features: [] });
     }
   };
-
   useEffect(() => { loadPublicLakes(); }, []);
+
+  // ---------------- Layers list for selected lake (PUBLIC) ----------------
+  const loadPublicLayersForLake = async (lakeId) => {
+    // Clear overlay when switching lakes
+    setOverlayFeature(null);
+    setBaseKey((v) => v + 1);
+
+    if (!lakeId) {
+      setLakeLayers([]);
+      setLakeActiveLayerId(null);
+      return;
+    }
+    try {
+      const rows = await fetchPublicLayers({ bodyType: "lake", bodyId: lakeId });
+      setLakeLayers(rows);
+      const active = rows.find((r) => r.is_active);
+      setLakeActiveLayerId(active ? active.id : null);
+    } catch (e) {
+      console.error("[MapPage] Failed to load public layers for lake", e);
+      setLakeLayers([]);
+      setLakeActiveLayerId(null);
+    }
+  };
+
+  // Apply a selected layer as overlay (and hide base feature for that lake)
+  const applyOverlayByLayerId = async (layerId, { fit = true } = {}) => {
+    try {
+      const row = await fetchPublicLayerGeo(layerId); // expects geom_geojson and/or bbox_geojson
+      if (!row) {
+        console.warn("[MapPage] Public layer not found:", layerId);
+        setOverlayFeature(null);
+        setBaseKey((v) => v + 1);
+        return;
+      }
+      const geomStr = row.geom_geojson || row.bbox_geojson || null;
+      if (!geomStr) {
+        console.warn("[MapPage] No geometry returned for layer", layerId);
+        setOverlayFeature(null);
+        setBaseKey((v) => v + 1);
+        return;
+      }
+      let geometry = null;
+      try { geometry = JSON.parse(geomStr); } catch (e) {
+        console.warn("[MapPage] Failed to parse geometry for layer", layerId, e);
+        setOverlayFeature(null);
+        setBaseKey((v) => v + 1);
+        return;
+      }
+
+      const feature = {
+        type: "Feature",
+        properties: {
+          layer_id: row.id,
+          name: row.name,
+          organization: row.uploaded_by_org || "LakeView",
+        },
+        geometry,
+      };
+
+      setOverlayFeature(feature);
+      setBaseKey((v) => v + 1);
+
+      if (fit && mapRef.current) {
+        try {
+          const gj = L.geoJSON(feature);
+          const b = gj.getBounds();
+          if (b?.isValid?.() === true) {
+            mapRef.current.fitBounds(b, { padding: [24, 24], maxZoom: 13 });
+          }
+        } catch (e) {
+          console.warn("[MapPage] Could not compute bounds for overlay", e);
+        }
+      }
+    } catch (e) {
+      console.error("[MapPage] Failed to fetch overlay layer", layerId, e);
+      setOverlayFeature(null);
+      setBaseKey((v) => v + 1);
+    }
+  };
+
+  // Helper: does a base feature correspond to the selected lake?
+  const baseMatchesSelectedLake = (feat) => {
+    if (!overlayFeature) return false; // only hide when we have an overlay to show
+    const fid = getLakeIdFromFeature(feat);
+    if (selectedLakeId != null && fid != null) {
+      return String(fid) === String(selectedLakeId);
+    }
+    // fallback by name if we don't have an id
+    const fname = (feat?.properties?.name || "").trim().toLowerCase();
+    return selectedLakeId == null &&
+           !!selectedLakeName &&
+           fname === String(selectedLakeName).trim().toLowerCase();
+  };
 
   // ---------------- Hotkeys (L / Esc) ----------------
   useEffect(() => {
@@ -108,53 +213,96 @@ function MapPage() {
     return () => window.removeEventListener("keydown", onKey, true);
   }, []);
 
-  // ---------------- Heatmap stub ----------------
   const togglePopulationHeatmap = (on, distanceKm) => {
     console.log("[Heatmap]", on ? "ON" : "OFF", "distance:", distanceKm, "km");
   };
 
-  // ---------------- Render ----------------
   const themeClass = selectedView === "satellite" ? "map-dark" : "map-light";
   const worldBounds = [[4.6,116.4],[21.1,126.6]];
 
   return (
     <div className={themeClass} style={{ height: "100vh", width: "100vw", margin: 0, padding: 0 }}>
-      <AppMap
-        view={selectedView}
-        zoomControl={false}
-        whenCreated={(m) => (mapRef.current = m)}
-      >
-        {/* Render all public default lake geometries */}
+      <AppMap view={selectedView} zoomControl={false} whenCreated={(m) => (mapRef.current = m)}>
+        {/* Base layer of all lakes; hides selected lake when an overlay is active */}
         {publicFC && (
           <GeoJSON
-            key={JSON.stringify(publicFC).length}
+            key={`base-${baseKey}`}
             data={publicFC}
-            style={{ weight: 2, fillOpacity: 0.12 }}
+            filter={(feat) => !baseMatchesSelectedLake(feat)}
+            style={{ color: "#3388ff", weight: 2, fillOpacity: 0.12 }}
             onEachFeature={(feat, layer) => {
-            layer.on("click", () => {
-              const p = feat?.properties || {};
-              setSelectedLake({
-                name: p.name,
-                alt_name: p.alt_name,
-                region: p.region,
-                province: p.province,
-                municipality: p.municipality,
-                watershed_name: p.watershed_name,
-                surface_area_km2: p.surface_area_km2,
-                elevation_m: p.elevation_m,
-                mean_depth_m: p.mean_depth_m,
-              });
-              setLakePanelOpen(true);
-              if (mapRef.current) {
-                const b = layer.getBounds();
-                if (b?.isValid?.() === true) {
-                  mapRef.current.fitBounds(b, { padding: [24, 24], maxZoom: 12 });
+              layer.on("click", () => {
+                const p = feat?.properties || {};
+                let lakeId =
+                  getLakeIdFromFeature(feat) ??
+                  (p && (p.lake_id ?? p.lakeId ?? p.id)) ??
+                  null;
+
+                setSelectedLake({
+                  id: lakeId,
+                  name: p.name,
+                  alt_name: p.alt_name,
+                  region: p.region,
+                  province: p.province,
+                  municipality: p.municipality,
+                  watershed_name: p.watershed_name,
+                  surface_area_km2: p.surface_area_km2,
+                  elevation_m: p.elevation_m,
+                  mean_depth_m: p.mean_depth_m,
+                });
+                setSelectedLakeId(lakeId);
+                setSelectedLakeName(p?.name || null);
+                setLakePanelOpen(true);
+
+                (async () => {
+                  if (lakeId == null && p?.name) {
+                    try {
+                      const opts = await fetchLakeOptions(p.name);
+                      const exact = opts.find(o => (o.name || "").toLowerCase() === String(p.name).toLowerCase());
+                      const candidate = exact || opts[0];
+                      if (candidate?.id != null) {
+                        lakeId = candidate.id;
+                        setSelectedLakeId(lakeId);
+                      }
+                    } catch (e) {
+                      console.warn("[MapPage] lake id lookup by name failed", e);
+                    }
+                  }
+
+                  if (lakeId != null) {
+                    await loadPublicLayersForLake(lakeId);
+                  } else {
+                    console.warn("[MapPage] No lakeId found on clicked feature; skipping layers fetch.", feat);
+                    setLakeLayers([]);
+                    setLakeActiveLayerId(null);
+                  }
+                })();
+
+                // Fit to lake bounds
+                if (mapRef.current) {
+                  const b = layer.getBounds();
+                  if (b?.isValid?.() === true) {
+                    mapRef.current.fitBounds(b, { padding: [24, 24], maxZoom: 12 });
+                  }
                 }
-              }
-            });
-            layer.on("mouseover", () => layer.setStyle({ weight: 3 }));
-            layer.on("mouseout",  () => layer.setStyle({ weight: 2 }));
-          }}
+              });
+
+              layer.on("mouseover", () => layer.setStyle({ weight: 3 }));
+              layer.on("mouseout",  () => layer.setStyle({ weight: 2 }));
+            }}
+          />
+        )}
+
+        {/* Overlay: selected layer geometry in ordinary blue */}
+        {overlayFeature && (
+          <GeoJSON
+            key={`overlay-${overlayFeature?.properties?.layer_id || "x"}`}
+            data={overlayFeature}
+            style={{ color: "#3388ff", weight: 2.5, fillOpacity: 0.20 }}
+            onEachFeature={(feat, layer) => {
+              const nm = feat?.properties?.name || "Layer";
+              layer.bindTooltip(nm, { sticky: true });
+            }}
           />
         )}
 
@@ -194,7 +342,36 @@ function MapPage() {
         isOpen={lakePanelOpen}
         onClose={() => setLakePanelOpen(false)}
         lake={selectedLake}
-        onToggleHeatmap={(on, km) => togglePopulationHeatmap(on, km)}
+        onToggleHeatmap={(on, km) => {
+          console.log("[Heatmap]", on ? "ON" : "OFF", "distance:", km, "km");
+        }}
+        layers={lakeLayers}
+        activeLayerId={lakeActiveLayerId}
+        onResetToActive={async () => {
+          // Clear overlay and show the base feature again
+          setOverlayFeature(null);
+          setBaseKey((v) => v + 1);
+
+          // Fit back to the base geometry for this lake
+          if (!publicFC || !selectedLakeId || !mapRef.current) return;
+          const f = publicFC.features?.find((feat) => {
+            const id = getLakeIdFromFeature(feat);
+            return id != null && String(id) === String(selectedLakeId);
+          });
+          if (f) {
+            try {
+              const gj = L.geoJSON(f);
+              const b = gj.getBounds();
+              if (b?.isValid?.() === true) {
+                mapRef.current.fitBounds(b, { padding: [24, 24], maxZoom: 13 });
+              }
+            } catch {}
+          }
+        }}
+        onSelectLayer={async (layer) => {
+          // Fetch overlay geometry and show it; base feature will be hidden for this lake
+          await applyOverlayByLayerId(layer.id, { fit: true });
+        }}
       />
 
       {/* UI overlays */}

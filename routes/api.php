@@ -51,6 +51,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/layers/{id}',   [ApiLayerController::class, 'destroy']); // superadmin only (enforced in controller)
 });
 
+// NEW: Public listing of layers, always filtered to visibility=public (no auth).
+// Usage: GET /api/public/layers?body_type=lake|watershed&body_id=123
+Route::get('/public/layers', [ApiLayerController::class, 'publicIndex']);
+Route::get('/public/layers/{id}', [ApiLayerController::class, 'publicShow']);
+
+
 // Slim options for dropdowns (id + name), with optional ?q=
 Route::get('/options/lakes',      [OptionsController::class, 'lakes']);
 Route::get('/options/watersheds', [OptionsController::class, 'watersheds']);
