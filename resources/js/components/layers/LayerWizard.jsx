@@ -29,6 +29,7 @@ export default function LayerWizard({
     { value: "public", label: "Public" },
     { value: "admin", label: "Admin" },
   ],
+  initialBodyId = "",
   onPublished,             // (layerResponse) => void
 }) {
   const normalizedVisibilityOptions = useMemo(() => {
@@ -63,7 +64,7 @@ export default function LayerWizard({
 
     // link
     bodyType: allowedBodyTypes.includes(defaultBodyType) ? defaultBodyType : allowedBodyTypes[0] || "lake",
-    bodyId: "",
+    bodyId: initialBodyId ? String(initialBodyId) : "",
 
     // meta
     name: "",
@@ -77,6 +78,12 @@ export default function LayerWizard({
   const mapRef = useRef(null);
   const [lakeOptions, setLakeOptions] = useState([]);
   const [watershedOptions, setWatershedOptions] = useState([]);
+
+  useEffect(() => {
+    if (initialBodyId === undefined || initialBodyId === null || initialBodyId === "") return;
+    const nextId = String(initialBodyId);
+    setData((prev) => (prev.bodyId === nextId ? prev : { ...prev, bodyId: nextId }));
+  }, [initialBodyId]);
 
   useEffect(() => {
     setData((d) => {
@@ -222,6 +229,8 @@ export default function LayerWizard({
   };
 
   // -------- steps ----------
+  const previewColor = data.bodyType === "watershed" ? "#16a34a" : "#2563eb";
+
   const steps = [
     // Step 1: Upload / Paste
     {
@@ -311,7 +320,7 @@ export default function LayerWizard({
                 whenCreated={(m) => { if (m && !mapRef.current) mapRef.current = m; }}
               >
                 {data.previewGeom && (
-                  <GeoJSON key="geom" data={{ type: "Feature", geometry: data.previewGeom }} />
+                  <GeoJSON key="geom" data={{ type: "Feature", geometry: data.previewGeom }} style={{ color: previewColor, weight: 2, fillOpacity: 0.15 }} />
                 )}
               </AppMap>
             </div>

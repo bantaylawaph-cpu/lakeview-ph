@@ -8,7 +8,7 @@ const fmtNum = (v, suffix = "", digits = 2) => {
 };
 const fmtDate = (v) => (v ? new Date(v).toLocaleString() : "–");
 
-function OverviewTab({ lake }) {
+function OverviewTab({ lake, showWatershed = false, canToggleWatershed = false, onToggleWatershed }) {
   const watershedName = useMemo(() => {
     if (!lake) return "–";
     return lake?.watershed?.name || lake?.watershed_name || "–";
@@ -26,11 +26,26 @@ function OverviewTab({ lake }) {
   const createdAtStr = useMemo(() => fmtDate(lake?.created_at), [lake]);
   const updatedAtStr = useMemo(() => fmtDate(lake?.updated_at), [lake]);
 
+  const showToggle = canToggleWatershed && typeof onToggleWatershed === 'function';
+
   return (
     <>
       {lake?.image && (
         <div className="lake-info-image">
           <img src={lake.image} alt={lake.name} />
+        </div>
+      )}
+
+      {showToggle && (
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
+            <input
+              type="checkbox"
+              checked={showWatershed}
+              onChange={(e) => onToggleWatershed?.(e.target.checked)}
+            />
+            <span>Show watershed outline</span>
+          </label>
         </div>
       )}
 

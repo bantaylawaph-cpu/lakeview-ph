@@ -162,6 +162,8 @@ class LayerController extends Controller
 
         $q->select([
             'layers.id',
+            'layers.body_type',
+            'layers.body_id',
             'layers.name',
             'layers.notes',
             'layers.is_active',

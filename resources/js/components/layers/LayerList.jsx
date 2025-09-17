@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FiLayers, FiLoader, FiEye, FiToggleRight, FiLock, FiUnlock, FiTrash2, FiEdit2,
 } from "react-icons/fi";
@@ -16,6 +16,7 @@ import {
   computeNextVisibility,
 } from "../../lib/layers";
 import AppMap from "../../components/AppMap";
+import MapViewport from "../../components/MapViewport";
 import { GeoJSON } from "react-leaflet";
 import L from "leaflet";
 
@@ -77,7 +78,33 @@ function LayerList({
   };
 
   const [previewLayer, setPreviewLayer] = useState(null);
-  const previewMapRef = useRef(null);
+
+  const [previewGeometry, setPreviewGeometry] = useState(null);
+  const [previewBounds, setPreviewBounds] = useState(null);
+
+  const [mapViewport, setMapViewport] = useState({
+    bounds: null,
+    maxZoom: 13,
+    padding: [24, 24],
+    pad: 0.02,
+    token: 0,
+  });
+
+  const updateViewport = useCallback((nextBounds, options = {}) => {
+    if (!nextBounds?.isValid?.()) return;
+    const clone = nextBounds.clone ? nextBounds.clone() : L.latLngBounds(nextBounds);
+    setMapViewport({
+      bounds: clone,
+      maxZoom: options.maxZoom ?? 13,
+      padding: options.padding ?? [24, 24],
+      pad: options.pad ?? 0.02,
+      token: Date.now(),
+    });
+  }, []);
+
+  const resetViewport = useCallback(() => {
+    setMapViewport((prev) => ({ ...prev, bounds: null, token: Date.now() }));
+  }, []);
 
   const refresh = async () => {
     if (!bodyType || !bodyId) {
@@ -110,6 +137,43 @@ function LayerList({
     })();
   }, [bodyType, bodyId]);
 
+  useEffect(() => {
+    if (!previewLayer?.geom_geojson) {
+      setPreviewGeometry(null);
+      setPreviewBounds(null);
+      resetViewport();
+      return;
+    }
+
+    let geometry = null;
+    try {
+      geometry = JSON.parse(previewLayer.geom_geojson);
+    } catch (err) {
+      console.error('[LayerList] Failed to parse preview geometry', err);
+      setPreviewGeometry(null);
+      setPreviewBounds(null);
+      return;
+    }
+
+    setPreviewGeometry(geometry);
+
+    try {
+      const layer = L.geoJSON(geometry);
+      const bounds = layer.getBounds();
+      if (bounds && bounds.isValid && bounds.isValid()) {
+        setPreviewBounds(bounds);
+        updateViewport(bounds, { maxZoom: previewLayer?.body_type === "watershed" ? 12 : 13 });
+      } else {
+        setPreviewBounds(null);
+        resetViewport();
+      }
+    } catch (err) {
+      console.error('[LayerList] Failed to compute preview bounds', err);
+      setPreviewBounds(null);
+      resetViewport();
+    }
+  }, [previewLayer, updateViewport, resetViewport]);
+
   // Load lake options (names only)
   useEffect(() => {
     let cancelled = false;
@@ -140,19 +204,6 @@ function LayerList({
     return () => { cancelled = true; };
   }, [bodyType]);
 
-  // Fit preview bounds when map or selection changes
-  useEffect(() => {
-    const map = previewMapRef.current;
-    if (!map || !previewLayer) return;
-    try {
-      const gj = previewLayer.geom_geojson ? JSON.parse(previewLayer.geom_geojson) : null;
-      if (!gj) return;
-      const layer = L.geoJSON(gj);
-      const b = layer.getBounds();
-      if (b && b.isValid && b.isValid()) map.fitBounds(b.pad(0.1));
-    } catch (_) {}
-  }, [previewLayer]);
-
   const doToggleVisibility = async (row) => {
     if (allowedVisibilityValues.length < 2) return;
     try {
@@ -175,7 +226,7 @@ function LayerList({
     }
   };
 
-  // NEW: default toggle with “one-at-a-time” guard (no auto-unset others)
+  // NEW: default toggle with "one-at-a-time" guard (no auto-unset others)
   const doToggleDefault = async (row) => {
     try {
       if (row.is_active) {
@@ -188,8 +239,8 @@ function LayerList({
       const existing = layers.find((l) => l.is_active && l.id !== row.id);
       if (existing) {
         alert(
-          `“${existing.name}” is already set as the default layer.\n\n` +
-          `Please turn it OFF first, then set “${row.name}” as the default.`
+          `"${existing.name}" is already set as the default layer.\n\n` +
+          `Please turn it OFF first, then set "${row.name}" as the default.`
         );
         return;
       }
@@ -270,14 +321,24 @@ function LayerList({
           </div>
 
           {/* Inline preview map (optional) */}
-          {previewLayer && previewLayer.geom_geojson && (
+          {previewGeometry && (
             <div style={{ height: 360, borderRadius: 12, overflow: 'hidden', border: '1px solid #e5e7eb', marginBottom: 12 }}>
-              <AppMap view="osm" whenCreated={(m) => (previewMapRef.current = m)}>
+              <AppMap view="osm">
                 <GeoJSON
-                  key={`gj-${previewLayer.id}`}
-                  data={JSON.parse(previewLayer.geom_geojson)}
-                  style={{ weight: 2, fillOpacity: 0.1 }}
+                  key={`preview-${previewLayer?.id ?? 'layer'}-${previewLayer?.geom_geojson?.length ?? 0}`}
+                  data={previewGeometry}
+                  style={{ weight: 2, fillOpacity: 0.1, color: (previewLayer?.body_type === 'watershed' ? '#16a34a' : '#2563eb') }}
                 />
+
+                {mapViewport.bounds ? (
+                  <MapViewport
+                    bounds={mapViewport.bounds}
+                    maxZoom={mapViewport.maxZoom}
+                    padding={mapViewport.padding}
+                    pad={mapViewport.pad}
+                    version={mapViewport.token}
+                  />
+                ) : null}
               </AppMap>
             </div>
           )}
@@ -490,3 +551,4 @@ function LayerList({
 }
 
 export default LayerList;
+

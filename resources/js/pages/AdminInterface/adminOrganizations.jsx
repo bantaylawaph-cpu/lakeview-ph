@@ -95,7 +95,7 @@ export default function AdminOrganizations() {
           <TableLayout
             columns={columns}
             data={orgs}
-            pageSize={10}
+            pageSize={5}
             actions={actions}
           />
         </div>

@@ -152,7 +152,7 @@ export default function AdminUsers() {
           <TableLayout
             columns={columns}
             data={users}
-            pageSize={10}
+            pageSize={5}
             actions={actions}
           />
         </div>

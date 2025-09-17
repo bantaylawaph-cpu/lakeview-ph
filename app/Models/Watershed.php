@@ -5,7 +5,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Watershed extends Model
 {
-    protected $fillable = ['name','description','region','province','municipality'];
+    protected $fillable = ['name','description'];
 
     // A watershed has many lakes
     public function lakes()

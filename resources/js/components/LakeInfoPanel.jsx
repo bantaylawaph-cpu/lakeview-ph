@@ -15,6 +15,9 @@ import LayersTab from "./lake-info-panel/LayersTab";
  * - activeLayerId?: number|string|null
  * - onSelectLayer?: (layer: object) => void
  * - onResetToActive?: () => void
+ * - onToggleWatershed?: (checked: boolean) => void
+ * - showWatershed?: boolean
+ * - canToggleWatershed?: boolean
  */
 function LakeInfoPanel({
   isOpen,
@@ -25,6 +28,9 @@ function LakeInfoPanel({
   activeLayerId = null,
   onSelectLayer,
   onResetToActive,
+  onToggleWatershed,
+  showWatershed = false,
+  canToggleWatershed = false,
 }) {
   const [activeTab, setActiveTab] = useState("overview");
   const [closing, setClosing] = useState(false);
@@ -85,7 +91,14 @@ function LakeInfoPanel({
 
       {/* Content */}
       <div className="lake-info-content">
-        {activeTab === "overview" && <OverviewTab lake={lake} />}
+        {activeTab === "overview" && (
+          <OverviewTab
+            lake={lake}
+            showWatershed={showWatershed}
+            canToggleWatershed={canToggleWatershed}
+            onToggleWatershed={onToggleWatershed}
+          />
+        )}
         {activeTab === "water" && <WaterQualityTab />}
 
         {activeTab === "population" && (

@@ -41,13 +41,16 @@ function MapPage() {
   const [selectedLake, setSelectedLake] = useState(null);
   const [selectedLakeId, setSelectedLakeId] = useState(null);
   const [selectedLakeName, setSelectedLakeName] = useState(null);
+  const [selectedWatershedId, setSelectedWatershedId] = useState(null);
+  const [watershedToggleOn, setWatershedToggleOn] = useState(false);
   const [lakePanelOpen, setLakePanelOpen] = useState(false);
 
   const [lakeLayers, setLakeLayers] = useState([]);
   const [lakeActiveLayerId, setLakeActiveLayerId] = useState(null);
 
   // Overlay feature to show (and trigger hiding of the base feature)
-  const [overlayFeature, setOverlayFeature] = useState(null);
+  const [lakeOverlayFeature, setLakeOverlayFeature] = useState(null);
+  const [watershedOverlayFeature, setWatershedOverlayFeature] = useState(null);
   const [baseKey, setBaseKey] = useState(0); // force base GeoJSON remount when needed
 
   const [measureActive, setMeasureActive] = useState(false);
@@ -109,8 +112,10 @@ function MapPage() {
 
   // ---------------- Layers list for selected lake (PUBLIC) ----------------
   const loadPublicLayersForLake = async (lakeId) => {
-    // Clear overlay when switching lakes
-    setOverlayFeature(null);
+    // Clear overlays when switching lakes
+    setLakeOverlayFeature(null);
+    setWatershedOverlayFeature(null);
+    setWatershedToggleOn(false);
     setBaseKey((v) => v + 1);
 
     if (!lakeId) {
@@ -133,25 +138,36 @@ function MapPage() {
   // Apply a selected layer as overlay (and hide base feature for that lake)
   const applyOverlayByLayerId = async (layerId, { fit = true } = {}) => {
     try {
-      const row = await fetchPublicLayerGeo(layerId); // expects geom_geojson and/or bbox_geojson
+      const row = await fetchPublicLayerGeo(layerId); // expects geom_geojson
       if (!row) {
         console.warn("[MapPage] Public layer not found:", layerId);
-        setOverlayFeature(null);
+        setLakeOverlayFeature(null);
+        setWatershedOverlayFeature(null);
         setBaseKey((v) => v + 1);
         return;
       }
-      const geomStr = row.geom_geojson || row.bbox_geojson || null;
+      const geomStr = row.geom_geojson || null;
       if (!geomStr) {
         console.warn("[MapPage] No geometry returned for layer", layerId);
-        setOverlayFeature(null);
-        setBaseKey((v) => v + 1);
+        if ((row.body_type || '').toLowerCase() === 'watershed') {
+          setWatershedOverlayFeature(null);
+          setWatershedToggleOn(false);
+        } else {
+          setLakeOverlayFeature(null);
+          setBaseKey((v) => v + 1);
+        }
         return;
       }
       let geometry = null;
       try { geometry = JSON.parse(geomStr); } catch (e) {
         console.warn("[MapPage] Failed to parse geometry for layer", layerId, e);
-        setOverlayFeature(null);
-        setBaseKey((v) => v + 1);
+        if ((row.body_type || '').toLowerCase() === 'watershed') {
+          setWatershedOverlayFeature(null);
+          setWatershedToggleOn(false);
+        } else {
+          setLakeOverlayFeature(null);
+          setBaseKey((v) => v + 1);
+        }
         return;
       }
 
@@ -159,36 +175,52 @@ function MapPage() {
         type: "Feature",
         properties: {
           layer_id: row.id,
+          body_type: row.body_type || "lake",
           name: row.name,
           organization: row.uploaded_by_org || "LakeView",
         },
         geometry,
       };
 
-      setOverlayFeature(feature);
-      setBaseKey((v) => v + 1);
-
-      if (fit && mapRef.current) {
-        try {
-          const gj = L.geoJSON(feature);
-          const b = gj.getBounds();
-          if (b?.isValid?.() === true) {
-            mapRef.current.fitBounds(b, { padding: [24, 24], maxZoom: 13 });
+      if ((feature.properties.body_type || "lake").toLowerCase() === "watershed") {
+        setWatershedOverlayFeature(feature);
+        if (fit && mapRef.current) {
+          try {
+            const gj = L.geoJSON(feature);
+            const b = gj.getBounds();
+            if (b?.isValid?.() === true) {
+              mapRef.current.fitBounds(b, { padding: [24, 24], maxZoom: 13 });
+            }
+          } catch (e) {
+            console.warn('[MapPage] Could not compute bounds for watershed overlay', e);
           }
-        } catch (e) {
-          console.warn("[MapPage] Could not compute bounds for overlay", e);
+        }
+      } else {
+        setLakeOverlayFeature(feature);
+        setBaseKey((v) => v + 1);
+        if (fit && mapRef.current) {
+          try {
+            const gj = L.geoJSON(feature);
+            const b = gj.getBounds();
+            if (b?.isValid?.() === true) {
+              mapRef.current.fitBounds(b, { padding: [24, 24], maxZoom: 13 });
+            }
+          } catch (e) {
+            console.warn("[MapPage] Could not compute bounds for overlay", e);
+          }
         }
       }
     } catch (e) {
       console.error("[MapPage] Failed to fetch overlay layer", layerId, e);
-      setOverlayFeature(null);
+      setLakeOverlayFeature(null);
+      setWatershedOverlayFeature(null);
       setBaseKey((v) => v + 1);
     }
   };
 
   // Helper: does a base feature correspond to the selected lake?
   const baseMatchesSelectedLake = (feat) => {
-    if (!overlayFeature) return false; // only hide when we have an overlay to show
+    if (!lakeOverlayFeature) return false; // only hide base lake when a lake overlay exists
     const fid = getLakeIdFromFeature(feat);
     if (selectedLakeId != null && fid != null) {
       return String(fid) === String(selectedLakeId);
@@ -198,6 +230,30 @@ function MapPage() {
     return selectedLakeId == null &&
            !!selectedLakeName &&
            fname === String(selectedLakeName).trim().toLowerCase();
+  };
+
+  const handlePanelToggleWatershed = async (checked) => {
+    setWatershedToggleOn(checked);
+    if (!checked) {
+      setWatershedOverlayFeature(null);
+      return;
+    }
+    if (!selectedWatershedId) {
+      setWatershedToggleOn(false);
+      return;
+    }
+    try {
+      const candidates = await fetchPublicLayers({ bodyType: 'watershed', bodyId: selectedWatershedId });
+      const target = candidates?.find((l) => l.is_active) || candidates?.[0];
+      if (!target) {
+        setWatershedToggleOn(false);
+        return;
+      }
+      await applyOverlayByLayerId(target.id, { fit: true });
+    } catch (err) {
+      console.error('[MapPage] Failed to toggle watershed overlay', err);
+      setWatershedToggleOn(false);
+    }
   };
 
   // ---------------- Hotkeys (L / Esc) ----------------
@@ -238,6 +294,9 @@ function MapPage() {
                   (p && (p.lake_id ?? p.lakeId ?? p.id)) ??
                   null;
 
+                setWatershedToggleOn(false);
+                setSelectedWatershedId(null);
+                setWatershedOverlayFeature(null);
                 setSelectedLake({
                   id: lakeId,
                   name: p.name,
@@ -246,6 +305,7 @@ function MapPage() {
                   province: p.province,
                   municipality: p.municipality,
                   watershed_name: p.watershed_name,
+                  watershed_id: null,
                   surface_area_km2: p.surface_area_km2,
                   elevation_m: p.elevation_m,
                   mean_depth_m: p.mean_depth_m,
@@ -270,9 +330,20 @@ function MapPage() {
                   }
 
                   if (lakeId != null) {
+                    try {
+                      const detail = await api(`/lakes/${lakeId}`);
+                      if (detail?.id && String(detail.id) === String(lakeId)) {
+                        setSelectedLake((prev) => ({ ...prev, ...detail }));
+                        setSelectedWatershedId(detail?.watershed_id ?? null);
+                      }
+                    } catch (err) {
+                      console.warn('[MapPage] Failed to load lake detail', err);
+                      setSelectedWatershedId(null);
+                    }
                     await loadPublicLayersForLake(lakeId);
                   } else {
                     console.warn("[MapPage] No lakeId found on clicked feature; skipping layers fetch.", feat);
+                    setSelectedWatershedId(null);
                     setLakeLayers([]);
                     setLakeActiveLayerId(null);
                   }
@@ -293,14 +364,27 @@ function MapPage() {
           />
         )}
 
-        {/* Overlay: selected layer geometry in ordinary blue */}
-        {overlayFeature && (
+        {/* Watershed overlay (green) */}
+        {watershedOverlayFeature && (
           <GeoJSON
-            key={`overlay-${overlayFeature?.properties?.layer_id || "x"}`}
-            data={overlayFeature}
-            style={{ color: "#3388ff", weight: 2.5, fillOpacity: 0.20 }}
+            key={`watershed-${watershedOverlayFeature?.properties?.layer_id || 'x'}-${JSON.stringify(watershedOverlayFeature?.geometry ?? {}).length}`}
+            data={watershedOverlayFeature}
+            style={{ color: '#16a34a', weight: 2, fillOpacity: 0.15 }}
             onEachFeature={(feat, layer) => {
-              const nm = feat?.properties?.name || "Layer";
+              const nm = feat?.properties?.name || 'Watershed';
+              layer.bindTooltip(nm, { sticky: true });
+            }}
+          />
+        )}
+
+        {/* Lake overlay (blue) */}
+        {lakeOverlayFeature && (
+          <GeoJSON
+            key={`lake-overlay-${lakeOverlayFeature?.properties?.layer_id || 'x'}-${JSON.stringify(lakeOverlayFeature?.geometry ?? {}).length}`}
+            data={lakeOverlayFeature}
+            style={{ color: '#3388ff', weight: 2.5, fillOpacity: 0.20 }}
+            onEachFeature={(feat, layer) => {
+              const nm = feat?.properties?.name || 'Layer';
               layer.bindTooltip(nm, { sticky: true });
             }}
           />
@@ -349,7 +433,9 @@ function MapPage() {
         activeLayerId={lakeActiveLayerId}
         onResetToActive={async () => {
           // Clear overlay and show the base feature again
-          setOverlayFeature(null);
+          setWatershedToggleOn(false);
+          setLakeOverlayFeature(null);
+          setWatershedOverlayFeature(null);
           setBaseKey((v) => v + 1);
 
           // Fit back to the base geometry for this lake
@@ -372,6 +458,9 @@ function MapPage() {
           // Fetch overlay geometry and show it; base feature will be hidden for this lake
           await applyOverlayByLayerId(layer.id, { fit: true });
         }}
+        showWatershed={watershedToggleOn}
+        canToggleWatershed={Boolean(selectedWatershedId)}
+        onToggleWatershed={handlePanelToggleWatershed}
       />
 
       {/* UI overlays */}

@@ -283,7 +283,7 @@ function MeasurementsStep({ data, setData, params }) {
           <TableLayout
             columns={columns}
             data={dataWithIndex}
-            pageSize={50}
+            pageSize={5}
             actions={actions.map(a => ({
               ...a,
               onClick: (row) => a.onClick(row, row.__idx),

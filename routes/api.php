@@ -7,6 +7,10 @@ use App\Http\Controllers\LakeController;
 use App\Http\Controllers\WatershedController;
 use App\Http\Controllers\Api\LayerController as ApiLayerController;
 use App\Http\Controllers\Api\OptionsController;
+use App\Http\Controllers\Api\Admin\ParameterController as AdminParameterController;
+use App\Http\Controllers\Api\Admin\ParameterThresholdController as AdminParameterThresholdController;
+use App\Http\Controllers\Api\Admin\WqStandardController as AdminWqStandardController;
+use App\Http\Controllers\Api\Admin\WaterQualityClassController as AdminWaterQualityClassController;
 
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register']); // public
@@ -18,9 +22,13 @@ Route::prefix('auth')->group(function () {
     });
 });
 
-// Example protected API groups (wire later as you build)
-Route::middleware(['auth:sanctum','role:superadmin'])->prefix('admin')->group(function () {
+Route::middleware('auth:sanctum')->prefix('admin')->group(function () {
     Route::get('/whoami', fn() => ['ok' => true]);
+
+    Route::get('water-quality-classes', [AdminWaterQualityClassController::class, 'index']);
+    Route::apiResource('parameters', AdminParameterController::class);
+    Route::apiResource('parameter-thresholds', AdminParameterThresholdController::class)->except(['create', 'edit']);
+    Route::apiResource('wq-standards', AdminWqStandardController::class)->except(['create', 'edit']);
 });
 
 Route::middleware(['auth:sanctum','role:org_admin'])->prefix('org')->group(function () {
@@ -41,6 +49,10 @@ Route::get('/public/lakes-geo', [LakeController::class, 'publicGeo']); // public
 
 // Watersheds
 Route::get('/watersheds', [WatershedController::class, 'index']); // for dropdowns
+Route::get('/watersheds/{watershed}', [WatershedController::class, 'show']);
+Route::post('/watersheds', [WatershedController::class, 'store']);
+Route::put('/watersheds/{watershed}', [WatershedController::class, 'update']);
+Route::delete('/watersheds/{watershed}', [WatershedController::class, 'destroy']);
 
 // Layers (single canonical controller)
 Route::middleware('auth:sanctum')->group(function () {
@@ -56,7 +68,7 @@ Route::middleware('auth:sanctum')->group(function () {
 Route::get('/public/layers', [ApiLayerController::class, 'publicIndex']);
 Route::get('/public/layers/{id}', [ApiLayerController::class, 'publicShow']);
 
-
 // Slim options for dropdowns (id + name), with optional ?q=
 Route::get('/options/lakes',      [OptionsController::class, 'lakes']);
 Route::get('/options/watersheds', [OptionsController::class, 'watersheds']);
+
