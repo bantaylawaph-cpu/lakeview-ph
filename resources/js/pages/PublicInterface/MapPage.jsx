@@ -418,7 +418,6 @@ function MapPage() {
         {/* Measure Tool */}
         <MeasureTool active={measureActive} mode={measureMode} onFinish={() => setMeasureActive(false)} />
         <CoordinatesScale />
-
         {/* Map Controls */}
         <MapControls defaultBounds={worldBounds} />
       </AppMap>
