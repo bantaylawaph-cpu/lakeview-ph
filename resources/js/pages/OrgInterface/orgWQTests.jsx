@@ -1,63 +1,22 @@
 // resources/js/pages/OrgInterface/OrgWQTests.jsx
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import TableLayout from "../../layouts/TableLayout";
 import TableToolbar from "../../components/table/TableToolbar";
 import OrgWQTestModal from "../../components/water-quality-test/OrgWQTestModal";
 import { FiEye, FiEdit2, FiTrash2, FiGlobe } from "react-icons/fi";
-
-/* Mock until backend is wired */
-const MOCK_LAKES = [
-  { id: 1, name: "Laguna de Bay", class_code: "C" },
-  { id: 2, name: "Taal Lake", class_code: "B" },
-];
-const MOCK_TESTS = [
-  {
-    id: 5001,
-    status: "published",
-    lake_id: 1,
-    lake_name: "Laguna de Bay",
-    station_id: 101,
-    station_name: "LLDA Sta. Rosa",
-    sampled_at: "2025-07-01T09:30",
-    sampler_name: "J. Cruz",
-    method: "Grab",
-    weather: "Sunny",
-    lat: 14.276,
-    lng: 121.110,
-    applied_standard_code: "DAO2021-19",
-    results: [
-      { parameter_id: 1, code: "DO", name: "Dissolved Oxygen", value: 6.2, unit: "mg/L", depth_m: 1.0 },
-      { parameter_id: 2, code: "pH", name: "pH", value: 7.4, unit: "" },
-    ],
-    notes: "Morning run",
-    year: 2025, quarter: 3, month: 7, day: 1,
-  },
-  {
-    id: 5002,
-    status: "draft",
-    lake_id: 2,
-    lake_name: "Taal Lake",
-    station_id: null,
-    station_name: "",
-    sampled_at: "2025-07-03T15:10",
-    sampler_name: "M. Dela Cruz",
-    method: "Grab",
-    weather: "Cloudy",
-    lat: 14.003,
-    lng: 120.981,
-    applied_standard_code: "DAO2021-19",
-    results: [{ parameter_id: 1, code: "DO", name: "Dissolved Oxygen", value: 5.4, unit: "mg/L" }],
-    notes: "",
-    year: 2025, quarter: 3, month: 7, day: 3,
-  },
-];
-
-// Small catalog so the modal can label/select parameters when adding rows in edit mode
-const PARAM_CATALOG = [
-  { id: 1, code: "DO",  name: "Dissolved Oxygen", unit: "mg/L" },
-  { id: 2, code: "pH",  name: "pH",                unit: ""     },
-  { id: 3, code: "BOD", name: "BOD",               unit: "mg/L" },
-];
+import {
+  fetchOrgContext,
+  fetchLakeOptions,
+  fetchParameterOptions,
+  fetchOrgWqTests,
+  fetchOrgWqTest,
+  updateOrgWqTest,
+  deleteOrgWqTest,
+  setOrgWqTestStatus,
+} from "../../lib/waterQuality";
+import { alertError, alertSuccess, confirm } from "../../utils/alerts";
+import { extractErrorMessage } from "../../utils/errors";
 
 function startOfDay(iso) {
   if (!iso) return null;
@@ -79,15 +38,18 @@ function yqmFrom(record) {
   return { year: y, quarter: q, month: m };
 }
 
-export default function OrgWQTests({
-  initialLakes = MOCK_LAKES,
-  initialTests = MOCK_TESTS,
-  currentUserRole = "org-admin", // "org-admin" | "contributor" | "system-admin"
-}) {
-  const canPublish = currentUserRole === "org-admin" || currentUserRole === "system-admin";
+export default function OrgWQTests() {
+  const navigate = useNavigate();
+  const [organization, setOrganization] = useState(null);
+  const [role, setRole] = useState("org-admin");
+  const [lakes, setLakes] = useState([]);
+  const [tests, setTests] = useState([]);
+  const [parameterCatalog, setParameterCatalog] = useState([]);
+  const [loadingContext, setLoadingContext] = useState(true);
+  const [fetching, setFetching] = useState(false);
+  const [error, setError] = useState(null);
 
-  const [lakes] = useState(initialLakes);
-  const [tests, setTests] = useState(initialTests);
+  const canPublish = role === "org-admin" || role === "system-admin";
 
   // filters/search
   const [q, setQ] = useState("");
@@ -105,6 +67,215 @@ export default function OrgWQTests({
   const [editing, setEditing] = useState(false);
 
   const [resetSignal, setResetSignal] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadContext = async () => {
+      setLoadingContext(true);
+      try {
+        const ctx = await fetchOrgContext();
+        if (cancelled) return;
+
+        const membership = ctx.membership;
+        if (!membership) {
+          setError("You must belong to an active organization to view tests.");
+          alertError("No organization", "You must belong to an active organization to view tests.");
+          return;
+        }
+
+        setOrganization({
+          id: membership.organization_id,
+          name: membership.organization_name,
+        });
+        const normalizedRole =
+          membership.role === "org_admin"
+            ? "org-admin"
+            : membership.role === "system_admin"
+              ? "system-admin"
+              : membership.role;
+        setRole(normalizedRole);
+        setError(null);
+      } catch (err) {
+        if (!cancelled) {
+          const message = extractErrorMessage(err);
+          setError(message);
+          alertError("Failed to load organization", message);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingContext(false);
+        }
+      }
+    };
+
+    loadContext();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadOptions = async () => {
+      try {
+        const [lakeRows, parameterRows] = await Promise.all([
+          fetchLakeOptions(),
+          fetchParameterOptions(),
+        ]);
+
+        if (!cancelled) {
+          setLakes(lakeRows);
+          setParameterCatalog(parameterRows);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          alertError("Failed to load reference data", extractErrorMessage(err));
+        }
+      }
+    };
+
+    loadOptions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const loadTests = useCallback(async () => {
+    if (!organization?.id) {
+      return;
+    }
+
+    setFetching(true);
+    setError(null);
+    try {
+      const rows = await fetchOrgWqTests({
+        organizationId: organization.id,
+        lakeId: lakeId || undefined,
+        status: status || undefined,
+        sampledFrom: dateFrom ? `${dateFrom}T00:00:00` : undefined,
+        sampledTo: dateTo ? `${dateTo}T23:59:59` : undefined,
+      });
+      setTests(rows);
+    } catch (err) {
+      const message = extractErrorMessage(err);
+      setError(message);
+      alertError("Failed to load tests", message);
+    } finally {
+      setFetching(false);
+    }
+  }, [organization?.id, lakeId, status, dateFrom, dateTo]);
+
+  useEffect(() => {
+    if (organization?.id) {
+      loadTests();
+    }
+  }, [organization?.id, loadTests]);
+
+  const toNumberOrNull = (value) => {
+    if (value === "" || value === null || value === undefined) return null;
+    const num = Number(value);
+    return Number.isFinite(num) ? num : null;
+  };
+
+  const openTestModal = useCallback(async (row, isEdit) => {
+    setSelected(row);
+    setEditing(isEdit);
+    setOpen(true);
+    try {
+      const detail = await fetchOrgWqTest(row.id, { organizationId: organization?.id });
+      setSelected(detail);
+    } catch (err) {
+      alertError("Failed to load test", extractErrorMessage(err));
+      setOpen(false);
+      setSelected(null);
+    }
+  }, [organization?.id]);
+
+  const handleTogglePublish = useCallback(async (record) => {
+    if (!organization?.id) return;
+    const next = record.status === "published" ? "draft" : "published";
+
+    try {
+      const updated = await setOrgWqTestStatus(record.id, next, { organizationId: organization.id });
+      setTests((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+      setSelected((prev) => (prev && prev.id === updated.id ? updated : prev));
+      alertSuccess(
+        next === "published" ? "Test published" : "Test set to draft",
+        next === "published"
+          ? "The water quality test is now public."
+          : "The water quality test is now a draft."
+      );
+    } catch (err) {
+      alertError("Failed to update status", extractErrorMessage(err));
+    }
+  }, [organization?.id]);
+
+  const handleDeleteTest = useCallback(async (record) => {
+    const confirmed = await confirm("Delete test?", "This action cannot be undone.");
+    if (!confirmed) return;
+
+    try {
+      await deleteOrgWqTest(record.id);
+      setTests((prev) => prev.filter((t) => t.id !== record.id));
+      if (selected?.id === record.id) {
+        setOpen(false);
+        setSelected(null);
+      }
+      alertSuccess("Water quality test deleted", "The test has been removed.");
+    } catch (err) {
+      alertError("Failed to delete test", extractErrorMessage(err));
+    }
+  }, [selected]);
+
+  const handleSaveModal = useCallback(async (draft) => {
+    if (!organization?.id) {
+      alertError("No organization", "Please wait for the organization context to load.");
+      return;
+    }
+
+    try {
+      const payload = {
+        organization_id: organization.id,
+        lake_id: draft.lake_id,
+        station_id: draft.station_id,
+        applied_standard_id: draft.applied_standard_id,
+        sampled_at: draft.sampled_at,
+        sampler_name: draft.sampler_name,
+        method: draft.method,
+        weather: draft.weather,
+        notes: draft.notes,
+        status: draft.status,
+        latitude: toNumberOrNull(draft.lat),
+        longitude: toNumberOrNull(draft.lng),
+        measurements: Array.isArray(draft.results)
+          ? draft.results
+              .map((r) => {
+                const parameterId = Number(r.parameter_id);
+                if (!Number.isFinite(parameterId)) return null;
+                return {
+                  parameter_id: parameterId,
+                  value: toNumberOrNull(r.value),
+                  unit: r.unit?.trim() ? r.unit : null,
+                  depth_m: toNumberOrNull(r.depth_m),
+                  remarks: r.remarks?.trim() ? r.remarks : null,
+                };
+              })
+              .filter(Boolean)
+          : undefined,
+      };
+
+      const updated = await updateOrgWqTest(draft.id, payload);
+      setTests((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+      setSelected(updated);
+      alertSuccess("Water quality test updated", "Changes saved.");
+    } catch (err) {
+      alertError("Failed to update test", extractErrorMessage(err));
+    }
+  }, [organization?.id]);
 
   const baseColumns = useMemo(
     () => [
@@ -179,35 +350,35 @@ export default function OrgWQTests({
       label: "View",
       title: "View",
       icon: <FiEye />,
-      onClick: (row) => { setSelected(row); setEditing(false); setOpen(true); },
+      onClick: (row) => openTestModal(row, false),
     },
     {
       label: "Edit",
       title: "Edit",
       icon: <FiEdit2 />,
-      onClick: (row) => { setSelected(row); setEditing(true); setOpen(true); },
+      onClick: (row) => openTestModal(row, true),
     },
-    ...(canPublish ? [{
-      label: "Publish/Unpublish",
-      title: "Toggle Publish",
-      icon: <FiGlobe />,
-      onClick: (row) => {
-        setTests((prev) =>
-          prev.map((t) => (t.id === row.id ? { ...t, status: t.status === "published" ? "draft" : "published" } : t))
-        );
-      },
-    }] : []),
+    ...(canPublish
+      ? [{
+          label: "Publish/Unpublish",
+          title: "Toggle Publish",
+          icon: <FiGlobe />,
+          onClick: (row) => handleTogglePublish(row),
+        }]
+      : []),
     {
       label: "Delete",
       title: "Delete",
       type: "delete",
       icon: <FiTrash2 />,
-      onClick: (row) => {
-        if (!confirm("Delete this test?")) return;
-        setTests((prev) => prev.filter((t) => t.id !== row.id));
-      },
+      onClick: (row) => handleDeleteTest(row),
     },
   ];
+
+  const handleRefresh = () => {
+    loadTests();
+    setResetSignal((x) => x + 1);
+  };
 
   // Unique years from data (for Year filter)
   const years = useMemo(() => {
@@ -236,14 +407,12 @@ export default function OrgWQTests({
           onChange: setStatus,
           options: [{ value: "", label: "All" }, { value: "draft", label: "Draft" }, { value: "published", label: "Published" }],
         },
-        // Period selects (compact; stay on one line)
         { id: "year", label: "Year", type: "select", value: year, onChange: setYear,
           options: [{ value: "", label: "Year" }, ...years.map((y) => ({ value: String(y), label: String(y) }))] },
         { id: "quarter", label: "Qtr", type: "select", value: quarter, onChange: setQuarter,
           options: [{ value: "", label: "Qtr" }, { value: "1", label: "Q1" }, { value: "2", label: "Q2" }, { value: "3", label: "Q3" }, { value: "4", label: "Q4" }] },
         { id: "month", label: "Month", type: "select", value: month, onChange: setMonth,
           options: [{ value: "", label: "Month" }, ...[1,2,3,4,5,6,7,8,9,10,11,12].map((m) => ({ value: String(m), label: String(m).padStart(2,"0") }))] },
-        // Date range (inclusive)
         { id: "from", label: "From", type: "date", value: dateFrom, onChange: setDateFrom },
         { id: "to",   label: "To",   type: "date", value: dateTo,   onChange: setDateTo   },
       ]}
@@ -253,9 +422,9 @@ export default function OrgWQTests({
         onVisibleChange: (next) => setVisibleMap({ ...next, id: true }),
       }}
       onResetWidths={() => setResetSignal((x) => x + 1)}
-      onRefresh={() => setResetSignal((x) => x + 1)}
+      onRefresh={handleRefresh}
       onExport={null}
-      onAdd={null}
+      onAdd={() => navigate("/org-dashboard/add-wq-tests")}
     />
   );
 
@@ -266,43 +435,46 @@ export default function OrgWQTests({
           <div className="dashboard-card-title"><span>Water Quality Tests</span></div>
         </div>
         <div className="dashboard-card-body">
-          {toolbarNode}
-          <TableLayout
-            tableId="org-wqtests"
-            columns={displayColumns}
-            data={filtered}
-            pageSize={10}
-            actions={actions}
-            resetSignal={resetSignal}
-            columnPicker={false}
-          />
+          {loadingContext ? (
+            <div>Loading organization context…</div>
+          ) : !organization ? (
+            <div>{error || "You must belong to an active organization to view tests."}</div>
+          ) : (
+            <>
+              {toolbarNode}
+              {error ? (
+                <div style={{ color: "#b91c1c", marginBottom: 8 }}>{error}</div>
+              ) : null}
+              {fetching ? (
+                <div style={{ color: "#6b7280", marginBottom: 8 }}>Refreshing…</div>
+              ) : null}
+              <TableLayout
+                tableId="org-wqtests"
+                columns={displayColumns}
+                data={filtered}
+                pageSize={10}
+                actions={actions}
+                resetSignal={resetSignal}
+                columnPicker={false}
+              />
+            </>
+          )}
         </div>
       </div>
 
       <OrgWQTestModal
-        open={open}
-        onClose={() => setOpen(false)}
+        open={open && !!selected}
+        onClose={() => { setOpen(false); setSelected(null); }}
         record={selected}
-        editable={editing}                     // <-- edit vs view
-        parameterCatalog={PARAM_CATALOG}       // optional, for add-row select
+        editable={editing}
+        parameterCatalog={parameterCatalog}
         canPublish={canPublish}
         onTogglePublish={() => {
-          if (!selected) return;
-          setTests((prev) =>
-            prev.map((t) =>
-              t.id === selected.id
-                ? { ...t, status: t.status === "published" ? "draft" : "published" }
-                : t
-            )
-          );
-          setSelected((s) =>
-            s ? { ...s, status: s.status === "published" ? "draft" : "published" } : s
-          );
+          if (selected) {
+            handleTogglePublish(selected);
+          }
         }}
-        onSave={(updated) => {                 // <-- persist edits from modal
-          setTests((prev) => prev.map((t) => (t.id === updated.id ? { ...t, ...updated } : t)));
-          setSelected(updated);
-        }}
+        onSave={handleSaveModal}
       />
     </div>
   );
