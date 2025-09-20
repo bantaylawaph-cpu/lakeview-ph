@@ -171,7 +171,20 @@ export default function AdminWQTests({ initialLakes = [], initialTests = [], par
     { id: 'quarter', header: 'Quarter', width: 90, render: (row) => { const q = yqmFrom(row).quarter; return Number.isFinite(q) ? `Q${q}` : '—'; }, sortValue: (row) => yqmFrom(row).quarter ?? null },
     { id: 'month_day', header: 'Month-Day', width: 160, render: (row) => { if (!row || !row.sampled_at) return '—'; try { const d = new Date(row.sampled_at); return d.toLocaleDateString(undefined, { month: 'long', day: 'numeric' }); } catch (e) { return '—'; } }, sortValue: (row) => (row?.sampled_at ? new Date(row.sampled_at) : null) },
     { id: 'lake_name', header: 'Lake', width: 200, render: (row) => row?.lake?.name ?? row?.lake_name ?? '—', sortValue: (row) => row?.lake?.name ?? row?.lake_name ?? '' },
-    { id: 'station_name', header: 'Station', width: 220, render: (row) => row?.station?.name ?? row?.station_name ?? '—', sortValue: (row) => row?.station?.name ?? row?.station_name ?? '' },
+    { id: 'station_name', header: 'Station', width: 220, render: (row) => {
+        const name = row?.station?.name ?? row?.station_name;
+        if (name) return name;
+        if (row?.latitude != null && row?.longitude != null) {
+          try {
+            const lat = Number(row.latitude).toFixed(6);
+            const lon = Number(row.longitude).toFixed(6);
+            return `${lat}, ${lon}`;
+          } catch (e) {
+            return '—';
+          }
+        }
+        return '—';
+      }, sortValue: (row) => row?.station?.name ?? row?.station_name ?? (row?.latitude != null && row?.longitude != null ? `${row.latitude},${row.longitude}` : '' ) },
     { id: 'status', header: 'Status', width: 120, render: (row) => (<span className={`tag ${row.status === 'public' ? 'success' : 'muted'}`}>{row.status === 'public' ? 'Published' : 'Draft'}</span>), sortValue: (row) => (row.status === 'public' ? 1 : 0) },
     { id: 'logged_by', header: 'Logged By', width: 180, render: (row) => (row?.createdBy?.name ?? row?.created_by_name ?? '—'), sortValue: (row) => row?.createdBy?.name ?? row?.created_by_name ?? '' },
     { id: 'updated_by', header: 'Updated By', width: 180, render: (row) => (row?.updatedBy?.name ?? row?.updated_by_name ?? '—'), sortValue: (row) => row?.updatedBy?.name ?? row?.updated_by_name ?? '' },
