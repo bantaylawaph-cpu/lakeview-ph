@@ -9,6 +9,14 @@ class SampleResult extends Model
 {
     use HasFactory;
 
+    /**
+     * The model should not manage created_at / updated_at timestamps
+     * because the `sample_results` table does not include those columns.
+     *
+     * @var bool
+     */
+    public $timestamps = false;
+
 
     protected $fillable = [
         'sampling_event_id',

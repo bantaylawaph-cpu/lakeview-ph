@@ -121,7 +121,7 @@ export default function OrgWQTestModal({
           <div style={{ display: "flex", gap: 8 }}>
             {canPublish && !editable && (
               <button className="pill-btn" onClick={onTogglePublish}>
-                {draft.status === "published" ? "Unpublish" : "Publish"}
+                {draft.status === "public" ? "Unpublish" : "Publish"}
               </button>
             )}
           </div>
@@ -147,8 +147,8 @@ export default function OrgWQTestModal({
       >
         {/* Context pills */}
         <div className="info-row" style={{ gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-          <Pill tone={draft.status === "published" ? "success" : "muted"}>
-            {draft.status === "published" ? "Published" : "Draft"}
+          <Pill tone={draft.status === "public" ? "success" : "muted"}>
+            {draft.status === "public" ? "Published" : "Draft"}
           </Pill>
           {draft.lake_name ? <Pill>{draft.lake_name}</Pill> : null}
           {draft.station_name ? <Pill>{draft.station_name}</Pill> : null}

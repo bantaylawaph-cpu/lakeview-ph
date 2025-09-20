@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from "react";
 import WQTestWizard from "../../components/water-quality-test/WQTestWizard";
 import { api } from "../../lib/api";
+import { alertError, alertSuccess } from "../../utils/alerts";
 
 /**
  * IMPORTANT: Route-level layout (DashboardLayout) should wrap this page.
@@ -48,9 +49,17 @@ export default function OrgAddWQTest() {
       <WQTestWizard
         organization={organization}
         lakeGeoms={lakeGeoms}
-        onSubmit={(payload) => {
-          console.log("[WQTestWizard] submit", payload);
-          alert("Draft saved locally. Check console for the payload.");
+        onSubmit={async (payload) => {
+          console.debug('[orgAddWQTest] submit', payload);
+          try {
+            const res = await api('/admin/sample-events', { method: 'POST', body: payload });
+            alertSuccess('Saved', 'Water quality test saved to server.');
+            return res?.data;
+          } catch (e) {
+            const msg = e?.message || String(e);
+            alertError('Save failed', msg);
+            throw e;
+          }
         }}
       />
     </div>

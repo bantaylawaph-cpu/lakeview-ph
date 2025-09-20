@@ -115,7 +115,7 @@ class SamplingEventController extends Controller
         $this->assertLakeExists($data['lake_id']);
         $this->assertStationOwnership($tenantId, $data['station_id'] ?? null);
 
-        $event = DB::transaction(function () use ($tenantId, $data) {
+    $event = DB::transaction(function () use ($tenantId, $data, $request) {
             $attributes = [
                 'organization_id' => $tenantId,
                 'lake_id' => $data['lake_id'],
@@ -166,7 +166,7 @@ class SamplingEventController extends Controller
             $this->assertStationOwnership($tenantId, $data['station_id']);
         }
 
-        DB::transaction(function () use ($samplingEvent, $data) {
+    DB::transaction(function () use ($samplingEvent, $data, $request) {
             $updates = [];
 
             foreach ([

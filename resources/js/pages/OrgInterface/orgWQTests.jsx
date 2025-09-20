@@ -120,8 +120,8 @@ export default function OrgWQTests({
         header: "Status",
         width: 120,
         render: (row) => (
-          <span className={`tag ${row.status === "published" ? "success" : "muted"}`}>
-            {row.status === "published" ? "Published" : "Draft"}
+          <span className={`tag ${row.status === "public" ? "success" : "muted"}`}>
+            {row.status === "public" ? "Published" : "Draft"}
           </span>
         ),
       },
@@ -193,13 +193,13 @@ export default function OrgWQTests({
       icon: <FiEdit2 />,
       onClick: (row) => { setSelected(row); setEditing(true); setOpen(true); },
     },
-    ...(canPublish ? [{
+        ...(canPublish ? [{
       label: "Publish/Unpublish",
       title: "Toggle Publish",
       icon: <FiGlobe />,
       onClick: (row) => {
         setTests((prev) =>
-          prev.map((t) => (t.id === row.id ? { ...t, status: t.status === "published" ? "draft" : "published" } : t))
+          prev.map((t) => (t.id === row.id ? { ...t, status: t.status === "public" ? "draft" : "public" } : t))
         );
       },
     }] : []),
@@ -240,7 +240,7 @@ export default function OrgWQTests({
           type: "select",
           value: status,
           onChange: setStatus,
-          options: [{ value: "", label: "All" }, { value: "draft", label: "Draft" }, { value: "published", label: "Published" }],
+    options: [{ value: "", label: "All" }, { value: "draft", label: "Draft" }, { value: "public", label: "Published" }],
         },
         // Period selects (compact; stay on one line)
         { id: "year", label: "Year", type: "select", value: year, onChange: setYear,
@@ -297,12 +297,12 @@ export default function OrgWQTests({
           setTests((prev) =>
             prev.map((t) =>
               t.id === selected.id
-                ? { ...t, status: t.status === "published" ? "draft" : "published" }
+                ? { ...t, status: t.status === "public" ? "draft" : "public" }
                 : t
             )
           );
           setSelected((s) =>
-            s ? { ...s, status: s.status === "published" ? "draft" : "published" } : s
+            s ? { ...s, status: s.status === "public" ? "draft" : "public" } : s
           );
         }}
         onSave={(updated) => {                 // <-- persist edits from modal

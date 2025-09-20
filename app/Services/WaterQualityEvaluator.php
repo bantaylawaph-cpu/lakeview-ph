@@ -29,19 +29,34 @@ class WaterQualityEvaluator
         }
 
         $standard = $this->resolveStandard($event);
-        $threshold = $this->resolveThreshold($parameter->id, $lakeClass, $standard?->id);
+    $threshold = $this->resolveThreshold($parameter->id, $lakeClass, $standard?->id);
 
         if (!$threshold) {
             return $this->markNotApplicable($result, $save, 'no_threshold');
         }
 
-        if ($result->value === null || $parameter->evaluation_type === null) {
+        // Normalize evaluation type to be safe (DB may store inconsistent casing)
+        $evalType = $parameter->evaluation_type ? strtolower((string) $parameter->evaluation_type) : null;
+
+        if ($result->value === null || $evalType === null) {
             return $this->markNotApplicable($result, $save, 'no_value_or_eval_type', $threshold);
         }
 
-        $outcome = $this->compare($parameter->evaluation_type, (float) $result->value, $threshold->min_value, $threshold->max_value);
+        $outcome = $this->compare($evalType, (float) $result->value, $threshold->min_value, $threshold->max_value);
 
         if ($outcome === null) {
+            // Log helpful debug info to aid fixing threshold/parameter data
+                Log::debug('Evaluation incomplete', [
+                'sample_result_id' => $result->id,
+                'parameter_id' => $parameter->id,
+                'parameter_evaluation_type' => $parameter->evaluation_type,
+                'normalized_eval_type' => $evalType,
+                'value' => $result->value,
+                'threshold_min' => $threshold?->min_value,
+                'threshold_max' => $threshold?->max_value,
+                'threshold_id' => $threshold?->id,
+            ]);
+
             return $this->markNotApplicable($result, $save, 'incomplete_threshold', $threshold);
         }
 

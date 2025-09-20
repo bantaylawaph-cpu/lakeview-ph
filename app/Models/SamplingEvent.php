@@ -9,6 +9,14 @@ class SamplingEvent extends Model
 {
     use HasFactory;
 
+    /**
+     * The model should not manage created_at / updated_at timestamps
+     * because the `sampling_events` table does not include those columns.
+     *
+     * @var bool
+     */
+    public $timestamps = false;
+
 
     protected $fillable = [
         'organization_id',

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { api } from "../../lib/api";
+import { api, getToken } from "../../lib/api";
 import { alertError, alertSuccess } from "../../utils/alerts";
 import { fetchLakeOptions } from "../../lib/layers";
 import {
-  FiMapPin, FiUser, FiThermometer, FiClipboard, FiCheckCircle,
+  FiMapPin, FiThermometer,
   FiPlus, FiTrash2, FiEdit2, FiFlag
 } from "react-icons/fi";
 import Wizard from "../Wizard";
@@ -13,7 +13,7 @@ import StationModal from "../../components/modals/StationModal";
 import { GeoJSON, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 
-/* --------------------- Config -------------------- */
+/* Config */
 
 const fmtDateLocal = (d = new Date()) => {
   const pad = (n) => String(n).padStart(2, "0");
@@ -51,7 +51,7 @@ const INITIAL_DATA = {
   status: "draft",
 };
 
-/* ------------------------------ Small UI helpers ----------------------------- */
+/* Small UI helpers */
 const Tag = ({ children }) => (
   <span style={{
     display: "inline-flex", alignItems: "center", gap: 6,
@@ -76,7 +76,7 @@ const STEP_LABELS = [
   { key: 'review',    title: 'Review' },
 ];
 
-/* -------------------------------- Component --------------------------------- */
+/* Component */
 export default function WQTestWizard({
   lakes = [],
   lakeGeoms = {},
@@ -114,9 +114,32 @@ export default function WQTestWizard({
   const [stationModalOpen, setStationModalOpen] = useState(false);
   const [stationEdit, setStationEdit] = useState(null);
 
+  // Parameter & standards lists (fetch from API if not provided as props)
+  const [parametersList, setParametersList] = useState(parameters || []);
+  const [standardsList, setStandardsList] = useState(standards || []);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        if ((!parameters || !parameters.length) && mounted) {
+          const p = await api('/options/parameters');
+          if (mounted) setParametersList(Array.isArray(p) ? p : []);
+        }
+      } catch (e) { /* ignore */ }
+      try {
+        if ((!standards || !standards.length) && mounted) {
+          const s = await api('/options/wq-standards');
+          if (mounted) setStandardsList(Array.isArray(s) ? s : []);
+        }
+      } catch (e) { /* ignore */ }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
   const lakeOptions      = Array.isArray(localLakes) && localLakes.length ? localLakes : [];
-  const parameterOptions = Array.isArray(parameters) && parameters.length ? parameters : [];
-  const standardOptions  = Array.isArray(standards)  && standards.length  ? standards  : [];
+  const parameterOptions = Array.isArray(parametersList) && parametersList.length ? parametersList : [];
+  const standardOptions  = Array.isArray(standardsList)  && standardsList.length  ? standardsList  : [];
 
   const roleToCheck = currentUserRole ?? resolvedUserRole;
   const canPublish = roleToCheck === "org_admin" || roleToCheck === "superadmin";
@@ -373,22 +396,68 @@ export default function WQTestWizard({
 
   const submit = (data) => {
     const payload = {
-      ...data,
       organization_id: data.organization_id ?? null,
       lake_id: data.lake_id ? Number(data.lake_id) : null,
       station_id: data.station_id ? Number(data.station_id) : null,
-      lat: data.lat === "" ? null : Number(data.lat),
-      lng: data.lng === "" ? null : Number(data.lng),
-      results: (data.results || []).map((r) => ({
-        ...r,
-        parameter_id: r.parameter_id ? Number(r.parameter_id) : null,
-        value: r.value === "" ? null : Number(r.value),
-        depth_m: r.depth_m === "" ? null : Number(r.depth_m),
-      })),
+      applied_standard_id: data.applied_standard_id ? Number(data.applied_standard_id) : null,
+      sampled_at: data.sampled_at,
+      sampler_name: data.sampler_name || null,
+      method: data.method || null,
+      weather: data.weather || null,
+      notes: data.notes || null,
       status: canPublish ? (data.status || "draft") : "draft",
-      // year/quarter/month/day are GENERATED on the DB from sampled_at; no need to send.
+      latitude: data.lat === "" ? null : (data.lat === null ? null : Number(data.lat)),
+      longitude: data.lng === "" ? null : (data.lng === null ? null : Number(data.lng)),
+      measurements: (data.results || []).map((r) => ({
+        parameter_id: r.parameter_id ? Number(r.parameter_id) : null,
+        value: r.value === "" ? null : (r.value === null ? null : Number(r.value)),
+        unit: r.unit || null,
+        depth_m: r.depth_m === "" ? null : (r.depth_m === null ? null : Number(r.depth_m)),
+        remarks: r.remarks || null,
+      })),
     };
-    onSubmit?.(payload);
+
+    // If parent supplied an onSubmit handler, delegate to it (useful for tests or overrides)
+    if (onSubmit) return onSubmit(payload);
+
+    // Log payload only in dev consoles if needed (removed for cleanliness)
+
+    // Return the promise so callers can await and observe errors
+    return (async () => {
+      try {
+        const token = getToken();
+        const resp = await fetch('/api/admin/sample-events', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(payload),
+        });
+
+        const text = await resp.text();
+        let json = null;
+        try { json = text ? JSON.parse(text) : null; } catch { json = null; }
+  // response handled below; no debug log here
+
+        if (!resp.ok) {
+          const msg = (json && (json.message || json.errors)) ? (json.message || JSON.stringify(json.errors)) : text || `HTTP ${resp.status}`;
+          alertError('Save failed', msg);
+          const err = new Error(msg);
+          err.status = resp.status;
+          err.response = json || text;
+          throw err;
+        }
+
+        const data = json?.data ?? json;
+        alertSuccess('Saved', 'Water quality test saved.');
+        return data;
+      } catch (e) {
+        console.error('[WQTestWizard] submit error', e);
+        throw e;
+      }
+    })();
   };
 
   // Fetch stations for a lake from the server and cache them in `stationsByLake`.
@@ -785,7 +854,7 @@ export default function WQTestWizard({
                 disabled={!canPublish}
               >
                 <option value="draft">Draft</option>
-                {canPublish && <option value="published">Published</option>}
+                {canPublish && <option value="public">Published</option>}
               </select>
               {!canPublish && (
                 <div style={{ fontSize: 12, color: "#6b7280", marginTop: 6 }}>
