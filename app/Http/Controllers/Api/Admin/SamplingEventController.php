@@ -367,6 +367,30 @@ class SamplingEventController extends Controller
         }
     }
 
+    // Toggle publish/unpublish for a sampling event
+    public function togglePublish(Request $request, SamplingEvent $samplingEvent)
+    {
+        $context = $this->resolveTenantMembership($request, ['org_admin', 'contributor'], $samplingEvent->organization_id);
+        $tenantId = (int) $context['tenant_id'];
+
+        if ($samplingEvent->organization_id !== $tenantId) {
+            abort(403, 'Forbidden');
+        }
+
+        // Prevent contributors from publishing
+        if (($context['role'] ?? null) === 'contributor' && $samplingEvent->status !== 'public') {
+            abort(403, 'Contributors cannot publish events.');
+        }
+
+        DB::transaction(function () use ($samplingEvent) {
+            $samplingEvent->status = ($samplingEvent->status === 'public') ? 'draft' : 'public';
+            $samplingEvent->save();
+        });
+
+        $resource = $this->eventDetailQuery()->findOrFail($samplingEvent->id);
+        return response()->json(['data' => $resource]);
+    }
+
     protected function assertLakeExists(int $lakeId): void
     {
         if (!Lake::whereKey($lakeId)->exists()) {

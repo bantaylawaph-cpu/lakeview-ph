@@ -45,6 +45,8 @@
 }
 .lv-th .lv-th-inner { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .lv-th .lv-th-label { overflow: hidden; text-overflow: ellipsis; }
+.lv-th .lv-th-label.lv-sortable { cursor: pointer; background: transparent; border: 0; padding: 0; color: inherit; text-align: left; }
+.lv-th .lv-th-label.lv-sortable:focus { outline: 2px solid rgba(59,130,246,0.35); outline-offset: 2px; border-radius: 4px; }
 
 .lv-resizer {
   flex: 0 0 auto;
@@ -122,6 +124,7 @@
   background: #ffffff;
   border: 1px solid #d1d5db;
   color: #374151;
+  min-width: 0;
 }
 
 .org-search { min-width: 0; }
@@ -130,15 +133,27 @@
   min-width: 0; width: 100%;
 }
 
-.org-filter { position: relative; }
-.org-filter select {
+.org-filter { position: relative; min-width: 0; width: 100%; }
+.org-filter select,
+.org-filter input:not([type="date"]) {
   background: transparent; border: 0; outline: 0; color: #111827;
-  min-width: 160px; border-radius: 8px; padding: 6px 28px 6px 8px;
+  width: 100%; min-width: 0; flex: 1 1 auto;
+  border-radius: 8px; padding: 6px 28px 6px 8px;
   appearance: none; -webkit-appearance: none; -moz-appearance: none;
 }
 .org-filter::after {
   content: "▾"; position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
   pointer-events: none; color: #6b7280;
+}
+
+/* Date filters: let native date picker and icon show; remove dropdown arrow */
+.org-filter.org-filter-date { position: relative; }
+.org-filter.org-filter-date::after { content: none; }
+.org-filter .org-date-input {
+  background: transparent; border: 0; outline: 0; color: #111827;
+  width: 100%; min-width: 0; flex: 1 1 auto;
+  border-radius: 8px; padding: 6px 8px; /* no right padding for arrow */
+  /* keep native appearance for calendar */
 }
 
 .toolbar-icon { color: #6b7280; }

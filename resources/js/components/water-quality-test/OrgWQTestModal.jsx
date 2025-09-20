@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Modal from "../Modal";
 import { api } from "../../lib/api";
+import { alertSuccess, alertError } from "../../lib/alerts";
 import AppMap from "../AppMap";
 import MapViewport from "../MapViewport";
 import { Marker, Popup } from "react-leaflet";
@@ -29,6 +30,11 @@ function yqmFrom(record) {
   return { year: y, quarter: q, month: m, day };
 }
 
+const pfLabel = (v) => {
+  const s = (v ?? "").toString().trim().toLowerCase();
+  return s === "pass" ? "Pass" : s === "fail" ? "Fail" : "—";
+};
+
 /**
  * OrgWQTestModal
  *
@@ -52,10 +58,60 @@ export default function OrgWQTestModal({
   parameterCatalog = [],
 }) {
   const [draft, setDraft] = useState(record || null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     setDraft(record || null);
   }, [record, open]);
+
+  // When opened with a record id, fetch full event details (includes results + parameter info)
+  useEffect(() => {
+    let mounted = true;
+    if (!open || !record || !record.id) return;
+
+    (async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const res = await api(`/admin/sample-events/${encodeURIComponent(record.id)}`);
+        const data = res?.data || res || {};
+
+        const normalizedResults = Array.isArray(data.results)
+          ? data.results.map((r) => ({
+              id: r.id,
+              parameter_id: r.parameter_id ?? r.parameter?.id ?? null,
+              code: r.parameter?.code ?? r.code ?? "",
+              name: r.parameter?.name ?? r.name ?? "",
+              unit: r.unit ?? r.parameter?.unit ?? "",
+              value: r.value ?? null,
+              depth_m: r.depth_m ?? null,
+              pass_fail: r.pass_fail ?? null,
+              remarks: r.remarks ?? "",
+            }))
+          : [];
+
+        if (!mounted) return;
+        // Merge list-row record with full details; prefer detailed fields
+        setDraft({
+          ...(record || {}),
+          ...(data || {}),
+          results: normalizedResults,
+        });
+      } catch (e) {
+        if (!mounted) return;
+        setError(e);
+        // Fallback: keep whatever we had from the list
+        setDraft(record || null);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [open, record && record.id]);
 
   // derive geographic values from multiple possible field names
   const geo = useMemo(() => {
@@ -72,6 +128,7 @@ export default function OrgWQTestModal({
   const { year, quarter, month, day } = yqmFrom(draft);
   // derive displayable lake name and nicely formatted sampled date
   const lakeName = draft?.lake?.name ?? draft?.lake_name ?? draft?.lake?.display_name ?? "—";
+  const lakeClass = draft?.lake?.class_code ?? draft?.lake_class_code ?? draft?.lake?.class ?? null;
   const formattedDate = (() => {
     try {
       return new Date(draft.sampled_at).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
@@ -150,9 +207,10 @@ export default function OrgWQTestModal({
         const res = await api(`/admin/sample-events/${draft.id}`, { method: 'PUT', body: payload });
         const updated = res.data || draft;
         onSave?.(updated);
+        await alertSuccess('Saved', 'Sampling event updated successfully.');
         onClose?.();
       } catch (e) {
-        alert('Save failed: ' + e.message);
+        await alertError('Save failed', e?.message || 'Please try again.');
       }
     })();
   };
@@ -161,15 +219,24 @@ export default function OrgWQTestModal({
     <Modal
       open={open}
       onClose={onClose}
-      width={760}
+      width={980}
       // keep overall modal compact; inner body will scroll
       maxHeight="86vh"
   title={`${formattedDate} - ${lakeName}`}
       footer={
         <div style={{ display: "flex", width: "100%", justifyContent: "space-between" }}>
           <div style={{ display: "flex", gap: 8 }}>
-            {canPublish && !editable && (
-              <button className="pill-btn" onClick={onTogglePublish}>
+            {canPublish && (
+              <button className="pill-btn" onClick={async () => {
+                const will = draft.status === 'public' ? 'Unpublish' : 'Publish';
+                const ok = await (await import('../../lib/alerts')).confirm({ title: `${will} this test?`, confirmButtonText: will });
+                if (!ok) return;
+                try {
+                  await onTogglePublish?.();
+                } catch (e) {
+                  await (await import('../../lib/alerts')).alertWarning('Toggle failed', e?.message || 'Toggled locally.');
+                }
+              }}>
                 {draft.status === "public" ? "Unpublish" : "Publish"}
               </button>
             )}
@@ -235,6 +302,7 @@ export default function OrgWQTestModal({
               <div><strong>Method:</strong> {draft.method || "—"}</div>
               <div><strong>Weather:</strong> {draft.weather || "—"}</div>
               <div><strong>Standard:</strong> {draft.applied_standard_code || draft.applied_standard_name || draft.applied_standard?.code || draft.applied_standard?.name || "—"}</div>
+              <div><strong>Lake Class:</strong> {lakeClass || "—"}</div>
               <div><strong>Period:</strong> {Number.isFinite(year) ? `${year} · Q${quarter} · M${month} · D${day}` : "—"}</div>
               <div style={{ gridColumn: "1 / -1" }}><strong>Notes:</strong> {draft.notes || "—"}</div>
             </div>
@@ -265,12 +333,19 @@ export default function OrgWQTestModal({
                     <th className="lv-th" style={{ width: 120 }}><div className="lv-th-inner"><span className="lv-th-label">Value</span></div></th>
                     <th className="lv-th" style={{ width: 110 }}><div className="lv-th-inner"><span className="lv-th-label">Unit</span></div></th>
                     <th className="lv-th" style={{ width: 120 }}><div className="lv-th-inner"><span className="lv-th-label">Depth (m)</span></div></th>
+                    <th className="lv-th" style={{ width: 120 }}><div className="lv-th-inner"><span className="lv-th-label">Pass/Fail</span></div></th>
                     <th className="lv-th"><div className="lv-th-inner"><span className="lv-th-label">Remarks</span></div></th>
                     {editable && <th className="lv-th" style={{ width: 60 }} />}
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r, i) => (
+                  {loading && (
+                    <tr><td className="lv-empty" colSpan={editable ? 7 : 6}>Loading parameters…</td></tr>
+                  )}
+                  {!loading && error && (
+                    <tr><td className="lv-empty" colSpan={editable ? 7 : 6}>Failed to load parameters.</td></tr>
+                  )}
+                  {!loading && !error && rows.map((r, i) => (
                     <tr key={`${draft.id}-${i}`}>
                       <td>
                         {editable ? (
@@ -342,6 +417,7 @@ export default function OrgWQTestModal({
                           <>{r.depth_m ?? "—"}</>
                         )}
                       </td>
+                      <td>{pfLabel(r.pass_fail)}</td>
                       <td>
                         {editable ? (
                           <div className="form-group" style={{ margin: 0, minWidth: 0 }}>
@@ -363,8 +439,8 @@ export default function OrgWQTestModal({
                       )}
                     </tr>
                   ))}
-                  {!rows.length && (
-                    <tr><td className="lv-empty" colSpan={editable ? 6 : 5}>No parameters.</td></tr>
+                  {!loading && !error && !rows.length && (
+                    <tr><td className="lv-empty" colSpan={editable ? 7 : 6}>No parameters.</td></tr>
                   )}
                 </tbody>
               </table>

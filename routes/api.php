@@ -31,7 +31,11 @@ Route::middleware('auth:sanctum')->prefix('admin')->group(function () {
     Route::apiResource('parameter-thresholds', AdminParameterThresholdController::class)->except(['create', 'edit']);
     Route::apiResource('wq-standards', AdminWqStandardController::class)->except(['create', 'edit']);
     Route::apiResource('stations', AdminStationController::class)->except(['create', 'edit']);
-    Route::apiResource('sample-events', AdminSamplingEventController::class)->except(['create', 'edit']);
+    Route::apiResource('sample-events', AdminSamplingEventController::class)
+        ->parameters(['sample-events' => 'samplingEvent'])
+        ->except(['create', 'edit']);
+    // Toggle publish state for a sampling event
+    Route::post('sample-events/{samplingEvent}/toggle-publish', [AdminSamplingEventController::class, 'togglePublish']);
 });
 
 Route::middleware(['auth:sanctum','role:org_admin'])->prefix('org')->group(function () {

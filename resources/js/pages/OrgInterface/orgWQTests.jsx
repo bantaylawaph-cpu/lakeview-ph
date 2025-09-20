@@ -29,6 +29,7 @@ function yqmFrom(record) {
 
 import { api } from "../../lib/api";
 import { fetchLakeOptions } from "../../lib/layers";
+import { alertSuccess, alertError, alertWarning, confirm as swalConfirm } from "../../lib/alerts";
 
 export default function OrgWQTests({
   initialLakes = [],
@@ -226,7 +227,7 @@ export default function OrgWQTests({
 
   const baseColumns = useMemo(
     () => [
-      { id: "year", header: "Year", width: 90, render: (row) => yqmFrom(row).year ?? "—" },
+      { id: "year", header: "Year", width: 90, render: (row) => yqmFrom(row).year ?? "—", sortValue: (row) => yqmFrom(row).year ?? null },
       {
         id: "quarter",
         header: "Quarter",
@@ -235,6 +236,7 @@ export default function OrgWQTests({
           const q = yqmFrom(row).quarter;
           return Number.isFinite(q) ? `Q${q}` : "—";
         },
+        sortValue: (row) => yqmFrom(row).quarter ?? null,
       },
       {
         id: "month_day",
@@ -249,8 +251,9 @@ export default function OrgWQTests({
             return "—";
           }
         },
+        sortValue: (row) => (row?.sampled_at ? new Date(row.sampled_at) : null),
       },
-      { id: "lake_name", header: "Lake", width: 200, render: (row) => row?.lake?.name ?? row?.lake_name ?? "—" },
+      { id: "lake_name", header: "Lake", width: 200, render: (row) => row?.lake?.name ?? row?.lake_name ?? "—", sortValue: (row) => row?.lake?.name ?? row?.lake_name ?? "" },
       { id: "station_name", header: "Station", width: 220, render: (row) => {
           const name = row?.station?.name ?? row?.station_name;
           if (name) return name;
@@ -264,7 +267,8 @@ export default function OrgWQTests({
             }
           }
           return "—";
-        }
+        },
+        sortValue: (row) => row?.station?.name ?? row?.station_name ?? (row?.latitude != null && row?.longitude != null ? `${row.latitude},${row.longitude}` : ""),
       },
       {
         id: "status",
@@ -275,13 +279,14 @@ export default function OrgWQTests({
             {row.status === "public" ? "Published" : "Draft"}
           </span>
         ),
+        sortValue: (row) => (row.status === "public" ? 1 : 0),
       },
 
       // Hidden/toggleable columns
-  { id: "logged_by", header: "Logged By", width: 180, render: (row) => (row?.createdBy?.name ?? row?.created_by_name ?? "—") },
-  { id: "updated_by", header: "Updated By", width: 180, render: (row) => (row?.updatedBy?.name ?? row?.updated_by_name ?? "—") },
-      { id: "logged_at", header: "Logged At", width: 170, render: (row) => (row?.created_at ? new Date(row.created_at).toLocaleString() : "—") },
-      { id: "updated_at", header: "Updated At", width: 170, render: (row) => (row?.updated_at ? new Date(row.updated_at).toLocaleString() : "—") },
+  { id: "logged_by", header: "Logged By", width: 180, render: (row) => (row?.createdBy?.name ?? row?.created_by_name ?? "—"), sortValue: (row) => row?.createdBy?.name ?? row?.created_by_name ?? "" },
+  { id: "updated_by", header: "Updated By", width: 180, render: (row) => (row?.updatedBy?.name ?? row?.updated_by_name ?? "—"), sortValue: (row) => row?.updatedBy?.name ?? row?.updated_by_name ?? "" },
+      { id: "logged_at", header: "Logged At", width: 170, render: (row) => (row?.created_at ? new Date(row.created_at).toLocaleString() : "—"), sortValue: (row) => (row?.created_at ? new Date(row.created_at) : null) },
+      { id: "updated_at", header: "Updated At", width: 170, render: (row) => (row?.updated_at ? new Date(row.updated_at).toLocaleString() : "—"), sortValue: (row) => (row?.updated_at ? new Date(row.updated_at) : null) },
     ],
     []
   );
@@ -324,8 +329,19 @@ export default function OrgWQTests({
 
       if (q) {
         const s = q.toLowerCase();
-        const hay = [t.id, t.lake_name, t.station_name, t.sampler_name, t.method, t.applied_standard_code]
-          .join(" ").toLowerCase();
+        const hay = [
+          t.id,
+          t.lake_name,
+          t.lake?.name,
+          t.station_name,
+          t.station?.name,
+          t.sampler_name,
+          t.method,
+          t.applied_standard_code,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
         if (!hay.includes(s)) return false;
       }
       return true;
@@ -343,9 +359,9 @@ export default function OrgWQTests({
       label: "Edit",
       title: "Edit",
       icon: <FiEdit2 />,
-      onClick: (row) => {
+      onClick: async (row) => {
         if (!(canPublish || (currentUserId && row.created_by_user_id === currentUserId))) {
-          alert('You do not have permission to edit this test.');
+          await alertError('Permission denied', 'You cannot edit this test.');
           return;
         }
         setSelected(row); setEditing(true); setOpen(true);
@@ -357,12 +373,19 @@ export default function OrgWQTests({
       type: "delete",
       icon: <FiTrash2 />,
       onClick: async (row) => {
-        if (!confirm("Delete this test?")) return;
+        const ok = await swalConfirm({
+          title: 'Delete this test?',
+          text: `This cannot be undone.`,
+          icon: 'warning',
+          confirmButtonText: 'Delete',
+        });
+        if (!ok) return;
         try {
           await api(`/admin/sample-events/${row.id}`, { method: "DELETE" });
           setTests((prev) => prev.filter((t) => t.id !== row.id));
+          await alertSuccess('Deleted', 'The test was removed.');
         } catch (e) {
-          alert('Delete failed: ' + e.message);
+          await alertError('Delete failed', e?.message || 'Please try again.');
         }
       },
     },
@@ -453,6 +476,7 @@ export default function OrgWQTests({
               // backend returns updated record
               setTests((prev) => prev.map((t) => (t.id === res.data.id ? res.data : t)));
               setSelected(res.data);
+              await alertSuccess(res.data.status === 'public' ? 'Published' : 'Unpublished');
             } catch (e) {
               // fallback local toggle
               setTests((prev) =>
@@ -465,6 +489,7 @@ export default function OrgWQTests({
               setSelected((s) =>
                 s ? { ...s, status: s.status === "public" ? "draft" : "public" } : s
               );
+              await alertWarning('Offline toggle', 'Toggled locally due to API error.');
             }
           })();
         }}
