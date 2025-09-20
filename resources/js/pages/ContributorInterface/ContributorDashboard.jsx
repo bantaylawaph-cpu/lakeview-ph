@@ -11,6 +11,7 @@ import {
 
 import DashboardLayout from "../../layouts/DashboardLayout";
 import ContribAddWQTest from "./ContribAddWQTest";
+import ContribWQTests from "./contribWQTests";
 
 const Page = ({ title }) => <h2>{title}</h2>;
 
@@ -39,7 +40,7 @@ export default function ContributorDashboard() {
         {/* Log Water Quality Tests */}
         <Route path="add-wq-tests" element={<ContribAddWQTest />} />
         {/* View Water Quality Tests */}
-        <Route path="wq-tests" element={<Page title="View Water Quality Tests" />} />
+        <Route path="wq-tests" element={<ContribWQTests />} />
         {/* Profile */}
         <Route path="profile" element={<Page title="Profile" />} />
         {/* Settings */}

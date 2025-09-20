@@ -209,7 +209,33 @@ class SamplingEventController extends Controller
 
     public function destroy(Request $request, SamplingEvent $samplingEvent)
     {
-        $this->resolveTenantMembership($request, ['org_admin'], $samplingEvent->organization_id);
+        // Resolve tenant membership for org_admins and contributors. We will
+        // enforce finer-grained rules below: org_admin (and superadmin) may
+        // delete any event in the org; contributors may delete events they
+        // created (but not published events).
+        $context = $this->resolveTenantMembership($request, ['org_admin', 'contributor'], $samplingEvent->organization_id);
+        $tenantId = (int) $context['tenant_id'];
+
+        // Ensure event belongs to the tenant
+        if ($samplingEvent->organization_id !== $tenantId) {
+            abort(403, 'Forbidden');
+        }
+
+        $role = $context['role'] ?? null;
+
+        if ($role === 'org_admin' || $context['is_superadmin'] === true) {
+            // allowed
+        } elseif ($role === 'contributor') {
+            // contributors may delete only their own non-public events
+            if (($samplingEvent->created_by_user_id ?? null) !== ($request->user()->id ?? null)) {
+                abort(403, 'Forbidden');
+            }
+            if ($samplingEvent->status === 'public') {
+                abort(403, 'Contributors cannot delete published events.');
+            }
+        } else {
+            abort(403, 'Forbidden');
+        }
 
         DB::transaction(function () use ($samplingEvent) {
             $samplingEvent->results()->delete();
