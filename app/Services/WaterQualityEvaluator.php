@@ -35,10 +35,43 @@ class WaterQualityEvaluator
             return $this->markNotApplicable($result, $save, 'no_threshold');
         }
 
-        // Normalize evaluation type to be safe (DB may store inconsistent casing)
-        $evalType = $parameter->evaluation_type ? strtolower((string) $parameter->evaluation_type) : null;
+        // Normalize evaluation type to be robust against casing/spacing/synonyms
+        $rawEvalType = $parameter->evaluation_type ?? null;
+        $evalType = null;
+        if ($rawEvalType !== null) {
+            $s = strtolower(trim((string) $rawEvalType));
+            // strip non-alphanumeric for matching (e.g. '>=', 'Less-Than' -> 'lessthan')
+            $key = preg_replace('/[^a-z0-9]/', '', $s);
+            // map common synonyms to canonical types
+            $map = [
+                'max' => 'max', 'maximum' => 'max', 'upper' => 'max', 'upperlimit' => 'max', 'lessthanorequal' => 'max', 'lessthan' => 'max', 'lte' => 'max', '>' => 'max', 'gt' => 'max',
+                'min' => 'min', 'minimum' => 'min', 'lower' => 'min', 'lowerlimit' => 'min', 'greaterthanorequal' => 'min', 'greaterthan' => 'min', 'gte' => 'min', '<' => 'min', 'lt' => 'min',
+                'range' => 'range', 'between' => 'range',
+            ];
+            if (isset($map[$key])) {
+                $evalType = $map[$key];
+            } elseif (isset($map[$s])) {
+                $evalType = $map[$s];
+            } else {
+                // fallback: use the simple trimmed lowercase if it matches known canonical types
+                if (in_array($s, ['min','max','range'], true)) {
+                    $evalType = $s;
+                }
+            }
+        }
 
         if ($result->value === null || $evalType === null) {
+            Log::debug('No value or unknown evaluation_type', [
+                'sample_result_id' => $result->id,
+                'parameter_id' => $parameter->id,
+                'raw_evaluation_type' => $parameter->evaluation_type,
+                'normalized_evaluation_type' => $evalType,
+                'value' => $result->value,
+                'threshold_id' => $threshold?->id,
+                'threshold_min' => $threshold?->min_value,
+                'threshold_max' => $threshold?->max_value,
+            ]);
+
             return $this->markNotApplicable($result, $save, 'no_value_or_eval_type', $threshold);
         }
 
@@ -46,9 +79,10 @@ class WaterQualityEvaluator
 
         if ($outcome === null) {
             // Log helpful debug info to aid fixing threshold/parameter data
-                Log::debug('Evaluation incomplete', [
+            Log::debug('Evaluation incomplete', [
                 'sample_result_id' => $result->id,
                 'parameter_id' => $parameter->id,
+                'parameter_code' => $parameter->code ?? null,
                 'parameter_evaluation_type' => $parameter->evaluation_type,
                 'normalized_eval_type' => $evalType,
                 'value' => $result->value,

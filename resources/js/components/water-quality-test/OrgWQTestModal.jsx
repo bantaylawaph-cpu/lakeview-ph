@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Modal from "../Modal";
+import { api } from "../../lib/api";
 import AppMap from "../AppMap";
 import MapViewport from "../MapViewport";
 import { Marker, Popup } from "react-leaflet";
@@ -104,8 +105,39 @@ export default function OrgWQTestModal({
   };
 
   const save = () => {
-    onSave?.(draft);
-    onClose?.();
+    (async () => {
+      try {
+        // send updated sampling event to backend
+        const payload = {
+          lake_id: draft.lake_id,
+          station_id: draft.station_id,
+          sampled_at: draft.sampled_at,
+          sampler_name: draft.sampler_name,
+          method: draft.method,
+          weather: draft.weather,
+          notes: draft.notes,
+          applied_standard_id: draft.applied_standard_id,
+          status: draft.status,
+          latitude: draft.lat ?? null,
+          longitude: draft.lng ?? null,
+          measurements: (draft.results || []).map((r) => ({
+            parameter_id: r.parameter_id ?? null,
+            value: r.value ?? null,
+            unit: r.unit ?? null,
+            depth_m: r.depth_m ?? null,
+            remarks: r.remarks ?? null,
+            id: r.id ?? undefined,
+          })),
+        };
+
+        const res = await api(`/admin/sample-events/${draft.id}`, { method: 'PUT', body: payload });
+        const updated = res.data || draft;
+        onSave?.(updated);
+        onClose?.();
+      } catch (e) {
+        alert('Save failed: ' + e.message);
+      }
+    })();
   };
 
   return (

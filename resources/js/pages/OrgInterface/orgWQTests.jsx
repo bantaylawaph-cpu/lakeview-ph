@@ -36,6 +36,7 @@ export default function OrgWQTests({
   parameterCatalog = [],
 }) {
   const [currentUserRole, setCurrentUserRole] = useState(null);
+  const [currentUserId, setCurrentUserId] = useState(null);
 
   useEffect(() => {
     let mounted = true;
@@ -50,6 +51,7 @@ export default function OrgWQTests({
           .replace(/\s+/g, "_")
           .replace(/-/g, "_");
         setCurrentUserRole(role || null);
+          setCurrentUserId(me?.id ?? null);
       } catch (e) {
         if (mounted) setCurrentUserRole(null);
       }
@@ -94,6 +96,7 @@ export default function OrgWQTests({
   const [lakes, setLakes] = useState(initialLakes);
   const [tests, setTests] = useState(initialTests);
   const [paramCatalog, setParamCatalog] = useState(parameterCatalog);
+  const [loading, setLoading] = useState(false);
 
   // filters/search
   const [q, setQ] = useState("");
@@ -111,6 +114,26 @@ export default function OrgWQTests({
   const [editing, setEditing] = useState(false);
 
   const [resetSignal, setResetSignal] = useState(0);
+  // fetch tests when the page mounts or when resetSignal increments
+  useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    (async () => {
+      try {
+        const res = await api('/admin/sample-events');
+        if (!mounted) return;
+        const data = Array.isArray(res.data) ? res.data : [];
+        setTests(data);
+      } catch (e) {
+        console.error('[OrgWQTests] failed to fetch tests', e);
+        if (mounted) setTests(initialTests || []);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+
+    return () => { mounted = false; };
+  }, [resetSignal]);
 
   const baseColumns = useMemo(
     () => [
@@ -127,8 +150,6 @@ export default function OrgWQTests({
       },
       { id: "lake_name", header: "Lake", width: 200, accessor: "lake_name" },
       { id: "station_name", header: "Station", width: 220, render: (row) => row.station_name || "—" },
-      { id: "sampled_at", header: "Sampled At", width: 180, render: (row) => new Date(row.sampled_at).toLocaleString() },
-      // Optional period columns (default hidden via ColumnPicker initial state below)
       { id: "year", header: "Year", width: 90, render: (row) => yqmFrom(row).year ?? "—" },
       { id: "quarter", header: "Qtr", width: 70, render: (row) => yqmFrom(row).quarter ?? "—" },
       { id: "month", header: "Month", width: 90, render: (row) => yqmFrom(row).month ?? "—" },
@@ -191,7 +212,13 @@ export default function OrgWQTests({
       label: "Edit",
       title: "Edit",
       icon: <FiEdit2 />,
-      onClick: (row) => { setSelected(row); setEditing(true); setOpen(true); },
+      onClick: (row) => {
+        if (!(canPublish || (currentUserId && row.created_by_user_id === currentUserId))) {
+          alert('You do not have permission to edit this test.');
+          return;
+        }
+        setSelected(row); setEditing(true); setOpen(true);
+      },
     },
         ...(canPublish ? [{
       label: "Publish/Unpublish",
@@ -208,9 +235,14 @@ export default function OrgWQTests({
       title: "Delete",
       type: "delete",
       icon: <FiTrash2 />,
-      onClick: (row) => {
+      onClick: async (row) => {
         if (!confirm("Delete this test?")) return;
-        setTests((prev) => prev.filter((t) => t.id !== row.id));
+        try {
+          await api(`/admin/sample-events/${row.id}`, { method: "DELETE" });
+          setTests((prev) => prev.filter((t) => t.id !== row.id));
+        } catch (e) {
+          alert('Delete failed: ' + e.message);
+        }
       },
     },
   ];
@@ -294,16 +326,26 @@ export default function OrgWQTests({
         canPublish={canPublish}
         onTogglePublish={() => {
           if (!selected) return;
-          setTests((prev) =>
-            prev.map((t) =>
-              t.id === selected.id
-                ? { ...t, status: t.status === "public" ? "draft" : "public" }
-                : t
-            )
-          );
-          setSelected((s) =>
-            s ? { ...s, status: s.status === "public" ? "draft" : "public" } : s
-          );
+          (async () => {
+            try {
+              const res = await api(`/admin/sample-events/${selected.id}/toggle-publish`, { method: 'POST' });
+              // backend returns updated record
+              setTests((prev) => prev.map((t) => (t.id === res.data.id ? res.data : t)));
+              setSelected(res.data);
+            } catch (e) {
+              // fallback local toggle
+              setTests((prev) =>
+                prev.map((t) =>
+                  t.id === selected.id
+                    ? { ...t, status: t.status === "public" ? "draft" : "public" }
+                    : t
+                )
+              );
+              setSelected((s) =>
+                s ? { ...s, status: s.status === "public" ? "draft" : "public" } : s
+              );
+            }
+          })();
         }}
         onSave={(updated) => {                 // <-- persist edits from modal
           setTests((prev) => prev.map((t) => (t.id === updated.id ? { ...t, ...updated } : t)));
