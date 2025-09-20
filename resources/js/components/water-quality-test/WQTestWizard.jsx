@@ -4,7 +4,7 @@ import { alertError, alertSuccess } from "../../utils/alerts";
 import { fetchLakeOptions } from "../../lib/layers";
 import {
   FiMapPin, FiThermometer,
-  FiPlus, FiTrash2, FiEdit2, FiFlag
+  FiPlus, FiTrash2, FiEdit2, FiFlag, FiClipboard
 } from "react-icons/fi";
 import Wizard from "../Wizard";
 import AppMap from "../AppMap";
@@ -580,43 +580,45 @@ export default function WQTestWizard({
                   </select>
                 </FG>
 
-                <FG label="Actions" style={{ minWidth: 220 }}>
-                  <div style={{ display: "flex", gap: 8 }}>
-                        <button
-                          className="pill-btn primary"
-                          onClick={async () => {
-                            if (!data.lake_id) return;
-                            await fetchStationsForLake(data.lake_id).catch(() => {});
-                            setStationEdit(null);
-                            setStationModalOpen(true);
-                          }}
-                          disabled={!data.lake_id || !canManageStations}
-                        >
-                          <FiPlus /> New Station
-                        </button>
-                    <button
-                          className="pill-btn ghost"
-                          disabled={!data.station_id || !canManageStations}
-                          onClick={async () => {
-                            if (!data.station_id) return;
-                            await fetchStationsForLake(data.lake_id).catch(() => {});
-                            setStationEdit(
-                              stationOptions(data).find((s) => String(s.id) === String(data.station_id)) || null
-                            );
-                            setStationModalOpen(true);
-                          }}
-                        >
-                          <FiEdit2 />
-                        </button>
-                        <button
-                          className="pill-btn ghost danger"
-                          disabled={!data.station_id || !canManageStations}
-                          onClick={() => deleteStationApi(data, setData, Number(data.station_id))}
-                        >
-                          <FiTrash2 />
-                        </button>
-                  </div>
-                </FG>
+                {canManageStations && (
+                  <FG label="Actions" style={{ minWidth: 220 }}>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        className="pill-btn primary"
+                        onClick={async () => {
+                          if (!data.lake_id) return;
+                          await fetchStationsForLake(data.lake_id).catch(() => {});
+                          setStationEdit(null);
+                          setStationModalOpen(true);
+                        }}
+                        disabled={!data.lake_id}
+                      >
+                        <FiPlus /> New Station
+                      </button>
+                      <button
+                        className="pill-btn ghost"
+                        disabled={!data.station_id}
+                        onClick={async () => {
+                          if (!data.station_id) return;
+                          await fetchStationsForLake(data.lake_id).catch(() => {});
+                          setStationEdit(
+                            stationOptions(data).find((s) => String(s.id) === String(data.station_id)) || null
+                          );
+                          setStationModalOpen(true);
+                        }}
+                      >
+                        <FiEdit2 />
+                      </button>
+                      <button
+                        className="pill-btn ghost danger"
+                        disabled={!data.station_id}
+                        onClick={() => deleteStationApi(data, setData, Number(data.station_id))}
+                      >
+                        <FiTrash2 />
+                      </button>
+                    </div>
+                  </FG>
+                )}
               </FormRow>
 
               <FormRow>

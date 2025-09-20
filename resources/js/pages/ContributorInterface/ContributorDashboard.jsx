@@ -10,6 +10,7 @@ import {
 } from "react-icons/fi";
 
 import DashboardLayout from "../../layouts/DashboardLayout";
+import ContribAddWQTest from "./ContribAddWQTest";
 
 const Page = ({ title }) => <h2>{title}</h2>;
 
@@ -36,9 +37,9 @@ export default function ContributorDashboard() {
         {/* Overview */}
         <Route index element={<Page title="Overview" />} />
         {/* Log Water Quality Tests */}
-        <Route index element={<Page title="Log Water Quality Tests" />} />
+        <Route path="add-wq-tests" element={<ContribAddWQTest />} />
         {/* View Water Quality Tests */}
-        <Route index element={<Page title="View Water Quality Tests" />} />
+        <Route path="wq-tests" element={<Page title="View Water Quality Tests" />} />
         {/* Profile */}
         <Route path="profile" element={<Page title="Profile" />} />
         {/* Settings */}
