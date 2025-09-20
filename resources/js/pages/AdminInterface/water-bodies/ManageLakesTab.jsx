@@ -9,7 +9,7 @@ import "leaflet/dist/leaflet.css";
 import TableLayout from "../../../layouts/TableLayout";
 import { api } from "../../../lib/api";
 import LakeForm from "../../../components/LakeForm";
-import ConfirmDialog from "../../../components/modals/ConfirmDialog";
+import { confirm, alertSuccess, alertError } from "../../../lib/alerts";
 import TableToolbar from "../../../components/table/TableToolbar";
 import FilterPanel from "../../../components/table/FilterPanel";
 
@@ -114,8 +114,6 @@ function ManageLakesTab() {
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState("create");
   const [formInitial, setFormInitial] = useState({});
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [confirmTarget, setConfirmTarget] = useState(null);
 
   const baseColumns = useMemo(
     () => [
@@ -494,9 +492,27 @@ function ManageLakesTab() {
   }, []);
 
   const openDelete = useCallback((row) => {
-    setConfirmTarget(row?._raw ?? row ?? null);
-    setConfirmOpen(true);
-  }, []);
+    const target = row?._raw ?? row ?? null;
+    console.debug('[ManageLakesTab] delete clicked', target);
+    if (!target) return;
+    (async () => {
+      const ok = await confirm({ title: 'Delete lake?', text: `Delete "${target.name}"?`, confirmButtonText: 'Delete' });
+      if (!ok) return;
+      setLoading(true);
+      setErrorMsg("");
+      try {
+        await api(`/lakes/${target.id}`, { method: "DELETE" });
+        await fetchLakes();
+        await alertSuccess('Deleted', `"${target.name}" was deleted.`);
+      } catch (err) {
+        console.error("[ManageLakesTab] Failed to delete lake", err);
+        setErrorMsg("Delete failed. This lake may be referenced by other records.");
+        await alertError('Delete failed', err?.message || 'Could not delete lake');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [fetchLakes]);
 
   const parsePayload = (form) => {
     const payload = { ...form };
@@ -524,14 +540,17 @@ function ManageLakesTab() {
       try {
         if (formMode === "create") {
           await api("/lakes", { method: "POST", body: payload });
+          await alertSuccess('Created', `"${payload.name}" was created.`);
         } else {
           await api(`/lakes/${payload.id}`, { method: "PUT", body: payload });
+          await alertSuccess('Saved', `"${payload.name}" was updated.`);
         }
         setFormOpen(false);
         await fetchLakes();
       } catch (err) {
         console.error("[ManageLakesTab] Failed to save lake", err);
         setErrorMsg("Save failed. Please verify required fields and that the name is unique.");
+        await alertError('Save failed', err?.message || 'Unable to save lake');
       } finally {
         setLoading(false);
       }
@@ -539,26 +558,7 @@ function ManageLakesTab() {
     [fetchLakes, formMode]
   );
 
-  const deleteLake = useCallback(async () => {
-    if (!confirmTarget?.id) {
-      setConfirmOpen(false);
-      return;
-    }
-
-    setLoading(true);
-    setErrorMsg("");
-    try {
-      await api(`/lakes/${confirmTarget.id}`, { method: "DELETE" });
-      setConfirmOpen(false);
-      setConfirmTarget(null);
-      await fetchLakes();
-    } catch (err) {
-      console.error("[ManageLakesTab] Failed to delete lake", err);
-      setErrorMsg("Delete failed. This lake may be referenced by other records.");
-    } finally {
-      setLoading(false);
-    }
-  }, [confirmTarget, fetchLakes]);
+  // delete flow now handled inline in openDelete
 
   const exportCsv = useCallback(() => {
     const headers = visibleColumns.map((col) => (typeof col.header === "string" ? col.header : col.id));
@@ -788,17 +788,7 @@ function ManageLakesTab() {
         onSubmit={saveLake}
         onCancel={() => setFormOpen(false)}
       />
-
-      <ConfirmDialog
-        open={confirmOpen}
-        title="Delete Lake"
-        message={`Are you sure you want to delete "${confirmTarget?.name ?? "this lake"}"?`}
-        confirmText="Delete"
-        cancelText="Cancel"
-        onConfirm={deleteLake}
-        onCancel={() => setConfirmOpen(false)}
-        loading={loading}
-      />
+      {/* Delete confirmation handled via SweetAlert confirm dialog */}
     </div>
   );
 }

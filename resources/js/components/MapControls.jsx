@@ -4,6 +4,7 @@ import { useMap, Marker, Tooltip } from "react-leaflet"; // use Tooltip instead 
 import { FiBarChart2, FiCrosshair, FiPlus, FiMinus } from "react-icons/fi";
 import { FaLocationDot } from "react-icons/fa6"; // filled location dot
 import L from "leaflet";
+import { alertError, alertSuccess } from "../lib/alerts";
 import ReactDOMServer from "react-dom/server";
 
 
@@ -37,7 +38,7 @@ function MapControls({ defaultCenter = [12.8797, 121.7740], defaultZoom = 6, def
             map.setView(userPos, 14);
             setGeolocated(true);
           },
-          () => alert("Unable to fetch your location.")
+          () => alertError("Unable to fetch your location.")
         );
       }
     } else {

@@ -3,6 +3,7 @@ import { FiCheckCircle, FiEdit2, FiSave, FiTrash2 } from "react-icons/fi";
 
 import TableLayout from "../../../layouts/TableLayout";
 import { api } from "../../../lib/api";
+import { confirm, alertSuccess, alertError } from "../../../lib/alerts";
 
 const TABLE_ID = "admin-standards";
 
@@ -91,12 +92,15 @@ function StandardsTab() {
       type: "delete",
       icon: <FiTrash2 />,
       onClick: async (standard) => {
-        if (!window.confirm(`Delete standard ${standard.code}?`)) return;
+        const ok = await confirm({ title: 'Delete standard?', text: `Delete ${standard.code}?`, confirmButtonText: 'Delete' });
+        if (!ok) return;
         try {
           await api(`/admin/wq-standards/${standard.id}`, { method: "DELETE" });
           await fetchStandards();
+          await alertSuccess('Deleted', `"${standard.code}" was deleted.`);
         } catch (err) {
           console.error("Failed to delete standard", err);
+          await alertError('Delete failed', err?.message || 'Failed to delete standard');
         }
       },
     },
@@ -122,14 +126,17 @@ function StandardsTab() {
 
       if (form.__id) {
         await api(`/admin/wq-standards/${form.__id}`, { method: "PUT", body: payload });
+        await alertSuccess('Saved', `"${payload.code}" was updated.`);
       } else {
         await api("/admin/wq-standards", { method: "POST", body: payload });
+        await alertSuccess('Created', `"${payload.code}" was created.`);
       }
 
       handleReset();
       await fetchStandards();
     } catch (err) {
       console.error("Failed to save standard", err);
+      await alertError('Save failed', err?.message || 'Failed to save standard');
     } finally {
       setSaving(false);
     }

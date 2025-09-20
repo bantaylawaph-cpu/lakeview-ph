@@ -31,10 +31,10 @@ export default function LakeForm({
     setForm({ ...EMPTY, ...initialValue });
   }, [initialValue, open]);
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e?.preventDefault?.();
     if (!form.name?.trim()) return; // minimal guard
-    onSubmit?.(form);
+    return onSubmit?.(form);
   };
 
   const denrOptions = Array.isArray(classOptions) ? classOptions : [];

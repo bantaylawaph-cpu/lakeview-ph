@@ -4,6 +4,7 @@ import {
 } from "react-icons/fi";
 
 import Modal from "../Modal";
+import { confirm, alertError, alertSuccess, alertWarning } from "../../lib/alerts";
 import {
   fetchLayersForBody,
   // activateLayer,  // no longer used
@@ -211,18 +212,21 @@ function LayerList({
       await refresh();
     } catch (e) {
       console.error('[LayerList] Toggle visibility failed', e);
-      alert(e?.message || "Failed to toggle visibility");
+      await alertError('Failed to toggle visibility', e?.message || '');
     }
   };
 
-  const doDelete = async (id) => {
-    if (!confirm("Delete this layer? This cannot be undone.")) return;
+  const doDelete = async (target) => {
+    const id = target && typeof target === 'object' ? target.id : target;
+    const name = target && typeof target === 'object' ? target.name : null;
+    if (!(await confirm({ title: 'Delete this layer?', text: 'This cannot be undone.', confirmButtonText: 'Delete' }))) return;
     try {
       await deleteLayer(id);
       await refresh();
+      await alertSuccess('Deleted', name ? `"${name}" was deleted.` : 'Layer deleted.');
     } catch (e) {
       console.error('[LayerList] Delete failed', e);
-      alert(e?.message || "Failed to delete layer");
+      await alertError('Failed to delete layer', e?.message || '');
     }
   };
 
@@ -238,17 +242,14 @@ function LayerList({
       // Trying to turn ON -> block if another layer is already default
       const existing = layers.find((l) => l.is_active && l.id !== row.id);
       if (existing) {
-        alert(
-          `"${existing.name}" is already set as the default layer.\n\n` +
-          `Please turn it OFF first, then set "${row.name}" as the default.`
-        );
+        await alertWarning('Default Layer Exists', `"${existing.name}" is already set as the default layer.\n\nPlease turn it OFF first, then set "${row.name}" as the default.`);
         return;
       }
       await updateLayer(row.id, { is_active: true });
       await refresh();
-    } catch (e) {
+      } catch (e) {
       console.error('[LayerList] Toggle default failed', e);
-      alert(e?.message || "Failed to toggle default");
+      await alertError('Failed to toggle default', e?.message || '');
     }
   };
 
@@ -488,9 +489,10 @@ function LayerList({
                     });
                     setEditOpen(false);
                     await refresh();
+                    await alertSuccess('Layer updated', 'Changes saved successfully.');
                   } catch (e) {
                     console.error('[LayerList] Update layer failed', e);
-                    alert(e?.message || 'Failed to update layer');
+                    await alertError('Failed to update layer', e?.message || '');
                   }
                 }}
               >

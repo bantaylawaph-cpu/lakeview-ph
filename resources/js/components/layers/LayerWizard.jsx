@@ -16,6 +16,7 @@ import {
 } from "../../utils/geo";
 
 import { createLayer, fetchLakeOptions, fetchWatershedOptions } from "../../lib/layers";
+import { alertSuccess, alertError } from "../../lib/alerts";
 
 export default function LayerWizard({
   defaultBodyType = "lake",
@@ -221,10 +222,11 @@ export default function LayerWizard({
       const res = await createLayer(payload);
       if (typeof onPublished === "function") onPublished(res);
 
-      alert("Layer created successfully.");
+      await alertSuccess("Layer created successfully.");
     } catch (e) {
       console.error('[LayerWizard] Publish failed', e);
       setError(e?.message || "Failed to publish layer.");
+      await alertError('Failed to publish layer', e?.message || '');
     }
   };
 

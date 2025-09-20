@@ -7,7 +7,7 @@ import L from "leaflet";
 
 import TableLayout from "../../../layouts/TableLayout";
 import TableToolbar from "../../../components/table/TableToolbar";
-import ConfirmDialog from "../../../components/modals/ConfirmDialog";
+import { confirm, alertSuccess, alertError } from "../../../lib/alerts";
 import WatershedForm from "../../../components/WatershedForm";
 import { api } from "../../../lib/api";
 
@@ -60,8 +60,6 @@ export default function ManageWatershedsTab() {
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState("create");
   const [formInitial, setFormInitial] = useState({ name: "", description: "" });
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [confirmTarget, setConfirmTarget] = useState(null);
 
   const mapRef = useRef(null);
   const lastLoadedIdRef = useRef(null);
@@ -152,8 +150,9 @@ export default function ManageWatershedsTab() {
   };
 
   const openDelete = (row) => {
-    setConfirmTarget(row?._raw ?? row);
-    setConfirmOpen(true);
+    const target = row?._raw ?? row;
+    console.debug('[ManageWatershedsTab] delete clicked', target);
+    handleDelete(target);
   };
 
   const loadPreview = useCallback(async (rawRow) => {
@@ -283,34 +282,36 @@ export default function ManageWatershedsTab() {
     try {
       if (formMode === "edit" && data.id) {
         await api(`/watersheds/${data.id}`, { method: "PUT", body: payload });
+        await alertSuccess('Saved', `"${payload.name}" was updated.`);
       } else {
         await api('/watersheds', { method: "POST", body: payload });
+        await alertSuccess('Created', `"${payload.name}" was created.`);
       }
       setFormOpen(false);
       await loadWatersheds();
     } catch (e) {
       console.error(e);
       setErrorMsg(parseError(e, "Failed to save watershed."));
+      await alertError('Save failed', parseError(e, 'Failed to save watershed.'));
     } finally {
       setLoading(false);
     }
   };
 
-  const deleteRow = async () => {
-    if (!confirmTarget?.id) {
-      setConfirmOpen(false);
-      return;
-    }
+  const handleDelete = async (target) => {
+    if (!target?.id) return;
+    const ok = await confirm({ title: 'Delete watershed?', text: `Delete "${target.name}"?`, confirmButtonText: 'Delete' });
+    if (!ok) return;
     setLoading(true);
     setErrorMsg("");
     try {
-      await api(`/watersheds/${confirmTarget.id}`, { method: "DELETE" });
-      setConfirmOpen(false);
-      setConfirmTarget(null);
+      await api(`/watersheds/${target.id}`, { method: "DELETE" });
       await loadWatersheds();
+      await alertSuccess('Deleted', `"${target.name}" was deleted.`);
     } catch (e) {
       console.error(e);
       setErrorMsg(parseError(e, "Failed to delete watershed."));
+      await alertError('Delete failed', parseError(e, 'Failed to delete watershed.'));
     } finally {
       setLoading(false);
     }
@@ -448,16 +449,7 @@ export default function ManageWatershedsTab() {
         onCancel={() => setFormOpen(false)}
       />
 
-      <ConfirmDialog
-        open={confirmOpen}
-        title="Delete Watershed"
-        message={`Are you sure you want to delete "${confirmTarget?.name ?? "this watershed"}"?`}
-        confirmText="Delete"
-        cancelText="Cancel"
-        onConfirm={deleteRow}
-        onCancel={() => setConfirmOpen(false)}
-        loading={loading}
-      />
+      {/* ConfirmDialog removed — deletion handled via centered SweetAlert confirm */}
 
     </div>
   );

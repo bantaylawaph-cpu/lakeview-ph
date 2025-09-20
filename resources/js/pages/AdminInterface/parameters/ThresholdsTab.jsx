@@ -5,6 +5,7 @@ import TableToolbar from "../../../components/table/TableToolbar";
 import FilterPanel from "../../../components/table/FilterPanel";
 import TableLayout from "../../../layouts/TableLayout";
 import { api } from "../../../lib/api";
+import { confirm, alertSuccess, alertError } from "../../../lib/alerts";
 
 const TABLE_ID = "admin-thresholds";
 const VIS_KEY = `${TABLE_ID}::visible`;
@@ -224,12 +225,15 @@ function ThresholdsTab() {
         onClick: async (threshold) => {
           const target = threshold?._raw ?? threshold;
           if (!target?.id) return;
-          if (!window.confirm("Delete threshold?")) return;
+          const ok = await confirm({ title: 'Delete threshold?', text: `Delete threshold for ${target.parameter?.name || target.parameter?.code || ''}?`, confirmButtonText: 'Delete' });
+          if (!ok) return;
           try {
             await api(`/admin/parameter-thresholds/${target.id}`, { method: "DELETE" });
             await fetchThresholds();
+            await alertSuccess('Deleted', 'Threshold deleted.');
           } catch (err) {
             console.error("Failed to delete threshold", err);
+            await alertError('Delete failed', err?.message || 'Failed to delete threshold');
           }
         },
       },
@@ -368,14 +372,17 @@ function ThresholdsTab() {
           method: "PUT",
           body: payload,
         });
+        await alertSuccess('Saved', 'Threshold updated.');
       } else {
         await api("/admin/parameter-thresholds", { method: "POST", body: payload });
+        await alertSuccess('Created', 'Threshold created.');
       }
 
       setForm(emptyThreshold);
       await fetchThresholds();
     } catch (err) {
       console.error("Failed to save threshold", err);
+      await alertError('Save failed', err?.message || 'Failed to save threshold');
     } finally {
       setSaving(false);
     }

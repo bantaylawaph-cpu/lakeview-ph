@@ -5,6 +5,7 @@ import TableToolbar from "../../../components/table/TableToolbar";
 import FilterPanel from "../../../components/table/FilterPanel";
 import TableLayout from "../../../layouts/TableLayout";
 import { api, buildQuery } from "../../../lib/api";
+import { confirm, alertSuccess, alertError } from "../../../lib/alerts";
 
 const TABLE_ID = "admin-parameters";
 const VIS_KEY = `${TABLE_ID}::visible`;
@@ -424,12 +425,15 @@ function ParametersTab() {
         type: "delete",
         icon: <FiTrash2 />,
         onClick: async (row) => {
-          if (!window.confirm(`Delete parameter ${row.code}?`)) return;
+          const ok = await confirm({ title: 'Delete parameter?', text: `Delete ${row.code}?`, confirmButtonText: 'Delete' });
+          if (!ok) return;
           try {
             await api(`/admin/parameters/${row.id}`, { method: "DELETE" });
             await fetchParameters();
+            await alertSuccess('Deleted', `"${row.code}" was deleted.`);
           } catch (err) {
             console.error("Failed to delete parameter", err);
+            await alertError('Delete failed', err?.message || 'Failed to delete parameter');
           }
         },
       },
@@ -467,8 +471,10 @@ function ParametersTab() {
 
       if (form.__id) {
         await api(`/admin/parameters/${form.__id}`, { method: "PUT", body: payload });
+        await alertSuccess('Saved', `"${payload.code}" was updated.`);
       } else {
         await api("/admin/parameters", { method: "POST", body: payload });
+        await alertSuccess('Created', `"${payload.code}" was created.`);
       }
 
       handleReset();
@@ -476,6 +482,7 @@ function ParametersTab() {
       setResetSignal((value) => value + 1);
     } catch (err) {
       console.error("Failed to save parameter", err);
+      await alertError('Save failed', err?.message || 'Failed to save parameter');
     } finally {
       setSaving(false);
     }
