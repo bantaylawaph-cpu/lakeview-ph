@@ -35,6 +35,7 @@
 @import './components/coordinates-scale.css';
 @import './components/sidebar.css';
 @import './components/lake-info-panel.css';
+@import './components/water-quality-tab.css';
 @import './components/table.css';
 @import './components/form.css';
 @import './components/wizard.css';

@@ -321,12 +321,63 @@ class SamplingEventController extends Controller
                 'station:id,name',
                 'appliedStandard:id,code,name',
                 'results' => function ($query) {
-                    $query->with(['parameter:id,code,name,unit']);
+                    $query->with([
+                        'parameter:id,code,name,unit,group',
+                        'threshold:id,parameter_id,class_code,standard_id,unit,min_value,max_value,notes',
+                    ]);
                 },
                 'createdBy:id,name',
                 'updatedBy:id,name',
             ])
             ->withCount('results');
+    }
+
+    /**
+     * Public list of sampling events, restricted to published status.
+     * Filters:
+     * - lake_id (required)
+     * - organization_id (optional)
+     * - limit (optional, default 10)
+     */
+    public function publicIndex(Request $request)
+    {
+        $lakeId = (int) $request->query('lake_id', 0);
+        if ($lakeId <= 0) {
+            abort(422, 'lake_id is required');
+        }
+
+        $orgId = $request->filled('organization_id') ? (int) $request->query('organization_id') : null;
+        $limit = (int) ($request->query('limit', 10));
+        if ($limit <= 0 || $limit > 100) { $limit = 10; }
+
+        $query = $this->eventDetailQuery()
+            ->where('sampling_events.status', 'public')
+            ->where('sampling_events.lake_id', $lakeId);
+
+        if ($orgId) {
+            $query->where('sampling_events.organization_id', $orgId);
+        }
+
+        $events = $query
+            ->orderByDesc('sampling_events.sampled_at')
+            ->orderBy('sampling_events.id', 'desc')
+            ->limit($limit)
+            ->get();
+
+        return response()->json(['data' => $events]);
+    }
+
+    /**
+     * Public detail for a sampling event. Only returns if published.
+     */
+    public function publicShow(Request $request, SamplingEvent $samplingEvent)
+    {
+        if ($samplingEvent->status !== 'public') {
+            abort(404);
+        }
+
+        $resource = $this->eventDetailQuery()->findOrFail($samplingEvent->id);
+        return response()->json(['data' => $resource]);
     }
 
     protected function syncEventPoint(int $eventId, array $data): void

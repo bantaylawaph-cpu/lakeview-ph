@@ -4,6 +4,7 @@ import OverviewTab from "./lake-info-panel/OverviewTab";
 import WaterQualityTab from "./lake-info-panel/WaterQualityTab";
 import HeatmapTab from "./lake-info-panel/HeatmapTab";
 import LayersTab from "./lake-info-panel/LayersTab";
+import TestsTab from "./lake-info-panel/TestsTab";
 
 /**
  * Props
@@ -23,6 +24,7 @@ function LakeInfoPanel({
   isOpen,
   onClose,
   lake,
+  onJumpToStation,
   onToggleHeatmap,
   layers = [],
   activeLayerId = null,
@@ -43,6 +45,17 @@ function LakeInfoPanel({
     if (lake) setActiveTab("overview");
     setSelectedLayerId(activeLayerId ?? null);
   }, [lake?.id, activeLayerId]);
+
+  // Emit WQ active state so MapPage can clear/persist markers (active when either Water or Tests tab is active)
+  useEffect(() => {
+    try {
+      window.dispatchEvent(new CustomEvent('lv-wq-active', { detail: { active: activeTab === 'water' || activeTab === 'tests' } }));
+      // If tests tab is now active, request that TestsTab immediately emit markers
+      if (activeTab === 'tests') {
+        try { window.dispatchEvent(new CustomEvent('lv-request-wq-markers', {})); } catch {}
+      }
+    } catch {}
+  }, [activeTab]);
 
   if (!lake && !isOpen) return null;
 
@@ -84,7 +97,8 @@ function LakeInfoPanel({
       {/* Tabs */}
       <div className="lake-info-tabs">
         <button className={`lake-tab ${activeTab === "overview" ? "active" : ""}`} onClick={() => setActiveTab("overview")}>Overview</button>
-        <button className={`lake-tab ${activeTab === "water" ? "active" : ""}`} onClick={() => setActiveTab("water")}>Water Quality</button>
+  <button className={`lake-tab ${activeTab === "water" ? "active" : ""}`} onClick={() => setActiveTab("water")}>Water Quality</button>
+  <button className={`lake-tab ${activeTab === "tests" ? "active" : ""}`} onClick={() => setActiveTab("tests")}>Tests</button>
         <button className={`lake-tab ${activeTab === "population" ? "active" : ""}`} onClick={() => setActiveTab("population")}>Population Density</button>
         <button className={`lake-tab ${activeTab === "layers" ? "active" : ""}`} onClick={() => setActiveTab("layers")}>Layers</button>
       </div>
@@ -99,7 +113,21 @@ function LakeInfoPanel({
             onToggleWatershed={onToggleWatershed}
           />
         )}
-        {activeTab === "water" && <WaterQualityTab />}
+        {activeTab === "water" && (
+          <WaterQualityTab
+            lake={lake}
+            onSelectTestStation={(lat, lon) => {
+              if (typeof onJumpToStation === 'function') {
+                onJumpToStation(lat, lon);
+              } else {
+                try { window.dispatchEvent(new CustomEvent('lv-jump-to-station', { detail: { lat, lon } })); } catch {}
+              }
+            }}
+          />
+        )}
+        {activeTab === "tests" && (
+          <TestsTab lake={lake} onJumpToStation={onJumpToStation} />
+        )}
 
         {activeTab === "population" && (
           <HeatmapTab lake={lake} onToggleHeatmap={onToggleHeatmap} />

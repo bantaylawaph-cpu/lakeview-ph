@@ -29,6 +29,15 @@ function MapWithContextMenu({ children }) {
   return children(map);
 }
 
+// Bridge component to ensure we capture the Leaflet map instance reliably
+function MapRefBridge({ onReady }) {
+  const map = useMap();
+  useEffect(() => {
+    if (map && typeof onReady === 'function') onReady(map);
+  }, [map, onReady]);
+  return null;
+}
+
 // Extract a lake id from a Feature robustly
 const getLakeIdFromFeature = (feat) => {
   const p = feat?.properties || {};
@@ -55,6 +64,7 @@ function MapPage() {
   const [lakeOverlayFeature, setLakeOverlayFeature] = useState(null);
   const [watershedOverlayFeature, setWatershedOverlayFeature] = useState(null);
   const [baseKey, setBaseKey] = useState(0); // force base GeoJSON remount when needed
+  const [wqMarker, setWqMarker] = useState(null); // {lat, lon}
 
   const [measureActive, setMeasureActive] = useState(false);
   const [measureMode, setMeasureMode] = useState("distance");
@@ -70,7 +80,10 @@ function MapPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const mapRef = useRef(null);
-
+  const wqLayerRef = useRef(null); // persistent WQ markers layer
+  const queuedWqMarkersRef = useRef([]);
+  const [mapReady, setMapReady] = useState(false);
+  const zoomLockedRef = useRef(true);
   // ---------------- Auth / route modal ----------------
   useEffect(() => {
     let mounted = true;
@@ -101,14 +114,8 @@ function MapPage() {
         // Force remount of the base GeoJSON so leaflet replaces the layer
         setBaseKey((v) => v + 1);
 
-        // Fit to all lakes initially
-        if (mapRef.current && fc.features?.length) {
-          const gj = L.geoJSON(fc);
-          const b = gj.getBounds();
-          if (b?.isValid?.() === true) {
-            mapRef.current.fitBounds(b, { padding: [24, 24], maxZoom: 9, animate: false });
-          }
-        }
+        // Do not auto-fit to all lakes when the GeoJSON renders.
+        // Zoom/fitting should only occur on explicit user actions (click/select).
       } else {
         setPublicFC({ type: "FeatureCollection", features: [] });
       }
@@ -295,9 +302,136 @@ function MapPage() {
   const themeClass = selectedView === "satellite" ? "map-dark" : "map-light";
   const worldBounds = [[4.6,116.4],[21.1,126.6]];
 
+  // Listen for jump-to-station events (fallback)
+  useEffect(() => {
+    const onJump = (e) => {
+      const lat = Number(e?.detail?.lat);
+      const lon = Number(e?.detail?.lon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon) || !mapRef.current) {
+        console.log('[MapPage] ignoring lv-jump-to-station - invalid or map not ready', e?.detail);
+        return;
+      }
+      setWqMarker({ lat, lon });
+      console.log('[MapPage] lv-jump-to-station flying to', lat, lon);
+      try { mapRef.current.flyTo([lat, lon], 13, { duration: 0.8 }); } catch {}
+    };
+    window.addEventListener('lv-jump-to-station', onJump);
+    return () => window.removeEventListener('lv-jump-to-station', onJump);
+  }, []);
+
+  // Persistent Water Quality markers: listen for list updates
+  useEffect(() => {
+    const onWqMarkers = (e) => {
+      const markers = Array.isArray(e?.detail?.markers) ? e.detail.markers : [];
+      // If map isn't ready yet, queue markers to be flushed later
+      if (!mapRef.current) {
+        queuedWqMarkersRef.current = markers || [];
+        console.log('[MapPage] map not ready - queued lv-wq-markers', queuedWqMarkersRef.current);
+        return;
+      }
+      try {
+        if (!wqLayerRef.current) {
+          wqLayerRef.current = L.layerGroup().addTo(mapRef.current);
+        }
+        wqLayerRef.current.clearLayers();
+        console.log('[MapPage] received lv-wq-markers', markers);
+        markers.forEach((m) => {
+          if (m && Number.isFinite(m.lat) && Number.isFinite(m.lon)) {
+            const cm = L.circleMarker([m.lat, m.lon], { radius: 6, color: '#ff6b6b', weight: 2, fillColor: '#ffffff', fillOpacity: 0.9 });
+            if (m.label) cm.bindPopup(m.label);
+            cm.addTo(wqLayerRef.current);
+          }
+        });
+      } catch (err) {
+        console.warn('[MapPage] Failed updating WQ markers layer', err);
+      }
+    };
+    const onWqActive = (e) => {
+      const active = !!e?.detail?.active;
+      if (!active && wqLayerRef.current) {
+        try { wqLayerRef.current.clearLayers(); } catch {}
+      }
+    };
+    window.addEventListener('lv-wq-markers', onWqMarkers);
+    window.addEventListener('lv-wq-active', onWqActive);
+    return () => {
+      window.removeEventListener('lv-wq-markers', onWqMarkers);
+      window.removeEventListener('lv-wq-active', onWqActive);
+    };
+  }, []);
+
+  // Flush queued markers once the map becomes ready
+  useEffect(() => {
+    if (!mapReady) return;
+    const queued = queuedWqMarkersRef.current || [];
+    if (queued.length && mapRef.current) {
+      try {
+        console.log('[MapPage] flushing queued lv-wq-markers', queued);
+        if (!wqLayerRef.current) wqLayerRef.current = L.layerGroup().addTo(mapRef.current);
+        wqLayerRef.current.clearLayers();
+        queued.forEach((m) => {
+          if (m && Number.isFinite(m.lat) && Number.isFinite(m.lon)) {
+            const cm = L.circleMarker([m.lat, m.lon], { radius: 6, color: '#ff6b6b', weight: 2, fillColor: '#ffffff', fillOpacity: 0.9 });
+            if (m.label) cm.bindPopup(m.label);
+            cm.addTo(wqLayerRef.current);
+          }
+        });
+      } catch (err) {
+        console.warn('[MapPage] Failed flushing queued WQ markers', err);
+      }
+    }
+    queuedWqMarkersRef.current = [];
+  }, [mapReady]);
+
+  // Fallback: poll for mapRef availability and flush queued markers once
+  useEffect(() => {
+    let attempts = 0;
+    const interval = setInterval(() => {
+      attempts += 1;
+      if (mapRef.current) {
+        if (!mapReady) setMapReady(true);
+        const queued = queuedWqMarkersRef.current || [];
+        if (queued.length) {
+          try {
+            console.log('[MapPage] fallback flush of queued lv-wq-markers', queued);
+            if (!wqLayerRef.current) wqLayerRef.current = L.layerGroup().addTo(mapRef.current);
+            wqLayerRef.current.clearLayers();
+            queued.forEach((m) => {
+              if (m && Number.isFinite(m.lat) && Number.isFinite(m.lon)) {
+                const cm = L.circleMarker([m.lat, m.lon], { radius: 6, color: '#ff6b6b', weight: 2, fillColor: '#ffffff', fillOpacity: 0.9 });
+                if (m.label) cm.bindPopup(m.label);
+                cm.addTo(wqLayerRef.current);
+              }
+            });
+            queuedWqMarkersRef.current = [];
+          } catch (err) {
+            console.warn('[MapPage] Failed fallback flush of WQ markers', err);
+          }
+        }
+        clearInterval(interval);
+      } else if (attempts > 60) { // ~12s at 200ms
+        clearInterval(interval);
+      }
+    }, 200);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Render a temporary marker when wqMarker changes
+  useEffect(() => {
+    if (!wqMarker || !mapRef.current) return;
+    let marker;
+    try {
+      marker = L.circleMarker([wqMarker.lat, wqMarker.lon], { radius: 7, color: '#2563eb', weight: 2, fillColor: '#93c5fd', fillOpacity: 0.9 }).addTo(mapRef.current);
+    } catch {}
+    const t = setTimeout(() => { try { marker && marker.remove(); } catch {} }, 4000);
+    return () => { clearTimeout(t); try { marker && marker.remove(); } catch {} };
+  }, [wqMarker]);
+
   return (
     <div className={themeClass} style={{ height: "100vh", width: "100vw", margin: 0, padding: 0 }}>
-      <AppMap view={selectedView} zoomControl={false} whenCreated={(m) => (mapRef.current = m)}>
+  <AppMap view={selectedView} zoomControl={false} whenCreated={(m) => { mapRef.current = m; try { window.lv_map = m; } catch {} setMapReady(true); }}>
+    {/* Ensure mapRef is set even if whenCreated timing varies */}
+    <MapRefBridge onReady={(m) => { if (!mapRef.current) { mapRef.current = m; try { window.lv_map = m; } catch {} setMapReady(true); } }} />
         {/* Base layer of all lakes; hides selected lake when an overlay is active */}
         {publicFC && (
           <GeoJSON
@@ -445,6 +579,11 @@ function MapPage() {
         isOpen={lakePanelOpen}
         onClose={() => setLakePanelOpen(false)}
         lake={selectedLake}
+        onJumpToStation={(lat, lon) => {
+          if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lon)) || !mapRef.current) return;
+          setWqMarker({ lat: Number(lat), lon: Number(lon) });
+          try { mapRef.current.flyTo([Number(lat), Number(lon)], 13, { duration: 0.8 }); } catch {}
+        }}
         onToggleHeatmap={(on, km) => {
           console.log("[Heatmap]", on ? "ON" : "OFF", "distance:", km, "km");
         }}

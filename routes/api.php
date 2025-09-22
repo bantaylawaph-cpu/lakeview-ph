@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\Admin\WqStandardController as AdminWqStandardContro
 use App\Http\Controllers\Api\Admin\WaterQualityClassController as AdminWaterQualityClassController;
 use App\Http\Controllers\Api\Admin\StationController as AdminStationController;
 use App\Http\Controllers\Api\Admin\SamplingEventController as AdminSamplingEventController;
+use App\Http\Controllers\Api\Admin\SamplingEventController;
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register']); // public
     Route::post('/login',    [AuthController::class, 'login']);    // public
@@ -80,6 +81,10 @@ Route::middleware('auth:sanctum')->group(function () {
 // Usage: GET /api/public/layers?body_type=lake|watershed&body_id=123
 Route::get('/public/layers', [ApiLayerController::class, 'publicIndex']);
 Route::get('/public/layers/{id}', [ApiLayerController::class, 'publicShow']);
+
+// Public Water Quality Sampling Events (published only)
+Route::get('/public/sample-events', [SamplingEventController::class, 'publicIndex']); // ?lake_id=..&organization_id=..&limit=10
+Route::get('/public/sample-events/{samplingEvent}', [SamplingEventController::class, 'publicShow']);
 
 // Slim options for dropdowns (id + name), with optional ?q=
 Route::get('/options/lakes',      [OptionsController::class, 'lakes']);
