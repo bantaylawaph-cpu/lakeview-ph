@@ -66,7 +66,7 @@ export default function ColumnPicker({
               checked={visible[c.id] !== false}
               onChange={() => onChange({ ...visible, [c.id]: !visible[c.id] })}
             />
-            <span>{typeof c.header === "string" ? c.header : c.id}</span>
+            <span>{typeof (c.header ?? c.label) === "string" ? (c.header ?? c.label) : c.id}</span>
           </label>
         ))}
       </div>

@@ -3,6 +3,7 @@ import { Marker, Tooltip } from "react-leaflet";
 import { FaRuler, FaDrawPolygon, FaMapMarkerAlt, FaCopy } from "react-icons/fa";
 import L from "leaflet";
 import ReactDOMServer from "react-dom/server";
+import { alertError, alertSuccess } from "../lib/alerts";
 
 // Blue pin icon
 const bluePinIcon = new L.DivIcon({
@@ -43,16 +44,40 @@ const ContextMenu = ({ map, onMeasureDistance, onMeasureArea }) => {
 
   const handleCopyCoords = () => {
     if (latlng) {
-      const coords = `${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`;
-      navigator.clipboard
-        .writeText(coords)
-        .then(() => {
-          M.toast({ html: `Copied: ${coords}`, classes: "green darken-1" });
+      (async () => {
+        const coords = `${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`;
+        let copied = false;
+        try {
+          if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+            await navigator.clipboard.writeText(coords);
+            copied = true;
+          }
+        } catch (e) {
+          copied = false;
+        }
+        if (!copied) {
+          // Fallback
+          const ta = document.createElement('textarea');
+          ta.value = coords;
+          ta.setAttribute('readonly', '');
+          ta.style.position = 'absolute';
+          ta.style.left = '-9999px';
+          document.body.appendChild(ta);
+          ta.select();
+          try {
+            copied = document.execCommand('copy');
+          } catch (err) {
+            copied = false;
+          }
+          document.body.removeChild(ta);
+        }
+        if (copied) {
+          await alertSuccess('Copied coordinates', coords);
           setPosition(null);
-        })
-        .catch(() => {
-          M.toast({ html: "Clipboard copy failed.", classes: "red darken-2" });
-        });
+        } else {
+          await alertError('Clipboard copy failed', 'Unable to copy coordinates to clipboard.');
+        }
+      })();
     }
   };
 
@@ -66,7 +91,6 @@ const ContextMenu = ({ map, onMeasureDistance, onMeasureArea }) => {
   // Remove pin by index
   const handleRemovePin = (idx) => {
     setPins((prev) => prev.filter((_, i) => i !== idx));
-    M.toast({ html: "Pin removed", classes: "red darken-2" });
   };
 
   return (

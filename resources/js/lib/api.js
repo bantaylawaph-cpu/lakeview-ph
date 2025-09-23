@@ -1,14 +1,5 @@
 // Remove a user as a member from a tenant (organization)
-export const removeTenantMember = (tenantId, userId) =>
-  api(`/admin/tenants/${tenantId}/members/${userId}`, {
-    method: "DELETE",
-  });
-// Assign a user as a member to a tenant (organization)
-export const assignTenantMember = (tenantId, userId) =>
-  api(`/admin/tenants/${tenantId}/members`, {
-    method: "POST",
-    body: { user_id: userId },
-  });
+// (These must be after api is defined, so moved to bottom)
 // resources/js/lib/api.js
 
 // --- Config ---------------------------------------------------------------
@@ -55,6 +46,21 @@ function toQueryString(params) {
   const s = usp.toString();
   return s ? `?${s}` : "";
 }
+/**
+ * Build a query string from a params object.
+ * Example: buildQuery({ a: 1, q: "laguna de bay" }) -> "?a=1&q=laguna%20de%20bay"
+ */
+export function buildQuery(params = {}) {
+  const entries = Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== "");
+  if (entries.length === 0) return "";
+  const usp = new URLSearchParams();
+  for (const [k, v] of entries) {
+    if (Array.isArray(v)) v.forEach((vv) => usp.append(k, String(vv)));
+    else usp.append(k, String(v));
+  }
+  const s = usp.toString();
+  return s ? `?${s}` : "";
+}
 
 function buildUrl(url, params) {
   const isAbsolute = /^https?:\/\//i.test(url);
@@ -81,18 +87,19 @@ function makeError(res, data) {
 async function request(method, url, { params, body, headers, raw } = {}) {
   const finalUrl = buildUrl(url, params);
   const isForm = body instanceof FormData;
-
+  const token = getToken();
+  const hadToken = !!token;
+  const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
   const init = {
     method,
     headers: {
       Accept: "application/json",
       ...(isForm ? {} : { "Content-Type": "application/json" }),
-      ...(_token ? { Authorization: `Bearer ${_token}` } : {}),
+      ...authHeaders,
       ...(headers || {}),
     },
     body: body ? (isForm ? body : JSON.stringify(body)) : undefined,
   };
-
   let res;
   try {
     res = await fetch(finalUrl, init);
@@ -101,9 +108,7 @@ async function request(method, url, { params, body, headers, raw } = {}) {
     err.cause = networkError;
     throw err;
   }
-
   if (raw) return res;
-
   const data = await parseResponse(res);
   if (!res.ok) throw makeError(res, data);
   return data;
@@ -202,8 +207,29 @@ export const removeTenantAdmin = (tenantId, userId) =>
   });
 
 
+
 // --- Exports ---------------------------------------------------------------
 const api = client;         // default export is the function client
 export default api;
 // also provide a named `api` for files that do: import { api } from "../lib/api"
 export { api };
+
+/**
+ * Public (no-auth) API wrapper — same as api() but always omits Authorization.
+ * Usage: apiPublic(`/public/layers${buildQuery({ body_type: 'lake', body_id: 1 })}`)
+ */
+export function apiPublic(path, opts = {}) {
+  return api(path, { ...opts, auth: false });
+}
+
+// Remove a user as a member from a tenant (organization)
+export const removeTenantMember = (tenantId, userId) =>
+  api(`/admin/tenants/${tenantId}/members/${userId}`, {
+    method: "DELETE",
+  });
+// Assign a user as a member to a tenant (organization)
+export const assignTenantMember = (tenantId, userId) =>
+  api(`/admin/tenants/${tenantId}/members`, {
+    method: "POST",
+    body: { user_id: userId },
+  });

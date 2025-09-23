@@ -1,5 +1,4 @@
 /* resources/css/dashboard/index.css */
-@import "./_variables.css";       /* optional placeholder; safe even if empty */
 @import "./layout.css";
 @import "./dashboard-sidebar.css";
 @import "./header.css";

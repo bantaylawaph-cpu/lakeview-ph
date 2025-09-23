@@ -1,71 +1,78 @@
-// src/components/LakeInfoPanel.jsx
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import { FiX } from "react-icons/fi";
+import OverviewTab from "./lake-info-panel/OverviewTab";
+import WaterQualityTab from "./lake-info-panel/WaterQualityTab";
+import HeatmapTab from "./lake-info-panel/HeatmapTab";
+import LayersTab from "./lake-info-panel/LayersTab";
+import TestsTab from "./lake-info-panel/TestsTab";
 
-function LakeInfoPanel({ isOpen, onClose, lake, onToggleHeatmap }) {
+/**
+ * Props
+ * - isOpen: boolean
+ * - onClose: () => void
+ * - lake: { id, name, ... }
+ * - onToggleHeatmap?: (enabled:boolean, km:number) => void
+ * - layers?: Array<{ id, name, notes?, uploaded_by_org?, is_active? }>
+ * - activeLayerId?: number|string|null
+ * - onSelectLayer?: (layer: object) => void
+ * - onResetToActive?: () => void
+ * - onToggleWatershed?: (checked: boolean) => void
+ * - showWatershed?: boolean
+ * - canToggleWatershed?: boolean
+ */
+function LakeInfoPanel({
+  isOpen,
+  onClose,
+  lake,
+  onJumpToStation,
+  onToggleHeatmap,
+  layers = [],
+  activeLayerId = null,
+  onSelectLayer,
+  onResetToActive,
+  onToggleWatershed,
+  showWatershed = false,
+  canToggleWatershed = false,
+}) {
   const [activeTab, setActiveTab] = useState("overview");
-  const [distance, setDistance] = useState(2); // km filter
-  const [estimatedPop, setEstimatedPop] = useState(0);
   const [closing, setClosing] = useState(false);
+  const [selectedLayerId, setSelectedLayerId] = useState(activeLayerId ?? null);
 
-  // Reset closing when panel re-opens
-  useEffect(() => {
-    if (isOpen) setClosing(false);
-  }, [isOpen]);
+  useEffect(() => { if (isOpen) setClosing(false); }, [isOpen]);
 
-  // Whenever a new lake is selected, return to Overview tab
+  // Sync selection when the lake or its active layer changes
   useEffect(() => {
     if (lake) setActiveTab("overview");
-  }, [lake?.id]);
+    setSelectedLayerId(activeLayerId ?? null);
+  }, [lake?.id, activeLayerId]);
 
-  // Mock population estimate (placeholder)
+  // Emit WQ active state so MapPage can clear/persist markers (active when either Water or Tests tab is active)
   useEffect(() => {
-    if (activeTab === "population") {
-      const fakeEstimate = Math.round(15000 + distance * 20000);
-      setEstimatedPop(fakeEstimate);
-    }
-  }, [distance, activeTab]);
+    try {
+      window.dispatchEvent(new CustomEvent('lv-wq-active', { detail: { active: activeTab === 'water' || activeTab === 'tests' } }));
+      // If tests tab is now active, request that TestsTab immediately emit markers
+      if (activeTab === 'tests') {
+        try { window.dispatchEvent(new CustomEvent('lv-request-wq-markers', {})); } catch {}
+      }
+    } catch {}
+  }, [activeTab]);
 
-  // ---------- Formatting helpers ----------
-  const fmtNum = (v, suffix = "", digits = 2) => {
-    if (v === null || v === undefined || v === "") return "–";
-    const n = Number(v);
-    if (!Number.isFinite(n)) return "–";
-    return `${n.toFixed(digits)}${suffix}`;
-  };
-  const fmtDate = (v) => (v ? new Date(v).toLocaleString() : "–");
-
-  // ---------- Derived display strings ----------
-  const watershedName = useMemo(() => {
-    if (!lake) return "–";
-    // support either nested relation or flattened property
-    return lake?.watershed?.name || lake?.watershed_name || "–";
-  }, [lake]);
-
-  const locationStr = useMemo(() => {
-    if (!lake) return "–";
-    const parts = [lake.municipality, lake.province, lake.region].filter(Boolean);
-    return parts.length ? parts.join(", ") : "–";
-  }, [lake]);
-
-  const areaStr       = useMemo(() => fmtNum(lake?.surface_area_km2, " km²", 2), [lake]);
-  const elevationStr  = useMemo(() => fmtNum(lake?.elevation_m, " m", 1), [lake]);
-  const meanDepthStr  = useMemo(() => fmtNum(lake?.mean_depth_m, " m", 1), [lake]);
-  const createdAtStr  = useMemo(() => fmtDate(lake?.created_at), [lake]);
-  const updatedAtStr  = useMemo(() => fmtDate(lake?.updated_at), [lake]);
-
-  // Prevent render if nothing to show
   if (!lake && !isOpen) return null;
-
-  const handleTabChange = (tab) => {
-    setActiveTab(tab);
-    if (tab === "population") onToggleHeatmap?.(true, distance);
-    else onToggleHeatmap?.(false);
-  };
 
   const handleClose = () => {
     setClosing(true);
-    setTimeout(() => { onClose?.(); }, 350); // match CSS transition
+    setTimeout(() => { onClose?.(); }, 350);
+  };
+
+  const handleChooseLayer = (id) => {
+    setSelectedLayerId(id);
+    const found = layers.find((l) => String(l.id) === String(id));
+    if (found) onSelectLayer?.(found);
+  };
+
+  const handleResetToActive = () => {
+    setSelectedLayerId(activeLayerId ?? null);
+    onResetToActive?.();
   };
 
   return (
@@ -89,111 +96,51 @@ function LakeInfoPanel({ isOpen, onClose, lake, onToggleHeatmap }) {
 
       {/* Tabs */}
       <div className="lake-info-tabs">
-        <button
-          className={`lake-tab ${activeTab === "overview" ? "active" : ""}`}
-          onClick={() => handleTabChange("overview")}
-        >
-          Overview
-        </button>
-        <button
-          className={`lake-tab ${activeTab === "water" ? "active" : ""}`}
-          onClick={() => handleTabChange("water")}
-        >
-          Water Quality
-        </button>
-        <button
-          className={`lake-tab ${activeTab === "population" ? "active" : ""}`}
-          onClick={() => handleTabChange("population")}
-        >
-          Population Density
-        </button>
+        <button className={`lake-tab ${activeTab === "overview" ? "active" : ""}`} onClick={() => setActiveTab("overview")}>Overview</button>
+  <button className={`lake-tab ${activeTab === "water" ? "active" : ""}`} onClick={() => setActiveTab("water")}>Water Quality</button>
+  <button className={`lake-tab ${activeTab === "tests" ? "active" : ""}`} onClick={() => setActiveTab("tests")}>Tests</button>
+        <button className={`lake-tab ${activeTab === "population" ? "active" : ""}`} onClick={() => setActiveTab("population")}>Population Density</button>
+        <button className={`lake-tab ${activeTab === "layers" ? "active" : ""}`} onClick={() => setActiveTab("layers")}>Layers</button>
       </div>
-
-      {/* Image (only on overview tab, only if provided) */}
-      {activeTab === "overview" && lake?.image && (
-        <div className="lake-info-image">
-          <img src={lake.image} alt={lake.name} />
-        </div>
-      )}
 
       {/* Content */}
       <div className="lake-info-content">
         {activeTab === "overview" && (
-          <>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 16px" }}>
-              <div><strong>Watershed:</strong></div>
-              <div>{watershedName}</div>
-
-              <div><strong>Region:</strong></div>
-              <div>{lake?.region || "–"}</div>
-
-              <div><strong>Province:</strong></div>
-              <div>{lake?.province || "–"}</div>
-
-              <div><strong>Municipality/City:</strong></div>
-              <div>{lake?.municipality || "–"}</div>
-
-              <div><strong>Surface Area:</strong></div>
-              <div>{areaStr}</div>
-
-              <div><strong>Elevation:</strong></div>
-              <div>{elevationStr}</div>
-
-              <div><strong>Mean Depth:</strong></div>
-              <div>{meanDepthStr}</div>
-
-              <div><strong>Location (full):</strong></div>
-              <div>{locationStr}</div>
-            </div>
-          </>
+          <OverviewTab
+            lake={lake}
+            showWatershed={showWatershed}
+            canToggleWatershed={canToggleWatershed}
+            onToggleWatershed={onToggleWatershed}
+          />
         )}
-
         {activeTab === "water" && (
-          <p><em>Water quality reports will appear here.</em></p>
+          <WaterQualityTab
+            lake={lake}
+            onSelectTestStation={(lat, lon) => {
+              if (typeof onJumpToStation === 'function') {
+                onJumpToStation(lat, lon);
+              } else {
+                try { window.dispatchEvent(new CustomEvent('lv-jump-to-station', { detail: { lat, lon } })); } catch {}
+              }
+            }}
+          />
+        )}
+        {activeTab === "tests" && (
+          <TestsTab lake={lake} onJumpToStation={onJumpToStation} />
         )}
 
         {activeTab === "population" && (
-          <>
-            <h3>Population Density Heatmap</h3>
-            <p>
-              Heatmap of population living around <strong>{lake?.name}</strong>.
-            </p>
+          <HeatmapTab lake={lake} onToggleHeatmap={onToggleHeatmap} />
+        )}
 
-            {/* Distance filter slider */}
-            <div
-              className="slider-container"
-              onMouseDown={(e) => e.stopPropagation()}
-              onTouchStart={(e) => e.stopPropagation()}
-              onPointerDown={(e) => e.stopPropagation()}
-              onContextMenu={(e) => e.stopPropagation()}
-            >
-              <label htmlFor="distanceRange">
-                Distance from shoreline: {distance} km
-              </label>
-              <input
-                id="distanceRange"
-                type="range"
-                min="1"
-                max="10"
-                step="1"
-                value={distance}
-                onChange={(e) => {
-                  const val = parseInt(e.target.value, 10);
-                  setDistance(val);
-                  onToggleHeatmap?.(true, val);
-                }}
-              />
-            </div>
-
-            {/* Estimated population insight */}
-            <div className="insight-card">
-              <h4>Estimated Population</h4>
-              <p>
-                ~ <strong>{estimatedPop.toLocaleString()}</strong> people
-                within {distance} km of the shoreline
-              </p>
-            </div>
-          </>
+        {activeTab === "layers" && (
+          <LayersTab
+            layers={layers}
+            activeLayerId={activeLayerId}
+            selectedLayerId={selectedLayerId}
+            onChooseLayer={handleChooseLayer}
+            onResetToActive={handleResetToActive}
+          />
         )}
       </div>
     </div>

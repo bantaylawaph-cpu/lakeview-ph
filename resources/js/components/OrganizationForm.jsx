@@ -72,6 +72,7 @@ export default function OrganizationForm({ initialData = {}, onSubmit, open, onC
         display: 'grid',
         gridTemplateColumns: '1fr 1fr',
         gap: 20,
+        width: '100%',
         maxWidth: 600,
         margin: '0 auto',
       }}>

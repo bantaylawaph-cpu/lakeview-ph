@@ -20,7 +20,7 @@ class StoreLayerRequest extends FormRequest
             'type'        => 'nullable|string|max:64',
             'category'    => 'nullable|string|max:64',
             'srid'        => 'nullable|integer|min:0',
-            'visibility'  => 'nullable|string|in:admin,public',
+            'visibility'  => 'nullable|string|in:admin,public,organization_admin',
             'is_active'   => 'nullable|boolean',
             'status'      => 'nullable|string|in:draft,ready,archived',
             'version'     => 'nullable|integer|min:1',

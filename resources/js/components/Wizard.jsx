@@ -26,9 +26,12 @@ export default function Wizard({
   initialData = {},
   initialStep = 0,
   onFinish,
+  onChange, // optional callback to notify parent of data changes
   labels = { back: "Back", next: "Next", finish: "Finish" },
 }) {
   const [stepIndex, setStepIndex] = useState(initialStep);
+  // Initialize data once from initialData; do not auto-reset on prop changes.
+  // Consumers needing to force a reset should remount the Wizard or add a reset key.
   const [data, setData] = useState(initialData);
 
   const isFirst = stepIndex === 0;
@@ -49,6 +52,23 @@ export default function Wizard({
   const finish = () => {
     if (!canGoNext) return;
     onFinish?.(data);
+  };
+
+  // Wrapped setter to allow steps to update data and notify parent via onChange
+  const updateData = (payload) => {
+    if (typeof payload === "function") {
+      setData((prev) => {
+        const next = payload(prev);
+        try { if (typeof onChange === 'function') setTimeout(() => onChange(next), 0); } catch (e) { /* ignore */ }
+        return next;
+      });
+    } else {
+      setData((prev) => {
+        const next = { ...prev, ...payload };
+        try { if (typeof onChange === 'function') setTimeout(() => onChange(next), 0); } catch (e) { /* ignore */ }
+        return next;
+      });
+    }
   };
 
   return (
@@ -74,7 +94,7 @@ export default function Wizard({
       </div>
 
       {/* Step content */}
-      {current && current.render({ data, setData, stepIndex })}
+  {current && current.render({ data, setData: updateData, stepIndex })}
 
       {/* Nav */}
       <div className="wizard-nav">

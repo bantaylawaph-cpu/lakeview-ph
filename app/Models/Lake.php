@@ -1,13 +1,17 @@
 <?php
+
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Lake extends Model
 {
+    use HasFactory;
+
     protected $fillable = [
         'watershed_id','name','alt_name','region','province','municipality',
-        'surface_area_km2','elevation_m','mean_depth_m'
+        'surface_area_km2','elevation_m','mean_depth_m','class_code'
     ];
 
     // A lake belongs to a watershed (nullable is okay)
@@ -28,4 +32,8 @@ class Lake extends Model
         return $this->morphOne(\App\Models\Layer::class, 'body')->where('is_active', true);
     }
 
+    public function waterQualityClass()
+    {
+        return $this->belongsTo(WaterQualityClass::class, 'class_code', 'code');
+    }
 }

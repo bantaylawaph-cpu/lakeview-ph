@@ -4,6 +4,11 @@ import { FiLayers } from "react-icons/fi";
 import LayerWizard from "../../components/layers/LayerWizard";
 import LayerList from "../../components/layers/LayerList";
 
+const ADMIN_VISIBILITY_OPTIONS = [
+  { value: "public", label: "Public" },
+  { value: "admin", label: "Admin" },
+];
+
 export default function AdminLayers() {
   // After a successful publish, remember which body was used
   const [lastBody, setLastBody] = useState({ type: "lake", id: "" });
@@ -39,6 +44,7 @@ export default function AdminLayers() {
         <LayerWizard
           defaultBodyType="lake"
           defaultVisibility="public"
+          visibilityOptions={ADMIN_VISIBILITY_OPTIONS}
           allowSetActive
           onPublished={(res) => {
             // Try to pick body_type/body_id from response payload shape
@@ -62,6 +68,7 @@ export default function AdminLayers() {
           allowToggleVisibility
           allowDelete
           showPreview={false}
+          visibilityOptions={ADMIN_VISIBILITY_OPTIONS}
         />
       )}
     </div>

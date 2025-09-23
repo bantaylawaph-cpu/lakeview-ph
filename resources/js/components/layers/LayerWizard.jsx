@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { GeoJSON } from "react-leaflet";
 import AppMap from "../../components/AppMap";
 import "leaflet/dist/leaflet.css";
@@ -7,7 +7,6 @@ import {
 } from "react-icons/fi";
 
 import Wizard from "../../components/Wizard";
-// BodySelect removed to keep the UX uniform (dropdown for both)
 
 import {
   boundsFromGeom,
@@ -16,6 +15,8 @@ import {
 } from "../../utils/geo";
 
 import { createLayer, fetchLakeOptions, fetchWatershedOptions } from "../../lib/layers";
+import { alertSuccess, alertError } from "../../lib/alerts";
+import MapViewport from "../../components/MapViewport";
 
 export default function LayerWizard({
   defaultBodyType = "lake",
@@ -25,26 +26,58 @@ export default function LayerWizard({
   allowedBodyTypes = ["lake", "watershed"],
   selectionModeLake = "dropdown",
   selectionModeWatershed = "dropdown",
+  visibilityOptions = [
+    { value: "public", label: "Public" },
+    { value: "admin", label: "Admin" },
+  ],
+  initialBodyId = "",
   onPublished,             // (layerResponse) => void
 }) {
+  const normalizedVisibilityOptions = useMemo(() => {
+    const base = Array.isArray(visibilityOptions) && visibilityOptions.length
+      ? visibilityOptions
+      : [
+          { value: "public", label: "Public" },
+          { value: "admin", label: "Admin" },
+        ];
+    return base
+      .map((opt) => (typeof opt === "string"
+        ? { value: opt, label: opt.charAt(0).toUpperCase() + opt.slice(1) }
+        : { value: opt.value, label: opt.label ?? opt.value }
+      ))
+      .filter((opt) => opt && opt.value);
+  }, [visibilityOptions]);
+
+  const resolvedDefaultVisibility = useMemo(() => {
+    if (normalizedVisibilityOptions.some((opt) => opt.value === defaultVisibility)) {
+      return defaultVisibility;
+    }
+    return normalizedVisibilityOptions[0]?.value || "public";
+  }, [defaultVisibility, normalizedVisibilityOptions]);
+
   const [data, setData] = useState({
     // file/geom
     fileName: "",
     geomText: "",
-    uploadGeom: null,       // original MultiPolygon (source SRID)
-    previewGeom: null,      // WGS84 for map preview
+    uploadGeom: null,
+    previewGeom: null,
     sourceSrid: 4326,
 
     // link
-    bodyType: allowedBodyTypes.includes(defaultBodyType) ? defaultBodyType : allowedBodyTypes[0] || "lake",
-    bodyId: "",
+    bodyType: allowedBodyTypes.includes(defaultBodyType) ? defaultBodyType : (allowedBodyTypes[0] || "lake"),
+    bodyId: initialBodyId ? String(initialBodyId) : "",
 
     // meta
     name: "",
     category: "",
     notes: "",
-    visibility: defaultVisibility, // 'admin' | 'public'
+    visibility: resolvedDefaultVisibility,
     isActive: false,
+
+    // viewport
+    includeViewport: true,
+    viewport: null,
+    viewportVersion: 0,
   });
 
   const [error, setError] = useState("");
@@ -52,13 +85,27 @@ export default function LayerWizard({
   const [lakeOptions, setLakeOptions] = useState([]);
   const [watershedOptions, setWatershedOptions] = useState([]);
 
-  // fit map when preview changes
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !data.previewGeom) return;
-    const b = boundsFromGeom(data.previewGeom);
-    if (b && b.isValid()) map.fitBounds(b.pad(0.2));
-  }, [data.previewGeom]);
+    if (initialBodyId === undefined || initialBodyId === null || initialBodyId === "") return;
+    const nextId = String(initialBodyId);
+    setData((prev) => (prev.bodyId === nextId ? prev : { ...prev, bodyId: nextId }));
+  }, [initialBodyId]);
+
+  useEffect(() => {
+    setData((d) => {
+      if (normalizedVisibilityOptions.some((opt) => opt.value === d.visibility)) {
+        return d;
+      }
+      return { ...d, visibility: resolvedDefaultVisibility };
+    });
+  }, [normalizedVisibilityOptions, resolvedDefaultVisibility]);
+
+  useEffect(() => {
+    if (allowSetActive) return;
+    setData((d) => (d.isActive ? { ...d, isActive: false } : d));
+  }, [allowSetActive]);
+
+  // Map viewport is now controlled by MapViewport inside the Preview render
 
   // Load lake options (names only) when selecting a lake
   useEffect(() => {
@@ -149,39 +196,44 @@ export default function LayerWizard({
   };
 
   // -------- publish ----------
-  const onPublish = async () => {
+  const onPublish = async (wizardData) => {
     setError("");
     try {
-      if (!data.uploadGeom) throw new Error("Please upload or paste a valid Polygon/MultiPolygon GeoJSON first.");
-      if (!data.bodyType || !data.bodyId) throw new Error("Select a target (lake or watershed) and its ID.");
-      if (!data.name) throw new Error("Layer name is required.");
+      const form = wizardData || data;
+      if (!form.uploadGeom) throw new Error("Please upload or paste a valid Polygon/MultiPolygon GeoJSON first.");
+      if (!form.bodyType || !form.bodyId) throw new Error("Select a target (lake or watershed) and its ID.");
+      if (!form.name) throw new Error("Layer name is required.");
 
       const payload = {
-        body_type: data.bodyType,
-        body_id: Number(data.bodyId),
-        name: data.name,
+        body_type: form.bodyType,
+        body_id: Number(form.bodyId),
+        name: form.name,
         type: "base",
-        category: data.category,
-        srid: Number(data.sourceSrid) || 4326,
-        visibility: data.visibility,          // 'admin' | 'public'
-        is_active: !!data.isActive,
+        category: form.category,
+        srid: Number(form.sourceSrid) || 4326,
+        visibility: form.visibility,          // e.g. public, organization
+        is_active: allowSetActive ? !!form.isActive : false,
         status: "ready",
-        notes: data.notes || null,
+        notes: form.notes || null,
         source_type: "geojson",
-        geom_geojson: JSON.stringify(data.uploadGeom),
+        geom_geojson: JSON.stringify(form.uploadGeom),
       };
+
 
       const res = await createLayer(payload);
       if (typeof onPublished === "function") onPublished(res);
 
-      alert("Layer created successfully.");
+      await alertSuccess("Layer created successfully.");
     } catch (e) {
       console.error('[LayerWizard] Publish failed', e);
       setError(e?.message || "Failed to publish layer.");
+      await alertError('Failed to publish layer', e?.message || '');
     }
   };
 
   // -------- steps ----------
+  const previewColor = data.bodyType === "watershed" ? "#16a34a" : "#2563eb";
+
   const steps = [
     // Step 1: Upload / Paste
     {
@@ -271,8 +323,13 @@ export default function LayerWizard({
                 whenCreated={(m) => { if (m && !mapRef.current) mapRef.current = m; }}
               >
                 {data.previewGeom && (
-                  <GeoJSON key="geom" data={{ type: "Feature", geometry: data.previewGeom }} />
+                  <GeoJSON key="geom" data={{ type: "Feature", geometry: data.previewGeom }} style={{ color: previewColor, weight: 2, fillOpacity: 0.15 }} />
                 )}
+                {/* MapViewport will fit map to either previewGeom or to a captured viewport (if present) */}
+                <MapViewport
+                  bounds={data.viewport ? [[data.viewport.bounds[0], data.viewport.bounds[1]], [data.viewport.bounds[2], data.viewport.bounds[3]]] : (data.previewGeom ? boundsFromGeom(data.previewGeom) : null)}
+                  version={data.viewportVersion || 0}
+                />
               </AppMap>
             </div>
 
@@ -300,12 +357,12 @@ export default function LayerWizard({
     {
       key: "link",
       title: "Link to Body",
-      render: () => (
+      render: ({ data: wdata, setData: wSetData }) => (
         <div className="dashboard-card">
           <div className="dashboard-card-header">
             <div className="dashboard-card-title">
               <FiMap />
-              <span>Link to a {data.bodyType === "lake" ? "Lake" : "Watershed"}</span>
+                <span>Link to a {wdata.bodyType === "lake" ? "Lake" : "Watershed"}</span>
             </div>
           </div>
           <div className="dashboard-card-body">
@@ -314,10 +371,10 @@ export default function LayerWizard({
                 <div className="form-group">
                   <label>Body Type</label>
                   <select
-                    value={data.bodyType}
-                    onChange={(e) =>
-                      setData((d) => ({ ...d, bodyType: e.target.value, bodyId: "" }))
-                    }
+                      value={wdata.bodyType}
+                      onChange={(e) =>
+                        wSetData((d) => ({ ...d, bodyType: e.target.value, bodyId: "" }))
+                      }
                   >
                     {allowedBodyTypes.includes("lake") && (<option value="lake">Lake</option>)}
                     {allowedBodyTypes.includes("watershed") && (<option value="watershed">Watershed</option>)}
@@ -325,12 +382,12 @@ export default function LayerWizard({
                 </div>
               )}
 
-              {data.bodyType === "lake" ? (
+                {wdata.bodyType === "lake" ? (
                 <div className="form-group" style={{ minWidth: 260 }}>
                   <label>Select Lake</label>
                   <select
-                    value={data.bodyId}
-                    onChange={(e) => setData((d) => ({ ...d, bodyId: e.target.value }))}
+                      value={wdata.bodyId}
+                      onChange={(e) => wSetData((d) => ({ ...d, bodyId: e.target.value }))}
                     required
                   >
                     <option value="" disabled>Choose a lake</option>
@@ -345,8 +402,8 @@ export default function LayerWizard({
                 <div className="form-group" style={{ minWidth: 260 }}>
                   <label>Select Watershed</label>
                   <select
-                    value={data.bodyId}
-                    onChange={(e) => setData((d) => ({ ...d, bodyId: e.target.value }))}
+                      value={wdata.bodyId}
+                      onChange={(e) => wSetData((d) => ({ ...d, bodyId: e.target.value }))}
                     required
                   >
                     <option value="" disabled>Select category…</option>
@@ -436,8 +493,11 @@ export default function LayerWizard({
                   value={data.visibility}
                   onChange={(e) => setData((d) => ({ ...d, visibility: e.target.value }))}
                 >
-                  <option value="public">Public</option>
-                  <option value="admin">Admin only</option>
+                  {normalizedVisibilityOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -474,7 +534,7 @@ export default function LayerWizard({
       initialData={data}
       labels={{ back: "Back", next: "Next", finish: "Publish" }}
       onFinish={onPublish}
-      onChange={(payload) => setData((d) => ({ ...d, ...payload }))}
+  onChange={(payload) => setTimeout(() => setData((d) => ({ ...d, ...payload })), 0)}
     />
   );
 }

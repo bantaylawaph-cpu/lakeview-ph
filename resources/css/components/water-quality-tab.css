@@ -1,0 +1,38 @@
+/* resources/css/components/water-quality-tab.css */
+
+/* Liquid-glass variant for pill button */
+.pill-btn.liquid {
+  background: rgba(255,255,255,0.18);
+  border: 1px solid rgba(255,255,255,0.35);
+  color: #fff;
+  backdrop-filter: blur(8px) saturate(140%);
+  -webkit-backdrop-filter: blur(8px) saturate(140%);
+}
+.pill-btn.liquid:hover { background: rgba(255,255,255,0.25); }
+
+/* Chart container adjustments inside insight-card */
+.insight-card .wq-chart { overflow: hidden; }
+.insight-card .wq-chart canvas { border-radius: 6px; display: block; }
+
+/* Compact card spacing for WQ tab */
+.insight-card { padding: 8px 10px; margin-top: 8px; }
+
+/* Compact controls */
+.lake-info-content select { max-width: 100%; }
+.lake-info-content .pill-btn { line-height: 1; }
+.lake-info-content .pill-btn svg { display: block; }
+
+/* Avoid horizontal scroll in WQ grid */
+.lake-info-content { overflow-x: hidden; }
+
+/* WQ station pin used by MapPage */
+.wq-station-pin .pin {
+  width: 14px;
+  height: 14px;
+  background: #ff6b6b;
+  border: 2px solid #fff;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg) translateY(-2px);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+}
+.wq-station-pin { pointer-events: auto; }

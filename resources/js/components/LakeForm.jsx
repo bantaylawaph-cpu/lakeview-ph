@@ -9,6 +9,7 @@ const EMPTY = {
   province: "",
   municipality: "",
   watershed_id: "",
+  class_code: "",
   surface_area_km2: "",
   elevation_m: "",
   mean_depth_m: "",
@@ -19,6 +20,7 @@ export default function LakeForm({
   mode = "create",                // "create" | "edit"
   initialValue = EMPTY,
   watersheds = [],
+  classOptions = [],
   loading = false,
   onSubmit,                        // (formObject) => void
   onCancel,
@@ -29,11 +31,13 @@ export default function LakeForm({
     setForm({ ...EMPTY, ...initialValue });
   }, [initialValue, open]);
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e?.preventDefault?.();
     if (!form.name?.trim()) return; // minimal guard
-    onSubmit?.(form);
+    return onSubmit?.(form);
   };
+
+  const denrOptions = Array.isArray(classOptions) ? classOptions : [];
 
   return (
     <Modal
@@ -48,7 +52,7 @@ export default function LakeForm({
             Cancel
           </button>
           <button type="submit" className="pill-btn primary" form="lv-lake-form" disabled={loading}>
-            {loading ? "Saving…" : (mode === "create" ? "Create" : "Save Changes")}
+            {loading ? "Saving..." : mode === "create" ? "Create" : "Save Changes"}
           </button>
         </div>
       }
@@ -101,7 +105,7 @@ export default function LakeForm({
             value={form.watershed_id ?? ""}
             onChange={(e) => setForm({ ...form, watershed_id: e.target.value })}
           >
-            <option value="">— None —</option>
+            <option value="">-- None --</option>
             {watersheds.map((ws) => (
               <option key={ws.id} value={ws.id}>
                 {ws.name}
@@ -111,7 +115,22 @@ export default function LakeForm({
         </label>
 
         <label className="lv-field">
-          <span>Surface Area (km²)</span>
+          <span>DENR Classification</span>
+          <select
+            value={form.class_code ?? ""}
+            onChange={(e) => setForm({ ...form, class_code: e.target.value })}
+          >
+            <option value="">Unspecified</option>
+            {denrOptions.map((opt) => (
+              <option key={opt.code} value={opt.code}>
+                {opt.name ? `${opt.code} - ${opt.name}` : opt.code}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="lv-field">
+          <span>Surface Area (km^2)</span>
           <input
             type="number"
             step="0.001"
@@ -139,9 +158,8 @@ export default function LakeForm({
             onChange={(e) => setForm({ ...form, mean_depth_m: e.target.value })}
           />
         </label>
-
-        
       </form>
     </Modal>
   );
 }
+

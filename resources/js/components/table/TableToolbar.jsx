@@ -94,7 +94,7 @@ export default function TableToolbar({
       {filters.map((f) => {
         if (f.type === "multiselect") {
           return (
-            <div key={f.id} className="org-filter" title={f.label}>
+            <div key={f.id} className="org-filter" title={f.label} style={{ minWidth: 0 }}>
               <FiFilter className="toolbar-icon" aria-hidden="true" />
               <select
                 multiple
@@ -104,7 +104,7 @@ export default function TableToolbar({
                   f.onChange?.(vals);
                 }}
                 aria-label={f.label}
-                style={{ minWidth: 200, height: 36 }}
+                style={{ width:  '100%', minWidth: 0, height: 36 }}
               >
                 {f.options?.map(opt => (
                   <option key={opt.value ?? opt} value={opt.value ?? opt}>
@@ -117,26 +117,30 @@ export default function TableToolbar({
         }
         if (f.type === "date") {
           return (
-            <div key={f.id} className="org-filter" title={f.label}>
+            <div key={f.id} className="org-filter org-filter-date" title={f.label} style={{ minWidth: 0 }}>
               <FiFilter className="toolbar-icon" aria-hidden="true" />
               <input
                 type="date"
                 value={f.value || ""}
                 onChange={(e) => f.onChange?.(e.target.value || null)}
                 aria-label={f.label}
-                style={{ minWidth: 180 }}
+                placeholder={f.placeholder || undefined}
+                title={f.placeholder || f.label}
+                className="org-date-input"
+                style={{ width: '100%', minWidth: 0 }}
               />
             </div>
           );
         }
         // default: single select
         return (
-          <div key={f.id} className="org-filter" title={f.label}>
+          <div key={f.id} className="org-filter" title={f.label} style={{ minWidth: 0 }}>
             <FiFilter className="toolbar-icon" aria-hidden="true" />
             <select
               value={f.value ?? ""}
               onChange={(e) => f.onChange?.(e.target.value)}
               aria-label={f.label}
+              style={{ width: '100%', minWidth: 0 }}
             >
               {(f.options || []).map(opt => (
                 <option key={opt.value ?? opt} value={opt.value ?? opt}>

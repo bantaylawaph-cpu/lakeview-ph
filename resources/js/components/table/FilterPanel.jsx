@@ -128,15 +128,18 @@ export default function FilterPanel({ open, fields = [], onClearAll }) {
           }
 
           if (f.type === "boolean") {
+            const pressed = !!f.value;
             return (
-              <label key={f.id} className="af-field af-boolean">
-                <input
-                  type="checkbox"
-                  checked={!!f.value}
-                  onChange={(e) => f.onChange?.(e.target.checked)}
-                />
-                <span>{f.label}</span>
-              </label>
+              <div key={f.id} className="af-field af-boolean-pill">
+                <button
+                  type="button"
+                  className={`pill-btn ${pressed ? "primary" : "ghost"}`}
+                  onClick={() => f.onChange?.(!pressed)}
+                  aria-pressed={pressed}
+                >
+                  {f.label}
+                </button>
+              </div>
             );
           }
 
@@ -146,3 +149,4 @@ export default function FilterPanel({ open, fields = [], onClearAll }) {
     </div>
   );
 }
+

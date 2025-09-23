@@ -155,7 +155,7 @@ export default function OrgMembers() {
           <TableLayout
             columns={columns}
             data={filtered}
-            pageSize={10}
+            pageSize={5}
             actions={rowActions}
           />
         </div>

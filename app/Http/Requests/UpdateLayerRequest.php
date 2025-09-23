@@ -18,7 +18,7 @@ class UpdateLayerRequest extends FormRequest
             'type'        => 'sometimes|string|max:64',
             'category'    => 'sometimes|nullable|string|max:64',
             'srid'        => 'sometimes|nullable|integer|min:0',
-            'visibility'  => 'sometimes|string|in:admin,public',
+            'visibility'  => 'sometimes|string|in:admin,public,organization_admin',
             'is_active'   => 'sometimes|boolean',
             'status'      => 'sometimes|string|in:draft,ready,archived',
             'version'     => 'sometimes|integer|min:1',
