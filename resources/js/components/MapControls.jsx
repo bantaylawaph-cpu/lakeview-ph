@@ -6,6 +6,7 @@ import { FaLocationDot } from "react-icons/fa6"; // filled location dot
 import L from "leaflet";
 import { alertError, alertSuccess } from "../lib/alerts";
 import ReactDOMServer from "react-dom/server";
+import StatsModal from "./modals/StatsModal";
 
 
 // Filled location icon
@@ -23,6 +24,7 @@ function MapControls({ defaultCenter = [12.8797, 121.7740], defaultZoom = 6, def
   const map = useMap();
   const [geolocated, setGeolocated] = useState(false);
   const [position, setPosition] = useState(null);
+  const [statsOpen, setStatsOpen] = useState(false);
 
   const handleZoomIn = () => map.zoomIn();
   const handleZoomOut = () => map.zoomOut();
@@ -54,7 +56,7 @@ function MapControls({ defaultCenter = [12.8797, 121.7740], defaultZoom = 6, def
     <>
       {/* Floating Controls */}
       <div className="map-controls">
-        <button className="btn-floating">
+        <button className="btn-floating" onClick={() => setStatsOpen(true)}>
           <FiBarChart2 className="icon-layer" />
         </button>
         <button className="btn-floating" onClick={handleGeolocation}>
@@ -85,6 +87,9 @@ function MapControls({ defaultCenter = [12.8797, 121.7740], defaultZoom = 6, def
           </Tooltip>
         </Marker>
       )}
+
+      {/* Stats Modal */}
+      <StatsModal open={statsOpen} onClose={() => setStatsOpen(false)} />
     </>
   );
 }

@@ -54,22 +54,35 @@ export function buildQuery(params = {}) {
 }
 
 export async function api(path, { method = "GET", body, headers = {}, auth = true } = {}) {
-  const hadToken = !!getToken(); // <-- existing behavior, just kept here
+  const token = getToken();
+  const hadToken = !!token;
+  // Only attach Authorization header when we actually have a token.
+  const authHeaders = auth && token ? { Authorization: `Bearer ${token}` } : {};
+
+  // If this call requires auth but we don't have a token, short-circuit and
+  // reject immediately. This avoids making unauthenticated requests to
+  // admin/auth endpoints which just return 401s and clutter the console.
+  if (auth && !token) {
+    return Promise.reject(new Error("Unauthenticated"));
+  }
+
   const res = await fetch(`${API_BASE}${path}`, {
     method,
     headers: {
       "Content-Type": "application/json",
       Accept: "application/json",
-      ...(auth && getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+      ...authHeaders,
       ...headers,
     },
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  if (res.status === 401) {
+  // If the server returns 401 but we didn't have a token, treat it as an unauthenticated request
+  // and don't clear tokens or show the session-expired notification. Only perform session
+  // expiry handling when the client actually had a token.
+  if (res.status === 401 && hadToken) {
     clearToken();
-    // Only show the alert if we *were* authenticated previously
-    if (hadToken && !window.__lv401Shown) {
+    if (!window.__lv401Shown) {
       window.__lv401Shown = true;
       alertInfo("Session expired", "Please sign in again.");
     }

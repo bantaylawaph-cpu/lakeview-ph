@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { FiArrowLeft } from "react-icons/fi";
-import { api } from "../../lib/api";
+import { api, apiPublic } from "../../lib/api";
 import { fetchPublicLayers, fetchLakeOptions, fetchPublicLayerGeo } from "../../lib/layers";
 import { useMap, GeoJSON } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
@@ -107,7 +107,7 @@ function MapPage() {
   const loadPublicLakes = async (filters = {}) => {
     try {
       const qs = buildQuery(filters || {});
-      const fc = await api(`/public/lakes-geo${qs}`); // FeatureCollection (server-side filtered)
+  const fc = await apiPublic(`/public/lakes-geo${qs}`); // FeatureCollection (server-side filtered)
       if (fc?.type === "FeatureCollection") {
         setPublicFC(fc);
 
@@ -484,7 +484,9 @@ function MapPage() {
 
                   if (lakeId != null) {
                     try {
-                      const detail = await api(`/lakes/${lakeId}`);
+                      // Try public detail first to avoid 401s when unauthenticated
+                      const pub = await apiPublic(`/public/lakes/${lakeId}`);
+                      const detail = pub?.id ? pub : await api(`/lakes/${lakeId}`);
                       if (detail?.id && String(detail.id) === String(lakeId)) {
                         setSelectedLake((prev) => ({ ...prev, ...detail }));
                         setSelectedWatershedId(detail?.watershed_id ?? null);

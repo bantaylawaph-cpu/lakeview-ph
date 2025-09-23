@@ -1,5 +1,5 @@
 // resources/js/lib/layers.js
-import { api, apiPublic, buildQuery } from "./api";
+import { api, apiPublic, buildQuery, getToken } from "./api";
 
 /** Normalize array responses: array | {data: array} | {data:{data: array}} */
 const pluck = (r) => {
@@ -31,10 +31,16 @@ export const fetchLakeOptions = async (q = "") => {
 
   const promise = (async () => {
     const qp = q ? `?q=${encodeURIComponent(q)}` : "";
+    // Try public (no-auth) endpoints first so anonymous users receive options.
+    // If those fail, fall back to authenticated endpoints (if a token exists).
     const attempts = [
-      () => api(`/options/lakes${qp}`),
-      () => api(`/lakes${qp}`),
+      () => apiPublic(`/options/lakes${qp}`),
+      () => apiPublic(`/lakes${qp}`),
     ];
+    if (getToken()) {
+      attempts.push(() => api(`/options/lakes${qp}`));
+      attempts.push(() => api(`/lakes${qp}`));
+    }
     for (const tryFetch of attempts) {
       try {
         const res = await tryFetch();
