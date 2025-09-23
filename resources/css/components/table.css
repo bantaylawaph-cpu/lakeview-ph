@@ -10,7 +10,7 @@
 .lv-table-wrap { width: 100%; }
 .lv-table-scroller {
   width: 100%;
-  overflow-x: visible;
+  overflow-x: auto;
   overflow-y: visible;     /* avoid inner vertical scrollbars */
   border-radius: 12px;
   scrollbar-gutter: stable both-edges; /* guard against layout jump */
@@ -18,9 +18,10 @@
 
 .lv-table {
   width: 100%;
+  min-width: 900px;
   border-collapse: separate;
   border-spacing: 0;
-  table-layout: fixed;     /* enables width control / wrapping */
+  table-layout: auto;      /* columns size to content */
   background: #fff;
   border-radius: 12px;
 }
