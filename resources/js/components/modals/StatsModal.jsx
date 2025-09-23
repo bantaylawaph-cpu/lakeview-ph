@@ -1,5 +1,5 @@
 // resources/js/components/modals/StatsModal.jsx
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import { api, apiPublic, buildQuery } from "../../lib/api";
 import Modal from "../Modal";
 import { Line } from "react-chartjs-2";
@@ -30,10 +30,57 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
 
   // Selections
   const [selectedLake, setSelectedLake] = useState("");
-  const [selectedStation, setSelectedStation] = useState("");
+  const [selectedStations, setSelectedStations] = useState([]);
+  const [stationsOpen, setStationsOpen] = useState(false);
   const [selectedParam, setSelectedParam] = useState("DO");
   const classes = ["AA", "A", "B", "C", "D", "SA", "SB", "SC", "SD"];
   const [selectedClass, setSelectedClass] = useState("C");
+  // Date range filter (ISO date strings yyyy-mm-dd)
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [timeRange, setTimeRange] = useState("all"); // presets: all, 5y, 3y, 1y, 6mo
+
+  const fmtIso = (d) => {
+    if (!d) return "";
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${dd}`;
+  };
+
+  const applyRange = (key) => {
+    const today = new Date();
+    let from = "";
+    let to = fmtIso(today);
+    if (key === "all") {
+      from = "";
+      to = "";
+    } else if (key === "custom") {
+      // leave existing from/to; user will adjust below
+      from = dateFrom || "";
+      to = dateTo || "";
+    } else if (key === "5y") {
+      const d = new Date(today);
+      d.setFullYear(d.getFullYear() - 5);
+      from = fmtIso(d);
+    } else if (key === "3y") {
+      const d = new Date(today);
+      d.setFullYear(d.getFullYear() - 3);
+      from = fmtIso(d);
+    } else if (key === "1y") {
+      const d = new Date(today);
+      d.setFullYear(d.getFullYear() - 1);
+      from = fmtIso(d);
+    } else if (key === "6mo") {
+      const d = new Date(today);
+      d.setMonth(d.getMonth() - 6);
+      from = fmtIso(d);
+    }
+    // If 'all', clear both; otherwise set from/to
+    setDateFrom(from);
+    setDateTo(to === "" ? "" : to);
+    setTimeRange(key);
+  };
 
   // Data sources
   const [effectiveAllRecords, setEffectiveAllRecords] = useState([]);
@@ -56,6 +103,40 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
   const [paramOptions, setParamOptions] = useState(params);
   const [orgOptions, setOrgOptions] = useState([]);
   const [selectedOrg, setSelectedOrg] = useState("");
+  const singleChartRef = useRef(null);
+  const compareChartRef = useRef(null);
+
+  const handleClear = () => {
+    setSelectedLake("");
+    setSelectedOrg("");
+    setStations([]);
+    setSelectedStations([]);
+    setStationsOpen(false);
+    setSelectedParam("");
+    setEffectiveAllRecords([]);
+    setDateFrom("");
+    setDateTo("");
+    setTimeRange("all");
+  };
+
+  const handleExport = () => {
+    const ref = activeTab === 'single' ? singleChartRef : compareChartRef;
+    const inst = ref?.current;
+    if (!inst) return;
+    try {
+      const url = inst.toBase64Image ? inst.toBase64Image() : (inst.canvas?.toDataURL('image/png'));
+      if (!url) return;
+      const lakeName = (lakeOptions.find((l) => String(l.id) === String(selectedLake))?.name) || 'lake';
+      const ts = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+      const label = activeTab === 'single' ? `${lakeName}-${selectedParam || 'param'}` : `compare-${selectedParam || 'param'}`;
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `stats-${label}-${ts}.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch {}
+  };
 
   // Fetch lakes and parameter options to populate selectors (when modal opens)
   useEffect(() => {
@@ -123,10 +204,10 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
 
       // Fallback: derive station list from public sample-events for this lake
       try {
-        const { apiPublic } = await import("../../lib/api");
-        const qs = `?lake_id=${encodeURIComponent(selectedLake)}&limit=1000`;
-  const res2 = await apiPublic(`/public/sample-events${qs}`);
-  const rows = Array.isArray(res2) ? res2 : Array.isArray(res2?.data) ? res2.data : [];
+        const lim = (timeRange === 'all' || timeRange === 'custom') ? 5000 : 1000;
+        const qs = buildQuery({ lake_id: selectedLake, sampled_from: dateFrom || undefined, sampled_to: dateTo || undefined, limit: lim });
+        const res2 = await apiPublic(`/public/sample-events${qs}`);
+        const rows = Array.isArray(res2) ? res2 : Array.isArray(res2?.data) ? res2.data : [];
         const uniq = new Map();
         rows.forEach((r) => {
           const name = r?.station?.name || r?.station_name || (r.latitude != null && r.longitude != null ? `${Number(r.latitude).toFixed(6)}, ${Number(r.longitude).toFixed(6)}` : null);
@@ -140,7 +221,7 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
       }
     })();
     return () => { mounted = false; };
-  }, [selectedLake]);
+  }, [selectedLake, dateFrom, dateTo, timeRange]);
 
   // Fetch public sample-events for the selected lake and convert into records used by charts
   useEffect(() => {
@@ -151,13 +232,13 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
     }
     (async () => {
       try {
-        const qs = buildQuery({ lake_id: selectedLake, organization_id: selectedOrg || undefined, limit: 1000 });
-  const res = await apiPublic(`/public/sample-events${qs}`);
-  const rows = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+        const lim = (timeRange === 'all' || timeRange === 'custom') ? 5000 : 1000;
+        const qs = buildQuery({ lake_id: selectedLake, organization_id: selectedOrg || undefined, sampled_from: dateFrom || undefined, sampled_to: dateTo || undefined, limit: lim });
+        const res = await apiPublic(`/public/sample-events${qs}`);
+        const rows = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
 
-  // Derive org list and parameter catalog from returned tests
-  const uniqOrgs = new Map();
-  const uniqParams = new Map();
+        const uniqOrgs = new Map();
+        const uniqParams = new Map();
         // Transform tests into a flat record structure keyed by station + month
         const recs = [];
         for (const ev of rows) {
@@ -209,7 +290,7 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
       }
     })();
     return () => { mounted = false; };
-  }, [selectedLake, selectedOrg]);
+  }, [selectedLake, selectedOrg, dateFrom, dateTo, timeRange]);
 
   // Thresholds by parameter and class
   const thresholds = {
@@ -235,8 +316,17 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
   };
 
   const currentRecords = useMemo(
-    () => effectiveAllRecords.filter((r) => r.lake === selectedLake),
-    [effectiveAllRecords, selectedLake]
+    () => {
+      const from = dateFrom ? new Date(`${dateFrom}T00:00:00`) : null;
+      const to = dateTo ? new Date(`${dateTo}T23:59:59.999`) : null;
+      return effectiveAllRecords.filter((r) => {
+        if (r.lake !== selectedLake) return false;
+        if (from && (!r.date || r.date < from)) return false;
+        if (to && (!r.date || r.date > to)) return false;
+        return true;
+      });
+    },
+    [effectiveAllRecords, selectedLake, dateFrom, dateTo]
   );
 
   // No cutoff; we bucket by Month/Quarter/Year like WaterQualityTab
@@ -291,11 +381,11 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
       const mo = m[3] ? Number(m[3]) : 0;
       return y * 12 + (q || mo);
     };
-    const byStationMap = new Map(); // station -> Map(bucketKey -> number[])
-    // First pass: collect all months for the selected station (or all stations) so thresholds can show even without data values
+  const byStationMap = new Map(); // station -> Map(bucketKey -> number[])
+    // First pass: collect all months for the selected station(s) (or all stations) so thresholds can show even without data values
     for (const r of currentRecords) {
       const key = r.area || r.stationCode || "";
-      if (selectedStation && key !== selectedStation) continue;
+      if (Array.isArray(selectedStations) && selectedStations.length && !selectedStations.includes(key)) continue;
       if (!r.date) continue;
       const bk = bucketKey(r.date, bucket);
       if (!bk) continue;
@@ -304,7 +394,7 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
     // Second pass: collect parameter values by month per station
     for (const r of currentRecords) {
       const key = r.area || r.stationCode || "";
-      if (selectedStation && key !== selectedStation) continue;
+      if (Array.isArray(selectedStations) && selectedStations.length && !selectedStations.includes(key)) continue;
       const val = r?.[selectedParam]?.value ?? null;
       if (val == null || !r.date) continue;
       const bk = bucketKey(r.date, bucket);
@@ -315,44 +405,71 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
       m.get(bk).push(val);
     }
   const labels = Array.from(labelSet).sort((a,b) => bucketSortKeyLocal(a) - bucketSortKeyLocal(b));
-    const datasets = Array.from(byStationMap.entries()).map(([label, seriesMap], i) => ({
-      label,
-      data: labels.map((l) => {
-        const arr = seriesMap.get(l);
-        if (!arr || !arr.length) return null;
-        const sum = arr.reduce((a,b) => a + b, 0);
-        return sum / arr.length;
-      }),
-      borderColor: i === 0 ? 'rgba(59,130,246,1)' : `hsl(${(i * 70) % 360} 80% 60%)`,
-      backgroundColor: i === 0 ? 'rgba(59,130,246,0.2)' : `hsl(${(i * 70) % 360} 80% 60% / 0.2)`,
-      pointRadius: 3,
-      tension: 0.2,
-    }));
-
-    // Threshold overlay — prefer server-provided per-result thresholds when available
+    // Determine thresholds for outlier highlighting
     const staticDef = thresholds[selectedParam];
-    // helper to find the first server threshold for this param in currentRecords
     const findServerThreshold = () => {
       for (const rec of currentRecords) {
         const t = rec?.[selectedParam]?.threshold;
         if (!t) continue;
-        // pH: expect both min and max
-        if (selectedParam === "pH") {
+        if (selectedParam === 'pH') {
           if (t.min != null && t.max != null) return { min: Number(t.min), max: Number(t.max) };
         } else {
-          // If staticDef indicates type, prefer matching server-side value
-          const typ = staticDef?.type || (selectedParam === 'pH' ? 'range' : null);
+          const typ = staticDef?.type || null;
           if (typ === 'max' && t.max != null) return { value: Number(t.max), kind: 'max' };
           if (typ === 'min' && t.min != null) return { value: Number(t.min), kind: 'min' };
-          // fallback to any available threshold
           if (t.max != null) return { value: Number(t.max), kind: 'max' };
           if (t.min != null) return { value: Number(t.min), kind: 'min' };
         }
       }
       return null;
     };
-
     const serverTh = findServerThreshold();
+
+    const datasets = Array.from(byStationMap.entries()).map(([label, seriesMap], i) => {
+      const data = [];
+      const pointBackgroundColor = [];
+      const pointRadius = [];
+      for (const l of labels) {
+        const arr = seriesMap.get(l);
+        if (!arr || !arr.length) {
+          data.push(null);
+          pointBackgroundColor.push(undefined);
+          pointRadius.push(0);
+          continue;
+        }
+        const sum = arr.reduce((a,b) => a + b, 0);
+        const avg = sum / arr.length;
+        data.push(avg);
+        let isOut = false;
+        if (selectedParam === 'pH') {
+          const rng = (serverTh && serverTh.min != null && serverTh.max != null)
+            ? [serverTh.min, serverTh.max]
+            : (thresholds.pH.range[selectedClass] || null);
+          if (rng) isOut = (avg < rng[0] || avg > rng[1]);
+        } else {
+          const thVal = (serverTh && typeof serverTh.value === 'number')
+            ? { value: serverTh.value, kind: serverTh.kind }
+            : (staticDef && (staticDef[selectedClass] != null) ? { value: Number(staticDef[selectedClass]), kind: (staticDef.type === 'min' ? 'min' : 'max') } : null);
+          if (thVal) isOut = thVal.kind === 'max' ? (avg > thVal.value) : (avg < thVal.value);
+        }
+        if (isOut) {
+          pointBackgroundColor.push('rgba(239,68,68,1)');
+          pointRadius.push(5);
+        } else {
+          pointBackgroundColor.push(i === 0 ? 'rgba(59,130,246,1)' : `hsl(${(i * 70) % 360} 80% 60%)`);
+          pointRadius.push(3);
+        }
+      }
+      return {
+        label,
+        data,
+        borderColor: i === 0 ? 'rgba(59,130,246,1)' : `hsl(${(i * 70) % 360} 80% 60%)`,
+        backgroundColor: i === 0 ? 'rgba(59,130,246,0.2)' : `hsl(${(i * 70) % 360} 80% 60% / 0.2)`,
+        pointBackgroundColor,
+        pointRadius,
+        tension: 0.2,
+      };
+    });
 
     if (selectedParam === "pH") {
       if (serverTh && serverTh.min != null && serverTh.max != null) {
@@ -385,7 +502,7 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
     }
 
     return { labels, datasets };
-  }, [currentRecords, selectedParam, selectedStation, selectedClass, bucket]);
+  }, [currentRecords, selectedParam, selectedStations, selectedClass, bucket]);
 
   // Build per-render options so thresholds are always inside the chart
   const singleChartOptions = useMemo(() => {
@@ -415,12 +532,12 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
 
   // Auto-select the first available parameter after station selection if none is chosen
   useEffect(() => {
-    if (!selectedParam && selectedStation && Array.isArray(paramOptions) && paramOptions.length) {
+    if (!selectedParam && Array.isArray(selectedStations) && selectedStations.length && Array.isArray(paramOptions) && paramOptions.length) {
       const first = paramOptions[0];
       const k = first?.key || first?.code || String(first?.id || "");
       if (k) setSelectedParam(k);
     }
-  }, [selectedStation, paramOptions, selectedParam]);
+  }, [selectedStations, paramOptions, selectedParam]);
 
 
   const tabBtn = (key, label) => (
@@ -441,6 +558,25 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
             <option value="month">Month</option>
           </select>
         </div>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <span style={{ fontSize: 12, opacity: 0.9 }}>Range</span>
+          <select className="pill-btn" value={timeRange} onChange={(e) => applyRange(e.target.value)}>
+            <option value="all">All Time</option>
+            <option value="5y">5 Yr</option>
+            <option value="3y">3 Yr</option>
+            <option value="1y">1 Yr</option>
+            <option value="6mo">6 Mo</option>
+            <option value="custom">Custom</option>
+          </select>
+          {timeRange === 'custom' && (
+            <>
+              <span style={{ fontSize: 12, opacity: 0.9 }}>From</span>
+              <input type="date" className="pill-btn" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+              <span style={{ fontSize: 12, opacity: 0.9 }}>To</span>
+              <input type="date" className="pill-btn" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+            </>
+          )}
+        </div>
         <div style={{ flex: 1 }} />
         {tabBtn("single", "Single Lake")}
         {tabBtn("compare", "Compare")}
@@ -458,7 +594,7 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
               setSelectedLake(v);
               // clear downstream selections
               setSelectedOrg("");
-              setSelectedStation("");
+              setSelectedStations([]);
               setSelectedParam("");
               setStations([]);
               setEffectiveAllRecords([]);
@@ -475,7 +611,7 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
               const v = e.target.value;
               setSelectedOrg(v);
               // clear downstream selections
-              setSelectedStation("");
+              setSelectedStations([]);
               setSelectedParam("");
               setEffectiveAllRecords([]);
             }} disabled={!selectedLake}>
@@ -484,18 +620,45 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
                 <option key={o.id} value={o.id}>{o.name}</option>
               ))}
             </select>
-            <select className="pill-btn" value={selectedStation} onChange={(e) => {
-              const v = e.target.value;
-              setSelectedStation(v);
-              // clear parameter selection when station changes
-              setSelectedParam("");
-            }} disabled={!selectedLake}>
-              <option value="">Select location</option>
-              {stations.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-            <select className="pill-btn" value={selectedParam} onChange={(e) => setSelectedParam(e.target.value)} disabled={!selectedStation}>
+            <select
+              className="pill-btn"
+              style={{ display: 'none' }}
+            />
+            {/* Dropdown with checkbox list for stations */}
+            <div style={{ position: 'relative' }}>
+              <button type="button" className="pill-btn" disabled={!selectedLake} onClick={() => setStationsOpen((v) => !v)}>
+                {selectedStations.length ? `${selectedStations.length} selected` : 'Select locations'}
+              </button>
+              {stationsOpen && (
+                <div style={{ position: 'absolute', top: '110%', left: 0, zIndex: 1000, minWidth: 220, maxHeight: 200, overflowY: 'auto', background: 'rgba(20,40,80,0.95)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 8, padding: 8 }}>
+                  {stations.length ? stations.map((s) => {
+                    const checked = selectedStations.includes(s);
+                    return (
+                      <label key={s} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 6px', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            const next = checked ? selectedStations.filter((x) => x !== s) : [...selectedStations, s];
+                            setSelectedStations(next);
+                            setSelectedParam("");
+                          }}
+                        />
+                        <span>{s}</span>
+                      </label>
+                    );
+                  }) : (
+                    <div style={{ opacity: 0.8 }}>No locations…</div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginTop: 8 }}>
+                    <button type="button" className="pill-btn" onClick={() => setSelectedStations(stations.slice())}>Select All</button>
+                    <button type="button" className="pill-btn" onClick={() => setSelectedStations([])}>Clear</button>
+                    <button type="button" className="pill-btn liquid" onClick={() => setStationsOpen(false)}>Done</button>
+                  </div>
+                </div>
+              )}
+            </div>
+            <select className="pill-btn" value={selectedParam} onChange={(e) => setSelectedParam(e.target.value)} disabled={!(selectedStations && selectedStations.length)}>
               <option value="">Select parameter</option>
               {paramOptions.map((p) => (
                 <option key={p.key || p.id || p.code} value={p.key || p.id || p.code}>{p.label || p.name || p.code}</option>
@@ -506,7 +669,7 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
           </div>
           <div className="wq-chart" style={{ height: 300, borderRadius: 8, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.18)", padding: 8 }}>
             {chartData && chartData.datasets.length ? (
-              <Line data={chartData} options={singleChartOptions} />
+              <Line ref={singleChartRef} data={chartData} options={singleChartOptions} />
             ) : (
               <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <span style={{ opacity: 0.9 }}>No data for selection…</span>
@@ -529,8 +692,14 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
       )}
 
       {/* Footer actions */}
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
-        <button className="pill-btn liquid" onClick={onClose}>Close</button>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: 'center', gap: 8, marginTop: 12 }}>
+        <div>
+          <button className="pill-btn" onClick={handleClear}>Clear</button>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="pill-btn" onClick={handleExport}>Export</button>
+          <button className="pill-btn liquid" onClick={onClose}>Close</button>
+        </div>
       </div>
     </Modal>
   );
@@ -562,6 +731,15 @@ function CompareTab({ allRecords, lakeOptions, params, thresholds, chartOptions,
   const { labels, datasets } = useMemo(() => {
     const labelSet = new Set();
     const lakeMonthValues = new Map(); // lake -> Map(bucketKey -> number[])
+    const bucketSortKey = (k) => {
+      if (!k) return 0;
+      const m = /^([0-9]{4})(?:-(?:Q([1-4])|([0-9]{2})))?$/.exec(k);
+      if (!m) return 0;
+      const y = Number(m[1]);
+      const q = m[2] ? (Number(m[2]) * 3) : 0;
+      const mo = m[3] ? Number(m[3]) : 0;
+      return y * 12 + (q || mo);
+    };
     for (const r of allRecords) {
       if (!selectedLakes.includes(r.lake)) continue;
       if (!r.date) continue;
@@ -576,19 +754,50 @@ function CompareTab({ allRecords, lakeOptions, params, thresholds, chartOptions,
       m.get(bk).push(val);
     }
   const labels = Array.from(labelSet).sort((a,b) => bucketSortKey(a) - bucketSortKey(b));
-    const datasets = Array.from(lakeMonthValues.entries()).map(([lake, seriesMap]) => ({
-      label: lake,
-      data: labels.map((l) => {
+    const datasets = Array.from(lakeMonthValues.entries()).map(([lake, seriesMap], i) => {
+      const data = [];
+      const pointBackgroundColor = [];
+      const pointRadius = [];
+      // Determine threshold basis: common class or per-lake class
+      const staticDef = thresholds[selectedParam];
+      const cls = commonClass || (lakeOptions.find((l) => String(l.id) === String(lake))?.class_code || null);
+      const phRange = selectedParam === 'pH' && cls ? (thresholds.pH.range[cls] || null) : null;
+      const thVal = (selectedParam !== 'pH' && staticDef && cls && (staticDef[cls] != null)) ? { value: Number(staticDef[cls]), kind: (staticDef.type === 'min' ? 'min' : 'max') } : null;
+      for (const l of labels) {
         const vals = seriesMap.get(l);
-        if (!vals || !vals.length) return null;
+        if (!vals || !vals.length) {
+          data.push(null);
+          pointBackgroundColor.push(undefined);
+          pointRadius.push(0);
+          continue;
+        }
         const sum = vals.reduce((a, b) => a + b, 0);
-        return sum / vals.length;
-      }),
-      borderColor: `rgba(59,130,246,1)`,
-      backgroundColor: `rgba(59,130,246,0.2)`,
-      pointRadius: 3,
-      tension: 0.2,
-    }));
+        const avg = sum / vals.length;
+        data.push(avg);
+        let isOut = false;
+        if (selectedParam === 'pH') {
+          if (phRange) isOut = (avg < phRange[0] || avg > phRange[1]);
+        } else if (thVal) {
+          isOut = thVal.kind === 'max' ? (avg > thVal.value) : (avg < thVal.value);
+        }
+        if (isOut) {
+          pointBackgroundColor.push('rgba(239,68,68,1)');
+          pointRadius.push(5);
+        } else {
+          pointBackgroundColor.push(i === 0 ? 'rgba(59,130,246,1)' : `hsl(${(i * 70) % 360} 80% 60%)`);
+          pointRadius.push(3);
+        }
+      }
+      return {
+        label: lake,
+        data,
+        borderColor: i === 0 ? 'rgba(59,130,246,1)' : `hsl(${(i * 70) % 360} 80% 60%)`,
+        backgroundColor: i === 0 ? 'rgba(59,130,246,0.2)' : `hsl(${(i * 70) % 360} 80% 60% / 0.2)`,
+        pointBackgroundColor,
+        pointRadius,
+        tension: 0.2,
+      };
+    });
 
     if (selectedParam === "pH") {
       const rng = commonClass ? thresholds.pH.range[commonClass] : null;
@@ -660,7 +869,7 @@ function CompareTab({ allRecords, lakeOptions, params, thresholds, chartOptions,
       </div>
       <div className="wq-chart" style={{ height: 300, borderRadius: 8, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.18)", padding: 8 }}>
         {datasets && datasets.length ? (
-          <Line data={{ labels, datasets }} options={compareChartOptions} />
+          <Line ref={compareChartRef} data={{ labels, datasets }} options={compareChartOptions} />
         ) : (
           <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <span style={{ opacity: 0.9 }}>Select at least one lake…</span>

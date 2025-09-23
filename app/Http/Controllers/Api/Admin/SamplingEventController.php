@@ -337,7 +337,9 @@ class SamplingEventController extends Controller
      * Filters:
      * - lake_id (required)
      * - organization_id (optional)
-     * - limit (optional, default 10)
+     * - sampled_from (optional, ISO date)
+     * - sampled_to (optional, ISO date)
+     * - limit (optional, default 1000, max 5000)
      */
     public function publicIndex(Request $request)
     {
@@ -347,8 +349,10 @@ class SamplingEventController extends Controller
         }
 
         $orgId = $request->filled('organization_id') ? (int) $request->query('organization_id') : null;
-        $limit = (int) ($request->query('limit', 10));
-        if ($limit <= 0 || $limit > 100) { $limit = 10; }
+        // Default to 1000 for broader historical views; cap to 5000 to avoid huge payloads
+        $limit = (int) ($request->query('limit', 1000));
+        if ($limit <= 0) { $limit = 1000; }
+        if ($limit > 5000) { $limit = 5000; }
 
         $query = $this->eventDetailQuery()
             ->where('sampling_events.status', 'public')
@@ -356,6 +360,14 @@ class SamplingEventController extends Controller
 
         if ($orgId) {
             $query->where('sampling_events.organization_id', $orgId);
+        }
+
+        if ($request->filled('sampled_from')) {
+            $query->where('sampling_events.sampled_at', '>=', CarbonImmutable::parse($request->query('sampled_from')));
+        }
+
+        if ($request->filled('sampled_to')) {
+            $query->where('sampling_events.sampled_at', '<=', CarbonImmutable::parse($request->query('sampled_to')));
         }
 
         $events = $query

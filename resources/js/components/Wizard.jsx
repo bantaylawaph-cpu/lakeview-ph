@@ -27,6 +27,7 @@ export default function Wizard({
   initialStep = 0,
   onFinish,
   onChange, // optional callback to notify parent of data changes
+  onSetDataRef, // optional callback to receive internal setData function
   labels = { back: "Back", next: "Next", finish: "Finish" },
 }) {
   const [stepIndex, setStepIndex] = useState(initialStep);
@@ -70,6 +71,9 @@ export default function Wizard({
       });
     }
   };
+
+  // expose setter to parent via callback (if provided)
+  try { if (typeof onSetDataRef === 'function') onSetDataRef(updateData); } catch (e) { /* ignore */ }
 
   return (
     <div>

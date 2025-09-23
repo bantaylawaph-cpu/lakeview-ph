@@ -82,6 +82,7 @@ export default function LayerWizard({
 
   const [error, setError] = useState("");
   const mapRef = useRef(null);
+  const wizardSetRef = useRef(null);
   const [lakeOptions, setLakeOptions] = useState([]);
   const [watershedOptions, setWatershedOptions] = useState([]);
 
@@ -158,6 +159,8 @@ export default function LayerWizard({
       fileName,
     }));
     setError("");
+    // also update wizard internal state so canNext sees the change
+    try { wizardSetRef.current?.({ uploadGeom, previewGeom, sourceSrid, geomText: JSON.stringify(parsed, null, 2), fileName }); } catch (e) { /* ignore */ }
   };
 
   const handleFile = async (file) => {
@@ -188,11 +191,13 @@ export default function LayerWizard({
     const s = Number(srid) || 4326;
     if (!data.uploadGeom) {
       setData((d) => ({ ...d, sourceSrid: s }));
+      try { wizardSetRef.current?.({ sourceSrid: s }); } catch (e) { /* ignore */ }
       return;
     }
     const preview =
       s === 4326 ? data.uploadGeom : reprojectMultiPolygonTo4326(data.uploadGeom, s);
     setData((d) => ({ ...d, sourceSrid: s, previewGeom: preview }));
+    try { wizardSetRef.current?.({ sourceSrid: s, previewGeom: preview }); } catch (e) { /* ignore */ }
   };
 
   // -------- publish ----------
@@ -239,7 +244,8 @@ export default function LayerWizard({
     {
       key: "upload",
       title: "Upload / Paste GeoJSON",
-      render: () => (
+      canNext: (d) => !!d.uploadGeom,
+    render: ({ data: wdata, setData: wSetData }) => (
         <div className="dashboard-card">
           <div className="dashboard-card-header">
             <div className="dashboard-card-title">
@@ -265,15 +271,15 @@ export default function LayerWizard({
             />
           </div>
 
-          <div className="org-form" style={{ marginTop: 12 }}>
+            <div className="org-form" style={{ marginTop: 12 }}>
             <div className="form-group" style={{ flexBasis: "100%" }}>
               <label>Or paste GeoJSON</label>
               <textarea
                 rows={8}
-                value={data.geomText}
+                value={wdata.geomText}
                 onChange={(e) => {
                   const text = e.target.value;
-                  setData((d) => ({ ...d, geomText: text }));
+                  wSetData((d) => ({ ...d, geomText: text }));
                   try {
                     const parsed = JSON.parse(text);
                     handleParsedGeoJSON(parsed, "");
@@ -291,7 +297,7 @@ export default function LayerWizard({
               <FiAlertTriangle /> {error}
             </div>
           )}
-          {data.fileName && (
+          {wdata.fileName && (
             <div className="info-row" style={{ marginTop: 6 }}>
               <FiInfo /> Loaded: <strong>{data.fileName}</strong>
             </div>
@@ -304,7 +310,7 @@ export default function LayerWizard({
     {
       key: "preview",
       title: "Preview & CRS",
-      render: () => (
+    render: ({ data: wdata, setData: wSetData }) => (
         <div className="dashboard-card">
           <div className="dashboard-card-header">
             <div className="dashboard-card-title">
@@ -322,13 +328,13 @@ export default function LayerWizard({
                 style={{ height: "100%", width: "100%" }}
                 whenCreated={(m) => { if (m && !mapRef.current) mapRef.current = m; }}
               >
-                {data.previewGeom && (
-                  <GeoJSON key="geom" data={{ type: "Feature", geometry: data.previewGeom }} style={{ color: previewColor, weight: 2, fillOpacity: 0.15 }} />
+                {wdata.previewGeom && (
+                  <GeoJSON key="geom" data={{ type: "Feature", geometry: wdata.previewGeom }} style={{ color: previewColor, weight: 2, fillOpacity: 0.15 }} />
                 )}
                 {/* MapViewport will fit map to either previewGeom or to a captured viewport (if present) */}
                 <MapViewport
-                  bounds={data.viewport ? [[data.viewport.bounds[0], data.viewport.bounds[1]], [data.viewport.bounds[2], data.viewport.bounds[3]]] : (data.previewGeom ? boundsFromGeom(data.previewGeom) : null)}
-                  version={data.viewportVersion || 0}
+                  bounds={wdata.viewport ? [[wdata.viewport.bounds[0], wdata.viewport.bounds[1]], [wdata.viewport.bounds[2], wdata.viewport.bounds[3]]] : (wdata.previewGeom ? boundsFromGeom(wdata.previewGeom) : null)}
+                  version={wdata.viewportVersion || 0}
                 />
               </AppMap>
             </div>
@@ -338,7 +344,7 @@ export default function LayerWizard({
                 <label>Detected/Source SRID</label>
                 <input
                   type="number"
-                  value={data.sourceSrid}
+                  value={wdata.sourceSrid}
                   onChange={(e) => updateSourceSrid(e.target.value)}
                   placeholder="e.g., 4326 or 32651"
                 />
@@ -357,7 +363,8 @@ export default function LayerWizard({
     {
       key: "link",
       title: "Link to Body",
-      render: ({ data: wdata, setData: wSetData }) => (
+      canNext: (d) => !!d.bodyId,
+    render: ({ data: wdata, setData: wSetData }) => (
         <div className="dashboard-card">
           <div className="dashboard-card-header">
             <div className="dashboard-card-title">
@@ -425,7 +432,8 @@ export default function LayerWizard({
     {
       key: "meta",
       title: "Metadata",
-      render: () => (
+      canNext: (d) => !!d.name,
+      render: ({ data: wdata, setData: wSetData }) => (
         <div className="dashboard-card">
           <div className="dashboard-card-header">
             <div className="dashboard-card-title">
@@ -435,12 +443,12 @@ export default function LayerWizard({
           </div>
           <div className="dashboard-card-body">
             <div className="org-form">
-              <div className="form-group">
+                <div className="form-group">
                 <label>Layer Name</label>
                 <input
                   type="text"
-                  value={data.name}
-                  onChange={(e) => setData((d) => ({ ...d, name: e.target.value }))}
+                  value={wdata.name}
+                  onChange={(e) => wSetData((d) => ({ ...d, name: e.target.value }))}
                   placeholder="e.g., Official shoreline 2024"
                 />
               </div>
@@ -448,8 +456,8 @@ export default function LayerWizard({
               <div className="form-group">
                 <label>Category</label>
                 <select
-                  value={data.category}
-                  onChange={(e) => setData((d) => ({ ...d, category: e.target.value }))}
+                  value={wdata.category}
+                  onChange={(e) => wSetData((d) => ({ ...d, category: e.target.value }))}
                 >
                   <option value="" disabled>Select category…</option>
                   <option value="Profile">Profile</option>
@@ -462,8 +470,8 @@ export default function LayerWizard({
                 <label>Notes</label>
                 <input
                   type="text"
-                  value={data.notes}
-                  onChange={(e) => setData((d) => ({ ...d, notes: e.target.value }))}
+                  value={wdata.notes}
+                  onChange={(e) => wSetData((d) => ({ ...d, notes: e.target.value }))}
                   placeholder="Short description / source credits"
                 />
               </div>
@@ -477,7 +485,8 @@ export default function LayerWizard({
     {
       key: "publish",
       title: "Publish",
-      render: () => (
+      canNext: (d) => !!d.uploadGeom && !!d.bodyType && !!d.bodyId && !!d.name,
+      render: ({ data: wdata, setData: wSetData }) => (
         <div className="dashboard-card">
           <div className="dashboard-card-header">
             <div className="dashboard-card-title">
@@ -487,11 +496,11 @@ export default function LayerWizard({
           </div>
           <div className="dashboard-card-body">
             <div className="org-form">
-              <div className="form-group">
+                <div className="form-group">
                 <label>Visibility</label>
                 <select
-                  value={data.visibility}
-                  onChange={(e) => setData((d) => ({ ...d, visibility: e.target.value }))}
+                  value={wdata.visibility}
+                  onChange={(e) => wSetData((d) => ({ ...d, visibility: e.target.value }))}
                 >
                   {normalizedVisibilityOptions.map((opt) => (
                     <option key={opt.value} value={opt.value}>
@@ -507,11 +516,11 @@ export default function LayerWizard({
                   <div>
                     <button
                       type="button"
-                      className={`pill-btn ${data.isActive ? 'primary' : 'ghost'}`}
-                      onClick={() => setData((d) => ({ ...d, isActive: !d.isActive }))}
+                      className={`pill-btn ${wdata.isActive ? 'primary' : 'ghost'}`}
+                      onClick={() => wSetData((d) => ({ ...d, isActive: !d.isActive }))}
                       title="Toggle default layer"
                     >
-                      {data.isActive ? 'Default Enabled' : 'Set as Default'}
+                      {wdata.isActive ? 'Default Enabled' : 'Set as Default'}
                     </button>
                   </div>
                 </div>
@@ -532,6 +541,7 @@ export default function LayerWizard({
     <Wizard
       steps={steps}
       initialData={data}
+      onSetDataRef={(fn) => { wizardSetRef.current = fn; }}
       labels={{ back: "Back", next: "Next", finish: "Publish" }}
       onFinish={onPublish}
   onChange={(payload) => setTimeout(() => setData((d) => ({ ...d, ...payload })), 0)}
