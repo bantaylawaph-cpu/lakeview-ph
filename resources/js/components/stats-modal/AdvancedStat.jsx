@@ -1,59 +1,65 @@
 import React, { useState, useEffect } from "react";
 import { api, apiPublic, buildQuery } from "../../lib/api";
-import { fetchParameters } from "./data/fetchers";
-import { alertSuccess, alertError, alertInfo } from '../../utils/alerts';
+import { fetchParameters, fetchSampleEvents } from "./data/fetchers";
+import { alertSuccess, alertError } from '../../utils/alerts';
 
-export default function AdvancedStat({ lakes = [], params = [], staticThresholds = {} }) {
-  const [mode, setMode] = useState('compliance');
-  const [test, setTest] = useState('one-sample');
-  const [lakeId, setLakeId] = useState(''); // one-sample
-  const [lake1, setLake1] = useState('');   // two-sample
-  const [lake2, setLake2] = useState('');
-  const [stations, setStations] = useState([]); // [{id,name,isCoord?,lat?,lng?}]
+export default function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOptions = [], staticThresholds = {} }) {
+  // test mode is now inferred from the user's compare selection (class vs lake)
+  const [lakeId, setLakeId] = useState(''); // primary lake selection (first dropdown)
+  // Comparison target encoded as "class:CODE" or "lake:ID"
+  // (we store it in `compareValue` below)
+
+  const [stations, setStations] = useState([]);
   const [selectedStationIds, setSelectedStationIds] = useState([]);
-  const [classes, setClasses] = useState([]); // [{code,name}]
-  const [paramOptions, setParamOptions] = useState([]); // available parameter list
+  const [classes, setClasses] = useState([]);
+  const [paramOptions, setParamOptions] = useState([]);
   const [paramCode, setParamCode] = useState('');
+  const [standards, setStandards] = useState([]);
+  const [appliedStandardId, setAppliedStandardId] = useState('');
 
-  // Adopt parent-provided params first; otherwise fetch via shared fetcher
+  // Adopt parent-provided params first (support both `paramOptions` and legacy `params`), otherwise fetch centrally
   useEffect(() => {
     let aborted = false;
     const normalize = (rows) => rows.map(pr => ({
       id: pr.id,
-      key: pr.code || pr.key || String(pr.id),
-      code: pr.code || pr.key || String(pr.id),
-      label: pr.name || pr.code || String(pr.id),
+      key: pr.key || pr.id || pr.code || String(pr.id),
+      code: pr.code || pr.key || pr.id || String(pr.id),
+      label: pr.label || pr.long_name || pr.full_name || pr.display_name || pr.name || pr.code || String(pr.id),
       unit: pr.unit || pr.parameter?.unit || ''
     }));
     const load = async () => {
-      if (params && params.length) {
-        setParamOptions(normalize(params));
+      const parentRows = Array.isArray(parentParamOptions) && parentParamOptions.length ? parentParamOptions : (Array.isArray(params) && params.length ? params : null);
+      if (parentRows) {
+        setParamOptions(normalize(parentRows));
         return;
       }
-      try { const list = await fetchParameters(); if (!aborted) setParamOptions(list); }
-      catch { if (!aborted) setParamOptions([]); }
+      try {
+        const list = await fetchParameters();
+        if (!aborted) setParamOptions(list);
+      } catch {
+        if (!aborted) setParamOptions([]);
+      }
     };
     load();
     return () => { aborted = true; };
-  }, [params]);
+  }, [params, parentParamOptions]);
 
-  // Ensure a selected parameter exists whenever paramOptions changes
-  // Removed auto default parameter; user must choose manually
-  const [classCode, setClassCode] = useState('C');
-  const [manualMu0, setManualMu0] = useState('');
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
+  const [classCode, setClassCode] = useState('');
+  const [compareValue, setCompareValue] = useState(''); // format: "class:CODE" or "lake:ID"
+  const [yearFrom, setYearFrom] = useState('');
+  const [yearTo, setYearTo] = useState('');
   const [cl, setCl] = useState('0.95');
-  const [aggregation, setAggregation] = useState('month');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [needsManual, setNeedsManual] = useState(false);
-  const manualRef = React.useRef(null);
   const [samplePreview, setSamplePreview] = useState([]);
   const [previewLoading, setPreviewLoading] = useState(false);
 
-  const disabled = loading || (test==='one-sample' ? !lakeId : !(lake1 && lake2));
+  const disabled = loading || !paramCode || !lakeId || !compareValue;
+
+  // infer test mode at runtime: two-sample when compareValue is a lake
+  const inferredTest = (compareValue && String(compareValue).startsWith('lake:')) ? 'two-sample' : 'one-sample';
 
   // Fetch water quality classes
   useEffect(() => {
@@ -65,17 +71,34 @@ export default function AdvancedStat({ lakes = [], params = [], staticThresholds
         if (!mounted) return;
         const list = rows.map(r => ({ code: r.code || r.id || '', name: r.name || r.code || '' })).filter(r=>r.code);
         if (list.length) setClasses(list);
-      } catch {}
+      } catch (e) {
+        console.error('Failed to load classes', e);
+      }
     })();
     return () => { mounted = false; };
   }, []);
 
-  // Removed auto-detect class; user must set manually
-
-  // Fetch stations for currently relevant lake (only one-sample for now)
+  // Fetch standards for applied dropdown
   useEffect(() => {
     let mounted = true;
-    const targetLake = test === 'one-sample' ? lakeId : (lake1 || '');
+    (async () => {
+      try {
+        const res = await apiPublic('/options/wq-standards');
+        const rows = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+        if (!mounted) return;
+        setStandards(rows || []);
+      } catch (e) {
+        console.error('Failed to load standards', e);
+        if (mounted) setStandards([]);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  // Fetch stations for selected primary lake
+  useEffect(() => {
+    let mounted = true;
+    const targetLake = lakeId || '';
     if (!targetLake) { setStations([]); setSelectedStationIds([]); return; }
     (async () => {
       try {
@@ -85,12 +108,11 @@ export default function AdvancedStat({ lakes = [], params = [], staticThresholds
         if (rows.length) {
           const mapped = rows.map(r => ({ id: r.id, name: r.name || `Station ${r.id}` }));
           setStations(mapped);
-          // auto-select all by default
           setSelectedStationIds(mapped.map(r => r.id));
           return;
         }
       } catch (e) {
-        // fallback public sample-events
+        // fallback to public
       }
       try {
         const qs = buildQuery({ lake_id: targetLake, limit: 1000 });
@@ -120,41 +142,49 @@ export default function AdvancedStat({ lakes = [], params = [], staticThresholds
       }
     })();
     return () => { mounted = false; };
-  }, [lakeId, lake1, test]);
+  }, [lakeId]);
+
+  // Auto-pair lake -> class (if lake record contains class info)
+  useEffect(() => {
+  if (!lakeId) return;
+    const lake = lakes.find(l => String(l.id) === String(lakeId));
+    if (!lake) return;
+    const code = lake.class_code || lake.class || lake.class?.code;
+  if (code) setClassCode(String(code));
+  // if the user hasn't selected a compare target, keep the classCode in sync with the lake
+  if (!compareValue && code) setClassCode(String(code));
+  }, [lakeId, lakes]);
 
   const run = async () => {
     setLoading(true); setError(null); setResult(null);
     try {
-      const stationsArr = (test==='one-sample' && selectedStationIds.length) ? selectedStationIds.filter(v=>Number.isFinite(v)) : undefined;
+      const stationsArr = selectedStationIds && selectedStationIds.length ? selectedStationIds.filter(v=>Number.isFinite(v)) : undefined;
       const body = {
-        mode,
-        test,
+        test: inferredTest,
         parameter_code: paramCode,
         confidence_level: Number(cl),
-        date_from: from || undefined,
-        date_to: to || undefined,
-        aggregation,
-        station_ids: stationsArr
+        year_from: yearFrom || undefined,
+        year_to: yearTo || undefined,
+        station_ids: stationsArr,
+        applied_standard_id: appliedStandardId || undefined
       };
-      if (test === 'one-sample') {
+      if (inferredTest === 'one-sample') {
         body.lake_id = Number(lakeId);
-        body.class_code = classCode;
-        if (manualMu0.trim() !== '' && !isNaN(Number(manualMu0))) {
-          body.manual_mu0 = Number(manualMu0);
-        }
+        // prefer explicit classCode, otherwise derive from compareValue
+        if (classCode) body.class_code = String(classCode);
+        else if (compareValue && String(compareValue).startsWith('class:')) body.class_code = String(compareValue).split(':')[1];
       } else {
-        body.lake_ids = [Number(lake1), Number(lake2)];
+        // two-sample: derive second lake id from compareValue
+        const other = (compareValue && String(compareValue).startsWith('lake:')) ? Number(String(compareValue).split(':')[1]) : undefined;
+        body.lake_ids = [Number(lakeId), other].filter(Boolean);
       }
-  // stats endpoint is public; use apiPublic so lack of token doesn't reject
       const res = await apiPublic('/stats/t-test', { method: 'POST', body });
       setResult(res);
-      // if server returned raw/sample values, populate preview for quick inspection
       if (res && (res.sample_values || res.samples || res.values || res.sample1_values || res.sample2_values)) {
         const pick = res.sample_values || res.samples || res.values || res.sample1_values || res.sample2_values || [];
         if (Array.isArray(pick)) setSamplePreview(pick.slice(0, 200));
       }
       setNeedsManual(false);
-      // Friendly notification
       if (res && (res.sample_n || res.sample1_n || res.type === 'tost')) {
         let msg = 'Test completed successfully.';
         if (res.warn_low_n) msg = 'Test completed but sample size is low — interpret with caution.';
@@ -169,19 +199,10 @@ export default function AdvancedStat({ lakes = [], params = [], staticThresholds
       const body = e?.body || null;
       console.error('[Stats] Run error:', e, body || 'no-body');
       if (body && body.error === 'threshold_missing') {
-        const dbg = body.debug || body;
-        // If server provided a sample threshold row, try to auto-fill
-        const sample = dbg?.threshold_row_sample || dbg?.threshold_debug || null;
-        if (sample && test === 'one-sample' && manualMu0.trim() === '') {
-          const candidate = (sample.min_value != null && (sample.max_value == null || evalType==='min')) ? sample.min_value : (sample.max_value != null ? sample.max_value : null);
-          if (candidate != null) setManualMu0(String(candidate));
-        }
         setNeedsManual(true);
-        alertError('Missing Threshold', 'No threshold found for this parameter/class — please supply a Manual Threshold (μ0) then rerun.');
-        setTimeout(()=> manualRef.current?.focus(), 30);
+        alertError('Missing Threshold', 'No threshold found for this parameter/class — set thresholds in Admin or provide one via API.');
       } else if (body && body.error === 'insufficient_data') {
-        // Friendly message: show counts vs required
-        const minReq = body.min_required || body.min_required || 3;
+        const minReq = body.min_required || 3;
         if (body.n != null) {
           alertError('Not enough data', `Not enough samples to run the test: found ${body.n}, need at least ${minReq}.`);
         } else if (body.n1 != null || body.n2 != null) {
@@ -190,11 +211,9 @@ export default function AdvancedStat({ lakes = [], params = [], staticThresholds
         } else {
           alertError('Not enough data', `Insufficient data to run the test (need at least ${minReq} observations).`);
         }
-        // keep technical details in console
         console.debug('[Stats] insufficient_data payload:', body);
       }
       else {
-        // Generic error notification
         alertError('Test Error', msg);
       }
     } finally { setLoading(false); }
@@ -206,43 +225,29 @@ export default function AdvancedStat({ lakes = [], params = [], staticThresholds
     try {
       const fmtPreviewDate = (d) => {
         if (!d) return '';
-        try {
-          const dt = new Date(d);
-          if (isNaN(dt)) return String(d);
-          return dt.toLocaleString();
-        } catch (e) { return String(d); }
+        try { const dt = new Date(d); if (isNaN(dt)) return String(d); return dt.toLocaleString(); } catch (e) { return String(d); }
       };
       const unit = (paramOptions.find(p => p.code === paramCode) || {}).unit || '';
       const mapped = [];
-      // For two-sample, public endpoint expects a single lake_id; fetch each lake separately and tag rows with lake name
-      if (test === 'two-sample') {
-        const lakeIds = [lake1, lake2].filter(Boolean);
+      const sampled_from = yearFrom ? `${yearFrom}-01-01` : undefined;
+      const sampled_to = yearTo ? `${yearTo}-12-31` : undefined;
+
+      if (inferredTest === 'two-sample') {
+        const other = (compareValue && String(compareValue).startsWith('lake:')) ? String(compareValue).split(':')[1] : undefined;
+        const lakeIds = [lakeId, other].filter(Boolean);
         for (const lid of lakeIds) {
           try {
-            const qs = buildQuery({ parameter_code: paramCode, lake_id: lid, sampled_from: from || undefined, sampled_to: to || undefined, limit: 1000 });
-            const res = await apiPublic(`/public/sample-events${qs}`);
-            const rows = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+            const recs = await fetchSampleEvents({ lakeId: lid, from: sampled_from, to: sampled_to, limit: 1000 });
             const lakeName = (lakes.find(l => String(l.id) === String(lid)) || {}).name || `Lake ${lid}`;
-            for (const ev of rows) {
-              let v = null;
-              if (ev.value != null) v = ev.value;
-              if (v == null && ev.sample_results && Array.isArray(ev.sample_results)) {
-                for (const r of ev.sample_results) {
-                  if ((r.parameter_code === paramCode || r.parameter?.code === paramCode || r.parameter_id === paramCode) && r.value != null) { v = r.value; break; }
-                }
-              }
-              if (v == null && ev.results && Array.isArray(ev.results)) {
-                for (const r of ev.results) {
-                  if ((r.parameter_code === paramCode || r.parameter?.code === paramCode) && r.value != null) { v = r.value; break; }
-                }
-              }
-              if (v == null && ev.parameter && (ev.parameter.code === paramCode) && ev.parameter_value != null) v = ev.parameter_value;
+            for (const ev of recs) {
+              const vObj = ev[paramCode];
+              const v = vObj && vObj.value != null ? vObj.value : null;
+              const unitLocal = vObj && vObj.unit ? vObj.unit : '';
               if (v == null) continue;
-              const rawDate = ev.sample_date || ev.sampled_at || ev.date || ev.event_date || ev.created_at || ev.datetime || '';
+              const rawDate = ev.date || ev.rawDate || '';
               const date = fmtPreviewDate(rawDate);
-              // fallback to coordinates when station name missing
-              const station = ev.station?.name || ev.station_name || (ev.latitude != null && ev.longitude != null ? `${Number(ev.latitude).toFixed(6)}, ${Number(ev.longitude).toFixed(6)}` : (ev.station_id ? `Station ${ev.station_id}` : ''));
-              mapped.push({ date, rawDate, station, lake: lakeName, value: v, unit });
+              const station = ev.area || ev.stationCode || '';
+              mapped.push({ date, rawDate, station, lake: lakeName, value: v, unit: unitLocal });
               if (mapped.length >= 200) break;
             }
           } catch (e) {
@@ -251,36 +256,21 @@ export default function AdvancedStat({ lakes = [], params = [], staticThresholds
           if (mapped.length >= 200) break;
         }
       } else {
-        const qs = buildQuery({
-          parameter_code: paramCode,
-          lake_id: test === 'one-sample' ? lakeId || undefined : undefined,
-          station_ids: (test==='one-sample' && selectedStationIds && selectedStationIds.length) ? selectedStationIds : undefined,
-          sampled_from: from || undefined,
-          sampled_to: to || undefined,
-          limit: 1000
-        });
-        const res = await apiPublic(`/public/sample-events${qs}`);
-        const rows = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
-        for (const ev of rows) {
-          let v = null;
-          if (ev.value != null) v = ev.value;
-          if (v == null && ev.sample_results && Array.isArray(ev.sample_results)) {
-            for (const r of ev.sample_results) {
-              if ((r.parameter_code === paramCode || r.parameter?.code === paramCode || r.parameter_id === paramCode) && r.value != null) { v = r.value; break; }
-            }
+        try {
+          const recs = await fetchSampleEvents({ lakeId: lakeId, from: sampled_from, to: sampled_to, limit: 1000 });
+          for (const ev of recs) {
+            const vObj = ev[paramCode];
+            const v = vObj && vObj.value != null ? vObj.value : null;
+            const unitLocal = vObj && vObj.unit ? vObj.unit : '';
+            if (v == null) continue;
+            const rawDate = ev.date || ev.rawDate || '';
+            const date = fmtPreviewDate(rawDate);
+            const station = ev.area || ev.stationCode || '';
+            mapped.push({ date, rawDate, station, value: v, unit: unitLocal });
+            if (mapped.length >= 200) break;
           }
-          if (v == null && ev.results && Array.isArray(ev.results)) {
-            for (const r of ev.results) {
-              if ((r.parameter_code === paramCode || r.parameter?.code === paramCode) && r.value != null) { v = r.value; break; }
-            }
-          }
-          if (v == null && ev.parameter && (ev.parameter.code === paramCode) && ev.parameter_value != null) v = ev.parameter_value;
-          if (v == null) continue; // skip events without matching value
-          const rawDate = ev.sample_date || ev.sampled_at || ev.date || ev.event_date || ev.created_at || ev.datetime || '';
-          const date = fmtPreviewDate(rawDate);
-          const station = ev.station?.name || ev.station_name || (ev.latitude != null && ev.longitude != null ? `${Number(ev.latitude).toFixed(6)}, ${Number(ev.longitude).toFixed(6)}` : (ev.station_id ? `Station ${ev.station_id}` : ''));
-          mapped.push({ date, rawDate, station, value: v, unit });
-          if (mapped.length >= 200) break;
+        } catch (e) {
+          console.error('[Stats] Preview fetch error', e);
         }
       }
       setSamplePreview(mapped);
@@ -358,146 +348,138 @@ export default function AdvancedStat({ lakes = [], params = [], staticThresholds
   const ciLine = (r) => (r.ci_lower != null && r.ci_upper != null ? <div>CI ({Math.round((r.ci_level||0)*100)}%): [{fmt(r.ci_lower)}, {fmt(r.ci_upper)}]</div> : null);
 
   return (
-  <div className="insight-card" style={{ minWidth: 720, maxWidth: '100%', maxHeight: '70vh', overflowY: 'auto', padding: 8 }}>
-      <h4>Advanced Statistics</h4>
-      <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-        <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-          <select className="pill-btn" value={test} onChange={e=>{setTest(e.target.value); setResult(null);}}>
-            <option value="one-sample">One Sample / Threshold</option>
-            <option value="two-sample">Two Sample Welch</option>
+  <div className="insight-card" style={{ minWidth: 680, maxWidth: '100%', maxHeight: '70vh', overflowY: 'auto', padding: 8 }}>
+      <h4 style={{ margin: '2px 0 8px' }}>Advanced Statistics</h4>
+  <div style={{ display:'grid', gridTemplateColumns:'3fr 3fr 0.6fr 0.6fr', gap:10, alignItems:'start', fontSize:13 }}>
+        {/* Row 1: Applied Standard, Parameter, Confidence Level (compact) */}
+        <div style={{ gridColumn: '1 / span 1' }}>
+          <select className="pill-btn" value={appliedStandardId} onChange={e=>{setAppliedStandardId(e.target.value); setResult(null);}} style={{ width:'100%', padding:'10px 12px', height:40, lineHeight:'20px' }}>
+            <option value="">Applied Standard</option>
+            {standards.map(s => <option key={s.id} value={s.id}>{s.code || s.name || s.id}</option>)}
           </select>
-          <select className="pill-btn" value={mode} onChange={e=>{setMode(e.target.value); setResult(null);}}>
-            <option value="compliance">Compliance</option>
-            <option value="improvement">Improvement</option>
-          </select>
-          <select className="pill-btn" value={paramCode} onChange={e=>{setParamCode(e.target.value); setResult(null);}}>
-            <option value="">Parameter</option>
+        </div>
+        <div style={{ gridColumn: '2 / span 1' }}>
+          <select className="pill-btn" value={paramCode} onChange={e=>{setParamCode(e.target.value); setResult(null);}} style={{ width:'100%', padding:'10px 12px', height:40, lineHeight:'20px' }}>
+            <option value="">Select parameter</option>
             {paramOptions.length ? (
-              paramOptions.map(p => <option key={p.code} value={p.code}>{p.label || p.code}</option>)
+              paramOptions.map(p => (
+                <option key={p.key || p.id || p.code} value={p.key || p.id || p.code}>
+                  {p.label || p.name || p.code}
+                </option>
+              ))
             ) : null}
           </select>
-          <select className="pill-btn" value={cl} onChange={e=>{setCl(e.target.value); setResult(null);}}>
+        </div>
+        <div style={{ gridColumn: '3 / span 2', display:'flex', justifyContent:'flex-end' }}>
+          <select className="pill-btn" value={cl} onChange={e=>{setCl(e.target.value); setResult(null);}} style={{ width:'100%', padding:'8px 10px', fontSize:12, height:36, lineHeight:'18px' }}>
             <option value="0.9">90% CL</option>
             <option value="0.95">95% CL</option>
             <option value="0.99">99% CL</option>
           </select>
         </div>
-        {test === 'one-sample' && (
-          <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-            <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-              <select className="pill-btn" value={lakeId} onChange={e=>{setLakeId(e.target.value); setResult(null);}}>
-                <option value="">Lake</option>
-                {lakes.map(l => <option key={l.id} value={l.id}>{l.name || `Lake ${l.id}`}</option>)}
-              </select>
-              {classes.length ? (
-                <select className="pill-btn" value={classCode} onChange={e=>{setClassCode(e.target.value); setNeedsManual(false);}} style={{ minWidth:72 }}>
-                  {classes.map(c => <option key={c.code} value={c.code}>{c.code}</option>)}
-                </select>
-              ) : (
-                <input className="pill-btn" placeholder="Class" value={classCode} onChange={e=>setClassCode(e.target.value)} style={{ width:70 }} />
-              )}
-              <input ref={manualRef} className="pill-btn" placeholder="Manual Threshold" value={manualMu0} onChange={e=>{setManualMu0(e.target.value);}} style={{ width:120, outline: needsManual ? '2px solid #ef4444' : undefined }} />
-            </div>
-            {stations.length > 0 && (
-              <div style={{ maxHeight:120, overflowY:'auto', border:'1px solid rgba(255,255,255,0.2)', padding:6, borderRadius:4 }}>
-                <div style={{ fontSize:12, opacity:0.85, marginBottom:4 }}>Stations (select subset or leave all):</div>
-                <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
-                  {stations.map(s => {
-                    const checked = selectedStationIds.includes(s.id);
-                    return (
-                      <label key={s.id} style={{ display:'flex', alignItems:'center', gap:4, fontSize:12, background:'rgba(255,255,255,0.08)', padding:'2px 6px', borderRadius:4 }}>
-                        <input type="checkbox" checked={checked} onChange={() => {
-                          setSelectedStationIds(prev => checked ? prev.filter(id=>id!==s.id) : [...prev, s.id]);
-                        }} />
-                        {s.name}
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-        {test === 'two-sample' && (
-          <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-            <select className="pill-btn" value={lake1} onChange={e=>{setLake1(e.target.value); setResult(null);}}>
-              <option value="">Lake 1</option>
-              {lakes.map(l => <option key={l.id} value={l.id}>{l.name || `Lake ${l.id}`}</option>)}
-            </select>
-            <select className="pill-btn" value={lake2} onChange={e=>{setLake2(e.target.value); setResult(null);}}>
-              <option value="">Lake 2</option>
-              {lakes.map(l => <option key={l.id} value={l.id}>{l.name || `Lake ${l.id}`}</option>)}
-            </select>
-          </div>
-        )}
-        <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-          <input className="pill-btn" type="date" value={from} onChange={e=>setFrom(e.target.value)} />
-          <input className="pill-btn" type="date" value={to} onChange={e=>setTo(e.target.value)} />
-          <select className="pill-btn" value={aggregation} onChange={e=>setAggregation(e.target.value)}>
-            <option value="month">Monthly</option>
-            <option value="daily">Daily</option>
-            <option value="raw">Raw</option>
+
+        {/* Row 2: Lake | Class (header + selector) | Compare Lake | Years */}
+        <div style={{ gridColumn: '1 / span 1' }}>
+          <select className="pill-btn" value={lakeId} onChange={e=>{setLakeId(e.target.value); setResult(null);}} style={{ width:'100%', padding:'10px 12px', height:40, lineHeight:'20px' }}>
+            <option value="">Primary Lake</option>
+            {lakes.map(l => <option key={l.id} value={l.id}>{l.name || `Lake ${l.id}`}</option>)}
           </select>
-          <button className="pill-btn liquid" disabled={disabled} onClick={run}>{loading ? 'Running...' : 'Run Test'}</button>
-          <button className="pill-btn" disabled={!paramCode || (test==='one-sample' && !lakeId) || (test==='two-sample' && (!lake1 || !lake2)) || previewLoading} onClick={fetchPreview}>{previewLoading ? 'Loading...' : 'Preview Values'}</button>
         </div>
-        {stations.length === 0 && lakeId && test==='one-sample' && (
-          <div style={{ fontSize:12, opacity:0.7 }}>No station records found; using all available measurements (coordinate points may appear once data exist).</div>
-        )}
-        {stations.length > 0 && stations.some(s=>s.isCoord) && (
-          <div style={{ fontSize:12, opacity:0.7 }}>Coordinate-only sampling points included (not selectable individually).</div>
-        )}
-        {error && <div style={{ color:'#ff8080', fontSize:12 }}>{error}{needsManual && ' — Please supply a Manual Threshold (μ0) then rerun.'}</div>}
-        {error && (error.includes('threshold_missing') || error.includes('threshold')) && (
-          <div style={{ fontSize:11, marginTop:6, color:'#ffd9d9' }}>
-            Server debug: <pre style={{ whiteSpace:'pre-wrap', fontSize:11 }}>{JSON.stringify((error && (typeof error === 'string') ? null : null) || '' )}</pre>
+        <div style={{ gridColumn: '2 / span 1' }}>
+          <select className="pill-btn" value={compareValue} onChange={e=>{
+            const v = e.target.value;
+            setCompareValue(v);
+            setResult(null);
+            // if user picked a class, keep classCode in sync
+            if (v && String(v).startsWith('class:')) {
+              setClassCode(String(v).split(':')[1] || '');
+            }
+          }} style={{ width:'100%', padding:'10px 12px', height:40, lineHeight:'20px' }}>
+            <option value="">Compare (Class or Lake)</option>
+            {classes.map(c => <option key={`class-${c.code}`} value={`class:${c.code}`}>{`Class ${c.code}`}</option>)}
+            <optgroup label="Lakes">
+              {lakes.map(l => <option key={`lake-${l.id}`} value={`lake:${l.id}`}>{l.name || `Lake ${l.id}`}</option>)}
+            </optgroup>
+          </select>
+        </div>
+        <div style={{ gridColumn: '3 / span 1' }}>
+          <input className="pill-btn" type="number" placeholder="Year from" value={yearFrom} onChange={e=>setYearFrom(e.target.value)} style={{ width: '100%', padding:'8px 10px', height:36, lineHeight:'18px' }} />
+        </div>
+        <div style={{ gridColumn: '4 / span 1' }}>
+          <input className="pill-btn" type="number" placeholder="Year to" value={yearTo} onChange={e=>setYearTo(e.target.value)} style={{ width: '100%', padding:'8px 10px', height:36, lineHeight:'18px' }} />
+        </div>
+
+        {/* Row 3: station selection removed — lake-level aggregation will be applied in backend */}
+
+        {/* Row 4: actions and notices */}
+        <div style={{ gridColumn: '1 / -1', display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}>
+          <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+            <div style={{ fontSize:12, opacity:0.8 }}>Lake-to-lake comparisons aggregate station measurements per lake (mean).</div>
           </div>
-        )}
-        {needsManual && (
-          <div style={{ color:'#fbbf24', fontSize:11 }}>
-            Tip: This value is the regulatory minimum or maximum used as the comparison mean (μ0).
+          <div style={{ display:'flex', gap:8 }}>
+            <button className="pill-btn liquid" disabled={disabled} onClick={run} style={{ padding:'6px 10px' }}>{loading ? 'Running...' : 'Run Test'}</button>
+            <button className="pill-btn" disabled={!paramCode || !lakeId || !compareValue || previewLoading} onClick={fetchPreview} style={{ padding:'6px 10px' }}>{previewLoading ? 'Loading...' : 'Preview Values'}</button>
           </div>
-        )}
-        {/* Preview table for fetched values */}
-        {samplePreview && samplePreview.length > 0 && (() => {
-          // sort by rawDate desc if available
-          const rows = [...samplePreview].sort((a,b) => {
-            const ad = a.rawDate ? new Date(a.rawDate).getTime() : 0;
-            const bd = b.rawDate ? new Date(b.rawDate).getTime() : 0;
-            return bd - ad;
-          });
-          return (
-            <div style={{ marginTop:8 }}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
-                <div style={{ fontSize:12, opacity:0.85 }}>Preview of values being fetched (showing up to 200 rows)</div>
-                <div style={{ fontSize:12, opacity:0.7 }}>{rows.length} rows • times shown in your local timezone</div>
-              </div>
-              <div style={{ maxHeight:320, overflow:'auto', border:'1px solid rgba(255,255,255,0.06)', borderRadius:6 }}>
-                <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
-                  <thead>
-                    <tr style={{ textAlign:'left', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
-                      <th style={{ padding:6, width:220 }}>Date (local)</th>
-                      <th style={{ padding:6 }}>Station / Coordinates</th>
-                      { (test === 'two-sample' || samplePreview.some(r => r.lake)) && <th style={{ padding:6, width:160 }}>Lake</th> }
-                      <th style={{ padding:6, width:120 }}>Value</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((r, idx) => (
-                      <tr key={idx} style={{ borderBottom:'1px dashed rgba(255,255,255,0.02)' }}>
-                        <td style={{ padding:6 }}>{r.date}</td>
-                        <td style={{ padding:6 }}>{r.station}</td>
-                        { (test === 'two-sample' || samplePreview.some(x => x.lake)) && <td style={{ padding:6 }}>{r.lake || '-'}</td> }
-                        <td style={{ padding:6 }}>{r.value}{r.unit ? ` ${r.unit}` : ''}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+        </div>
+
+        {/* Notices/errors */}
+        <div style={{ gridColumn: '1 / -1' }}>
+          {error && <div style={{ color:'#ff8080', fontSize:12 }}>{error}{needsManual && ' — Please supply a Manual Threshold (μ0) then rerun.'}</div>}
+          {error && (error.includes('threshold_missing') || error.includes('threshold')) && (
+            <div style={{ fontSize:11, marginTop:6, color:'#ffd9d9' }}>
+              Server debug: <pre style={{ whiteSpace:'pre-wrap', fontSize:11 }}>{JSON.stringify((error && (typeof error === 'string') ? null : null) || '' )}</pre>
             </div>
-          );
-        })()}
-        {renderResult()}
+          )}
+          {needsManual && (
+            <div style={{ color:'#fbbf24', fontSize:11 }}>
+              Tip: A threshold is required by the server for this parameter/class — set thresholds in the admin panel or provide a manual μ0 via API.
+            </div>
+          )}
+        </div>
+
+        {/* Preview table */}
+        <div style={{ gridColumn: '1 / -1' }}>
+          {samplePreview && samplePreview.length > 0 && (() => {
+            const rows = [...samplePreview].sort((a,b) => {
+              const ad = a.rawDate ? new Date(a.rawDate).getTime() : 0;
+              const bd = b.rawDate ? new Date(b.rawDate).getTime() : 0;
+              return bd - ad;
+            });
+            return (
+              <div style={{ marginTop:8 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+                  <div style={{ fontSize:12, opacity:0.85 }}>Preview of values being fetched (showing up to 200 rows)</div>
+                  <div style={{ fontSize:12, opacity:0.7 }}>{rows.length} rows • times shown in your local timezone</div>
+                </div>
+                      <div style={{ maxHeight:320, overflow:'auto', border:'1px solid rgba(255,255,255,0.06)', borderRadius:6 }}>
+                        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
+                          <thead>
+                            <tr style={{ textAlign:'left', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
+                              <th style={{ padding:6, width:220 }}>Date (local)</th>
+                              <th style={{ padding:6 }}>Station / Coordinates</th>
+                              { (inferredTest === 'two-sample' || samplePreview.some(r => r.lake)) && <th style={{ padding:6, width:160 }}>Lake</th> }
+                              <th style={{ padding:6, width:120 }}>Value</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {rows.map((r, i) => (
+                              <tr key={i} style={{ borderBottom:'1px solid rgba(255,255,255,0.03)' }}>
+                                <td style={{ padding:6, width:220 }}>{r.date}</td>
+                                <td style={{ padding:6 }}>{r.station}</td>
+                                {(inferredTest === 'two-sample' || samplePreview.some(rr => rr.lake)) && <td style={{ padding:6, width:160 }}>{r.lake || ''}</td>}
+                                <td style={{ padding:6, width:120 }}>{r.value}{r.unit ? ` ${r.unit}` : ''}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+              </div>
+            );
+          })()}
+        </div>
+
+        {/* Result */}
+        <div style={{ gridColumn: '1 / -1' }}>{renderResult()}</div>
       </div>
     </div>
   );
