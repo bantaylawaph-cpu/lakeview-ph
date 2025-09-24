@@ -8,4 +8,4 @@ Route::view('/login', 'app')->name('login');
 
 Route::get('/{any}', function () {
     return view('app'); // your main blade file that mounts React
-})->where('any', '.*');
+})->where('any', '^(?!api).*$');

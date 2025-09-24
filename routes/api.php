@@ -101,7 +101,7 @@ Route::middleware('auth:sanctum')->prefix('admin')->group(function () {
 | Organization Admin (tenant-scoped)
 |--------------------------------------------------------------------------
 */
-Route::middleware(['auth:sanctum','tenant.scoped','role:org_admin'])
+Route::middleware(['auth:sanctum','tenant.scoped','role:org_admin,superadmin'])
     ->prefix('org/{tenant}')
     ->whereNumber('tenant')
     ->group(function () {

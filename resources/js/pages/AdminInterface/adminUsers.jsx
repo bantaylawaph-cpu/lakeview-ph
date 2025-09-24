@@ -113,6 +113,11 @@ export default function AdminUsersPage() {
       payload.role = payload.global_role;
       delete payload.global_role;
     }
+    // Convert tenant_id to number if present and not empty
+    if (payload.tenant_id && typeof payload.tenant_id === 'string') {
+      payload.tenant_id = Number(payload.tenant_id);
+      if (isNaN(payload.tenant_id)) delete payload.tenant_id;
+    }
     const verb = mode === "edit" ? "Update" : "Create";
     const { isConfirmed } = await Swal.fire({
       title: `${verb} user?`,

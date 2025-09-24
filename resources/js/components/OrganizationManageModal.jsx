@@ -1,13 +1,17 @@
+
 import React, { useEffect, useState } from "react";
 import api from "../lib/api";
 import Modal from "./Modal";
+import Swal from "sweetalert2";
 
 export default function OrganizationManageModal({ org, open, onClose }) {
-	const [activeTab, setActiveTab] = useState("members");
-	const [members, setMembers] = useState([]);
+	const [activeTab, setActiveTab] = useState("admins");
+	// Contributors logic removed
 	const [admins, setAdmins] = useState([]);
-	const [unassigned, setUnassigned] = useState([]);
 	const [loading, setLoading] = useState(false);
+	const [editing, setEditing] = useState(null); // user being edited
+	const [editForm, setEditForm] = useState({ name: "", email: "" });
+	const [saving, setSaving] = useState(false);
 
 	useEffect(() => {
 		if (open && org) fetchTabs();
@@ -17,14 +21,8 @@ export default function OrganizationManageModal({ org, open, onClose }) {
 	const fetchTabs = async () => {
 		setLoading(true);
 		try {
-			const [membersRes, adminsRes, unassignedRes] = await Promise.all([
-				api.get(`/admin/tenants/${org.id}/members`).catch(() => ({ data: [] })),
-				api.get(`/admin/tenants/${org.id}/admins`).catch(() => ({ data: [] })),
-				api.get(`/admin/users`, { params: { tenant_id: null } }).catch(() => ({ data: [] })),
-			]);
-			setMembers(membersRes.data || []);
+			const adminsRes = await api.get(`/admin/tenants/${org.id}/admins`).catch(() => ({ data: [] }));
 			setAdmins(adminsRes.data || []);
-			setUnassigned(unassignedRes.data || []);
 		} catch (e) {
 			// fallback: show nothing
 		} finally {
@@ -32,48 +30,129 @@ export default function OrganizationManageModal({ org, open, onClose }) {
 		}
 	};
 
+	// Remove org admin
+	const handleRemove = async (user) => {
+		const ok = await Swal.fire({
+			title: `Remove Org Admin?`,
+			text: `Are you sure you want to remove ${user.name} (${user.email})?`,
+			icon: "warning",
+			showCancelButton: true,
+			confirmButtonText: "Remove",
+			confirmButtonColor: "#dc2626",
+		}).then(r => r.isConfirmed);
+		if (!ok) return;
+		try {
+			await api.delete(`/admin/tenants/${org.id}/admins/${user.id}`);
+			await fetchTabs();
+			Swal.fire("Removed", `${user.name} removed.`, "success");
+		} catch (e) {
+			Swal.fire("Failed", e?.response?.data?.message || "Could not remove user.", "error");
+		}
+	};
+
+	// Edit user info (name/email only)
+	const openEdit = (user) => {
+		setEditing(user);
+		setEditForm({ name: user.name, email: user.email });
+	};
+	const closeEdit = () => {
+		setEditing(null);
+		setEditForm({ name: "", email: "" });
+	};
+	const submitEdit = async (e) => {
+		e.preventDefault();
+		setSaving(true);
+		try {
+			await api.put(`/admin/users/${editing.id}`, {
+				name: editForm.name,
+				email: editForm.email,
+				role: "org_admin",
+				tenant_id: org.id
+			});
+			await fetchTabs();
+			Swal.fire("Updated", "User info updated.", "success");
+			closeEdit();
+		} catch (e) {
+			Swal.fire("Failed", e?.response?.data?.message || "Could not update user.", "error");
+		} finally {
+			setSaving(false);
+		}
+	};
+
 	return (
-		<Modal open={open} onClose={onClose} title={`Manage Organization: ${org?.name || ""}`} width={700}>
-			<div style={{ display: "flex", gap: 16, marginBottom: 16 }}>
-				<button className={activeTab === "members" ? "tab-active" : "tab"} onClick={() => setActiveTab("members")}>Members</button>
-				<button className={activeTab === "admins" ? "tab-active" : "tab"} onClick={() => setActiveTab("admins")}>Org Admins</button>
-				<button className={activeTab === "unassigned" ? "tab-active" : "tab"} onClick={() => setActiveTab("unassigned")}>Unassigned Users</button>
-			</div>
-			<div style={{ minHeight: 300 }}>
+		<Modal
+			open={open}
+			onClose={onClose}
+			title={`Manage Organization: ${org?.name || ""}`}
+			width={600}
+			ariaLabel="Organization Manage Modal"
+			footer={
+				<div className="lv-modal-actions">
+					<button type="button" className="pill-btn ghost" onClick={onClose}>
+						Close
+					</button>
+				</div>
+			}
+		>
+			<div style={{ fontWeight: 600, fontSize: 18, marginBottom: 18 }}>Organization Admins</div>
+			<div className="lv-modal-section" style={{ minHeight: 320, background: '#f8fafc', borderRadius: 12, padding: 16, boxShadow: '0 2px 8px #0001', marginBottom: 0 }}>
 				{loading ? (
-					<div>Loading…</div>
-				) : activeTab === "members" ? (
-					<div>
-						<h4>Organization Members</h4>
-						<ul>
-							{members.map((m) => (
-								<li key={m.id}>{m.name} ({m.email})</li>
-							))}
-						</ul>
-					</div>
-				) : activeTab === "admins" ? (
-					<div>
-						<h4>Organization Admins</h4>
-						<ul>
-							{admins.map((a) => (
-								<li key={a.id}>{a.name} ({a.email})</li>
-							))}
-						</ul>
-					</div>
+					<div style={{ textAlign: 'center', color: '#888', fontSize: 18, padding: 40 }}>Loading…</div>
 				) : (
-					<div>
-						<h4>Unassigned Users</h4>
-						<ul>
-							{unassigned.map((u) => (
-								<li key={u.id}>{u.name} ({u.email})</li>
-							))}
-						</ul>
-					</div>
+					<>
+						<div>
+							<div style={{ overflowX: 'auto', width: '100%' }}>
+								<table className="lv-table" style={{ minWidth: 420, width: '100%', background: '#fff', borderRadius: 8, overflow: 'hidden', boxShadow: '0 1px 4px #0001' }}>
+									<thead style={{ background: '#f1f5f9' }}>
+										<tr style={{ fontWeight: 500 }}><th>Name</th><th>Email</th><th style={{ width: 120 }}>Actions</th></tr>
+									</thead>
+									<tbody>
+										{admins.length === 0 ? (
+											<tr><td colSpan={3} style={{ textAlign: 'center', color: '#888', padding: 24 }}>No org admins found</td></tr>
+										) : admins.map((a) => (
+											<tr key={a.id}>
+												<td>{a.name}</td>
+												<td>{a.email}</td>
+												<td style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+													<button className="pill-btn ghost sm" onClick={() => openEdit(a)}>Edit</button>
+													<button className="pill-btn ghost sm red-text" onClick={() => handleRemove(a)}>Remove</button>
+												</td>
+											</tr>
+										))}
+									</tbody>
+								</table>
+							</div>
+						</div>
+					</>
 				)}
 			</div>
-			<div style={{ marginTop: 24, textAlign: "right" }}>
-				<button className="pill-btn ghost" onClick={onClose}>Close</button>
-			</div>
+			{/* Edit Modal */}
+			{editing && (
+				<Modal
+					open={!!editing}
+					onClose={closeEdit}
+					title="Edit User"
+					width={400}
+					ariaLabel="Edit User Modal"
+					footer={
+						<div className="lv-modal-actions">
+							<button type="button" className="pill-btn ghost" onClick={closeEdit} disabled={saving}>Cancel</button>
+							<button type="submit" className="pill-btn primary" form="org-edit-user-form" disabled={saving}>{saving ? "Saving…" : "Save"}</button>
+						</div>
+					}
+				>
+					<form id="org-edit-user-form" onSubmit={submitEdit} style={{ display: 'grid', gap: 16 }}>
+						<label className="lv-field">
+							<span>Name</span>
+							<input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} required />
+						</label>
+						<label className="lv-field">
+							<span>Email</span>
+							<input value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} required />
+						</label>
+					</form>
+				</Modal>
+			)}
 		</Modal>
 	);
 }
