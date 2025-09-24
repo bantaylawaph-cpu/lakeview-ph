@@ -378,7 +378,7 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
   }, [selectedStations, paramOptions, selectedParam]);
 
   return (
-    <Modal open={open} onClose={onClose} title={title} ariaLabel="Lake statistics modal" width={860} style={modalStyle}>
+    <Modal open={open} onClose={onClose} title={title} ariaLabel="Lake statistics modal" width={1100} style={modalStyle}>
       {/* Header controls: Bucket & Range + Tabs */}
       <div style={{ display: "flex", gap: 8, alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'nowrap' }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -467,7 +467,7 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
         />
       )}
 
-      {activeTab === 'advanced' && <AdvancedStat />}
+  {activeTab === 'advanced' && <AdvancedStat lakes={lakeOptions} params={paramOptions} staticThresholds={thresholds} />}
 
       {/* Footer actions */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: 'center', gap: 8, marginTop: 12 }}>

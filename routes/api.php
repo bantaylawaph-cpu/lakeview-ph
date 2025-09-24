@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\Admin\WaterQualityClassController as AdminWaterQual
 use App\Http\Controllers\Api\Admin\StationController as AdminStationController;
 use App\Http\Controllers\Api\Admin\SamplingEventController as AdminSamplingEventController;
 use App\Http\Controllers\Api\Admin\SamplingEventController;
+use App\Http\Controllers\Api\StatsController;
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register']); // public
     Route::post('/login',    [AuthController::class, 'login']);    // public
@@ -95,5 +96,8 @@ Route::get('/options/water-quality-classes', [OptionsController::class, 'waterQu
 Route::get('/options/regions', [OptionsController::class, 'regions']);
 Route::get('/options/provinces', [OptionsController::class, 'provinces']);
 Route::get('/options/municipalities', [OptionsController::class, 'municipalities']);
+
+// Statistics endpoints (public for now; consider auth later)
+Route::post('/stats/t-test', [StatsController::class, 'tTest']);
 
 

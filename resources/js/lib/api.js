@@ -88,20 +88,21 @@ export async function api(path, { method = "GET", body, headers = {}, auth = tru
     }
   }
 
-  if (!res.ok) {
+    if (!res.ok) {
     // Try to parse a JSON error body to extract validation messages
     let t = "";
+    let parsedBody = null;
     try {
-      const j = await res.json();
-      if (j) {
-        if (j.errors && typeof j.errors === 'object') {
-          t = Object.entries(j.errors)
+      parsedBody = await res.json();
+      if (parsedBody) {
+        if (parsedBody.errors && typeof parsedBody.errors === 'object') {
+          t = Object.entries(parsedBody.errors)
             .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
             .join('; ');
-        } else if (j.message) {
-          t = j.message;
+        } else if (parsedBody.message) {
+          t = parsedBody.message;
         } else {
-          t = JSON.stringify(j);
+          t = JSON.stringify(parsedBody);
         }
       }
     } catch {
@@ -109,10 +110,16 @@ export async function api(path, { method = "GET", body, headers = {}, auth = tru
     }
 
     if (res.status === 429) {
-      throw new Error(`HTTP 429 Too Many Requests: ${t || 'rate limit exceeded'}`);
+      const err = new Error(`HTTP 429 Too Many Requests: ${t || 'rate limit exceeded'}`);
+      err.status = res.status;
+      err.body = parsedBody;
+      throw err;
     }
 
-    throw new Error(t ? `HTTP ${res.status} ${t}` : `HTTP ${res.status}`);
+    const err = new Error(t ? `HTTP ${res.status} ${t}` : `HTTP ${res.status}`);
+    err.status = res.status;
+    err.body = parsedBody;
+    throw err;
   }
 
   return res.json().catch(() => ({}));

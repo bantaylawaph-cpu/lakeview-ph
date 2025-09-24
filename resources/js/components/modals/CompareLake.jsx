@@ -1,5 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Line } from "react-chartjs-2";
+import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend } from "chart.js";
+
+// Ensure Chart.js components are registered for this module regardless of import order
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 import { api, apiPublic, buildQuery } from "../../lib/api";
 
 export default function CompareLake({

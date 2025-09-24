@@ -46,7 +46,7 @@ const getLakeIdFromFeature = (feat) => {
 
 function MapPage() {
   // ---------------- State ----------------
-  const [selectedView, setSelectedView] = useState("satellite");
+  const [selectedView, setSelectedView] = useState("osm");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarPinned, setSidebarPinned] = useState(false);
 
