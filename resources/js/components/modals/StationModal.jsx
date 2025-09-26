@@ -39,6 +39,7 @@ export default function StationModal({
       onClose={onClose}
       title={editing ? "Edit Station" : "New Station"}
       width={860}
+      style={{ maxHeight: '85vh' }}
       footer={
         <div className="lv-modal-actions" style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
           <button className="pill-btn ghost" onClick={onClose}><FiX /> Close</button>

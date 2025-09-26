@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from "react";
-import { api, apiPublic, buildQuery } from "../../lib/api";
-import { fetchParameters, fetchSampleEvents } from "./data/fetchers";
+import React, { useState, useEffect, useRef } from "react";
+import { FiSettings, FiX } from 'react-icons/fi';
+import { apiPublic } from "../../lib/api";
+import { fetchParameters, fetchSampleEvents, deriveOrgOptions } from "./data/fetchers";
 import { alertSuccess, alertError } from '../../utils/alerts';
+import { tOneSampleAsync, tTwoSampleWelchAsync, tTwoSampleStudentAsync, mannWhitney, signTestAsync, tostEquivalenceAsync, wilcoxonSignedRankAsync, moodMedianAsync } from '../../stats/statsUtils';
 
 export default function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOptions = [], staticThresholds = {} }) {
   // test mode is now inferred from the user's compare selection (class vs lake)
@@ -9,8 +11,7 @@ export default function AdvancedStat({ lakes = [], params = [], paramOptions: pa
   // Comparison target encoded as "class:CODE" or "lake:ID"
   // (we store it in `compareValue` below)
 
-  const [stations, setStations] = useState([]);
-  const [selectedStationIds, setSelectedStationIds] = useState([]);
+  // Station selection removed; backend aggregates by lake across all stations
   const [classes, setClasses] = useState([]);
   const [paramOptions, setParamOptions] = useState([]);
   const [paramCode, setParamCode] = useState('');
@@ -62,18 +63,34 @@ export default function AdvancedStat({ lakes = [], params = [], paramOptions: pa
   const [compareValue, setCompareValue] = useState(''); // format: "class:CODE" or "lake:ID"
   const [yearFrom, setYearFrom] = useState('');
   const [yearTo, setYearTo] = useState('');
+  const [organizationId, setOrganizationId] = useState('');
+  const [orgOptions, setOrgOptions] = useState([]);
+  // For two-sample comparisons we can optionally scope each lake to a different organization
+  const [secondaryOrganizationId, setSecondaryOrganizationId] = useState('');
+  const [secondaryOrgOptions, setSecondaryOrgOptions] = useState([]);
   const [cl, setCl] = useState('0.95');
+  const [selectedTest, setSelectedTest] = useState(''); // manual test selection
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
-  const [needsManual, setNeedsManual] = useState(false);
-  const [samplePreview, setSamplePreview] = useState([]);
-  const [previewLoading, setPreviewLoading] = useState(false);
+  const [showAllValues, setShowAllValues] = useState(false);
+  // Gear popover state/refs for advanced (moved Year/CL inputs)
+  const [showGearPopover, setShowGearPopover] = useState(false);
+  const gearBtnRef = useRef(null);
+  const popoverRef = useRef(null);
+  const containerRef = useRef(null);
+  const [popoverStyle, setPopoverStyle] = useState({});
+  // Manual threshold flow removed
+  // Preview functionality removed — tests now run fully on demand
 
-  const disabled = loading || !paramCode || !lakeId || !compareValue;
+  const disabled = loading || !paramCode || !lakeId || !compareValue || !selectedTest;
 
   // infer test mode at runtime: two-sample when compareValue is a lake
   const inferredTest = (compareValue && String(compareValue).startsWith('lake:')) ? 'two-sample' : 'one-sample';
+
+  // Require class selection when comparing to a class
+  const disabledWithClass = (String(compareValue).startsWith('class:') && !classCode);
+  const runDisabled = disabled || disabledWithClass;
 
   // Fetch water quality classes
   useEffect(() => {
@@ -109,54 +126,7 @@ export default function AdvancedStat({ lakes = [], params = [], paramOptions: pa
     return () => { mounted = false; };
   }, []);
 
-  // Fetch stations for selected primary lake
-  useEffect(() => {
-    let mounted = true;
-    const targetLake = lakeId || '';
-    if (!targetLake) { setStations([]); setSelectedStationIds([]); return; }
-    (async () => {
-      try {
-        const res = await api(`/admin/stations?lake_id=${encodeURIComponent(targetLake)}`);
-        const rows = Array.isArray(res?.data) ? res.data : [];
-        if (!mounted) return;
-        if (rows.length) {
-          const mapped = rows.map(r => ({ id: r.id, name: r.name || `Station ${r.id}` }));
-          setStations(mapped);
-          setSelectedStationIds(mapped.map(r => r.id));
-          return;
-        }
-      } catch (e) {
-        // fallback to public
-      }
-      try {
-        const qs = buildQuery({ lake_id: targetLake, limit: 1000 });
-        const res2 = await apiPublic(`/public/sample-events${qs}`);
-        const rows2 = Array.isArray(res2) ? res2 : Array.isArray(res2?.data) ? res2.data : [];
-        if (!mounted) return;
-        const uniq = new Map();
-        rows2.forEach(ev => {
-          const sid = ev.station_id || ev.station?.id;
-          if (!sid) {
-            const lat = ev.latitude ?? ev.station?.latitude;
-            const lng = ev.longitude ?? ev.station?.longitude;
-            if (lat != null && lng != null) {
-              const key = `coord:${lat}:${lng}`;
-              if (!uniq.has(key)) uniq.set(key, { id: key, name: `${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}`, isCoord: true, lat, lng });
-            }
-            return;
-          }
-          const nm = ev.station?.name || ev.station_name || `Station ${sid}`;
-          if (!uniq.has(sid)) uniq.set(sid, { id: sid, name: nm });
-        });
-        const arr = Array.from(uniq.values());
-        setStations(arr);
-        setSelectedStationIds(arr.filter(r=>!r.isCoord).map(r => r.id));
-      } catch (e) {
-        if (mounted) { setStations([]); setSelectedStationIds([]); }
-      }
-    })();
-    return () => { mounted = false; };
-  }, [lakeId]);
+  // Station fetching removed
 
   // Auto-select class + compare target from lake's class. Fires only when lake changes.
   useEffect(() => {
@@ -178,49 +148,215 @@ export default function AdvancedStat({ lakes = [], params = [], paramOptions: pa
     });
   }, [lakeId, lakes]);
 
+  // When lake changes, load organization options present in recent sample-events for that lake
+  useEffect(() => {
+    if (!lakeId) { setOrgOptions([]); setOrganizationId(''); return; }
+    let mounted = true;
+    (async () => {
+      try {
+        const ev = await fetchSampleEvents({ lakeId: Number(lakeId), limit: 500 });
+        if (!mounted) return;
+        const opts = deriveOrgOptions(ev || []);
+        setOrgOptions(opts || []);
+        // clear selection if not present
+        if (organizationId && !opts.find(o => String(o.id) === String(organizationId))) {
+          setOrganizationId('');
+        }
+      } catch (e) {
+        if (!mounted) return;
+        setOrgOptions([]);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [lakeId]);
+
+  // When compare target is a lake and the secondary lake id changes, load org options for secondary lake
+  useEffect(() => {
+    if (!compareValue || !String(compareValue).startsWith('lake:')) { setSecondaryOrgOptions([]); setSecondaryOrganizationId(''); return; }
+    const otherId = Number(String(compareValue).split(':')[1]);
+    if (!otherId) { setSecondaryOrgOptions([]); setSecondaryOrganizationId(''); return; }
+    let mounted = true;
+    (async () => {
+      try {
+        const ev = await fetchSampleEvents({ lakeId: otherId, limit: 500 });
+        if (!mounted) return;
+        const opts = deriveOrgOptions(ev || []);
+        setSecondaryOrgOptions(opts || []);
+        if (secondaryOrganizationId && !opts.find(o => String(o.id) === String(secondaryOrganizationId))) {
+          setSecondaryOrganizationId('');
+        }
+      } catch (e) {
+        if (!mounted) return;
+        setSecondaryOrgOptions([]);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [compareValue]);
+
+  // Clear selected test when inferred test mode changes (e.g., switching Lake vs Class to Lake vs Lake)
+  useEffect(() => {
+    setSelectedTest('');
+    setResult(null);
+  }, [inferredTest]);
+
+  // Auto-select TOST when staticThresholds indicate a range for the selected parameter (one-sample only)
+  useEffect(() => {
+    try {
+      if (!paramCode) return;
+      const st = staticThresholds && staticThresholds[paramCode];
+      if (st && st.type === 'range' && inferredTest === 'one-sample') {
+        setSelectedTest(prev => prev === 'tost' ? prev : 'tost');
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, [paramCode, inferredTest, staticThresholds]);
+
+  // If TOST is currently selected but the parameter no longer has a range threshold, clear it.
+  useEffect(() => {
+    try {
+      if (selectedTest !== 'tost') return;
+      // If the current param no longer supports range thresholds, remove TOST selection
+      const st = paramCode ? (staticThresholds && staticThresholds[paramCode]) : null;
+      if (!st || st.type !== 'range' || inferredTest !== 'one-sample') {
+        setSelectedTest('');
+        setResult(null);
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, [selectedTest, paramCode, staticThresholds, inferredTest]);
+
   const run = async () => {
     setLoading(true); setError(null); setResult(null);
     try {
-      const stationsArr = selectedStationIds && selectedStationIds.length ? selectedStationIds.filter(v=>Number.isFinite(v)) : undefined;
-      const body = {
-        test: inferredTest,
+      // Step 1: fetch series from server (minimal exposure)
+      const seriesBody = {
         parameter_code: paramCode,
-        confidence_level: Number(cl),
         date_from: yearFrom ? `${yearFrom}-01-01` : undefined,
         date_to: yearTo ? `${yearTo}-12-31` : undefined,
-        station_ids: stationsArr,
         applied_standard_id: appliedStandardId || undefined
       };
+      if (organizationId) seriesBody.organization_id = organizationId;
       if (inferredTest === 'one-sample') {
-        body.lake_id = Number(lakeId);
-        if (classCode) body.class_code = String(classCode);
-        else if (compareValue && String(compareValue).startsWith('class:')) body.class_code = String(compareValue).split(':')[1];
+        seriesBody.lake_id = Number(lakeId);
       } else {
         const other = (compareValue && String(compareValue).startsWith('lake:')) ? Number(String(compareValue).split(':')[1]) : undefined;
-        body.lake_ids = [Number(lakeId), other].filter(Boolean);
+        const lakeIds = [Number(lakeId), other].filter(Boolean);
+        seriesBody.lake_ids = lakeIds;
+        // include per-lake organization filters if provided
+        const orgIds = [organizationId || null, secondaryOrganizationId || null];
+        if (orgIds.some(v => v)) {
+          // ensure ordering matches lake_ids: we only include entries for positions that exist in lakeIds
+          const padded = [];
+          for (let i=0;i<lakeIds.length;i++) {
+            padded.push(orgIds[i] ?? null);
+          }
+          seriesBody.organization_ids = padded;
+        }
       }
-      const res = await apiPublic('/stats/adaptive', { method: 'POST', body });
-      setResult(res);
-      if (res && (res.sample_values || res.samples || res.values || res.sample1_values || res.sample2_values)) {
-        const pick = res.sample_values || res.samples || res.values || res.sample1_values || res.sample2_values || [];
-        if (Array.isArray(pick)) setSamplePreview(pick.slice(0, 200));
-      }
-      setNeedsManual(false);
-      if (res && (res.n || res.n1 || res.type === 'tost' || res.sample_n || res.sample1_n)) {
-        let msg = 'Test completed successfully.';
-        if (res.warn_low_n) msg = 'Test completed but sample size is low — interpret with caution.';
-        alertSuccess('Test Result', msg);
+      const series = await apiPublic('/stats/series', { method: 'POST', body: seriesBody });
+  // debug: log server series response to verify events payload
+  try { console.debug('[Stats] series response:', series); } catch(e) {}
+
+      // Step 2: compute client-side using stdlib-js (statsUtils)
+      const alpha = 1 - Number(cl || '0.95');
+      let computed = null;
+      if (inferredTest === 'one-sample') {
+        const values = (series?.sample_values || []).map(v => Number(v)).filter(Number.isFinite);
+        const n = values.length;
+        if (!n || n < 2) {
+          alertError('Not enough data', `Not enough samples to run the test: found ${n}, need at least 2.`);
+          setResult(null);
+          return;
+        }
+        // Determine mu0 for one-sample tests
+        let mu0 = null; // prefer server-provided threshold
+        const evalType = series?.evaluation_type;
+          if (evalType === 'range') {
+          const thrMin = series?.threshold_min; const thrMax = series?.threshold_max;
+          if (thrMin == null || thrMax == null) {
+            alertError('Threshold missing', 'Range evaluation requires both lower and upper thresholds.');
+            setResult(null);
+            return;
+          }
+          const tt = await tostEquivalenceAsync(values, Number(thrMin), Number(thrMax), alpha);
+          // Mark decision for unified UI line; keep detailed fields p1/p2, t1/t2
+          computed = { ...tt, significant: !!tt.equivalent, sample_values: values, threshold_min: thrMin, threshold_max: thrMax, evaluation_type: 'range', test_used: 'tost' };
+        } else {
+          const thrMin = series?.threshold_min;
+          const thrMax = series?.threshold_max;
+          if (thrMin != null || thrMax != null) {
+            mu0 = thrMax != null ? thrMax : thrMin;
+          } else {
+            mu0 = suggestThreshold(paramCode, classCode, staticThresholds);
+          }
+          if (selectedTest === 'wilcoxon_signed_rank') {
+            const qp = await wilcoxonSignedRankAsync(values, Number(mu0), alpha, 'two-sided');
+            computed = {
+              type: 'one-sample-nonparam',
+              test_used: 'wilcoxon_signed_rank',
+              n: qp.n,
+              statistic: qp.statistic,
+              p_value: qp.p_value,
+              alpha: qp.alpha ?? alpha,
+              significant: typeof qp.p_value === 'number' ? (qp.p_value < (qp.alpha ?? alpha)) : undefined,
+              mu0: mu0,
+              sample_values: values,
+              threshold_min: thrMin ?? null,
+              threshold_max: thrMax ?? null,
+              standard_code: series?.standard_code || null,
+              class_code_used: series?.class_code_used || null
+            };
+          } else if (selectedTest === 't_one_sample') {
+            const tp = await tOneSampleAsync(values, Number(mu0), alpha, 'two-sided');
+            computed = { type: 'one-sample', test_used: 't_one_sample', ...tp, mu0: mu0, sample_values: values };
+          } else if (selectedTest === 'sign_test') {
+            const sp = await signTestAsync(values, Number(mu0), alpha, 'two-sided');
+            computed = { type: 'one-sample-nonparam', test_used: 'sign_test', ...sp, mu0: mu0, sample_values: values };
+          } else {
+            // default to t_one_sample
+            const tp = await tOneSampleAsync(values, Number(mu0), alpha, 'two-sided');
+            computed = { type: 'one-sample', test_used: 't_one_sample', ...tp, mu0: mu0, sample_values: values };
+          }
+        }
       } else {
-        alertSuccess('Test Result', 'Test completed.');
+        // two-sample
+        const x = (series?.sample1_values || []).map(v => Number(v)).filter(Number.isFinite);
+        const y = (series?.sample2_values || []).map(v => Number(v)).filter(Number.isFinite);
+        if (x.length < 2 || y.length < 2) {
+          alertError('Not enough data', `Not enough samples: group 1 has ${x.length}, group 2 has ${y.length}; need at least 2 each.`);
+          setResult(null);
+          return;
+        }
+        if (selectedTest === 'mann_whitney') {
+          const mp = mannWhitney(x, y, alpha, 'two-sided');
+          computed = { type: 'two-sample-nonparam', test_used: 'mann_whitney', ...mp, sample1_values: x, sample2_values: y };
+        } else if (selectedTest === 't_student') {
+          const tp = await tTwoSampleStudentAsync(x, y, alpha, 'two-sided');
+          computed = { type: 'two-sample-t', test_used: 't_student', ...tp, sample1_values: x, sample2_values: y };
+        } else if (selectedTest === 'mood_median_test') {
+          const mp = await moodMedianAsync(x, y, alpha);
+          computed = { type: 'two-sample-nonparam', test_used: 'mood_median_test', ...mp, sample1_values: x, sample2_values: y };
+        } else { // default welch
+          const tp = await tTwoSampleWelchAsync(x, y, alpha, 'two-sided');
+          computed = { type: 'two-sample-welch', test_used: 't_welch', ...tp, sample1_values: x, sample2_values: y };
+        }
       }
+
+      // include event-level metadata from the server if available so the UI can show the events table
+      if (series?.events) {
+        try { computed = { ...computed, events: series.events }; } catch (e) { /* ignore */ }
+      }
+      setResult(computed);
+      alertSuccess('Test Result', 'Computed on the client using preloaded series.');
     } catch (e) {
       const msg = e?.message || 'Failed';
       setError(msg);
       const body = e?.body || null;
       console.error('[Stats] Run error:', e, body || 'no-body');
       if (body && body.error === 'threshold_missing') {
-        setNeedsManual(true);
-        alertError('Missing Threshold', 'No threshold found for this parameter/class — set thresholds in Admin or provide one via API.');
+        alertError('Missing Threshold', 'No threshold found for this parameter/class — set thresholds in the Admin panel.');
       } else if (body && body.error === 'insufficient_data') {
         const minReq = body.min_required || 3;
         if (body.n != null) {
@@ -238,79 +374,30 @@ export default function AdvancedStat({ lakes = [], params = [], paramOptions: pa
     } finally { setLoading(false); }
   };
 
-  const fetchPreview = async () => {
-    setPreviewLoading(true);
-    setSamplePreview([]);
-    try {
-      const fmtPreviewDate = (d) => {
-        if (!d) return '';
-        try { const dt = new Date(d); if (isNaN(dt)) return String(d); return dt.toLocaleString(); } catch (e) { return String(d); }
-      };
-      const unit = (paramOptions.find(p => p.code === paramCode) || {}).unit || '';
-      const mapped = [];
-      const sampled_from = yearFrom ? `${yearFrom}-01-01` : undefined;
-      const sampled_to = yearTo ? `${yearTo}-12-31` : undefined;
-
-      if (inferredTest === 'two-sample') {
-        const other = (compareValue && String(compareValue).startsWith('lake:')) ? String(compareValue).split(':')[1] : undefined;
-        const lakeIds = [lakeId, other].filter(Boolean);
-        for (const lid of lakeIds) {
-          try {
-            const recs = await fetchSampleEvents({ lakeId: lid, from: sampled_from, to: sampled_to, limit: 1000 });
-            const lakeName = (lakes.find(l => String(l.id) === String(lid)) || {}).name || `Lake ${lid}`;
-            for (const ev of recs) {
-              const vObj = ev[paramCode];
-              const v = vObj && vObj.value != null ? vObj.value : null;
-              const unitLocal = vObj && vObj.unit ? vObj.unit : '';
-              if (v == null) continue;
-              const rawDate = ev.date || ev.rawDate || '';
-              const date = fmtPreviewDate(rawDate);
-              const station = ev.area || ev.stationCode || '';
-              mapped.push({ date, rawDate, station, lake: lakeName, value: v, unit: unitLocal });
-              if (mapped.length >= 200) break;
-            }
-          } catch (e) {
-            console.error('[Stats] Preview fetch error for lake', lid, e);
-          }
-          if (mapped.length >= 200) break;
-        }
-      } else {
-        try {
-          const recs = await fetchSampleEvents({ lakeId: lakeId, from: sampled_from, to: sampled_to, limit: 1000 });
-          for (const ev of recs) {
-            const vObj = ev[paramCode];
-            const v = vObj && vObj.value != null ? vObj.value : null;
-            const unitLocal = vObj && vObj.unit ? vObj.unit : '';
-            if (v == null) continue;
-            const rawDate = ev.date || ev.rawDate || '';
-            const date = fmtPreviewDate(rawDate);
-            const station = ev.area || ev.stationCode || '';
-            mapped.push({ date, rawDate, station, value: v, unit: unitLocal });
-            if (mapped.length >= 200) break;
-          }
-        } catch (e) {
-          console.error('[Stats] Preview fetch error', e);
-        }
-      }
-      setSamplePreview(mapped);
-    } catch (e) {
-      console.error('[Stats] Preview fetch error', e);
-      setSamplePreview([]);
-    } finally { setPreviewLoading(false); }
-  };
+  // Preview removal: no preview fetcher
 
   const renderResult = () => {
     if (!result) return null;
     const gridItems = [];
     const push = (k, v) => gridItems.push({ k, v });
-    const typeLabelMap = {
+    const labelMap = {
+      // types
       'one-sample':'One-sample t-test',
       'one-sample-nonparam':'Wilcoxon signed-rank',
       'two-sample-welch':'Two-sample Welch t-test',
       'two-sample-nonparam':'Mann-Whitney U test',
-      'tost':'Equivalence TOST'
+      'tost':'Equivalence TOST',
+      // test_used
+      't_one_sample':'One-sample t-test',
+      'wilcoxon_signed_rank':'Wilcoxon signed-rank',
+      'sign_test':'Sign test',
+      't_student':'Student t-test (equal var)',
+      't_welch':'Welch t-test (unequal var)',
+      'mann_whitney':'Mann–Whitney U',
+      'mood_median_test':'Mood’s median test',
     };
-    push('Test Selected', typeLabelMap[result.type] || result.type);
+    const testLabel = labelMap[result.test_used] || labelMap[result.type] || result.test_used || result.type;
+    push('Test Selected', testLabel);
     if (result.normality_test) {
       if (result.normality_test.sample1) {
         push('Normality S1', result.normality_test.sample1.normal ? 'Normal' : 'Non-normal');
@@ -335,6 +422,24 @@ export default function AdvancedStat({ lakes = [], params = [], paramOptions: pa
     if ('U' in result) push('U', fmt(result.U));
     if ('z' in result) push('z', fmt(result.z));
     if ('df' in result) push('Degrees Freedom', fmt(result.df));
+    if ('statistic' in result) push('Statistic', fmt(result.statistic));
+    if ('chi2' in result) push('Chi-square', fmt(result.chi2));
+    // Sign test details
+    if ('k_positive' in result) push('Positives', result.k_positive);
+    if ('k_negative' in result) push('Negatives', result.k_negative);
+    // Wilcoxon fallback details
+    if (!('statistic' in result)) {
+      if ('Wplus' in result) push('W+', fmt(result.Wplus));
+      if ('Wminus' in result) push('W-', fmt(result.Wminus));
+    }
+    // TOST details
+    if (result.test_used === 'tost' || result.type === 'tost') {
+      if ('t1' in result) push('t1 (lower)', fmt(result.t1));
+      if ('p1' in result) push('p1 (H0: mean ≤ lower)', sci(result.p1));
+      if ('t2' in result) push('t2 (upper)', fmt(result.t2));
+      if ('p2' in result) push('p2 (H0: mean ≥ upper)', sci(result.p2));
+      if ('equivalent' in result) push('Equivalent?', result.equivalent ? 'Yes' : 'No');
+    }
     if ('p_value' in result) push('p-value', sci(result.p_value));
     if ('mu0' in result) push('Threshold (μ0)', fmt(result.mu0));
     if (result.threshold_min != null) push('Threshold Min', result.threshold_min);
@@ -366,6 +471,8 @@ export default function AdvancedStat({ lakes = [], params = [], paramOptions: pa
             </div>
           )}
         </div>
+        {/* Values used panel (shown only after running a test) */}
+        {renderValuesUsed(result)}
       </div>
     );
   };
@@ -374,140 +481,311 @@ export default function AdvancedStat({ lakes = [], params = [], paramOptions: pa
   const sci = (v) => (v == null ? '' : (v < 0.001 ? Number(v).toExponential(2) : v.toFixed(4)));
   const ciLine = (r) => (r.ci_lower != null && r.ci_upper != null ? <div>CI ({Math.round((r.ci_level||0)*100)}%): [{fmt(r.ci_lower)}, {fmt(r.ci_upper)}]</div> : null);
 
+  const renderValuesUsed = (r) => {
+    // Prefer events array (contains sampled_at, station_id, lake_id, value) if available
+    const events = Array.isArray(r.events) ? r.events : null;
+
+    // Fallback to the older arrays for backward compatibility
+    const one = Array.isArray(r.sample_values) ? r.sample_values : null;
+    const two1 = Array.isArray(r.sample1_values) ? r.sample1_values : null;
+    const two2 = Array.isArray(r.sample2_values) ? r.sample2_values : null;
+    if (!events && !one && !(two1 && two2)) return null;
+
+    const limit = 200;
+    const showAll = showAllValues;
+    const slice = (arr) => (showAll ? arr : arr.slice(0, limit));
+
+    const lakeName = (id) => {
+      const lk = lakes.find(l => String(l.id) === String(id));
+      return lk ? (lk.name || `Lake ${lk.id}`) : (id == null ? '' : `Lake ${id}`);
+    };
+
+    const copyValues = async () => {
+      try {
+        let text = '';
+        if (events) {
+          // CSV: sampled_at,lake,station,value
+          const lines = [ 'sampled_at,lake,station_id,value' ];
+          slice(events).forEach(ev => lines.push(`${ev.sampled_at || ''},"${lakeName(ev.lake_id)}",${ev.station_id ?? ''},${ev.value ?? ''}`));
+          text = lines.join('\n');
+        } else if (one) {
+          text = slice(one).join(', ');
+        } else {
+          const maxLen = Math.max(two1.length, two2.length);
+          const lines = [ [groupLabel(two1, two2, 1), groupLabel(two1, two2, 2)].join(',') ];
+          for (let i=0;i<maxLen;i++) {
+            const a = i < two1.length ? two1[i] : '';
+            const b = i < two2.length ? two2[i] : '';
+            lines.push(`${a},${b}`);
+          }
+          text = lines.join('\n');
+        }
+
+        if (navigator?.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text);
+          alertSuccess('Copied', 'Values copied to clipboard.');
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+          alertSuccess('Copied', 'Values copied to clipboard.');
+        }
+      } catch (e) {
+        console.warn('Copy failed', e);
+        alertError('Copy failed', 'Could not copy values to clipboard.');
+      }
+    };
+
+    const copyValuesOnly = async () => {
+      try {
+        let text = '';
+        if (events) {
+          text = slice(events).map(ev => (ev.value != null ? ev.value : '')).join(', ');
+        } else if (one) {
+          text = slice(one).join(', ');
+        } else if (two1 && two2) {
+          // Copy both groups as two comma-separated lines with labels
+          const a = slice(two1).join(', ');
+          const b = slice(two2).join(', ');
+          text = `${groupLabel(two1, two2, 1)}: ${a}\n${groupLabel(two1, two2, 2)}: ${b}`;
+        }
+
+        if (!text) throw new Error('No values to copy');
+
+        if (navigator?.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text);
+          alertSuccess('Copied', 'Values copied to clipboard.');
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+          alertSuccess('Copied', 'Values copied to clipboard.');
+        }
+      } catch (e) {
+        console.warn('Copy values-only failed', e);
+        alertError('Copy failed', 'Could not copy values to clipboard.');
+      }
+    };
+
+    // helper to label two-sample columns when falling back
+    const groupLabel = (a,b,idx) => {
+      if (!(a && b)) return idx === 1 ? 'Group 1' : 'Group 2';
+      const lake = lakes.find(l => String(l.id) === String(lakeId));
+      if (idx === 1) return lake?.name ? `${lake.name}` : 'Group 1';
+      if (compareValue && String(compareValue).startsWith('lake:')){
+        const otherId = String(compareValue).split(':')[1];
+        const lake2 = lakes.find(l => String(l.id) === String(otherId));
+        return lake2?.name ? `${lake2.name}` : 'Group 2';
+      }
+      return 'Group 2';
+    };
+
+    return (
+      <div style={{ marginTop:10, padding:10, background:'rgba(255,255,255,0.02)', borderRadius:6 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <strong>Values used</strong>
+          <div style={{ display:'flex', gap:8 }}>
+            <button className="pill-btn" onClick={()=>setShowAllValues(s=>!s)}>{showAll ? `Show first ${limit}` : 'Show all'}</button>
+            <button className="pill-btn" onClick={copyValues}>Copy</button>
+            <button className="pill-btn" onClick={copyValuesOnly}>Copy values</button>
+          </div>
+        </div>
+
+        {events ? (
+          <div style={{ marginTop:8 }}>
+            <div style={{ maxHeight: 240, overflowY: 'auto', overflowX: 'auto', border: '1px solid rgba(255,255,255,0.02)', borderRadius:6, minWidth:0 }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13, tableLayout: 'fixed', minWidth:0 }}>
+              <thead>
+                <tr style={{ textAlign:'left', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
+                  <th style={{ padding:'6px 8px', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>Sampled at</th>
+                  <th style={{ padding:'6px 8px', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>Lake</th>
+                  <th style={{ padding:'6px 8px', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>Station</th>
+                  <th style={{ padding:'6px 8px', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {slice(events).map((ev, i) => (
+                  <tr key={i} style={{ borderBottom:'1px solid rgba(255,255,255,0.02)' }}>
+                    <td style={{ padding:'6px 8px', fontSize:12, overflowWrap: 'anywhere', wordBreak: 'break-word', minWidth:0 }}>{ev.sampled_at || ''}</td>
+                    <td style={{ padding:'6px 8px', fontSize:12, overflowWrap: 'anywhere', wordBreak: 'break-word', minWidth:0 }}>{lakeName(ev.lake_id)}</td>
+                    <td style={{ padding:'6px 8px', fontSize:12, overflowWrap: 'anywhere', wordBreak: 'break-word', minWidth:0 }}>{ev.station_name ?? (ev.station_id ?? '')}</td>
+                    <td style={{ padding:'6px 8px', fontSize:12, overflowWrap: 'anywhere', wordBreak: 'break-word', minWidth:0 }}>{ev.value != null ? Number(ev.value).toFixed(2) : ''}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            </div>
+            {!showAll && events.length > limit && (
+              <div style={{ marginTop:6, fontSize:11, opacity:0.65 }}>Showing first {limit} of {events.length} events</div>
+            )}
+          </div>
+        ) : one ? (
+          <div style={{ marginTop:8, fontFamily:'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize:12, lineHeight:'18px', whiteSpace:'pre-wrap', wordBreak:'break-word' }}>
+            {slice(one).join(', ')}
+            {!showAll && one.length > limit && (
+              <div style={{ marginTop:6, fontSize:11, opacity:0.65 }}>Showing first {limit} of {one.length} values</div>
+            )}
+          </div>
+        ) : (
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:8 }}>
+            <div>
+              <div style={{ fontSize:12, opacity:0.8, marginBottom:6 }}>{groupLabel(two1, two2, 1)} ({two1.length})</div>
+              <div style={{ fontFamily:'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize:12, lineHeight:'18px', whiteSpace:'pre-wrap', wordBreak:'break-word' }}>
+                {slice(two1).join(', ')}
+                {!showAll && two1.length > limit && (
+                  <div style={{ marginTop:6, fontSize:11, opacity:0.65 }}>Showing first {limit} of {two1.length} values</div>
+                )}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize:12, opacity:0.8, marginBottom:6 }}>{groupLabel(two1, two2, 2)} ({two2.length})</div>
+              <div style={{ fontFamily:'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize:12, lineHeight:'18px', whiteSpace:'pre-wrap', wordBreak:'break-word' }}>
+                {slice(two2).join(', ')}
+                {!showAll && two2.length > limit && (
+                  <div style={{ marginTop:6, fontSize:11, opacity:0.65 }}>Showing first {limit} of {two2.length} values</div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
-  <div className="insight-card" style={{ minWidth: 680, maxWidth: '100%', maxHeight: '70vh', overflowY: 'auto', padding: 8 }}>
-      <h4 style={{ margin: '2px 0 8px' }}>Advanced Statistics</h4>
-  <div style={{ display:'grid', gridTemplateColumns:'3fr 3fr 0.6fr 0.6fr', gap:10, alignItems:'start', fontSize:13 }}>
-        {/* Row 1: Applied Standard, Parameter, Confidence Level (compact) */}
-        <div style={{ gridColumn: '1 / span 1' }}>
-          <select className="pill-btn" value={appliedStandardId} onChange={e=>{setAppliedStandardId(e.target.value); setResult(null);}} style={{ width:'100%', padding:'10px 12px', height:40, lineHeight:'20px' }}>
-            <option value="">Applied Standard</option>
-            {standards.map(s => <option key={s.id} value={s.id}>{s.code || s.name || s.id}</option>)}
+  <div ref={containerRef} className="insight-card" style={{ position:'relative', minWidth: 0, maxWidth: '100%', maxHeight: '90vh', overflowY: 'auto', padding: 8 }}>
+    <h4 style={{ margin: '2px 0 8px' }}>Advanced Statistics</h4>
+    {/* gear was moved back to the actions area */}
+  <div>
+  <div style={{ display:'grid', gridTemplateColumns:'1fr 2fr 1fr 1fr', gridTemplateRows:'repeat(2, auto)', gap:10, alignItems:'start', fontSize:13, minWidth:0 }}>
+      {/* Row 1: Applied Standard, Parameter, Confidence Level (compact) */}
+      <div style={{ gridColumn: '1 / span 1', minWidth:0 }}>
+        <select className="pill-btn" value={appliedStandardId} onChange={e=>{setAppliedStandardId(e.target.value); setResult(null);}} style={{ width:'100%', minWidth:0, boxSizing:'border-box', padding:'10px 12px', height:40, lineHeight:'20px' }}>
+          <option value="">Applied Standard</option>
+          {standards.map(s => <option key={s.id} value={s.id}>{s.code || s.name || s.id}</option>)}
+        </select>
+      </div>
+      <div style={{ gridColumn: '2 / span 1', minWidth:0 }}>
+        <select className="pill-btn" value={paramCode} onChange={e=>{setParamCode(e.target.value); setResult(null);}} style={{ width:'100%', minWidth:0, boxSizing:'border-box', padding:'10px 12px', height:40, lineHeight:'20px' }}>
+          <option value="">Select parameter</option>
+          {paramOptions.length ? (
+            paramOptions.map(p => (
+              <option key={p.key || p.id || p.code} value={p.code}>
+                {p.label || p.name || p.code}
+              </option>
+            ))
+          ) : null}
+        </select>
+      </div>
+      <div style={{ gridColumn: '3 / span 2', display:'flex', justifyContent:'flex-end', minWidth:0 }}>
+        <div style={{ display:'flex', gap:8, width:'100%' }}>
+            <select className="pill-btn" value={selectedTest} onChange={e=>{setSelectedTest(e.target.value); setResult(null);}} style={{ flex:1, minWidth:0, boxSizing:'border-box', padding:'8px 10px', fontSize:12, height:36, lineHeight:'18px' }}>
+            <option value="" disabled>Select test</option>
+            {/* One-sample options */}
+            <option value="t_one_sample" disabled={inferredTest!=='one-sample'}>One-sample t-test</option>
+            <option value="wilcoxon_signed_rank" disabled={inferredTest!=='one-sample'}>Wilcoxon signed-rank</option>
+            <option value="sign_test" disabled={inferredTest!=='one-sample'}>Sign test</option>
+            <option value="tost" disabled={inferredTest!=='one-sample'}>Equivalence TOST</option>
+            {/* Two-sample options */}
+            <option value="t_student" disabled={inferredTest!=='two-sample'}>Student t-test (equal var)</option>
+            <option value="t_welch" disabled={inferredTest!=='two-sample'}>Welch t-test (unequal var)</option>
+            <option value="mann_whitney" disabled={inferredTest!=='two-sample'}>Mann–Whitney U</option>
+            <option value="mood_median_test" disabled={inferredTest!=='two-sample'}>Mood’s median test</option>
           </select>
         </div>
-        <div style={{ gridColumn: '2 / span 1' }}>
-          <select className="pill-btn" value={paramCode} onChange={e=>{setParamCode(e.target.value); setResult(null);}} style={{ width:'100%', padding:'10px 12px', height:40, lineHeight:'20px' }}>
-            <option value="">Select parameter</option>
-            {paramOptions.length ? (
-              paramOptions.map(p => (
-                <option key={p.key || p.id || p.code} value={p.key || p.id || p.code}>
-                  {p.label || p.name || p.code}
-                </option>
-              ))
-            ) : null}
+      </div>
+
+      {/* Row 2: Lake | Class (header + selector) | Compare Lake | Years */}
+      <div style={{ gridColumn: '1 / span 1', minWidth:0 }}>
+        <select className="pill-btn" value={lakeId} onChange={e=>{setLakeId(e.target.value); setResult(null);}} style={{ width:'100%', minWidth:0, boxSizing:'border-box', padding:'10px 12px', height:40, lineHeight:'20px' }}>
+          <option value="">Primary Lake</option>
+          {lakes.map(l => <option key={l.id} value={l.id}>{l.name || `Lake ${l.id}`}</option>)}
+        </select>
+      </div>
+      <div style={{ gridColumn: '2 / span 1', minWidth:0 }}>
+        <select className="pill-btn" value={compareValue} onChange={e=>{
+          const v = e.target.value;
+          setCompareValue(v);
+          setResult(null);
+          // if user picked a class, keep classCode in sync
+          if (v && String(v).startsWith('class:')) {
+            setClassCode(String(v).split(':')[1] || '');
+          }
+        }} style={{ width:'100%', padding:'10px 12px', height:40, lineHeight:'20px' }}>
+          <option value="">Compare (Class or Lake)</option>
+          {classes.map(c => <option key={`class-${c.code}`} value={`class:${c.code}`}>{`Class ${c.code}`}</option>)}
+          <optgroup label="Lakes">
+            {lakes.map(l => <option key={`lake-${l.id}`} value={`lake:${l.id}`}>{l.name || `Lake ${l.id}`}</option>)}
+          </optgroup>
+        </select>
+      </div>
+      <div style={{ gridColumn: '3 / span 1', minWidth:0 }}>
+        <select className="pill-btn" value={organizationId} onChange={e=>{ setOrganizationId(e.target.value); setResult(null); }} style={{ width:'100%', minWidth:0, boxSizing:'border-box', padding:'10px 12px', height:40, lineHeight:'20px' }}>
+          <option value="">Organization (optional)</option>
+          {orgOptions.map(o => <option key={`org-${o.id}`} value={o.id}>{o.name || o.id}</option>)}
+        </select>
+      </div>
+      {/* Secondary organization only when comparing to another lake */}
+      {compareValue && String(compareValue).startsWith('lake:') ? (
+        <div style={{ gridColumn: '4 / span 1', minWidth:0 }}>
+          <select className="pill-btn" value={secondaryOrganizationId} onChange={e=>{ setSecondaryOrganizationId(e.target.value); setResult(null); }} style={{ width:'100%', minWidth:0, boxSizing:'border-box', padding:'10px 12px', height:40, lineHeight:'20px' }}>
+            <option value="">Organization (secondary lake, optional)</option>
+            {secondaryOrgOptions.map(o => <option key={`org2-${o.id}`} value={o.id}>{o.name || o.id}</option>)}
           </select>
         </div>
-        <div style={{ gridColumn: '3 / span 2', display:'flex', justifyContent:'flex-end' }}>
-          <select className="pill-btn" value={cl} onChange={e=>{setCl(e.target.value); setResult(null);}} style={{ width:'100%', padding:'8px 10px', fontSize:12, height:36, lineHeight:'18px' }}>
+      ) : null}
+      {/* Year inputs moved into gear popover */}
+      <div style={{ gridColumn: '4 / span 1', display:'flex', gap:8, minWidth:0 }}>
+        <div style={{ width: '100%' }} />
+      </div>
+    </div>
+
+    {/* Actions and notices */}
+      <div style={{ marginTop:10, display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}>
+      <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+        <div style={{ fontSize:12, opacity:0.8 }}>Lake-to-lake comparisons aggregate station measurements per lake (mean).</div>
+      </div>
+      <div style={{ display:'flex', gap:8 }}>
+        <button ref={gearBtnRef} aria-label="Advanced options" title="Advanced options" className="pill-btn" onClick={() => setShowGearPopover(s => !s)} style={{ padding:'6px 10px', display:'inline-flex', alignItems:'center', justifyContent:'center' }}>
+          <FiSettings size={16} />
+        </button>
+  <button className="pill-btn liquid" disabled={runDisabled} onClick={run} style={{ padding:'6px 10px' }}>{loading ? 'Running...' : 'Run Test'}</button>
+      </div>
+    </div>
+
+    {/* Gear popover: contains Year From / Year To / Confidence Level */}
+    {showGearPopover && (
+      <div ref={popoverRef} style={{ position:'absolute', zIndex:999, width:340, padding:12, background:'#164479', border:'1px solid rgba(255,255,255,0.06)', borderRadius:8, boxShadow:'0 8px 24px rgba(0,0,0,0.35)', right:12, top:48 }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+          <div style={{ fontSize:13, fontWeight:600, color:'#f0f6fb' }}>Advanced</div>
+          <button aria-label="Close advanced options" title="Close" onClick={() => setShowGearPopover(false)} className="pill-btn" style={{ padding:'4px 8px', height:30, display:'inline-flex', alignItems:'center', justifyContent:'center' }}>
+            <FiX size={14} />
+          </button>
+        </div>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+          <input className="pill-btn" type="number" placeholder="Year from" value={yearFrom} onChange={e=>setYearFrom(e.target.value)} style={{ width:'100%', boxSizing:'border-box', padding:'8px 10px', height:36 }} />
+          <input className="pill-btn" type="number" placeholder="Year to" value={yearTo} onChange={e=>setYearTo(e.target.value)} style={{ width:'100%', boxSizing:'border-box', padding:'8px 10px', height:36 }} />
+          <select className="pill-btn" value={cl} onChange={e=>{setCl(e.target.value); setResult(null);}} style={{ gridColumn: '1 / span 2', width:'100%', boxSizing:'border-box', padding:'8px 10px', height:36 }}>
             <option value="0.9">90% CL</option>
             <option value="0.95">95% CL</option>
             <option value="0.99">99% CL</option>
           </select>
         </div>
-
-        {/* Row 2: Lake | Class (header + selector) | Compare Lake | Years */}
-        <div style={{ gridColumn: '1 / span 1' }}>
-          <select className="pill-btn" value={lakeId} onChange={e=>{setLakeId(e.target.value); setResult(null);}} style={{ width:'100%', padding:'10px 12px', height:40, lineHeight:'20px' }}>
-            <option value="">Primary Lake</option>
-            {lakes.map(l => <option key={l.id} value={l.id}>{l.name || `Lake ${l.id}`}</option>)}
-          </select>
-        </div>
-        <div style={{ gridColumn: '2 / span 1' }}>
-          <select className="pill-btn" value={compareValue} onChange={e=>{
-            const v = e.target.value;
-            setCompareValue(v);
-            setResult(null);
-            // if user picked a class, keep classCode in sync
-            if (v && String(v).startsWith('class:')) {
-              setClassCode(String(v).split(':')[1] || '');
-            }
-          }} style={{ width:'100%', padding:'10px 12px', height:40, lineHeight:'20px' }}>
-            <option value="">Compare (Class or Lake)</option>
-            {classes.map(c => <option key={`class-${c.code}`} value={`class:${c.code}`}>{`Class ${c.code}`}</option>)}
-            <optgroup label="Lakes">
-              {lakes.map(l => <option key={`lake-${l.id}`} value={`lake:${l.id}`}>{l.name || `Lake ${l.id}`}</option>)}
-            </optgroup>
-          </select>
-        </div>
-        <div style={{ gridColumn: '3 / span 1' }}>
-          <input className="pill-btn" type="number" placeholder="Year from" value={yearFrom} onChange={e=>setYearFrom(e.target.value)} style={{ width: '100%', padding:'8px 10px', height:36, lineHeight:'18px' }} />
-        </div>
-        <div style={{ gridColumn: '4 / span 1' }}>
-          <input className="pill-btn" type="number" placeholder="Year to" value={yearTo} onChange={e=>setYearTo(e.target.value)} style={{ width: '100%', padding:'8px 10px', height:36, lineHeight:'18px' }} />
-        </div>
-
-        {/* Row 3: station selection removed — lake-level aggregation will be applied in backend */}
-
-        {/* Row 4: actions and notices */}
-        <div style={{ gridColumn: '1 / -1', display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}>
-          <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-            <div style={{ fontSize:12, opacity:0.8 }}>Lake-to-lake comparisons aggregate station measurements per lake (mean).</div>
-          </div>
-          <div style={{ display:'flex', gap:8 }}>
-            <button className="pill-btn liquid" disabled={disabled} onClick={run} style={{ padding:'6px 10px' }}>{loading ? 'Running...' : 'Run Test'}</button>
-            <button className="pill-btn" disabled={!paramCode || !lakeId || !compareValue || previewLoading} onClick={fetchPreview} style={{ padding:'6px 10px' }}>{previewLoading ? 'Loading...' : 'Preview Values'}</button>
-          </div>
-        </div>
-
-        {/* Notices/errors */}
-        <div style={{ gridColumn: '1 / -1' }}>
-          {error && <div style={{ color:'#ff8080', fontSize:12 }}>{error}{needsManual && ' — Please supply a Manual Threshold (μ0) then rerun.'}</div>}
-          {error && (error.includes('threshold_missing') || error.includes('threshold')) && (
-            <div style={{ fontSize:11, marginTop:6, color:'#ffd9d9' }}>
-              Server debug: <pre style={{ whiteSpace:'pre-wrap', fontSize:11 }}>{JSON.stringify((error && (typeof error === 'string') ? null : null) || '' )}</pre>
-            </div>
-          )}
-          {needsManual && (
-            <div style={{ color:'#fbbf24', fontSize:11 }}>
-              Tip: A threshold is required by the server for this parameter/class — set thresholds in the admin panel or provide a manual μ0 via API.
-            </div>
-          )}
-        </div>
-
-        {/* Preview table */}
-        <div style={{ gridColumn: '1 / -1' }}>
-          {samplePreview && samplePreview.length > 0 && (() => {
-            const rows = [...samplePreview].sort((a,b) => {
-              const ad = a.rawDate ? new Date(a.rawDate).getTime() : 0;
-              const bd = b.rawDate ? new Date(b.rawDate).getTime() : 0;
-              return bd - ad;
-            });
-            return (
-              <div style={{ marginTop:8 }}>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
-                  <div style={{ fontSize:12, opacity:0.85 }}>Preview of values being fetched (showing up to 200 rows)</div>
-                  <div style={{ fontSize:12, opacity:0.7 }}>{rows.length} rows • times shown in your local timezone</div>
-                </div>
-                      <div style={{ maxHeight:320, overflow:'auto', border:'1px solid rgba(255,255,255,0.06)', borderRadius:6 }}>
-                        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
-                          <thead>
-                            <tr style={{ textAlign:'left', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
-                              <th style={{ padding:6, width:220 }}>Date (local)</th>
-                              <th style={{ padding:6 }}>Station / Coordinates</th>
-                              { (inferredTest === 'two-sample' || samplePreview.some(r => r.lake)) && <th style={{ padding:6, width:160 }}>Lake</th> }
-                              <th style={{ padding:6, width:120 }}>Value</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {rows.map((r, i) => (
-                              <tr key={i} style={{ borderBottom:'1px solid rgba(255,255,255,0.03)' }}>
-                                <td style={{ padding:6, width:220 }}>{r.date}</td>
-                                <td style={{ padding:6 }}>{r.station}</td>
-                                {(inferredTest === 'two-sample' || samplePreview.some(rr => rr.lake)) && <td style={{ padding:6, width:160 }}>{r.lake || ''}</td>}
-                                <td style={{ padding:6, width:120 }}>{r.value}{r.unit ? ` ${r.unit}` : ''}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-              </div>
-            );
-          })()}
-        </div>
-
-        {/* Result */}
-        <div style={{ gridColumn: '1 / -1' }}>{renderResult()}</div>
       </div>
+    )}
+
+    {/* Notices/errors */}
+    <div style={{ marginTop:8 }}>
+      {error && <div style={{ color:'#ff8080', fontSize:12 }}>{error}</div>}
+      {error && (error.includes('threshold_missing') || error.includes('threshold')) && (
+        <div style={{ fontSize:11, marginTop:6, color:'#ffd9d9' }}>
+          Server debug: <pre style={{ whiteSpace:'pre-wrap', fontSize:11 }}>{JSON.stringify((error && (typeof error === 'string') ? null : null) || '' )}</pre>
+        </div>
+      )}
+      {/* Manual threshold flow removed in backend; no prompt needed here */}
+    </div>
+
+    {/* Result */}
+    <div style={{ marginTop:8 }}>{renderResult()}</div>
+  </div>
     </div>
   );
 }
@@ -522,4 +800,3 @@ function suggestThreshold(paramCode, classCode, staticThresholds) {
   const num = Number(val);
   return Number.isFinite(num) ? num : null;
 }
-

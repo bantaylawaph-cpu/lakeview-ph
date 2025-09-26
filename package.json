@@ -8,6 +8,10 @@
   },
   "dependencies": {
     "4": "^0.0.0",
+    "@stdlib/stats-base-dists-binomial-cdf": "^0.2.2",
+    "@stdlib/stats-base-dists-chisquare-cdf": "^0.2.2",
+    "@stdlib/stats-base-dists-t-cdf": "^0.2.2",
+    "@stdlib/stats-wilcoxon": "^0.2.2",
     "@turf/turf": "^7.2.0",
     "axios": "^1.11.0",
     "chart.js": "^4.5.0",

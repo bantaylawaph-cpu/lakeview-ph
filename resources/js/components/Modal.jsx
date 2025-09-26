@@ -51,7 +51,7 @@ export default function Modal({
     >
       <div
         className={`lv-modal-card ${cardClassName} ${isClosing ? "fade-out" : "fade-in"}`}
-        style={{ width, maxWidth: "95vw", ...style }}
+        style={{ width, maxWidth: "95vw", maxHeight: '95vh', display: 'flex', flexDirection: 'column', ...style }}
       >
         {header && (
           <div className="lv-modal-header">
@@ -62,7 +62,7 @@ export default function Modal({
           </div>
         )}
 
-        <div className={`lv-modal-body ${bodyClassName}`}>{children}</div>
+  <div className={`lv-modal-body ${bodyClassName}`} style={{ overflowY: 'auto', maxHeight: 'calc(100vh - 180px)' }}>{children}</div>
 
         {footer && <div className="lv-modal-footer">{footer}</div>}
       </div>
