@@ -179,5 +179,16 @@ class LakeController extends Controller
             ], 500);
         }
     }
+
+    // Public single-lake detail: mirrors show() but intended for unauthenticated clients
+    public function publicShow(Lake $lake)
+    {
+        $lake->load('watershed:id,name','waterQualityClass:code,name');
+        $active = $lake->activeLayer()
+            ->select('id')
+            ->selectRaw('ST_AsGeoJSON(geom) as geom_geojson')
+            ->first();
+        return array_merge($lake->toArray(), ['geom_geojson' => $active->geom_geojson ?? null]);
+    }
 }
 

@@ -1,7 +1,7 @@
 // ----------------------------------------------------
 // Main Map Page Component for LakeView PH
 // ----------------------------------------------------
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { FiArrowLeft } from "react-icons/fi";
 import { api, apiPublic } from "../../lib/api";
@@ -9,6 +9,7 @@ import { fetchPublicLayers, fetchLakeOptions, fetchPublicLayerGeo } from "../../
 import { useMap, GeoJSON } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
+import { createHeatLayer, fetchPopPoints } from "../../map/leafletHeat";
 
 import AppMap from "../../components/AppMap";
 import MapControls from "../../components/MapControls";
@@ -65,6 +66,7 @@ function MapPage() {
   const [watershedOverlayFeature, setWatershedOverlayFeature] = useState(null);
   const [baseKey, setBaseKey] = useState(0); // force base GeoJSON remount when needed
   const [wqMarker, setWqMarker] = useState(null); // {lat, lon}
+  const popHeatLayerRef = useRef(null); // Leaflet.heat layer
 
   const [measureActive, setMeasureActive] = useState(false);
   const [measureMode, setMeasureMode] = useState("distance");
@@ -76,6 +78,13 @@ function MapPage() {
   const [publicFC, setPublicFC] = useState(null);
   const [filterTrayOpen, setFilterTrayOpen] = useState(false);
   const [activeFilters, setActiveFilters] = useState({});
+  const [heatLoading, setHeatLoading] = useState(false);
+  const [heatProgress, setHeatProgress] = useState(null); // null=indeterminate, 0..1 determinate
+  const [heatEnabled, setHeatEnabled] = useState(false);
+  const heatParamsRef = useRef(null); // { year, km, layerId }
+  const heatDebounceRef = useRef(null);
+  const heatAbortRef = useRef(null);
+  const heatInFlightRef = useRef(false);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -295,9 +304,142 @@ function MapPage() {
     return () => window.removeEventListener("keydown", onKey, true);
   }, []);
 
-  const togglePopulationHeatmap = (on, distanceKm) => {
-    console.log("[Heatmap]", on ? "ON" : "OFF", "distance:", distanceKm, "km");
-  };
+  const togglePopulationHeatmap = useCallback((on, opts) => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (!on) {
+      try {
+        if (popHeatLayerRef.current) {
+          map.removeLayer(popHeatLayerRef.current);
+          popHeatLayerRef.current = null;
+        }
+      } catch {}
+      setHeatLoading(false);
+      setHeatEnabled(false);
+      heatParamsRef.current = null;
+      if (heatDebounceRef.current) { clearTimeout(heatDebounceRef.current); heatDebounceRef.current = null; }
+      if (heatAbortRef.current) { try { heatAbortRef.current.abort(); } catch {} heatAbortRef.current = null; }
+      heatInFlightRef.current = false;
+      return;
+    }
+    if (!selectedLake?.id) return;
+    setHeatEnabled(true);
+    heatParamsRef.current = {
+      year: Number(opts?.year || 2025),
+      km: Number(opts?.km || 2),
+      layerId: opts?.layerId ?? null,
+    };
+
+    if (opts?.loading) setHeatLoading(true);
+
+    const fetchAndRender = async () => {
+      const p = heatParamsRef.current;
+      if (!p) return;
+      if (heatInFlightRef.current) {
+        // cancel the previous request and proceed
+        try { heatAbortRef.current && heatAbortRef.current.abort(); } catch {}
+      }
+      const controller = new AbortController();
+      heatAbortRef.current = controller;
+      const params = {
+        lakeId: selectedLake.id,
+        year: p.year,
+        radiusKm: p.km,
+        layerId: p.layerId,
+        bbox: (() => {
+          try {
+            const b = map.getBounds();
+            const sw = b.getSouthWest();
+            const ne = b.getNorthEast();
+            return `${sw.lng},${sw.lat},${ne.lng},${ne.lat}`;
+          } catch { return null; }
+        })(),
+      };
+      try {
+        heatInFlightRef.current = true;
+        const pts = await fetchPopPoints(params, {
+          signal: controller.signal,
+          onProgress: (p) => {
+            if (p === null) setHeatProgress(null); else setHeatProgress(p);
+          }
+        });
+        if (!popHeatLayerRef.current) {
+          const layer = createHeatLayer(pts);
+          popHeatLayerRef.current = layer;
+          layer.addTo(map);
+        } else {
+          popHeatLayerRef.current.__setData?.(pts);
+        }
+      } catch (e) {
+        const status = e?.status ?? e?.response?.status;
+        if (e?.name === 'CanceledError' || e?.name === 'AbortError' || e?.code === 'ERR_CANCELED') {
+          // silently ignore cancellations
+        } else if (status === 429) {
+          // gentle backoff: re-try once after a short delay
+          try {
+            const retryAfter = Number(e?.response?.headers?.['retry-after']) || 0;
+            const delayMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 700;
+            await new Promise((r) => setTimeout(r, delayMs));
+            const pts = await fetchPopPoints(params, { signal: controller.signal });
+            if (!popHeatLayerRef.current) {
+              const layer = createHeatLayer(pts);
+              popHeatLayerRef.current = layer;
+              layer.addTo(map);
+            } else {
+              popHeatLayerRef.current.__setData?.(pts);
+            }
+          } catch (err2) {
+            if (!(err2?.name === 'CanceledError' || err2?.name === 'AbortError' || err2?.code === 'ERR_CANCELED')) {
+              console.warn('[Heatmap] failed after 429/backoff', err2);
+            }
+          }
+        } else {
+          console.warn('[Heatmap] failed to fetch points', e);
+        }
+      } finally {
+        heatInFlightRef.current = false;
+        setHeatProgress(null);
+        setHeatLoading(false);
+      }
+    };
+
+    fetchAndRender();
+  }, [selectedLake?.id]);
+
+  // Auto-refresh heat points when the map moves/zooms and heat is enabled
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const schedule = () => {
+      if (!heatEnabled) return;
+      if (heatDebounceRef.current) clearTimeout(heatDebounceRef.current);
+      // slight debounce to avoid rapid refetches during quick pans/zooms
+      heatDebounceRef.current = setTimeout(async () => {
+        heatDebounceRef.current = null;
+        // Reuse toggle handler to fetch with current params and bbox
+        try {
+          setHeatLoading(true);
+          const p = heatParamsRef.current || {};
+          // Call as an update (on already true)
+          togglePopulationHeatmap(true, { km: p.km, year: p.year, layerId: p.layerId });
+        } catch {}
+      }, 200);
+    };
+
+    if (heatEnabled) {
+      map.on('moveend', schedule);
+      map.on('zoomend', schedule);
+    }
+    return () => {
+      if (heatEnabled) {
+        try { map.off('moveend', schedule); } catch {}
+        try { map.off('zoomend', schedule); } catch {}
+      }
+      if (heatDebounceRef.current) { clearTimeout(heatDebounceRef.current); heatDebounceRef.current = null; }
+      if (heatAbortRef.current) { try { heatAbortRef.current.abort(); } catch {} heatAbortRef.current = null; }
+    };
+  }, [heatEnabled]);
 
   const themeClass = selectedView === "satellite" ? "map-dark" : "map-light";
   const worldBounds = [[4.6,116.4],[21.1,126.6]];
@@ -428,7 +570,7 @@ function MapPage() {
   }, [wqMarker]);
 
   return (
-    <div className={themeClass} style={{ height: "100vh", width: "100vw", margin: 0, padding: 0 }}>
+    <div className={themeClass} style={{ height: "100vh", width: "100vw", margin: 0, padding: 0, position: 'relative' }}>
   <AppMap view={selectedView} zoomControl={false} whenCreated={(m) => { mapRef.current = m; try { window.lv_map = m; } catch {} setMapReady(true); }}>
     {/* Ensure mapRef is set even if whenCreated timing varies */}
     <MapRefBridge onReady={(m) => { if (!mapRef.current) { mapRef.current = m; try { window.lv_map = m; } catch {} setMapReady(true); } }} />
@@ -486,7 +628,7 @@ function MapPage() {
                     try {
                       // Try public detail first to avoid 401s when unauthenticated
                       const pub = await apiPublic(`/public/lakes/${lakeId}`);
-                      const detail = pub?.id ? pub : await api(`/lakes/${lakeId}`);
+                      const detail = pub?.id ? pub : await apiPublic(`/lakes/${lakeId}`);
                       if (detail?.id && String(detail.id) === String(lakeId)) {
                         setSelectedLake((prev) => ({ ...prev, ...detail }));
                         setSelectedWatershedId(detail?.watershed_id ?? null);
@@ -586,9 +728,7 @@ function MapPage() {
           setWqMarker({ lat: Number(lat), lon: Number(lon) });
           try { mapRef.current.flyTo([Number(lat), Number(lon)], 13, { duration: 0.8 }); } catch {}
         }}
-        onToggleHeatmap={(on, km) => {
-          console.log("[Heatmap]", on ? "ON" : "OFF", "distance:", km, "km");
-        }}
+        onToggleHeatmap={togglePopulationHeatmap}
         layers={lakeLayers}
         activeLayerId={lakeActiveLayerId}
         onResetToActive={async () => {
@@ -633,6 +773,19 @@ function MapPage() {
       />
       <LayerControl selectedView={selectedView} setSelectedView={setSelectedView} />
       <ScreenshotButton />
+      {heatLoading && (
+        <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 1200, background: 'rgba(0,0,0,0.6)', color: '#fff', padding: '8px 10px', borderRadius: 6, fontSize: 12, minWidth: 180 }}>
+          <div style={{ marginBottom: 6 }}>Loading heatmap…</div>
+          <div style={{ position: 'relative', height: 6, background: 'rgba(255,255,255,0.2)', borderRadius: 999 }}>
+            {heatProgress === null ? (
+              <div style={{ position: 'absolute', height: '100%', width: '40%', left: 0, background: 'linear-gradient(90deg,#3b82f6,#93c5fd)', borderRadius: 999, animation: 'lvHeatInd 1.1s infinite' }} />
+            ) : (
+              <div style={{ position: 'absolute', height: '100%', width: `${Math.round(heatProgress * 100)}%`, left: 0, background: 'linear-gradient(90deg,#3b82f6,#93c5fd)', borderRadius: 999 }} />
+            )}
+          </div>
+          <style>{`@keyframes lvHeatInd {0%{left:-40%}100%{left:100%}}`}</style>
+        </div>
+      )}
       {/* Back to Dashboard */}
       {userRole && (
         <button

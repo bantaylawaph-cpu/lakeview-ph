@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\Admin\StationController as AdminStationController;
 use App\Http\Controllers\Api\Admin\SamplingEventController as AdminSamplingEventController;
 use App\Http\Controllers\Api\Admin\SamplingEventController;
 use App\Http\Controllers\Api\StatsController;
+use App\Http\Controllers\PopulationController;
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register']); // public
     Route::post('/login',    [AuthController::class, 'login']);    // public
@@ -61,6 +62,7 @@ Route::post('/lakes',           [LakeController::class, 'store']);
 Route::put('/lakes/{lake}',     [LakeController::class, 'update']);   // or PATCH
 Route::delete('/lakes/{lake}',  [LakeController::class, 'destroy']);
 Route::get('/public/lakes-geo', [LakeController::class, 'publicGeo']); // public FeatureCollection
+Route::get('/public/lakes/{lake}', [LakeController::class, 'publicShow']); // public single lake detail
 
 // Watersheds
 Route::get('/watersheds', [WatershedController::class, 'index']); // for dropdowns
@@ -98,5 +100,11 @@ Route::get('/options/provinces', [OptionsController::class, 'provinces']);
 Route::get('/options/municipalities', [OptionsController::class, 'municipalities']);
 
 Route::post('/stats/series', [StatsController::class, 'series']);
+
+// Population estimates and tiles (public)
+Route::get('/population/estimate', [PopulationController::class, 'estimate']);
+Route::get('/tiles/pop/{z}/{x}/{y}', [PopulationController::class, 'tile'])
+    ->where(['z' => '[0-9]+', 'x' => '[0-9]+', 'y' => '[0-9]+']);
+Route::get('/population/points', [PopulationController::class, 'points']);
 
 

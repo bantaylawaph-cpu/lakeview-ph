@@ -130,7 +130,15 @@ function LakeInfoPanel({
         )}
 
         {activeTab === "population" && (
-          <HeatmapTab lake={lake} onToggleHeatmap={onToggleHeatmap} />
+          <HeatmapTab
+            lake={lake}
+            onToggleHeatmap={onToggleHeatmap}
+            currentLayerId={
+              selectedLayerId != null && String(selectedLayerId) !== String(activeLayerId ?? '')
+                ? selectedLayerId
+                : null
+            }
+          />
         )}
 
         {activeTab === "layers" && (
