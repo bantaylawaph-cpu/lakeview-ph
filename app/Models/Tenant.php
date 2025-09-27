@@ -8,15 +8,13 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Tenant extends Model
 {
-    use SoftDeletes;
+    use HasFactory, SoftDeletes;
 
-    protected $fillable = ['name','type','phone','address','active','domain','contact_email','metadata','slug'];
+    protected $fillable = ['name', 'type', 'phone', 'address', 'active', 'domain', 'contact_email', 'metadata', 'slug'];
     protected $casts = ['active' => 'boolean', 'metadata' => 'array'];
 
-    public function memberships() { return $this->hasMany(UserTenant::class); }
-    public function users() {
-        return $this->belongsToMany(User::class, 'user_tenants')
-            ->withPivot(['role_id','is_active'])
-            ->withTimestamps();
+    public function users()
+    {
+        return $this->hasMany(User::class);
     }
 }

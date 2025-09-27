@@ -6,10 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\Role;
 use App\Models\Tenant;
 use App\Models\User;
-use App\Models\UserTenant;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rule;
+use App\Services\UserRoleAuditLogger;
+use Illuminate\Validation\ValidationException;
 
 class TenantController extends Controller
 {
@@ -49,9 +49,10 @@ class TenantController extends Controller
     /**
      * GET /api/admin/tenants/{tenant}
      */
-    public function show(Tenant $tenant)
+    public function show(Request $request, Tenant $tenant)
     {
-        return response()->json(['data' => $this->tenantResource($tenant)]);
+        $this->authorizeTenantAccess($request, $tenant);
+        return response()->json(['data' => $tenant]);
     }
 
     /**
@@ -59,33 +60,10 @@ class TenantController extends Controller
      */
     public function store(Request $request)
     {
-        $data = $request->validate([
-            'name'          => ['required', 'string', 'max:255', 'unique:tenants,name'],
-            'slug'          => ['nullable', 'string', 'max:255', 'unique:tenants,slug'],
-            'domain'        => ['nullable', 'string', 'max:255', 'unique:tenants,domain'],
-            'type'          => ['nullable', 'string', 'max:255'],
-            'phone'         => ['nullable', 'string', 'max:255'],
-            'address'       => ['nullable', 'string', 'max:255'],
-            'contact_email' => ['nullable', 'email', 'max:255'],
-            'active'        => ['sometimes', 'boolean'],
-            'metadata'      => ['sometimes', 'array'], // JSONB
-        ]);
-
-        $tenant = new Tenant();
-        $tenant->name          = $data['name'];
-        $tenant->slug          = $data['slug']          ?? null;
-        $tenant->domain        = $data['domain']        ?? null;
-        $tenant->type          = $data['type']          ?? null;
-        $tenant->phone         = $data['phone']         ?? null;
-        $tenant->address       = $data['address']       ?? null;
-        $tenant->contact_email = $data['contact_email'] ?? null;
-        $tenant->active        = array_key_exists('active', $data) ? (bool)$data['active'] : true;
-        if (array_key_exists('metadata', $data)) {
-            $tenant->metadata = $data['metadata'];
-        }
-        $tenant->save();
-
-        return response()->json(['data' => $this->tenantResource($tenant)], 201);
+        $this->requireSuperAdmin($request);
+        $data = $request->validate(['name' => 'required|string|max:255', 'description' => 'nullable|string']);
+        $tenant = Tenant::create($data);
+        return response()->json(['data' => $tenant], 201);
     }
 
     /**
@@ -93,133 +71,96 @@ class TenantController extends Controller
      */
     public function update(Request $request, Tenant $tenant)
     {
-        $data = $request->validate([
-            'name'          => ['required', 'string', 'max:255', Rule::unique('tenants', 'name')->ignore($tenant->id)],
-            'slug'          => ['nullable', 'string', 'max:255', Rule::unique('tenants', 'slug')->ignore($tenant->id)],
-            'domain'        => ['nullable', 'string', 'max:255', Rule::unique('tenants', 'domain')->ignore($tenant->id)],
-            'type'          => ['nullable', 'string', 'max:255'],
-            'phone'         => ['nullable', 'string', 'max:255'],
-            'address'       => ['nullable', 'string', 'max:255'],
-            'contact_email' => ['nullable', 'email', 'max:255'],
-            'active'        => ['sometimes', 'boolean'],
-            'metadata'      => ['sometimes', 'array'],
-        ]);
-
-        $tenant->name          = $data['name'];
-        $tenant->slug          = $data['slug']          ?? null;
-        $tenant->domain        = $data['domain']        ?? null;
-        $tenant->type          = $data['type']          ?? null;
-        $tenant->phone         = $data['phone']         ?? null;
-        $tenant->address       = $data['address']       ?? null;
-        $tenant->contact_email = $data['contact_email'] ?? null;
-        if (array_key_exists('active', $data)) {
-            $tenant->active = (bool)$data['active'];
-        }
-        if (array_key_exists('metadata', $data)) {
-            $tenant->metadata = $data['metadata'];
-        }
+        $this->requireSuperAdmin($request);
+        $data = $request->validate(['name' => 'sometimes|string|max:255', 'description' => 'nullable|string']);
+        $tenant->fill($data);
         $tenant->save();
-
-        return response()->json(['data' => $this->tenantResource($tenant)]);
+        return response()->json(['data' => $tenant]);
     }
 
     /**
      * DELETE /api/admin/tenants/{tenant}
      * Soft-deletes the tenant.
      */
-    public function destroy(Tenant $tenant)
+    public function destroy(Request $request, Tenant $tenant)
     {
+        $this->requireSuperAdmin($request);
+        // Decide cascade handling: we prevent delete if users still attached
+        $usersCount = $tenant->users()->count();
+        if ($usersCount > 0) {
+            throw ValidationException::withMessages(['tenant' => ['Cannot delete a tenant while users still belong to it. Move or delete users first.']]);
+        }
         $tenant->delete();
         return response()->json([], 204);
     }
 
-    /**
-     * POST /api/admin/tenants/{id}/restore
-     */
-    public function restore($id)
+    // List organization admins for a tenant
+    public function admins(Request $request, Tenant $tenant)
     {
-        $tenant = Tenant::withTrashed()->findOrFail($id);
-        $tenant->restore();
-        return response()->json(['data' => $this->tenantResource($tenant)]);
+        $this->authorizeTenantAccess($request, $tenant, requireAdmin: true);
+        $admins = User::where('tenant_id', $tenant->id)
+            ->whereHas('role', fn($q) => $q->where('name', Role::ORG_ADMIN))
+            ->orderBy('name')
+            ->get(['id','name','email','is_active','tenant_id','role_id']);
+        return response()->json(['data' => $admins]);
     }
 
-    /* =========================================================================
-     | Org Admin management for a tenant (superadmin-only)
-     |   GET    /api/admin/tenants/{tenant}/admins
-     |   POST   /api/admin/tenants/{tenant}/admins      { user_id }
-     |   DELETE /api/admin/tenants/{tenant}/admins/{user}
-     * =========================================================================*/
-
-    public function admins(Tenant $tenant)
-    {
-        $roleId = Role::where('name', 'org_admin')->value('id');
-        if (!$roleId) {
-            return response()->json(['message' => 'org_admin role missing'], 422);
-        }
-
-        $rows = UserTenant::query()
-            ->where('tenant_id', $tenant->id)
-            ->where('role_id', $roleId)
-            ->where('is_active', true)
-            ->join('users', 'users.id', '=', 'user_tenants.user_id')
-            ->orderBy('users.name')
-            ->get([
-                'users.id', 'users.name', 'users.email',
-                'user_tenants.joined_at', 'user_tenants.is_active'
-            ]);
-
-        return response()->json(['data' => $rows]);
-    }
-
+    // Assign a user (existing) as organization admin.
     public function assignAdmin(Request $request, Tenant $tenant)
     {
+        $this->authorizeTenantAccess($request, $tenant, requireAdmin: true);
         $data = $request->validate([
-            'user_id' => ['required', 'integer', 'exists:users,id'],
+            'user_id' => 'required|integer|exists:users,id'
         ]);
-
-        $roleId = Role::where('name', 'org_admin')->value('id');
-        if (!$roleId) {
-            return response()->json(['message' => 'org_admin role missing'], 422);
+    $user = User::findOrFail($data['user_id']);
+    $original = $user->only(['role_id','tenant_id']);
+        if ($user->tenant_id !== $tenant->id) {
+            // If user currently belongs to another tenant and has tenant-scoped role, block.
+            if ($user->tenant_id && $user->role && $user->role->scope === 'tenant' && $user->tenant_id !== $tenant->id) {
+                throw ValidationException::withMessages(['user_id' => ['User already belongs to another organization.']]);
+            }
+            $user->tenant_id = $tenant->id; // Move user if was public or system scoped.
         }
+        $orgAdminRoleId = Role::where('name', Role::ORG_ADMIN)->value('id');
+        $user->role_id = $orgAdminRoleId;
+        $user->save();
 
-        DB::transaction(function () use ($tenant, $data, $roleId) {
-            UserTenant::updateOrCreate(
-                [
-                    'user_id'   => $data['user_id'],
-                    'tenant_id' => $tenant->id,
-                    'role_id'   => $roleId,
-                ],
-                [
-                    'is_active' => true,
-                    'joined_at' => now(),
-                ]
-            );
-        });
-
-        return response()->json(['message' => 'Org admin assigned']);
+        UserRoleAuditLogger::log($user, $original, $request->user(), 'Assigned as organization admin');
+        return response()->json(['data' => $user]);
     }
 
-    public function removeAdmin(Tenant $tenant, User $user)
+    // Remove admin role from a user (demote to contributor or public)
+    public function removeAdmin(Request $request, Tenant $tenant, User $user)
     {
-        $roleId = Role::where('name', 'org_admin')->value('id');
-        if (!$roleId) {
-            return response()->json(['message' => 'org_admin role missing'], 422);
+        $this->authorizeTenantAccess($request, $tenant, requireAdmin: true);
+        if ($user->tenant_id !== $tenant->id) {
+            return response()->json(['message' => 'User does not belong to this tenant.'], 422);
         }
-
-        $ut = UserTenant::where([
-            'user_id'   => $user->id,
-            'tenant_id' => $tenant->id,
-            'role_id'   => $roleId,
-        ])->first();
-
-        if (!$ut) {
-            return response()->json(['message' => 'Not an org admin for this tenant'], 404);
+        if ($user->role?->name !== Role::ORG_ADMIN) {
+            return response()->json(['message' => 'User is not an organization admin.'], 422);
         }
+        $contributorRoleId = Role::where('name', Role::CONTRIBUTOR)->value('id');
+        $original = $user->only(['role_id','tenant_id']);
+        $user->role_id = $contributorRoleId; // Demote but keep tenant membership
+        $user->save();
+        UserRoleAuditLogger::log($user, $original, $request->user(), 'Removed organization admin role');
+        return response()->json(['data' => $user]);
+    }
 
-        // Keep audit trail: deactivate instead of delete
-        $ut->update(['is_active' => false]);
+    protected function authorizeTenantAccess(Request $request, Tenant $tenant, bool $requireAdmin = false): void
+    {
+        $user = $request->user();
+        if (!$user) abort(401);
+        $roleName = $user->role?->name;
+        if ($roleName === Role::SUPERADMIN) return; // always allowed
+        if ($user->tenant_id !== $tenant->id) abort(403, 'Forbidden for this tenant');
+        if ($requireAdmin && $roleName !== Role::ORG_ADMIN) abort(403, 'Organization admin role required');
+    }
 
-        return response()->json(['message' => 'Org admin removed']);
+    protected function requireSuperAdmin(Request $request): void
+    {
+        $role = $request->user()?->role?->name;
+        if ($role !== Role::SUPERADMIN) abort(403, 'Super administrator role required');
     }
 
     /* ----------------------------------------

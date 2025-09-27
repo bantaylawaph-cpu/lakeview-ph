@@ -3,13 +3,14 @@ import React, { useState } from "react";
 import { FiLayers } from "react-icons/fi";
 import LayerWizard from "../../components/layers/LayerWizard";
 import LayerList from "../../components/layers/LayerList";
+import { ROLES } from "../../lib/roles";
 
 const ADMIN_VISIBILITY_OPTIONS = [
   { value: "public", label: "Public" },
   { value: "admin", label: "Admin" },
 ];
 
-export default function AdminLayers() {
+export default function AdminLayers({ currentUserRole = ROLES.SUPERADMIN }) { // assume superadmin when mounted under admin interface
   // After a successful publish, remember which body was used
   const [lastBody, setLastBody] = useState({ type: "lake", id: "" });
   const [activeTab, setActiveTab] = useState("upload"); // 'upload' | 'view'
@@ -69,6 +70,7 @@ export default function AdminLayers() {
           allowDelete
           showPreview={false}
           visibilityOptions={ADMIN_VISIBILITY_OPTIONS}
+          currentUserRole={currentUserRole}
         />
       )}
     </div>

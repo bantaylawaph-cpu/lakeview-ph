@@ -3,12 +3,14 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\DB;
 
 class Layer extends Model
 {
+    use HasFactory;
     protected $table = 'layers';
 
     public const VIS_PUBLIC = 'public';
@@ -64,17 +66,18 @@ class Layer extends Model
             return 'LakeView';
         }
 
-        $name = DB::table('user_tenants AS ut')
-            ->join('roles AS r', 'r.id', '=', 'ut.role_id')
-            ->join('tenants', 'tenants.id', '=', 'ut.tenant_id')
-            ->where('ut.user_id', $this->uploaded_by)
-            ->where('ut.is_active', true)
-            ->where('r.name', 'org_admin')
-            ->orderByRaw('COALESCE(ut.joined_at, ut.created_at) DESC')
-            ->limit(1)
-            ->value('tenants.name');
+        $row = DB::table('users')
+            ->leftJoin('tenants', 'tenants.id', '=', 'users.tenant_id')
+            ->leftJoin('roles', 'roles.id', '=', 'users.role_id')
+            ->where('users.id', $this->uploaded_by)
+            ->select('tenants.name AS tname', 'roles.scope AS rscope')
+            ->first();
 
-        return $name ?: 'LakeView';
+        if ($row && $row->rscope === 'tenant' && $row->tname) {
+            return $row->tname;
+        }
+
+        return 'LakeView';
     }
 
     // Tip: when returning to the frontend map, select GeoJSON from the DB:

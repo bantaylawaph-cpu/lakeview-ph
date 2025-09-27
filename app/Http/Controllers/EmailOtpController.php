@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Mail\OtpMail;
 use App\Models\User;
+use App\Models\Role;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{Cache, DB, Hash, Mail, Validator};
 use Illuminate\Support\Str;
@@ -150,11 +151,33 @@ class EmailOtpController extends Controller
         if (!$check['ok']) return response()->json(['message' => 'Invalid or expired code.'], 422);
 
         $payload = json_decode($check['row']->payload ?? 'null', true) ?: [];
+        // Resolve the default public role id (system scope). Fallback: attempt to insert canonical roles if missing.
+        static $publicRoleId = null;
+        if ($publicRoleId === null) {
+            $publicRoleId = Role::where('name', Role::PUBLIC)->value('id');
+            // Defensive: if roles table missing seeds, recreate minimal set.
+            if (!$publicRoleId) {
+                $canonical = [
+                    ['name' => Role::PUBLIC, 'scope' => 'system'],
+                    ['name' => Role::CONTRIBUTOR, 'scope' => 'tenant'],
+                    ['name' => Role::ORG_ADMIN, 'scope' => 'tenant'],
+                    ['name' => Role::SUPERADMIN, 'scope' => 'system'],
+                ];
+                foreach ($canonical as $c) {
+                    Role::firstOrCreate(['name' => $c['name']], ['scope' => $c['scope']]);
+                }
+                $publicRoleId = Role::where('name', Role::PUBLIC)->value('id');
+            }
+        }
+
         $user = User::create([
             'name'              => $payload['name'] ?? 'User',
             'email'             => $r->email,
             'password'          => $payload['password_hash'] ?? Hash::make(Str::uuid()->toString()),
             'email_verified_at' => now(),
+            'role_id'           => $publicRoleId,   // expected default role
+            'tenant_id'         => null,            // enforce null for system role
+            'is_active'         => true,
         ]);
 
         // Issue token (match your “remember me” durations)

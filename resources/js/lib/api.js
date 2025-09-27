@@ -23,6 +23,10 @@ export function setToken(token /*, opts */) {
   try {
     if (_token) localStorage.setItem(STORAGE_KEY, _token);
     else localStorage.removeItem(STORAGE_KEY);
+    // Notify listeners (Sidebar, etc.) that auth changed
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('lv-auth-change'));
+    }
   } catch (_) {}
 }
 
@@ -192,17 +196,18 @@ export async function logout() {
 }
 
 // ---- Tenant admin management ----
+// Tenant admin management (single-tenant user model)
 export const fetchTenantAdmins = (tenantId) =>
-  api(`/admin/tenants/${tenantId}/admins`);
+  api(`/tenants/${tenantId}/admins`);
 
 export const assignTenantAdmin = (tenantId, userId) =>
-  api(`/admin/tenants/${tenantId}/admins`, {
+  api(`/tenants/${tenantId}/assign-admin`, {
     method: "POST",
     body: { user_id: userId },
   });
 
 export const removeTenantAdmin = (tenantId, userId) =>
-  api(`/admin/tenants/${tenantId}/admins/${userId}`, {
+  api(`/tenants/${tenantId}/admins/${userId}`, { // matches route('tenants.removeAdmin')
     method: "DELETE",
   });
 
@@ -222,14 +227,5 @@ export function apiPublic(path, opts = {}) {
   return api(path, { ...opts, auth: false });
 }
 
-// Remove a user as a member from a tenant (organization)
-export const removeTenantMember = (tenantId, userId) =>
-  api(`/admin/tenants/${tenantId}/members/${userId}`, {
-    method: "DELETE",
-  });
-// Assign a user as a member to a tenant (organization)
-export const assignTenantMember = (tenantId, userId) =>
-  api(`/admin/tenants/${tenantId}/members`, {
-    method: "POST",
-    body: { user_id: userId },
-  });
+// Tenancy integrity check (optional UI surfacing)
+export const verifyTenancy = async () => api('/tenancy/verify');

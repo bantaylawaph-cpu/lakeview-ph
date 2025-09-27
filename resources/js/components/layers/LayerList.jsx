@@ -43,6 +43,7 @@ function LayerList({
   showPreview = false,
   onPreview,
   visibilityOptions = DEFAULT_VISIBILITY_OPTIONS,
+  currentUserRole = null,
 }) {
   const [bodyType, setBodyType] = useState(initialBodyType);
   const [bodyId, setBodyId] = useState(initialBodyId);
@@ -67,10 +68,18 @@ function LayerList({
     return mapped.length ? mapped : DEFAULT_VISIBILITY_OPTIONS;
   }, [visibilityOptions]);
 
-  const allowedVisibilityValues = useMemo(
-    () => normalizedVisibilityOptions.map((opt) => opt.value),
-    [normalizedVisibilityOptions]
-  );
+  // Role-based allowed cycles:
+  // superadmin: whatever provided (both public/admin)
+  // org_admin: can see both public & admin but cannot toggle if not uploader's tenant? (API already filters list server-side)
+  // contributors/public: should not be able to toggle at UI level
+  const allowedVisibilityValues = useMemo(() => {
+    const base = normalizedVisibilityOptions.map((opt) => opt.value);
+    if (!currentUserRole) return base;
+    if (currentUserRole === 'superadmin') return base;
+    if (currentUserRole === 'org_admin') return base; // server restricts rows to tenant uploads
+    // read-only roles
+    return [base[0]]; // only show first (likely 'public') so toggle disabled
+  }, [normalizedVisibilityOptions, currentUserRole]);
 
   const formatCreator = (row) => {
     if (row?.uploaded_by_org) return row.uploaded_by_org;
@@ -240,7 +249,8 @@ function LayerList({
   }, [bodyType]);
 
   const doToggleVisibility = async (row) => {
-    if (allowedVisibilityValues.length < 2) return;
+    if (allowedVisibilityValues.length < 2) return; // read-only context
+    if (currentUserRole && !['superadmin','org_admin'].includes(currentUserRole)) return; // guard
     try {
       await toggleLayerVisibility(row, allowedVisibilityValues);
       await refresh();
@@ -251,6 +261,7 @@ function LayerList({
   };
 
   const doDelete = async (target) => {
+    if (currentUserRole !== 'superadmin') return; // deletion restricted to superadmin by backend, reflect here
     const id = target && typeof target === 'object' ? target.id : target;
     const name = target && typeof target === 'object' ? target.name : null;
     if (!(await confirm({ title: 'Delete this layer?', text: 'This cannot be undone.', confirmButtonText: 'Delete' }))) return;
@@ -432,27 +443,29 @@ function LayerList({
                               <FiEye />
                             </button>
 
-                            <button
-                              className="icon-btn simple"
-                              title="Edit metadata"
-                              aria-label="Edit"
-                              onClick={() => {
-                                setEditRow(row);
-                                setEditForm({
-                                  name: row.name || '',
-                                  category: row.category || '',
-                                  notes: row.notes || '',
-                                  visibility: initialEditVisibility,
-                                  is_active: !!row.is_active,
-                                });
-                                setEditOpen(true);
-                              }}
-                            >
-                              <FiEdit2 />
-                            </button>
+                            {(['superadmin','org_admin'].includes(currentUserRole)) && (
+                              <button
+                                className="icon-btn simple"
+                                title="Edit metadata"
+                                aria-label="Edit"
+                                onClick={() => {
+                                  setEditRow(row);
+                                  setEditForm({
+                                    name: row.name || '',
+                                    category: row.category || '',
+                                    notes: row.notes || '',
+                                    visibility: initialEditVisibility,
+                                    is_active: !!row.is_active,
+                                  });
+                                  setEditOpen(true);
+                                }}
+                              >
+                                <FiEdit2 />
+                              </button>
+                            )}
 
 
-                            {allowDelete && (
+                            {allowDelete && currentUserRole === 'superadmin' && (
                               <button
                                 className="icon-btn simple danger"
                                 title="Delete"
@@ -480,7 +493,7 @@ function LayerList({
         `}</style>
       </div>
 
-      {editOpen && (
+      {editOpen && (['superadmin','org_admin'].includes(currentUserRole)) && (
         <Modal
           open={editOpen}
           onClose={() => setEditOpen(false)}
@@ -503,13 +516,19 @@ function LayerList({
                       }
                     }
 
-                    await updateLayer(editRow.id, {
+                    // Only superadmin may change visibility or default flag per backend; org_admin limited to name/category/notes.
+                    const patch = {
                       name: editForm.name,
                       category: editForm.category || null,
                       notes: editForm.notes || null,
-                      visibility: editForm.visibility,
-                      is_active: !!editForm.is_active,
-                    });
+                    };
+                    if (currentUserRole === 'superadmin') {
+                      patch.visibility = editForm.visibility;
+                      patch.is_active = !!editForm.is_active;
+                    }
+                    // Apply patch (visibility & is_active included only for superadmin)
+                    await updateLayer(editRow.id, patch);
+
                     setEditOpen(false);
                     await refresh();
                     await alertSuccess('Layer updated', 'Changes saved successfully.');
@@ -551,35 +570,39 @@ function LayerList({
                 placeholder="Short description / source credits"
               />
             </div>
-            <div className="form-group">
-              <label>Visibility</label>
-              <select
-                value={editForm.visibility}
-                onChange={(e) => setEditForm((f) => ({ ...f, visibility: e.target.value }))}
-              >
-                {[...normalizedVisibilityOptions,
-                  ...(editRow && editRow.visibility && !normalizedVisibilityOptions.some((opt) => opt.value === editRow.visibility)
-                    ? [{ value: editRow.visibility, label: getVisibilityLabel(editRow.visibility) }]
-                    : []
-                  )].map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <label>Default Layer</label>
-              <div>
-                <button
-                  type="button"
-                  className={`pill-btn ${editForm.is_active ? 'primary' : 'ghost'}`}
-                  onClick={() => setEditForm((f) => ({ ...f, is_active: !f.is_active }))}
-                >
-                  {editForm.is_active ? 'Default Enabled' : 'Set as Default'}
-                </button>
-              </div>
-            </div>
+            {currentUserRole === 'superadmin' && (
+              <>
+                <div className="form-group">
+                  <label>Visibility</label>
+                  <select
+                    value={editForm.visibility}
+                    onChange={(e) => setEditForm((f) => ({ ...f, visibility: e.target.value }))}
+                  >
+                    {[...normalizedVisibilityOptions,
+                      ...(editRow && editRow.visibility && !normalizedVisibilityOptions.some((opt) => opt.value === editRow.visibility)
+                        ? [{ value: editRow.visibility, label: getVisibilityLabel(editRow.visibility) }]
+                        : []
+                      )].map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Default Layer</label>
+                  <div>
+                    <button
+                      type="button"
+                      className={`pill-btn ${editForm.is_active ? 'primary' : 'ghost'}`}
+                      onClick={() => setEditForm((f) => ({ ...f, is_active: !f.is_active }))}
+                    >
+                      {editForm.is_active ? 'Default Enabled' : 'Set as Default'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </Modal>
       )}

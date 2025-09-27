@@ -24,7 +24,6 @@ use App\Http\Controllers\Api\Admin\WqStandardController as AdminWqStandardContro
 use App\Http\Controllers\Api\Admin\WaterQualityClassController as AdminWaterQualityClassController;
 use App\Http\Controllers\Api\Admin\StationController as AdminStationController;
 use App\Http\Controllers\Api\Admin\SamplingEventController as AdminSamplingEventController;
-use App\Http\Controllers\Api\Admin\SamplingEventController;
 Route::prefix('auth')->group(function () {
     // Registration OTP
     Route::post('/register/request-otp', [EmailOtpController::class, 'registerRequestOtp'])->middleware('throttle:6,1');
@@ -65,9 +64,9 @@ Route::middleware(['auth:sanctum','role:superadmin'])->prefix('admin')->group(fu
     Route::post('/tenants/{id}/restore', [TenantController::class, 'restore'])->whereNumber('id');
 
     // Org admin management for a tenant
-    Route::get('/tenants/{tenant}/admins',   [TenantController::class, 'admins']);
-    Route::post('/tenants/{tenant}/admins',  [TenantController::class, 'assignAdmin']);
-    Route::delete('/tenants/{tenant}/admins/{user}', [TenantController::class, 'removeAdmin']);
+    Route::get('/tenants/{tenant}/admins',   [TenantController::class, 'admins'])->name('tenants.admins');
+    Route::post('/tenants/{tenant}/admins',  [TenantController::class, 'assignAdmin'])->name('tenants.assignAdmin');
+    Route::delete('/tenants/{tenant}/admins/{user}', [TenantController::class, 'removeAdmin'])->name('tenants.removeAdmin');
 
     // Users (site-wide)
     Route::get('/users',            [UserController::class, 'index']);
@@ -75,9 +74,8 @@ Route::middleware(['auth:sanctum','role:superadmin'])->prefix('admin')->group(fu
     Route::get('/users/{user}',     [UserController::class, 'show'])->whereNumber('user');
     Route::put('/users/{user}',     [UserController::class, 'update'])->whereNumber('user');
     Route::delete('/users/{user}',  [UserController::class, 'destroy'])->whereNumber('user');
-Route::middleware('auth:sanctum')->prefix('admin')->group(function () {
-    Route::get('/whoami', fn() => ['ok' => true]);
 
+    // Water Quality & related admin resources
     Route::get('water-quality-classes', [AdminWaterQualityClassController::class, 'index']);
     Route::apiResource('parameters', AdminParameterController::class);
     Route::apiResource('parameter-thresholds', AdminParameterThresholdController::class)->except(['create', 'edit']);
@@ -86,11 +84,10 @@ Route::middleware('auth:sanctum')->prefix('admin')->group(function () {
     Route::apiResource('sample-events', AdminSamplingEventController::class)
         ->parameters(['sample-events' => 'samplingEvent'])
         ->except(['create', 'edit']);
-    // Toggle publish state for a sampling event
     Route::post('sample-events/{samplingEvent}/toggle-publish', [AdminSamplingEventController::class, 'togglePublish']);
 
-    // Lightweight tenants list for admin dropdowns
-    Route::get('/tenants', function () {
+    // Lightweight tenant list for dropdowns
+    Route::get('/tenants-list', function () {
         $rows = \App\Models\Tenant::query()->select(['id', 'name'])->orderBy('name')->get();
         return response()->json(['data' => $rows]);
     });
@@ -146,15 +143,19 @@ Route::get('/options/roles',      [OptionsController::class, 'roles']);
 
 /*
 |--------------------------------------------------------------------------
-| Layers
+| Layers (single canonical section)
 |--------------------------------------------------------------------------
 */
-Route::get('/public/layers', [ApiLayerController::class, 'publicIndex']); // implement to return only public-visible layers
+// Public listing & show (visibility constrained internally)
+Route::get('/public/layers', [ApiLayerController::class, 'publicIndex']);
+Route::get('/public/layers/{id}', [ApiLayerController::class, 'publicShow']);
 
+// Authenticated layer operations
 Route::middleware('auth:sanctum')->group(function () {
-    Route::get('/layers',           [ApiLayerController::class, 'index']);
+    Route::get('/layers',           [ApiLayerController::class, 'index'])->name('layers.index');
     Route::get('/layers/active',    [ApiLayerController::class, 'active']);
 
+    // Creation & modifications restricted to superadmin (controller also validates)
     Route::post('/layers',          [ApiLayerController::class, 'store'])->middleware('role:superadmin');
     Route::patch('/layers/{id}',    [ApiLayerController::class, 'update'])->middleware('role:superadmin')->whereNumber('id');
     Route::delete('/layers/{id}',   [ApiLayerController::class, 'destroy'])->middleware('role:superadmin')->whereNumber('id');
@@ -170,39 +171,18 @@ Route::middleware(['auth:sanctum', 'role:superadmin'])->group(function () {
     Route::put('/lakes/{lake}',     [LakeController::class, 'update'])->whereNumber('lake');
     Route::delete('/lakes/{lake}',  [LakeController::class, 'destroy'])->whereNumber('lake');
 });
-// Watersheds
-Route::get('/watersheds', [WatershedController::class, 'index']); // for dropdowns
-Route::get('/watersheds/{watershed}', [WatershedController::class, 'show']);
-Route::post('/watersheds', [WatershedController::class, 'store']);
-Route::put('/watersheds/{watershed}', [WatershedController::class, 'update']);
-Route::delete('/watersheds/{watershed}', [WatershedController::class, 'destroy']);
-
-// Layers (single canonical controller)
-Route::middleware('auth:sanctum')->group(function () {
-    Route::get('/layers',           [ApiLayerController::class, 'index']);   // ?body_type=lake&body_id=1&include=bounds
-    Route::get('/layers/active',    [ApiLayerController::class, 'active']);  // active for a body
-    Route::post('/layers',          [ApiLayerController::class, 'store']);   // superadmin only (enforced in controller)
-    Route::patch('/layers/{id}',    [ApiLayerController::class, 'update']);  // superadmin only (enforced in controller)
-    Route::delete('/layers/{id}',   [ApiLayerController::class, 'destroy']); // superadmin only (enforced in controller)
+// Public Water Quality Sampling Events (published only)
+Route::get('/public/sample-events', [AdminSamplingEventController::class, 'publicIndex'] ?? function() {
+    return response()->json(['data' => []]);
+});
+Route::get('/public/sample-events/{samplingEvent}', [AdminSamplingEventController::class, 'publicShow'] ?? function() {
+    return response()->json(['data' => null], 404);
 });
 
-// NEW: Public listing of layers, always filtered to visibility=public (no auth).
-// Usage: GET /api/public/layers?body_type=lake|watershed&body_id=123
-Route::get('/public/layers', [ApiLayerController::class, 'publicIndex']);
-Route::get('/public/layers/{id}', [ApiLayerController::class, 'publicShow']);
-
-// Public Water Quality Sampling Events (published only)
-Route::get('/public/sample-events', [SamplingEventController::class, 'publicIndex']); // ?lake_id=..&organization_id=..&limit=10
-Route::get('/public/sample-events/{samplingEvent}', [SamplingEventController::class, 'publicShow']);
-
-// Slim options for dropdowns (id + name), with optional ?q=
-Route::get('/options/lakes',      [OptionsController::class, 'lakes']);
-Route::get('/options/watersheds', [OptionsController::class, 'watersheds']);
+// Additional options endpoints (non-duplicated)
 Route::get('/options/parameters', [OptionsController::class, 'parameters']);
 Route::get('/options/wq-standards', [OptionsController::class, 'standards']);
 Route::get('/options/water-quality-classes', [OptionsController::class, 'waterQualityClasses']);
 Route::get('/options/regions', [OptionsController::class, 'regions']);
 Route::get('/options/provinces', [OptionsController::class, 'provinces']);
 Route::get('/options/municipalities', [OptionsController::class, 'municipalities']);
-
-});

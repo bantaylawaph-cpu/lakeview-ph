@@ -5,6 +5,7 @@ import {
   api, setToken, requestRegisterOtp, verifyRegisterOtp, 
   requestForgotOtp, verifyForgotOtp, resetWithTicket, resendOtp } 
   from "../../lib/api";
+import { setCurrentUser } from "../../lib/authState";
 import { alertSuccess, alertError, alertInfo } from "../../utils/alerts";
 import Modal from "../../components/Modal";
 import { FiX } from "react-icons/fi";
@@ -86,7 +87,17 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
   }, [mode, resendIn]);
 
   function redirectByRole(user) {
-    const role = user?.role || "public";
+    if (!user) { navigate('/', { replace: true }); return; }
+    // Defensive: derive role name from role or role_id mapping if needed
+    let role = user.role;
+    if (!role && user.role_id != null) {
+      // fallback mapping assumes roles seeded in canonical order but queries backend if needed later
+      const idMap = { 1:'public', 2:'contributor', 3:'org_admin', 4:'superadmin' };
+      role = idMap[user.role_id] || 'public';
+    }
+    if (!role) role = 'public';
+    // Debug aid (remove later)
+    try { console.debug('[AuthModal] redirectByRole', { user, derivedRole: role }); } catch {}
     if (role === "superadmin") navigate("/admin-dashboard", { replace: true });
     else if (role === "org_admin") navigate("/org-dashboard", { replace: true });
     else if (role === "contributor") navigate("/contrib-dashboard", { replace: true });
@@ -119,20 +130,22 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
         body: { email, password, remember },
       });
 
-      if (res?.token) {
-        setToken(res.token, { remember });
+      if (res?.token) setToken(res.token, { remember });
+
+      // Backend returns user under res.data; fallback to fetching /auth/me if absent
+      let finalUser = res?.data || res?.user || null;
+      if (!finalUser || !finalUser.role) {
+        try { finalUser = await api('/auth/me'); } catch { /* ignore */ }
       }
 
-      // Use tenant_id from login response if present
-      if (res?.user?.tenant_id) {
-        // Store tenant_id in localStorage or your app state
-        localStorage.setItem("tenant_id", res.user.tenant_id);
-      } else {
-        localStorage.removeItem("tenant_id");
-      }
+      // Optimistic propagation to sidebar / other listeners
+      if (finalUser) setCurrentUser(finalUser);
 
-      alertSuccess("Welcome back!", "Login successful.");
-      redirectByRole(res.user);
+  if (finalUser?.tenant_id) localStorage.setItem('tenant_id', finalUser.tenant_id);
+      else localStorage.removeItem('tenant_id');
+
+      alertSuccess('Welcome back!', 'Login successful.');
+      redirectByRole(finalUser);
       onClose?.();
     } catch (e2) {
       const msg = extractMessage(e2, "Invalid email or password.");
@@ -214,7 +227,8 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
       if (verifyContext === "register") {
         const out = await verifyRegisterOtp({ email: verifyEmail, code: otp, remember });
         if (out?.token) setToken(out.token, { remember });
-        const me = await api("/auth/me");
+  const me = await api("/auth/me");
+  if (me) setCurrentUser(me?.data || me);
         alertSuccess("Registered & verified", "Welcome to LakeView PH!");
         redirectByRole(me);
         onClose?.();

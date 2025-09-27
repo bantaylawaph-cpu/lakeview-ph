@@ -21,8 +21,11 @@ class EnsureRole
             return response()->json(['message' => 'Unauthenticated'], 401);
         }
 
+        // Eager load current role once
+        $user->loadMissing('role');
+
         // SUPERADMIN always allowed
-        if ($user->role === 'superadmin') {
+        if (($user->role?->name) === 'superadmin') {
             return $next($request);
         }
 
@@ -41,11 +44,8 @@ class EnsureRole
             return $next($request);
         }
 
-        // Ensure relations are available once
-        $user->loadMissing('roles');
-
-        // Any-match semantics: user must have at least one of the required roles
-        if (!$user->hasAnyRole($list)) {
+        $current = $user->role?->name;
+        if (!in_array($current, $list, true)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 

@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
+import { TENANT_SCOPED } from "../lib/roles";
 
+// allowed: array of role strings permitted to view the child content; empty = any authenticated user
 export default function RequireRole({ allowed = [], children }) {
   const [checking, setChecking] = useState(true);
   const [ok, setOk] = useState(false);
@@ -14,14 +16,10 @@ export default function RequireRole({ allowed = [], children }) {
       try {
         const me = await api("/auth/me");
 
-        // role check
         const roleAllowed = allowed.length === 0 || allowed.includes(me.role);
         setOk(roleAllowed);
-
-        // tenant check: org_admins and contributors must have tenant_id
-        if ((me.role === "org_admin" || me.role === "contributor") && !me.tenant_id) {
-          setTenantOk(false);
-        }
+        // Tenant-scoped roles must have tenant_id
+        if (TENANT_SCOPED.has(me.role) && !me.tenant_id) setTenantOk(false);
       } catch {
         setOk(false);
         setTenantOk(false);

@@ -1,4 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
+import TableToolbar from "../../components/table/TableToolbar";
+import FilterPanel from "../../components/table/FilterPanel";
 import api from "../../lib/api";
 import Swal from "sweetalert2";
 import OrganizationForm from "../../components/OrganizationForm";
@@ -13,11 +15,36 @@ export default function AdminOrganizationsPage() {
   const [editingOrg, setEditingOrg] = useState(null);
   const [openManage, setOpenManage] = useState(false);
   const [manageOrg, setManageOrg] = useState(null);
+  const [q, setQ] = useState("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
-  const fetchOrgs = async () => {
+  // Simple in-memory column visibility (no persistence per Option A revert)
+  const [colVisible, setColVisible] = useState({
+    seq: true,
+    id: true,
+    name: true,
+    type: true,
+    domain: true,
+    contact: true,
+    active: true,
+    actions: true,
+  });
+
+  const columns = useMemo(() => [
+    { id: 'seq', header: '#', width: 56 },
+    { id: 'id', header: 'ID', width: 80 },
+    { id: 'name', header: 'Name' },
+    { id: 'type', header: 'Type' },
+    { id: 'domain', header: 'Domain' },
+    { id: 'contact', header: 'Contact' },
+    { id: 'active', header: 'Active' },
+    { id: 'actions', header: 'Actions', width: 220 },
+  ], []);
+
+  const fetchOrgs = async (params = {}) => {
     setLoading(true);
     try {
-      const res = await api.get("/admin/tenants");
+      const res = await api.get("/admin/tenants", { params });
       setRows(res.data || []);
     } catch (e) {
       Swal.fire("Failed to load organizations", "", "error");
@@ -26,7 +53,7 @@ export default function AdminOrganizationsPage() {
     }
   };
 
-  useEffect(() => { fetchOrgs(); }, []);
+  useEffect(() => { fetchOrgs({ q }); }, []);
 
   const openCreate = () => {
     setEditingOrg(null);
@@ -79,54 +106,78 @@ export default function AdminOrganizationsPage() {
   };
 
   return (
-    <div className="dashboard-card">
-      <div className="dashboard-card-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div className="dashboard-card-title">Admin · Organizations</div>
-        <div className="org-actions-right">
-          <button className="pill-btn primary" onClick={openCreate}>+ New Organization</button>
-        </div>
+    <div className="container" style={{ padding: 16 }}>
+      <div className="flex-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <h2 style={{ margin: 0 }}>Admin · Organizations</h2>
+        <button className="pill-btn" onClick={openCreate}>+ New Organization</button>
       </div>
-      <div className="dashboard-card-body">
-        <div className="table-wrapper">
-          <div className="lv-table-wrap">
-            <div className="lv-table-scroller">
-              <table className="lv-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ background: '#f8fafc' }}>
-                    <th style={{ width: 56, textAlign: 'left', padding: '8px 12px' }}>#</th>
-                    <th style={{ textAlign: 'left', padding: '8px 12px' }}>Name</th>
-                    <th style={{ textAlign: 'left', padding: '8px 12px' }}>Type</th>
-                    <th style={{ textAlign: 'left', padding: '8px 12px' }}>Domain</th>
-                    <th style={{ textAlign: 'left', padding: '8px 12px' }}>Contact</th>
-                    <th style={{ textAlign: 'left', padding: '8px 12px' }}>Active</th>
-                    <th style={{ width: 220, textAlign: 'right', padding: '8px 12px' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr><td colSpan="7" style={{ textAlign: 'center', padding: 16 }}>Loading…</td></tr>
-                  ) : rows.length === 0 ? (
-                    <tr><td colSpan="7" className="lv-empty" style={{ textAlign: 'center', padding: 16 }}>No organizations found</td></tr>
-                  ) : (
-                    rows.map((org, i) => (
-                      <tr key={org.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                        <td style={{ padding: '8px 12px' }}>{i + 1}</td>
-                        <td style={{ padding: '8px 12px' }}>{org.name}</td>
-                        <td style={{ padding: '8px 12px' }}>{org.type}</td>
-                        <td style={{ padding: '8px 12px' }}>{org.domain}</td>
-                        <td style={{ padding: '8px 12px' }}>{org.contact_email}</td>
-                        <td style={{ padding: '8px 12px' }}>{org.active ? 'Yes' : 'No'}</td>
+      <div className="card" style={{ padding: 12, borderRadius: 12, marginBottom: 12 }}>
+        <TableToolbar
+          tableId="admin-organizations"
+          search={{
+            value: q,
+            onChange: (val) => { setQ(val); fetchOrgs({ q: val }); },
+            placeholder: 'Search organizations…'
+          }}
+          filters={[]}
+          columnPicker={{
+            columns,
+            visibleMap: colVisible,
+            onVisibleChange: (m) => setColVisible(m)
+          }}
+          onRefresh={() => fetchOrgs({ q })}
+          onToggleFilters={() => setShowAdvanced(s => !s)}
+          filtersBadgeCount={0}
+        />
+        <FilterPanel
+          open={showAdvanced}
+          fields={[]}
+          onClearAll={() => {/* future advanced filters clear */}}
+        />
+      </div>
+      <div className="table-wrapper">
+        <div className="lv-table-wrap">
+          <div className="lv-table-scroller">
+            <table className="lv-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: '#f8fafc' }}>
+                  {colVisible.seq && <th style={{ width: 56, textAlign: 'left', padding: '8px 12px' }}>#</th>}
+                  {colVisible.id && <th style={{ width: 80, textAlign: 'left', padding: '8px 12px' }}>ID</th>}
+                  {colVisible.name && <th style={{ textAlign: 'left', padding: '8px 12px' }}>Name</th>}
+                  {colVisible.type && <th style={{ textAlign: 'left', padding: '8px 12px' }}>Type</th>}
+                  {colVisible.domain && <th style={{ textAlign: 'left', padding: '8px 12px' }}>Domain</th>}
+                  {colVisible.contact && <th style={{ textAlign: 'left', padding: '8px 12px' }}>Contact</th>}
+                  {colVisible.active && <th style={{ textAlign: 'left', padding: '8px 12px' }}>Active</th>}
+                  {colVisible.actions && <th style={{ width: 220, textAlign: 'right', padding: '8px 12px' }}>Actions</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan="8" style={{ textAlign: 'center', padding: 16 }}>Loading…</td></tr>
+                ) : rows.length === 0 ? (
+                  <tr><td colSpan="8" className="lv-empty" style={{ textAlign: 'center', padding: 16 }}>No organizations found</td></tr>
+                ) : (
+                  rows.map((org, i) => (
+                    <tr key={org.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                      {colVisible.seq && <td style={{ padding: '8px 12px' }}>{i + 1}</td>}
+                      {colVisible.id && <td style={{ padding: '8px 12px' }}>{org.id}</td>}
+                      {colVisible.name && <td style={{ padding: '8px 12px' }}>{org.name}</td>}
+                      {colVisible.type && <td style={{ padding: '8px 12px' }}>{org.type}</td>}
+                      {colVisible.domain && <td style={{ padding: '8px 12px' }}>{org.domain}</td>}
+                      {colVisible.contact && <td style={{ padding: '8px 12px' }}>{org.contact_email}</td>}
+                      {colVisible.active && <td style={{ padding: '8px 12px' }}>{org.active ? 'Yes' : 'No'}</td>}
+                      {colVisible.actions && (
                         <td style={{ padding: '8px 12px', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                           <button className="pill-btn ghost sm" onClick={() => openEdit(org)}>Edit</button>
                           <button className="pill-btn ghost sm" onClick={() => openOrgManage(org)}>Manage</button>
                           <button className="pill-btn ghost sm red-text" onClick={() => handleDelete(org)}>Delete</button>
                         </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                      )}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>

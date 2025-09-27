@@ -7,6 +7,7 @@ use App\Models\Role;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Services\UserRoleAuditLogger;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 
@@ -14,7 +15,6 @@ class UserController extends Controller
 {
     /**
      * GET /api/admin/users
-     * Query params: q?, page?, per_page?
      */
     public function index(Request $request)
     {
@@ -24,29 +24,32 @@ class UserController extends Controller
         $qb = User::query()
             ->when($q !== '', function ($w) use ($q) {
                 $pattern = "%{$q}%";
-                // Postgres ILIKE
                 $w->where(function ($x) use ($pattern) {
                     $x->where('name', 'ILIKE', $pattern)
                       ->orWhere('email', 'ILIKE', $pattern);
                 });
             })
-            ->with(['roles' => function ($q) {
-                $q->withPivot(['tenant_id', 'is_active']);
-            }])
+            ->with(['role','tenant'])
             ->orderBy('name');
 
         $paginator = $qb->paginate($pp);
 
         $paginator->getCollection()->transform(function (User $u) {
             return [
-                'id'                => $u->id,
-                'name'              => $u->name,
-                'email'             => $u->email,
-                'role'              => $u->role, // baseline (system)
-                'global_role'       => $u->highestRoleName(), // effective for UI
+                'id' => $u->id,
+                'name' => $u->name,
+                'email' => $u->email,
+                'role' => $u->role?->name,
+                'role_id' => $u->role_id,
+                'tenant_id' => $u->tenant_id,
+                'tenant' => $u->tenant ? [
+                    'id' => $u->tenant->id,
+                    'name' => $u->tenant->name,
+                ] : null,
+                'is_active' => $u->is_active,
                 'email_verified_at' => optional($u->email_verified_at)->toIso8601String(),
-                'created_at'        => optional($u->created_at)->toIso8601String(),
-                'updated_at'        => optional($u->updated_at)->toIso8601String(),
+                'created_at' => optional($u->created_at)->toIso8601String(),
+                'updated_at' => optional($u->updated_at)->toIso8601String(),
             ];
         });
 
@@ -58,21 +61,8 @@ class UserController extends Controller
      */
     public function show(User $user)
     {
-        $user->load(['roles' => function ($q) {
-            $q->withPivot(['tenant_id', 'is_active']);
-        }]);
-
-        return response()->json([
-            'data' => [
-                'id'          => $user->id,
-                'name'        => $user->name,
-                'email'       => $user->email,
-                'role'        => $user->role,
-                'global_role' => $user->highestRoleName(),
-                'created_at'  => optional($user->created_at)->toIso8601String(),
-                'updated_at'  => optional($user->updated_at)->toIso8601String(),
-            ],
-        ]);
+        $user->load(['role','tenant']);
+        return response()->json(['data' => $this->resource($user)]);
     }
 
     /**
@@ -81,82 +71,105 @@ class UserController extends Controller
      */
     public function store(Request $request)
     {
-    $allowed = \App\Models\Role::query()->pluck('name')->all();
+        $auth = $request->user();
+        $roleNames = [Role::PUBLIC, Role::CONTRIBUTOR, Role::ORG_ADMIN, Role::SUPERADMIN];
 
         $data = $request->validate([
-            'name'                  => ['nullable', 'string', 'max:255'],
-            'email'                 => ['required', 'email', 'max:255', 'unique:users,email'],
-            'password'              => ['required', 'string', 'min:8', 'confirmed'],
-            'role'                  => ['required', Rule::in($allowed)],
-            'tenant_id'             => ['nullable', 'integer', 'exists:tenants,id'],
+            'name' => ['nullable','string','max:255'],
+            'email' => ['required','email','max:255','unique:users,email'],
+            'password' => ['required','string','min:8','confirmed'],
+            'role' => ['required', Rule::in($roleNames)],
+            'tenant_id' => ['nullable','integer','exists:tenants,id'],
         ]);
 
-        // Validate role scope
-        if (in_array($data['role'], ['org_admin', 'contributor']) && empty($data['tenant_id'])) {
-            return response()->json(['message' => 'tenant_id is required for org-scoped roles.'], 422);
+        // Enforce creation context:
+        if ($auth && $auth->isOrgAdmin()) {
+            // org_admin can only create contributors inside own tenant
+            $data['role'] = Role::CONTRIBUTOR;
+            $data['tenant_id'] = $auth->tenant_id;
         }
-        if ($data['role'] === 'superadmin' && !empty($data['tenant_id'])) {
-            return response()->json(['message' => 'tenant_id must be null for superadmin.'], 422);
+
+        if (!$auth || $auth->role?->name === Role::PUBLIC) {
+            // public self-registration scenario: force public
+            $data['role'] = Role::PUBLIC;
+            $data['tenant_id'] = null;
         }
 
-    $user = new User();
-    $user->name  = $data['name'] ?? strtok($data['email'], '@');
-    $user->email = $data['email'];
-    $user->password = Hash::make($data['password']);
-    // Save the actual selected role
-    $user->role = $data['role'];
-    $user->save();
+        // Scope validation
+        $roleRow = Role::where('name', $data['role'])->firstOrFail();
+        if ($roleRow->scope === 'tenant' && empty($data['tenant_id'])) {
+            return response()->json(['message' => 'tenant_id is required for tenant-scoped role'], 422);
+        }
+        if ($roleRow->scope === 'system' && !empty($data['tenant_id'])) {
+            return response()->json(['message' => 'tenant_id must be null for system role'], 422);
+        }
 
-        // org-scoped assignment if applicable
-        $this->upsertOrgMembership($user, $data['role'], $data['tenant_id'] ?? null);
+        $user = new User();
+        $user->name = $data['name'] ?? strtok($data['email'], '@');
+        $user->email = $data['email'];
+        $user->password = Hash::make($data['password']);
+        $user->role_id = $roleRow->id;
+        $user->tenant_id = $data['tenant_id'] ?? null;
+        $user->is_active = true;
+        $user->save();
 
-        return response()->json(['data' => $this->resource($user->fresh(['roles']))], 201);
+        return response()->json(['data' => $this->resource($user->fresh(['role','tenant']))], 201);
     }
 
     /**
      * PUT /api/admin/users/{user}
-     * body: { name?, email, password?, password_confirmation?, role, tenant_id? }
      */
     public function update(Request $request, User $user)
     {
-    $allowed = \App\Models\Role::query()->pluck('name')->all();
+        $auth = $request->user();
+        $roleNames = [Role::PUBLIC, Role::CONTRIBUTOR, Role::ORG_ADMIN, Role::SUPERADMIN];
 
         $data = $request->validate([
-            'name'                  => ['nullable', 'string', 'max:255'],
-            'email'                 => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
-            'password'              => ['nullable', 'string', 'min:8', 'confirmed'],
-            'role'                  => ['required', Rule::in($allowed)],
-            'tenant_id'             => ['nullable', 'integer', 'exists:tenants,id'],
+            'name' => ['nullable','string','max:255'],
+            'email' => ['required','email','max:255', Rule::unique('users','email')->ignore($user->id)],
+            'password' => ['nullable','string','min:8','confirmed'],
+            'role' => ['required', Rule::in($roleNames)],
+            'tenant_id' => ['nullable','integer','exists:tenants,id'],
+            'is_active' => ['nullable','boolean'],
+            'reason' => ['nullable','string','max:500']
         ]);
 
-        if (in_array($data['role'], ['org_admin', 'contributor']) && empty($data['tenant_id'])) {
-            return response()->json(['message' => 'tenant_id is required for org-scoped roles.'], 422);
-        }
-        if ($data['role'] === 'superadmin' && !empty($data['tenant_id'])) {
-            return response()->json(['message' => 'tenant_id must be null for superadmin.'], 422);
+        $original = $user->only(['role_id','tenant_id']);
+
+        if ($auth && $auth->isOrgAdmin()) {
+            // org_admin cannot elevate; forced contributor within same tenant
+            $data['role'] = Role::CONTRIBUTOR;
+            $data['tenant_id'] = $auth->tenant_id;
         }
 
-        $oldBaseline = $user->role;
+        $roleRow = Role::where('name', $data['role'])->firstOrFail();
+        if ($roleRow->scope === 'tenant' && empty($data['tenant_id'])) {
+            return response()->json(['message' => 'tenant_id is required for tenant-scoped role'], 422);
+        }
+        if ($roleRow->scope === 'system' && !empty($data['tenant_id'])) {
+            return response()->json(['message' => 'tenant_id must be null for system role'], 422);
+        }
 
-        $user->name  = $data['name'] ?? $user->name;
+        $user->name = $data['name'] ?? $user->name;
         $user->email = $data['email'] ?? $user->email;
         if (!empty($data['password'])) {
             $user->password = Hash::make($data['password']);
         }
-
-        // Save the actual selected role
-        $user->role = $data['role'];
+        $user->role_id = $roleRow->id;
+        $user->tenant_id = $data['tenant_id'] ?? null;
+        if (array_key_exists('is_active', $data)) {
+            $user->is_active = (bool)$data['is_active'];
+        }
         $user->save();
 
-        // Upsert org membership for org-scoped roles (does nothing for user/superadmin)
-        $this->upsertOrgMembership($user, $data['role'], $data['tenant_id'] ?? null);
+        // Audit log if role or tenant changed
+        UserRoleAuditLogger::log($user, $original, $auth, $data['reason'] ?? null);
 
-        // If baseline changed (e.g., user<->superadmin), revoke tokens so abilities refresh
-        if ($oldBaseline !== $user->role) {
+        if ($original['role_id'] !== $user->role_id) {
             $user->tokens()->delete();
         }
 
-        return response()->json(['data' => $this->resource($user->fresh(['roles']))]);
+        return response()->json(['data' => $this->resource($user->fresh(['role','tenant']))]);
     }
 
     /**
@@ -169,50 +182,23 @@ class UserController extends Controller
         return response()->json([], 204);
     }
 
-    /* ----------------------------------------
-     | Helpers
-     |-----------------------------------------*/
-
     private function resource(User $u): array
     {
         return [
-            'id'          => $u->id,
-            'name'        => $u->name,
-            'email'       => $u->email,
-            'role'        => $u->role,               // baseline (system)
-            'global_role' => $u->highestRoleName(),  // effective UI role
-            'created_at'  => optional($u->created_at)->toIso8601String(),
-            'updated_at'  => optional($u->updated_at)->toIso8601String(),
+            'id' => $u->id,
+            'name' => $u->name,
+            'email' => $u->email,
+            'role' => $u->role?->name,
+            'role_id' => $u->role_id,
+            'tenant_id' => $u->tenant_id,
+            'tenant' => $u->tenant ? [
+                'id' => $u->tenant->id,
+                'name' => $u->tenant->name,
+            ] : null,
+            'is_active' => $u->is_active,
+            'email_verified_at' => optional($u->email_verified_at)->toIso8601String(),
+            'created_at' => optional($u->created_at)->toIso8601String(),
+            'updated_at' => optional($u->updated_at)->toIso8601String(),
         ];
-    }
-
-    /**
-     * Upsert org-scoped membership for org_admin / contributor.
-     * Does nothing for 'user' or 'superadmin'.
-     */
-    private function upsertOrgMembership(User $user, string $roleName, ?int $tenantId): void
-    {
-        if (!in_array($roleName, ['org_admin', 'contributor'], true)) {
-            return; // only org roles are stored in pivot
-        }
-
-        $roleId = Role::query()->where('name', $roleName)->value('id');
-        if (!$roleId) {
-            // roles table should contain these canonical names
-            return;
-        }
-
-        DB::table('user_tenants')->updateOrInsert(
-            [
-                'user_id'   => $user->id,
-                'tenant_id' => $tenantId,
-                'role_id'   => $roleId,
-            ],
-            [
-                'is_active' => true,
-                'updated_at'=> now(),
-                'created_at'=> now(),
-            ]
-        );
     }
 }

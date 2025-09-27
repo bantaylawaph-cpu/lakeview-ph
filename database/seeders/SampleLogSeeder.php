@@ -20,14 +20,16 @@ class SampleLogSeeder extends Seeder
     public function run(): void
     {
         DB::transaction(function () {
+            // Tenants table has no 'email' column; use slug as stable unique key
             $tenant = Tenant::firstOrCreate(
-                ['email' => 'qa@lakeview.local'],
+                ['slug' => 'lakeview-qa'],
                 [
                     'name' => 'LakeView QA Cooperative',
                     'type' => 'Government',
                     'phone' => '555-0100',
                     'address' => '123 QA Avenue, Makati City',
                     'active' => true,
+                    'contact_email' => 'qa@lakeview.local',
                 ]
             );
 

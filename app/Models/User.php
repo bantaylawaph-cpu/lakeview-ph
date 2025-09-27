@@ -2,27 +2,22 @@
 
 namespace App\Models;
 
-use Illuminate\Contracts\Auth\MustVerifyEmail;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable;
 
-    /**
-     * System/base role is kept here (Option A): 'user' | 'superadmin'.
-     * Org-scoped roles (org_admin, contributor) live in user_tenants.
-     */
     protected $fillable = [
         'name',
         'email',
         'password',
-        'role',                 // <= keep baseline here (usually 'user' or 'superadmin')
-        'occupation',
-        'occupation_other',
+        'role_id',
+        'tenant_id',
+        'is_active'
     ];
 
     protected $hidden = [
@@ -32,97 +27,58 @@ class User extends Authenticatable
 
     protected $casts = [
         'email_verified_at' => 'datetime',
+        'is_active' => 'boolean',
     ];
 
-    /* ----------------------------------------
-     | Relationships
-     |-----------------------------------------*/
-
-    // Org-scoped roles via pivot (user_tenants)
-    public function roles()
+    // Relationships
+    public function role()
     {
-        // Pivot columns: user_id, tenant_id (nullable), role_id, is_active
-        return $this->belongsToMany(Role::class, 'user_tenants', 'user_id', 'role_id')
-            ->withPivot(['tenant_id', 'is_active'])
-            ->withTimestamps();
+        return $this->belongsTo(Role::class);
     }
 
-    // Raw pivot rows if needed elsewhere
-    public function userTenants()
+    public function tenant()
     {
-        return $this->hasMany(UserTenant::class, 'user_id');
+        return $this->belongsTo(Tenant::class);
     }
 
-    /**
-     * (Optional) Tenants relation, kept for convenience.
-     * Not strictly required by Option A, but safe to have.
-     */
-    public function tenants()
+    // Convenience
+    public function isSuperAdmin(): bool
     {
-        return $this->belongsToMany(Tenant::class, 'user_tenants', 'user_id', 'tenant_id')
-            ->withPivot(['role_id', 'is_active'])
-            ->whereNotNull('user_tenants.tenant_id')
-            ->withTimestamps();
+        return ($this->role?->name) === Role::SUPERADMIN;
     }
 
-    /* ----------------------------------------
-     | Role helpers
-     |-----------------------------------------*/
+    public function isOrgAdmin(): bool
+    {
+        return ($this->role?->name) === Role::ORG_ADMIN;
+    }
 
-    // Compute the effective "highest" role for UI/guards
+    public function isContributor(): bool
+    {
+        return ($this->role?->name) === Role::CONTRIBUTOR;
+    }
+
     public function highestRoleName(): string
     {
-        // system baseline first
-        if ($this->role === 'superadmin') {
-            return 'superadmin';
-        }
-
-        // then org-scoped memberships
-        $rank = ['superadmin' => 4, 'org_admin' => 3, 'contributor' => 2, 'user' => 1];
-        $best = 'user';
-
-        foreach ($this->roles as $r) {
-            $name = $r->name ?? 'user';
-            if (($rank[$name] ?? 0) > ($rank[$best] ?? 0)) {
-                $best = $name;
-            }
-        }
-
-        // baseline when no memberships
-        if ($best === 'user' && $this->role && $this->role !== 'superadmin') {
-            // keep explicit baseline if you ever use 'public'
-            return $this->role;
-        }
-
-        return $best;
+        return $this->role?->name ?? Role::PUBLIC;
     }
 
-    public function hasRole(string $roleName, ?int $tenantId = null): bool
+    public function hasRole(string $name): bool
     {
-        if ($roleName === 'superadmin') {
-            return $this->role === 'superadmin';
-        }
+        return $this->role?->name === $name;
+    }
 
-        // org-scoped check (optionally on a tenant)
-        return $this->roles->contains(function ($r) use ($roleName, $tenantId) {
-            $ok = ($r->name === $roleName);
-            if ($tenantId !== null) {
-                $ok = $ok && ((int)($r->pivot->tenant_id) === (int)$tenantId);
+    protected static function booted()
+    {
+        static::saving(function (User $user) {
+            // Enforce tenant/role pairing (secondary to DB trigger)
+            $roleName = $user->role?->name;
+            if (in_array($roleName, [Role::CONTRIBUTOR, Role::ORG_ADMIN]) && !$user->tenant_id) {
+                throw new \RuntimeException('tenant_id is required for tenant-scoped role.');
             }
-            return $ok;
+            if (in_array($roleName, [Role::SUPERADMIN, Role::PUBLIC]) && $user->tenant_id) {
+                // Allow superadmin to temporarily switch? Business rule says must be null.
+                throw new \RuntimeException('tenant_id must be null for system role.');
+            }
         });
     }
-
-    // In App\Models\User (keep your existing code; just add this method)
-
-    public function hasAnyRole(array $roleNames, ?int $tenantId = null): bool
-    {
-        foreach ($roleNames as $r) {
-            if ($this->hasRole($r, $tenantId)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
 }

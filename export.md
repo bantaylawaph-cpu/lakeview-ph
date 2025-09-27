@@ -30,7 +30,6 @@ app/
     Role.php
     Tenant.php
     User.php
-    UserTenant.php
     Watershed.php
   Providers/
     AppServiceProvider.php
@@ -5463,9 +5462,49 @@ vendor/
             Trait_.php
             TraitUse.php
             TraitUseAdaptation.php
-            Use_.php
-          Comment/
-            Doc.php
+          User.php
+          Watershed.php
+        ```
+
+        ---
+
+        ## Documentation Addendum (Sept 2025 Single-Tenant Refactor)
+
+        This project migrated from a multi-association pivot (`user_tenants`) to a strict single-tenant user model:
+
+        | Legacy | Current |
+        |--------|---------|
+        | `users` ⇄ `user_tenants` ⇄ `tenants` | `users.tenant_id` (nullable FK) |
+        | Role determined via pivot context | `users.role_id` (single role) |
+        | Implicit change history | Explicit `user_tenant_changes` audit rows |
+
+        Legacy `UserTenant` model has been fully removed; historical pivot logic retained here only for archival context.
+
+        ### Role Scopes
+        Roles classified as `system` or `tenant` scoped. Invariants:
+        * Tenant-scoped role → `tenant_id` required.
+        * System-scoped role → `tenant_id` must be null.
+
+        ### Integrity Verification
+        Artisan command:
+        ```
+        php artisan tenancy:verify        # Summary
+        php artisan tenancy:verify --json # JSON detail
+        ```
+        Fails (exit code 1) on:
+        1. Tenant role without tenant
+        2. System role with tenant
+        3. User missing role
+        4. Audit row with orphan new_role_id
+
+        ### Audit Table
+        `user_tenant_changes` keeps (user_id, old/new role & tenant, changed_by_user_id, created_at). Used for traceability and integrity checks.
+
+        ### Testing Notes
+        SQLite tests rely on stub lake / layer migrations guarded from Postgres-specific spatial DDL.
+
+        ---
+        ```
           ErrorHandler/
             Collecting.php
             Throwing.php
@@ -11265,21 +11304,9 @@ class User extends Authenticatable
 }
 ```
 
-## app/Models/UserTenant.php
+## (Legacy Removed) app/Models/UserTenant.php
 
-```php
-<?php
-
-namespace App\Models;
-
-use Illuminate\Database\Eloquent\Model;
-
-class UserTenant extends Model
-{
-    protected $table = 'user_tenants';
-    protected $fillable = ['user_id','tenant_id','role_id','joined_at','is_active'];
-}
-```
+Removed during single-tenant refactor (Sept 2025). Previous responsibilities: pivot join between users & tenants with role context. Replaced by direct `users.tenant_id` + `users.role_id` and audit table `user_tenant_changes`.
 
 ## app/Models/Watershed.php
 

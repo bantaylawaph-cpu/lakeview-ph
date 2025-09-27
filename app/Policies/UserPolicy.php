@@ -6,21 +6,32 @@ use App\Models\User;
 
 class UserPolicy
 {
-    /**
-     * Org admins can manage users inside their org; never superadmins.
-     * Superadmin can manage anyone site-wide.
-     */
-    public function manageTenantUser(User $actor, User $subject, int $tenantId): bool
+    // Superadmin can manage any user; org_admin can manage contributor users in same tenant.
+    public function manage(User $actor, User $subject): bool
     {
         if ($actor->isSuperAdmin()) return true;
+        if ($actor->isOrgAdmin()) {
+            return $actor->tenant_id && $actor->tenant_id === $subject->tenant_id && !$subject->isSuperAdmin();
+        }
+        return false;
+    }
 
-        // must be org_admin of that tenant
-        if (! $actor->hasOrgRole($tenantId, 'org_admin')) return false;
+    public function promoteToOrgAdmin(User $actor, User $target): bool
+    {
+        if ($actor->isSuperAdmin()) return true;
+        // org_admin cannot promote others to org_admin; only superadmin
+        return false;
+    }
 
-        // subject must be in same tenant and not be a superadmin
-        $sameTenant = $subject->inOrg($tenantId);
-        $notSuper   = ! $subject->isSuperAdmin();
+    public function demoteOrgAdmin(User $actor, User $target): bool
+    {
+        if ($actor->isSuperAdmin()) return true;
+        // org_admin cannot demote peer org_admins; restricted.
+        return false;
+    }
 
-        return $sameTenant && $notSuper;
+    public function deactivate(User $actor, User $target): bool
+    {
+        return $this->manage($actor, $target);
     }
 }

@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use App\Models\Role;
 
 class StoreUserRequest extends FormRequest
 {
@@ -12,12 +13,11 @@ class StoreUserRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name'       => ['nullable','string','max:255'],
-            'email'      => ['required','email','max:255','unique:users,email'],
-            'password'   => ['required','string','min:8','confirmed'],
-            // chosen role and (optional) org context
-            'role' => ['required', Rule::in(['public','contributor','org_admin','superadmin'])],
-            'tenant_id'  => ['nullable','integer','exists:tenants,id'],
+            'name' => ['nullable','string','max:255'],
+            'email' => ['required','email','max:255','unique:users,email'],
+            'password' => ['required','string','min:8','confirmed'],
+            'role' => ['required', Rule::in([Role::PUBLIC, Role::CONTRIBUTOR, Role::ORG_ADMIN, Role::SUPERADMIN])],
+            'tenant_id' => ['nullable','integer','exists:tenants,id'],
         ];
     }
 
@@ -26,12 +26,11 @@ class StoreUserRequest extends FormRequest
         $v->after(function($v){
             $role = $this->input('role');
             $tenantId = $this->input('tenant_id');
-
-            if (in_array($role, ['contributor','org_admin']) && !$tenantId) {
-                $v->errors()->add('tenant_id', 'tenant_id is required for org-scoped roles.');
+            if (in_array($role, [Role::CONTRIBUTOR, Role::ORG_ADMIN]) && !$tenantId) {
+                $v->errors()->add('tenant_id', 'tenant_id is required for tenant-scoped role.');
             }
-            if ($role === 'superadmin' && $tenantId) {
-                $v->errors()->add('tenant_id', 'tenant_id must be null for superadmin.');
+            if (in_array($role, [Role::SUPERADMIN, Role::PUBLIC]) && $tenantId) {
+                $v->errors()->add('tenant_id', 'tenant_id must be null for system role.');
             }
         });
     }

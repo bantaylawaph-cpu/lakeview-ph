@@ -16,16 +16,16 @@ return new class extends Migration
                 }
             });
 
-            DB::statement("ALTER TABLE public.lakes DROP CONSTRAINT IF EXISTS fk_lakes_class_code");
-
-            Schema::table('lakes', function (Blueprint $table) {
-                $table->foreign('class_code', 'fk_lakes_class_code')
-                    ->references('code')->on('water_quality_classes')
-                    ->onUpdate('cascade')
-                    ->onDelete('set null');
-            });
-
-            DB::statement('CREATE INDEX IF NOT EXISTS idx_lakes_class ON public.lakes (class_code)');
+            if (DB::getDriverName() === 'pgsql') {
+                DB::statement("ALTER TABLE lakes DROP CONSTRAINT IF EXISTS fk_lakes_class_code");
+                Schema::table('lakes', function (Blueprint $table) {
+                    $table->foreign('class_code', 'fk_lakes_class_code')
+                        ->references('code')->on('water_quality_classes')
+                        ->onUpdate('cascade')
+                        ->onDelete('set null');
+                });
+                DB::statement('CREATE INDEX IF NOT EXISTS idx_lakes_class ON lakes (class_code)');
+            }
         }
 
         if (Schema::hasTable('lakes') && Schema::hasTable('water_quality_classes')) {
@@ -38,14 +38,11 @@ return new class extends Migration
 
     public function down(): void
     {
-        if (Schema::hasTable('lakes')) {
+        if (Schema::hasTable('lakes') && DB::getDriverName() === 'pgsql') {
             DB::statement('DROP INDEX IF EXISTS idx_lakes_class');
-
             Schema::table('lakes', function (Blueprint $table) {
-                $table->dropForeign('fk_lakes_class_code');
+                try { $table->dropForeign('fk_lakes_class_code'); } catch (Throwable $e) {}
             });
-            // Intentionally keep the column in place when rolling back. Removing it would
-            // discard user-provided classifications, so we only drop the constraint & index.
         }
     }
 };

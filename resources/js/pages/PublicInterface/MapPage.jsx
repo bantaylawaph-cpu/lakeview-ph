@@ -5,6 +5,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { FiArrowLeft } from "react-icons/fi";
 import { api, getToken, apiPublic } from "../../lib/api";
+import { getCurrentUser, isStale, setCurrentUser } from "../../lib/authState";
 import { fetchPublicLayers, fetchLakeOptions, fetchPublicLayerGeo } from "../../lib/layers";
 import { useMap, GeoJSON } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
@@ -84,20 +85,67 @@ function MapPage() {
   const queuedWqMarkersRef = useRef([]);
   const [mapReady, setMapReady] = useState(false);
   const zoomLockedRef = useRef(true);
-  // ---------------- Auth / route modal ----------------
+  // ---------------- Auth / route modal (centralized auth state) ----------------
   useEffect(() => {
-    let mounted = true;
-    (async () => {
-      if (!getToken()) { setUserRole(null); return; }
-      try {
-        const me = await api("/auth/me");
-        if (!mounted) return;
-        setUserRole(['superadmin','org_admin','contributor'].includes(me.role) ? me.role : null);
-      } catch {
-        if (mounted) setUserRole(null);
+    // Helper to derive role from cached/current user object
+    const deriveRole = (u) => {
+      if (!u) return null;
+      return ['superadmin','org_admin','contributor'].includes(u.role) ? u.role : null;
+    };
+
+    const applyFromCache = () => {
+      const cached = getCurrentUser();
+      setUserRole(deriveRole(cached));
+    };
+
+    if (!getToken()) {
+      setUserRole(null);
+    } else {
+      // Immediate optimistic role from cache
+      applyFromCache();
+      // Fetch fresh if absent or stale
+      const needFetch = !getCurrentUser() || isStale();
+      if (needFetch) {
+        (async () => {
+          try {
+            const res = await api('/auth/me');
+            const u = res?.data || res;
+            setCurrentUser(u, { silent: true }); // we'll emit a separate event manually for control
+            setUserRole(deriveRole(u));
+            // Manually dispatch update so other listeners sync (authState set silent)
+            try { window.dispatchEvent(new CustomEvent('lv-user-update', { detail: u })); } catch {}
+          } catch {
+            setUserRole(null);
+          }
+        })();
       }
-    })();
-    return () => { mounted = false; };
+    }
+
+    const onUserUpdate = (e) => {
+      const u = e.detail || getCurrentUser();
+      setUserRole(deriveRole(u));
+    };
+    const onAuthChange = () => {
+      if (!getToken()) { setUserRole(null); return; }
+      const u = getCurrentUser();
+      if (u) setUserRole(deriveRole(u)); else {
+        // fetch once if cache empty
+        (async () => {
+          try {
+            const res = await api('/auth/me');
+            const fetched = res?.data || res;
+            setCurrentUser(fetched);
+            setUserRole(deriveRole(fetched));
+          } catch { setUserRole(null); }
+        })();
+      }
+    };
+    window.addEventListener('lv-user-update', onUserUpdate);
+    window.addEventListener('lv-auth-change', onAuthChange);
+    return () => {
+      window.removeEventListener('lv-user-update', onUserUpdate);
+      window.removeEventListener('lv-auth-change', onAuthChange);
+    };
   }, []);
 
   useEffect(() => {
