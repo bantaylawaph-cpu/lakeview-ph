@@ -7,9 +7,9 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void {
         Schema::create('roles', function (Blueprint $table) {
-            $table->bigIncrements('id');
-            $table->string('name')->unique();       // superadmin, org_admin, contributor, public
-            $table->string('scope')->nullable();    // system/tenant (optional)
+            $table->id();
+            $table->string('name')->unique();          // public, contributor, org_admin, superadmin
+            $table->string('scope')->nullable();       // 'global'|'tenant'
             $table->timestampsTz();
         });
     }

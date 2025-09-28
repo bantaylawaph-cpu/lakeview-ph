@@ -95,6 +95,8 @@ return [
     |
     */
 
+    'otp_pepper' => env('OTP_PEPPER', ''),
+
     'cipher' => 'AES-256-CBC',
 
     'key' => env('APP_KEY'),

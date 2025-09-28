@@ -1,0 +1,225 @@
+openapi: 3.1.0
+info:
+  title: LakeView API
+  version: 0.1.0
+  description: >-
+    API skeleton for LakeView backend (single-tenant user model). This file is an initial
+    draft and must be expanded with full parameter, response and security detail.
+servers:
+  - url: https://api.example.com
+    description: Production
+  - url: https://staging-api.example.com
+    description: Staging
+  - url: http://localhost:8000
+    description: Local Dev
+
+paths:
+  /api/auth/login:
+    post:
+      summary: Login with email + password + optional OTP
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        '401': { description: Invalid credentials }
+  /api/auth/logout:
+    post:
+      summary: Revoke current token
+      tags: [Auth]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204': { description: Logged out }
+  /api/email/otp:
+    post:
+      summary: Request one-time passcode email
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OtpRequest'
+      responses:
+        '204': { description: OTP sent }
+  /api/tenants:
+    post:
+      summary: Create tenant (superadmin only)
+      tags: [Tenants]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '201': { description: Created }
+  /api/tenants/{tenant}/admins:
+    get:
+      summary: List admins for tenant
+      tags: [Tenants]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+      responses:
+        '200':
+          description: Admin list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/User' }
+  /api/tenants/{tenant}/assign-admin:
+    post:
+      summary: Promote user to org_admin (superadmin only)
+      tags: [Tenants]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id]
+              properties:
+                user_id: { type: integer }
+      responses:
+        '200': { description: Updated user, role changed }
+        '403': { description: Forbidden }
+        '422': { description: Validation error }
+  /api/tenants/{tenant}/admins/{user}:
+    delete:
+      summary: Demote org_admin to contributor (superadmin only)
+      tags: [Tenants]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - name: user
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: Updated user, role changed }
+        '403': { description: Forbidden }
+  /api/layers:
+    get:
+      summary: List layers (role filtered)
+      tags: [Layers]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: tenant_id
+          in: query
+          schema: { type: integer, nullable: true }
+        - name: visibility
+          in: query
+          schema: { type: string, enum: [public, private] }
+      responses:
+        '200':
+          description: Layer page
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Layer' }
+  /api/public/layers:
+    get:
+      summary: Publicly visible layers
+      tags: [Public]
+      responses:
+        '200':
+          description: Public layers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Layer' }
+  /api/tenancy/verify:
+    get:
+      summary: Run tenancy integrity verification (wrapper over artisan command)
+      tags: [Maintenance]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: OK (no issues) }
+        '409': { description: Issues found }        
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    TenantId:
+      name: tenant
+      in: path
+      required: true
+      schema: { type: integer }
+  schemas:
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, format: password }
+        otp: { type: string, nullable: true }
+    OtpRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+    AuthTokenResponse:
+      type: object
+      properties:
+        token: { type: string }
+        token_type: { type: string, example: Bearer }
+        user: { $ref: '#/components/schemas/User' }
+    User:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        email: { type: string, format: email }
+        role_id: { type: integer }
+        tenant_id: { type: integer, nullable: true }
+    Layer:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        body_type: { type: string }
+        body_id: { type: integer }
+        visibility: { type: string, enum: [public, private] }
+        is_active: { type: boolean }
+        uploaded_by: { type: integer }
+    TenancyVerifyResult:
+      type: object
+      properties:
+        status: { type: string, enum: [OK, ISSUES_FOUND] }
+        issue_keys:
+          type: array
+          items: { type: string }
+        issues:
+          type: object
+          additionalProperties: true
+
+tags:
+  - name: Auth
+  - name: Tenants
+  - name: Layers
+  - name: Public
+  - name: Maintenance

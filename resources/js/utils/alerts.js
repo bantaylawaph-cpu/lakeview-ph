@@ -1,27 +1,67 @@
-// resources/js/utils/alerts.js
-import Swal from "sweetalert2";
-import withReactContent from "sweetalert2-react-content";
+import Swal from 'sweetalert2';
+import withReactContent from 'sweetalert2-react-content';
 
-const MySwal = withReactContent(Swal);
+const ReactSwal = withReactContent(Swal);
 
-export const alertSuccess = (title, text) =>
-  MySwal.fire({ icon: "success", title, text, timer: 1800, showConfirmButton: false });
+export const Toast = ReactSwal.mixin({
+  toast: true,
+  position: 'top-end',
+  showConfirmButton: false,
+  timer: 3000,
+  timerProgressBar: true,
+});
 
-export const alertError = (title, text) =>
-  MySwal.fire({ icon: "error", title, text });
+export function toastSuccess(title = 'Success', text = undefined) {
+  return Toast.fire({ icon: 'success', title, text });
+}
 
-export const alertInfo = (title, text) =>
-  MySwal.fire({ icon: "info", title, text });
+export function toastError(title = 'Error', text = undefined) {
+  return Toast.fire({ icon: 'error', title, text });
+}
 
-export const confirm = async (title, text, confirmButtonText = "Yes") => {
-  const res = await MySwal.fire({
-    icon: "question",
+export function toastWarning(title = 'Notice', text = undefined) {
+  return Toast.fire({ icon: 'warning', title, text });
+}
+
+export function toastInfo(title = 'Info', text = undefined) {
+  return Toast.fire({ icon: 'info', title, text });
+}
+
+export async function confirm({
+  title = 'Are you sure?',
+  text = '',
+  confirmButtonText = 'Yes',
+  cancelButtonText = 'Cancel',
+  confirmButtonColor = '#3b82f6',
+  cancelButtonColor = '#d1d5db',
+  icon = 'question',
+} = {}) {
+  const res = await ReactSwal.fire({
     title,
     text,
+    icon,
     showCancelButton: true,
     confirmButtonText,
+    cancelButtonText,
+    confirmButtonColor,
+    cancelButtonColor,
     reverseButtons: true,
-    focusCancel: true,
   });
   return res.isConfirmed;
-};
+}
+
+export async function alertError(title = 'Something went wrong', text = '') {
+  return ReactSwal.fire({ icon: 'error', title, text });
+}
+
+export async function alertSuccess(title = 'Success', text = '') {
+  return ReactSwal.fire({ icon: 'success', title, text });
+}
+
+export async function alertWarning(title = 'Warning', text = '') {
+  return ReactSwal.fire({ icon: 'warning', title, text });
+}
+
+export async function alertInfo(title = 'Info', text = '') {
+  return ReactSwal.fire({ icon: 'info', title, text });
+}

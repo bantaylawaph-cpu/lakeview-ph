@@ -16,8 +16,8 @@ import {
 
 import DashboardLayout from "../../layouts/DashboardLayout";
 import AdminOverview from "./AdminOverview";
-import AdminOrganizations from "./AdminOrganizations";
-import AdminUsers from "./AdminUsers";
+import AdminOrganizations from "./adminOrganizations";
+import AdminUsers from "./adminUsers";
 import AdminWaterCat from "./adminWaterCat";
 import AdminLayers from "./adminLayers";
 import AdminParameters from "./adminParams";

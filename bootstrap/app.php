@@ -12,15 +12,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
+        // Route middleware aliases (Kernel.php replacement in Laravel 12)
         $middleware->alias([
-            "role" => \App\Http\Middleware\EnsureRole::class,
-        ]);
-
-        // Bearer-token mode (no stateful Sanctum, no CSRF in API)
-        // Use numeric throttle to avoid named limiter errors here.
-        $middleware->appendToGroup("api", [
-            "throttle:60,1",
-            \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            'tenant.scoped' => \App\Http\Middleware\TenantScope::class,
+            'role'          => \App\Http\Middleware\EnsureRole::class, // you already have EnsureRole
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

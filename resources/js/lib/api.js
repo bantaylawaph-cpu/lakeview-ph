@@ -1,42 +1,55 @@
+// Remove a user as a member from a tenant (organization)
+// (These must be after api is defined, so moved to bottom)
 // resources/js/lib/api.js
-import { alertInfo } from "../utils/alerts";
 
-const API_BASE = "/api";
-const LS_KEY = "lv_token";
-const STORE_KEY = "lv_token_store"; // "local" or "session"
+// --- Config ---------------------------------------------------------------
+const STORAGE_KEY = "auth.token";
+const API_BASE =
+  (typeof window !== "undefined" && window.__API_BASE__) ||
+  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_BASE) ||
+  (typeof process !== "undefined" && process.env && (process.env.MIX_API_BASE || process.env.VITE_API_BASE)) ||
+  "/api";
 
-function notifyAuthChange() {
-  try { window.dispatchEvent(new CustomEvent("lv-auth-change")); } catch {}
+// --- Token handling -------------------------------------------------------
+let _token = null;
+try {
+  _token = localStorage.getItem(STORAGE_KEY) || null;
+} catch (_) {
+  _token = null;
+}
+
+export function setToken(token /*, opts */) {
+  _token = token || null;
+  try {
+    if (_token) localStorage.setItem(STORAGE_KEY, _token);
+    else localStorage.removeItem(STORAGE_KEY);
+    // Notify listeners (Sidebar, etc.) that auth changed
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('lv-auth-change'));
+    }
+  } catch (_) {}
 }
 
 export function getToken() {
-  const store = localStorage.getItem(STORE_KEY) || "local";
-  return store === "session"
-    ? sessionStorage.getItem(LS_KEY)
-    : localStorage.getItem(LS_KEY);
-}
-
-export function setToken(tok, { remember = false } = {}) {
-  try { localStorage.removeItem(LS_KEY); sessionStorage.removeItem(LS_KEY); } catch {}
-  if (remember) {
-    localStorage.setItem(LS_KEY, tok);
-    localStorage.setItem(STORE_KEY, "local");
-  } else {
-    sessionStorage.setItem(LS_KEY, tok);
-    localStorage.setItem(STORE_KEY, "session");
-  }
-  notifyAuthChange();
+  return _token;
 }
 
 export function clearToken() {
-  try {
-    localStorage.removeItem(LS_KEY);
-    sessionStorage.removeItem(LS_KEY);
-    localStorage.removeItem(STORE_KEY);
-  } catch {}
-  notifyAuthChange();
+  setToken(null);
 }
 
+// --- Helpers --------------------------------------------------------------
+function toQueryString(params) {
+  if (!params) return "";
+  const usp = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v === undefined || v === null || v === "") return;
+    if (Array.isArray(v)) v.forEach((item) => usp.append(`${k}[]`, item));
+    else usp.append(k, v);
+  });
+  const s = usp.toString();
+  return s ? `?${s}` : "";
+}
 /**
  * Build a query string from a params object.
  * Example: buildQuery({ a: 1, q: "laguna de bay" }) -> "?a=1&q=laguna%20de%20bay"
@@ -53,77 +66,158 @@ export function buildQuery(params = {}) {
   return s ? `?${s}` : "";
 }
 
-export async function api(path, { method = "GET", body, headers = {}, auth = true } = {}) {
+function buildUrl(url, params) {
+  const isAbsolute = /^https?:\/\//i.test(url);
+  const base = isAbsolute ? url : `${API_BASE}${url}`;
+  return `${base}${toQueryString(params)}`;
+}
+
+async function parseResponse(res) {
+  const ct = res.headers.get("content-type") || "";
+  if (res.status === 204) return {};
+  if (ct.includes("application/json")) return res.json();
+  const text = await res.text();
+  return { message: text || res.statusText };
+}
+
+function makeError(res, data) {
+  // Stringify so AuthModal.extractMessage(JSON.parse(e.message)) works
+  const err = new Error(JSON.stringify(data));
+  err.response = { status: res.status, data };
+  return err;
+}
+
+// --- Core request ---------------------------------------------------------
+async function request(method, url, { params, body, headers, raw, auth } = {}) {
+  const finalUrl = buildUrl(url, params);
+  const isForm = body instanceof FormData;
   const token = getToken();
   const hadToken = !!token;
-  // Only attach Authorization header when we actually have a token.
-  const authHeaders = auth && token ? { Authorization: `Bearer ${token}` } : {};
-
-  // If this call requires auth but we don't have a token, short-circuit and
-  // reject immediately. This avoids making unauthenticated requests to
-  // admin/auth endpoints which just return 401s and clutter the console.
-  if (auth && !token) {
-    return Promise.reject(new Error("Unauthenticated"));
-  }
-
-  const res = await fetch(`${API_BASE}${path}`, {
+  // If auth === false, omit Authorization header even if a token exists (used by apiPublic)
+  const useAuth = auth !== false;
+  const authHeaders = useAuth && token ? { Authorization: `Bearer ${token}` } : {};
+  const init = {
     method,
     headers: {
-      "Content-Type": "application/json",
       Accept: "application/json",
+      ...(isForm ? {} : { "Content-Type": "application/json" }),
       ...authHeaders,
-      ...headers,
+      ...(headers || {}),
     },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-
-  // If the server returns 401 but we didn't have a token, treat it as an unauthenticated request
-  // and don't clear tokens or show the session-expired notification. Only perform session
-  // expiry handling when the client actually had a token.
-  if (res.status === 401 && hadToken) {
-    clearToken();
-    if (!window.__lv401Shown) {
-      window.__lv401Shown = true;
-      alertInfo("Session expired", "Please sign in again.");
-    }
-  }
-
-    if (!res.ok) {
-    // Try to parse a JSON error body to extract validation messages
-    let t = "";
-    let parsedBody = null;
-    try {
-      parsedBody = await res.json();
-      if (parsedBody) {
-        if (parsedBody.errors && typeof parsedBody.errors === 'object') {
-          t = Object.entries(parsedBody.errors)
-            .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
-            .join('; ');
-        } else if (parsedBody.message) {
-          t = parsedBody.message;
-        } else {
-          t = JSON.stringify(parsedBody);
-        }
-      }
-    } catch {
-      t = await res.text().catch(() => "");
-    }
-
-    if (res.status === 429) {
-      const err = new Error(`HTTP 429 Too Many Requests: ${t || 'rate limit exceeded'}`);
-      err.status = res.status;
-      err.body = parsedBody;
-      throw err;
-    }
-
-    const err = new Error(t ? `HTTP ${res.status} ${t}` : `HTTP ${res.status}`);
-    err.status = res.status;
-    err.body = parsedBody;
+    body: body ? (isForm ? body : JSON.stringify(body)) : undefined,
+  };
+  let res;
+  try {
+    res = await fetch(finalUrl, init);
+  } catch (networkError) {
+    const err = new Error(JSON.stringify({ message: "Network error" }));
+    err.cause = networkError;
     throw err;
   }
-
-  return res.json().catch(() => ({}));
+  if (raw) return res;
+  const data = await parseResponse(res);
+  if (!res.ok) throw makeError(res, data);
+  return data;
 }
+
+// --- Public API client ----------------------------------------------------
+// Function-call style: api("/path", { method, body, params })
+function client(url, opts = {}) {
+  const method = (opts.method || "GET").toUpperCase();
+  return request(method, url, opts);
+}
+
+// Attach axios-like methods
+client.get    = (url, config = {})           => request("GET",    url, config);
+client.post   = (url, body, config = {})     => request("POST",   url, { ...(config || {}), body });
+client.put    = (url, body, config = {})     => request("PUT",    url, { ...(config || {}), body });
+client.patch  = (url, body, config = {})     => request("PATCH",  url, { ...(config || {}), body });
+client.delete = (url, config = {})           => request("DELETE", url, config);
+client.upload = (url, formData, config = {}) => request("POST",   url, { ...(config || {}), body: formData });
+
+// expose token helpers on the client too (optional)
+client.setToken  = setToken;
+client.getToken  = getToken;
+client.clearToken = clearToken;
+
+// --- Auth helpers (used by AuthModal.jsx) ---------------------------------
+// Registration OTP
+export async function requestRegisterOtp(payloadOrEmail) {
+  const payload = typeof payloadOrEmail === "string"
+    ? { email: payloadOrEmail }
+    : (payloadOrEmail || {});
+  return client.post("/auth/register/request-otp", payload);
+}
+export async function verifyRegisterOtp({ email, code, remember }) {
+  return client.post("/auth/register/verify-otp", { email, code, remember });
+}
+
+// Forgot Password OTP
+export async function requestForgotOtp(payloadOrEmail) {
+  const payload = typeof payloadOrEmail === "string"
+    ? { email: payloadOrEmail }
+    : (payloadOrEmail || {});
+  return client.post("/auth/forgot/request-otp", payload);
+}
+export async function verifyForgotOtp({ email, code }) {
+  return client.post("/auth/forgot/verify-otp", { email, code });
+}
+
+// Ticket-based reset (what AuthModal imports as resetWithTicket)
+export async function resetWithTicket({ ticket, password, password_confirmation }) {
+  return client.post("/auth/forgot/reset", { ticket, password, password_confirmation });
+}
+
+// (Optional) Code-based reset helper, if some screens still use it
+export async function resetForgotPassword({ email, code, password, password_confirmation }) {
+  return client.post("/auth/forgot/reset", { email, code, password, password_confirmation });
+}
+
+// Resend OTP
+export async function resendOtp({ email, purpose }) {
+  return client.post("/auth/otp/resend", { email, purpose });
+}
+
+// Auth: register/login/me/logout (used in some flows)
+export async function register(payload) {
+  const res = await client.post("/auth/register", payload);
+  if (res?.token) setToken(res.token);
+  return res;
+}
+export async function login({ email, password, remember }) {
+  const res = await client.post("/auth/login", { email, password, remember });
+  if (res?.token) setToken(res.token);
+  return res;
+}
+export async function me() {
+  return client.get("/auth/me");
+}
+export async function logout() {
+  try { await client.post("/auth/logout"); }
+  finally { clearToken(); }
+}
+
+// ---- Tenant admin management ----
+// Tenant admin management (single-tenant user model)
+export const fetchTenantAdmins = (tenantId) =>
+  api(`/admin/tenants/${tenantId}/admins`);
+
+export const assignTenantAdmin = (tenantId, userId) =>
+  api(`/admin/tenants/${tenantId}/admins`, {
+    method: "POST",
+    body: { user_id: userId },
+  });
+
+export const removeTenantAdmin = (tenantId, userId) =>
+  api(`/admin/tenants/${tenantId}/admins/${userId}`, {
+    method: "DELETE",
+  });
+
+// --- Exports ---------------------------------------------------------------
+const api = client;         // default export is the function client
+export default api;
+// also provide a named `api` for files that do: import { api } from "../lib/api"
+export { api };
 
 /**
  * Public (no-auth) API wrapper — same as api() but always omits Authorization.
@@ -132,3 +226,6 @@ export async function api(path, { method = "GET", body, headers = {}, auth = tru
 export function apiPublic(path, opts = {}) {
   return api(path, { ...opts, auth: false });
 }
+
+// Tenancy integrity check (optional UI surfacing)
+export const verifyTenancy = async () => api('/tenancy/verify');

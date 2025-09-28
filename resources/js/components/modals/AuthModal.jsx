@@ -1,14 +1,20 @@
 // resources/js/components/AuthModal.jsx
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import Modal from "../Modal";
-import { api, setToken } from "../../lib/api";
-import { alertSuccess, alertError } from "../../utils/alerts";
+import { 
+  api, setToken, requestRegisterOtp, verifyRegisterOtp, 
+  requestForgotOtp, verifyForgotOtp, resetWithTicket, resendOtp } 
+  from "../../lib/api";
+import { setCurrentUser } from "../../lib/authState";
+import { alertSuccess, alertError, alertInfo } from "../../utils/alerts";
+import Modal from "../../components/Modal";
 import { FiX } from "react-icons/fi";
 
 export default function AuthModal({ open, onClose, mode: initialMode = "login" }) {
   const navigate = useNavigate();
-  const [mode, setMode] = useState(initialMode); // 'login' | 'register'
+
+  // Modes: 'login' | 'register' | 'forgot' | 'verify' | 'reset'
+  const [mode, setMode] = useState(initialMode);
 
   // Shared
   const [loading, setLoading] = useState(false);
@@ -23,12 +29,23 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
   const [fullName, setFullName] = useState("");
   const [regEmail, setRegEmail] = useState("");
   const [regPassword, setRegPassword] = useState("");
-  const [regPassword2, setRegPassword2] = useState(""); // confirm password
+  const [regPassword2, setRegPassword2] = useState("");
   const [occupation, setOccupation] = useState("");
   const [occupationOther, setOccupationOther] = useState("");
 
-  // Derived: password match (register)
+  // Forgot/Verify/Reset
+  const [verifyContext, setVerifyContext] = useState(null); // 'register' | 'reset'
+  const [verifyEmail, setVerifyEmail] = useState("");
+  const [otp, setOtp] = useState("");
+  const [resendIn, setResendIn] = useState(0); // seconds
+  const [ticket, setTicket] = useState(null);
+
+  // Reset confirm password
+  const [password2, setPassword2] = useState(""); // <-- added
+
+  // Derived
   const passwordsMatch = regPassword.length > 0 && regPassword === regPassword2;
+  const canResend = resendIn <= 0;
 
   useEffect(() => { setMode(initialMode); }, [initialMode]);
 
@@ -36,15 +53,51 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
     if (!open) {
       setErr("");
       setLoading(false);
-      setEmail(""); setPassword(""); setRemember(true);
-      setFullName(""); setRegEmail(""); setRegPassword(""); setRegPassword2("");
-      setOccupation(""); setOccupationOther("");
+
+      // login fields
+      setEmail("");
+      setPassword("");
       setRemember(false);
+
+      // register fields
+      setFullName("");
+      setRegEmail("");
+      setRegPassword("");
+      setRegPassword2("");
+      setOccupation("");
+      setOccupationOther("");
+
+      // otp/reset
+      setVerifyContext(null);
+      setVerifyEmail("");
+      setOtp("");
+      setResendIn(0);
+      setTicket(null);
+
+      // reset password fields
+      setPassword2("");
     }
   }, [open]);
 
+  // resend countdown
+  useEffect(() => {
+    if (mode !== "verify" || resendIn <= 0) return;
+    const t = setInterval(() => setResendIn((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(t);
+  }, [mode, resendIn]);
+
   function redirectByRole(user) {
-    const role = user?.role || "public";
+    if (!user) { navigate('/', { replace: true }); return; }
+    // Defensive: derive role name from role or role_id mapping if needed
+    let role = user.role;
+    if (!role && user.role_id != null) {
+      // fallback mapping assumes roles seeded in canonical order but queries backend if needed later
+      const idMap = { 1:'public', 2:'contributor', 3:'org_admin', 4:'superadmin' };
+      role = idMap[user.role_id] || 'public';
+    }
+    if (!role) role = 'public';
+    // Debug aid (remove later)
+    try { console.debug('[AuthModal] redirectByRole', { user, derivedRole: role }); } catch {}
     if (role === "superadmin") navigate("/admin-dashboard", { replace: true });
     else if (role === "org_admin") navigate("/org-dashboard", { replace: true });
     else if (role === "contributor") navigate("/contrib-dashboard", { replace: true });
@@ -54,15 +107,18 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
   function extractMessage(errLike, fallback) {
     try {
       const j = JSON.parse(errLike?.message ?? "");
-    if (j?.errors) {
-    const first = Object.values(j.errors).flat()[0];
-    return typeof first === "string" ? first : fallback;
-  }
+      if (j?.errors) {
+        const first = Object.values(j.errors).flat()[0];
+        return typeof first === "string" ? first : fallback;
+      }
       if (j?.message) return j.message;
     } catch {}
     return fallback;
   }
 
+  /* =========================
+   * LOGIN
+   * ========================= */
   async function handleLogin(e) {
     e.preventDefault();
     setErr("");
@@ -71,18 +127,25 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
       const res = await api("/auth/login", {
         method: "POST",
         auth: false,
-        body: { email, password, remember }, // send remember to backend
+        body: { email, password, remember },
       });
 
-      if (res?.token) {
-        setToken(res.token, { remember }); // store synchronously
+      if (res?.token) setToken(res.token, { remember });
+
+      // Backend returns user under res.data; fallback to fetching /auth/me if absent
+      let finalUser = res?.data || res?.user || null;
+      if (!finalUser || !finalUser.role) {
+        try { finalUser = await api('/auth/me'); } catch { /* ignore */ }
       }
 
-      // Confirm role from the source of truth
-      const me = await api("/auth/me"); // uses the freshly stored token
+      // Optimistic propagation to sidebar / other listeners
+      if (finalUser) setCurrentUser(finalUser);
 
-      alertSuccess("Welcome back!", "Login successful.");
-      redirectByRole(me);
+  if (finalUser?.tenant_id) localStorage.setItem('tenant_id', finalUser.tenant_id);
+      else localStorage.removeItem('tenant_id');
+
+      alertSuccess('Welcome back!', 'Login successful.');
+      redirectByRole(finalUser);
       onClose?.();
     } catch (e2) {
       const msg = extractMessage(e2, "Invalid email or password.");
@@ -94,11 +157,13 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
     }
   }
 
+  /* =========================
+   * REGISTER (→ OTP)
+   * ========================= */
   async function handleRegister(e) {
     e.preventDefault();
     setErr("");
 
-    // Frontend confirm-password guard
     if (!passwordsMatch) {
       setErr("Passwords do not match.");
       return;
@@ -106,52 +171,141 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
 
     setLoading(true);
     try {
-      const body = {
-        full_name: fullName,
+      const out = await requestRegisterOtp({
+        name: fullName,
         email: regEmail,
         password: regPassword,
-        password_confirmation: regPassword2, // allow Laravel 'confirmed' rule
-        occupation: occupation || null,
-        occupation_other: occupation === "other" ? (occupationOther || null) : null,
-      };
-
-      const res = await api("/auth/register", {
-        method: "POST",
-        auth: false,
-        body,
+        password_confirmation: regPassword2,
       });
 
-      await alertSuccess("Account created", "Please log in to continue.");
-
-      // Switch modal to LOGIN mode and prefill email
-      setMode("login");
-      setEmail(regEmail);
-      setPassword(""); // clear any junk
-      // Clear register form fields
-      setFullName("");
-      setRegEmail("");
-      setRegPassword("");
-      setRegPassword2("");
-      setOccupation("");
-      setOccupationOther("");
-
-      if (res?.token) {
-        // If you auto-login new public users:
-        setToken(res.token, { remember: true }); // new users generally want persistence
-        alertSuccess("Account created", "Welcome to LakeView PH!");
-        navigate("/", { replace: true });
-      } else {
-        alertSuccess("Account created", res?.message || "You can now sign in.");
-        navigate("/login", { replace: true });
-      }
-      onClose?.();
+      setVerifyContext("register");
+      setVerifyEmail(regEmail);
+      setMode("verify");
+      setResendIn(out?.cooldown_seconds ?? 180);
+      alertInfo("Check your inbox", "We sent a 6-digit code to verify your email.");
     } catch (e2) {
       const msg = extractMessage(e2, "Registration failed. Please review your entries.");
       setErr(msg);
       alertError("Registration failed", msg);
     } finally {
-      setRegPassword("");
-      setRegPassword2("");
+      setLoading(false);
+    }
+  }
+
+  /* =========================
+   * FORGOT (→ OTP)
+   * ========================= */
+  async function handleForgotStart(e) {
+    e.preventDefault();
+    setErr("");
+    setLoading(true);
+    try {
+      const out = await requestForgotOtp({ email });
+      setVerifyContext("reset");
+      setVerifyEmail(email);
+      setMode("verify");
+      setResendIn(out?.cooldown_seconds ?? 180);
+      alertInfo("Check your inbox", "We sent a 6-digit code to verify your email.");
+    } catch (e2) {
+      const msg = extractMessage(e2, "Please try again.");
+      setErr(msg);
+      alertError("Error", msg);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  /* =========================
+   * VERIFY OTP
+   * ========================= */
+  async function handleVerify(e) {
+    e.preventDefault();
+    if (otp.length !== 6) return;
+    setErr("");
+    setLoading(true);
+    try {
+      if (verifyContext === "register") {
+        const out = await verifyRegisterOtp({ email: verifyEmail, code: otp, remember });
+        if (out?.token) setToken(out.token, { remember });
+  const me = await api("/auth/me");
+  if (me) setCurrentUser(me?.data || me);
+        alertSuccess("Registered & verified", "Welcome to LakeView PH!");
+        redirectByRole(me);
+        onClose?.();
+
+        // clear registration fields
+        setFullName("");
+        setRegEmail("");
+        setRegPassword("");
+        setRegPassword2("");
+        setOccupation("");
+        setOccupationOther("");
+      } else {
+        const out = await verifyForgotOtp({ email: verifyEmail, code: otp });
+        setTicket(out?.ticket || null);
+        setMode("reset");
+        setPassword("");
+        setPassword2("");
+        alertSuccess("Email verified", "Please set a new password.");
+      }
+    } catch (e2) {
+      const msg = extractMessage(e2, "Invalid or expired code. Try again or resend.");
+      setErr(msg);
+      alertError("Verification failed", msg);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleResend(e) {
+    e.preventDefault();
+    if (!canResend) return;
+    setLoading(true);
+    try {
+      const out = await resendOtp({
+        email: verifyEmail,
+        purpose: verifyContext === "register" ? "register" : "reset",
+      });
+      setResendIn(out?.cooldown_seconds ?? 180);
+      alertInfo("Code sent", "Please check your email.");
+    } catch (e2) {
+      const msg = extractMessage(e2, "Please wait before requesting another code.");
+      setErr(msg);
+      alertError("Resend blocked", msg);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  /* =========================
+   * RESET PASSWORD (ticket)
+   * ========================= */
+  async function handleReset(e) {
+    e.preventDefault();
+    setErr("");
+
+    if (password !== password2) {
+      setErr("Passwords do not match.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await resetWithTicket({
+        ticket,
+        password,
+        password_confirmation: password2,
+      });
+      alertSuccess("Password updated", "You can now sign in with your new password.");
+      setMode("login");
+      setEmail(verifyEmail);
+      setPassword("");
+      setPassword2("");
+    } catch (e2) {
+      const msg = extractMessage(e2, "Please check your new password.");
+      setErr(msg);
+      alertError("Reset failed", msg);
+    } finally {
       setLoading(false);
     }
   }
@@ -182,106 +336,50 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
             <span>LakeView PH</span>
           </div>
 
-          {mode === "login" ? (
-            <>
-              <h2>Welcome Back</h2>
-              <p className="auth-subtitle">Log in to continue to LakeView PH</p>
-            </>
-          ) : (
-            <>
-              <h2>Create a New Account</h2>
-              <p className="auth-subtitle">Sign up to access LakeView PH</p>
-            </>
-          )}
+          {/* ====== headings per mode ====== */}
+          {mode === "login" && (<><h2>Welcome Back</h2><p className="auth-subtitle">Log in to continue to LakeView PH</p></>)}
+          {mode === "register" && (<><h2>Create a New Account</h2><p className="auth-subtitle">Sign up to access LakeView PH</p></>)}
+          {mode === "forgot" && (<><h2>Forgot Password</h2><p className="auth-subtitle">Enter your email to receive a verification code</p></>)}
+          {mode === "verify" && (<><h2>Email Verification</h2><p className="auth-subtitle">We sent a 6-digit code to <strong>{verifyEmail}</strong></p></>)}
+          {mode === "reset" && (<><h2>Set New Password</h2><p className="auth-subtitle">Email: <strong>{verifyEmail}</strong></p></>)}
 
           {err ? <div className="auth-error" role="alert">{err}</div> : null}
 
-          {mode === "login" ? (
+          {/* ===== LOGIN ===== */}
+          {mode === "login" && (
             <form onSubmit={handleLogin}>
-              <input
-                type="email"
-                placeholder="Email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="email"
-                required
-              />
-              <input
-                type="password"
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
-                required
-              />
+              <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required />
+              <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
 
-              {/* Remember me */}
               <label className="auth-remember">
-                <input
-                  type="checkbox"
-                  checked={remember}
-                  onChange={(e) => setRemember(e.target.checked)}
-                />
+                <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
                 <span>Remember me</span>
               </label>
 
-              <div className="auth-forgot">Forgot your password?</div>
               <button type="submit" className="auth-btn" disabled={loading}>
                 {loading ? "Logging in..." : "LOG IN"}
               </button>
-              <p className="auth-switch">
-                Don’t have an account?{" "}
-                <button type="button" className="auth-link" onClick={() => setMode("register")}>
-                  Sign Up
-                </button>
-              </p>
-            </form>
-          ) : (
-            <form onSubmit={handleRegister}>
-              <input
-                type="text"
-                placeholder="Full Name"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                autoComplete="name"
-                required
-              />
-              <input
-                type="email"
-                placeholder="Email"
-                value={regEmail}
-                onChange={(e) => setRegEmail(e.target.value)}
-                autoComplete="email"
-                required
-              />
-              <input
-                type="password"
-                placeholder="Password"
-                value={regPassword}
-                onChange={(e) => setRegPassword(e.target.value)}
-                autoComplete="new-password"
-                required
-              />
-              <input
-                type="password"
-                placeholder="Confirm Password"
-                value={regPassword2}
-                onChange={(e) => setRegPassword2(e.target.value)}
-                autoComplete="new-password"
-                required
-              />
-              {!passwordsMatch && regPassword2.length > 0 && (
-                <div className="auth-error" role="alert">Passwords do not match.</div>
-              )}
 
-              {/* Occupation (public users) */}
+              <div className="auth-inline">
+                <button type="button" className="auth-link" onClick={() => { setMode("forgot"); setErr(""); setEmail(email); }}>Forgot your password?</button>
+                <span />
+              </div>
+
+              <p className="auth-switch">Don’t have an account? <button type="button" className="auth-link" onClick={() => setMode("register")}>Sign Up</button></p>
+            </form>
+          )}
+
+          {/* ===== REGISTER ===== */}
+          {mode === "register" && (
+            <form onSubmit={handleRegister}>
+              <input type="text" placeholder="Full Name" value={fullName} onChange={(e) => setFullName(e.target.value)} autoComplete="name" required />
+              <input type="email" placeholder="Email" value={regEmail} onChange={(e) => setRegEmail(e.target.value)} autoComplete="email" required />
+              <input type="password" placeholder="Password" value={regPassword} onChange={(e) => setRegPassword(e.target.value)} autoComplete="new-password" required />
+              <input type="password" placeholder="Confirm Password" value={regPassword2} onChange={(e) => setRegPassword2(e.target.value)} autoComplete="new-password" required />
+              {!passwordsMatch && regPassword2.length > 0 && (<div className="auth-error" role="alert">Passwords do not match.</div>)}
+
               <label className="auth-label" htmlFor="occupation">Occupation</label>
-              <select
-                id="occupation"
-                value={occupation}
-                onChange={(e) => setOccupation(e.target.value)}
-                className="auth-select"
-              >
+              <select id="occupation" value={occupation} onChange={(e) => setOccupation(e.target.value)} className="auth-select">
                 <option value="">Select occupation</option>
                 <option value="student">Student</option>
                 <option value="researcher">Researcher</option>
@@ -296,25 +394,55 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
               </select>
 
               {occupation === "other" && (
-                <input
-                  type="text"
-                  placeholder="Please specify your occupation"
-                  value={occupationOther}
-                  onChange={(e)=> setOccupationOther(e.target.value)}
-                  required
-                />
+                <input type="text" placeholder="Please specify your occupation" value={occupationOther} onChange={(e)=> setOccupationOther(e.target.value)} required />
               )}
 
               <div className="auth-hint">Use at least 8 characters for a strong password.</div>
+
+              <label className="auth-remember">
+                <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+                <span>Remember me after verify</span>
+              </label>
+
               <button type="submit" className="auth-btn" disabled={loading || !passwordsMatch}>
-                {loading ? "Creating account..." : "REGISTER"}
+                {loading ? "Sending code..." : "REGISTER"}
               </button>
-              <p className="auth-switch">
-                Already have an account?{" "}
-                <button type="button" className="auth-link" onClick={() => setMode("login")}>
-                  Log In
+
+              <p className="auth-switch">Already have an account? <button type="button" className="auth-link" onClick={() => setMode("login")}>Log In</button></p>
+            </form>
+          )}
+
+          {/* ===== FORGOT ===== */}
+          {mode === "forgot" && (
+            <form onSubmit={handleForgotStart}>
+              <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required />
+              <button type="submit" className="auth-btn" disabled={loading}>{loading ? "Sending code..." : "SEND CODE"}</button>
+              <p className="auth-switch">Remembered it? <button type="button" className="auth-link" onClick={() => setMode("login")}>Back to Log In</button></p>
+            </form>
+          )}
+
+          {/* ===== VERIFY ===== */}
+          {mode === "verify" && (
+            <form onSubmit={handleVerify}>
+              <input className="auth-otp-input" inputMode="numeric" pattern="\d{6}" maxLength={6} value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="Enter 6-digit code" autoFocus required />
+              <div className="auth-row">
+                <button type="submit" className="auth-btn" disabled={loading || otp.length !== 6}>{loading ? "Verifying..." : "VERIFY"}</button>
+                <button type="button" className="auth-btn auth-btn-secondary" onClick={handleResend} disabled={!canResend || loading}>
+                  {canResend ? "RESEND CODE" : `RESEND IN ${Math.floor(resendIn/60)}:${String(resendIn%60).padStart(2,"0")}`}
                 </button>
-              </p>
+              </div>
+              <p className="auth-switch">Wrong email? <button type="button" className="auth-link" onClick={() => setMode("login")}>Back to Log In</button></p>
+            </form>
+          )}
+
+          {/* ===== RESET ===== */}
+          {mode === "reset" && (
+            <form onSubmit={handleReset}>
+              <input type="password" placeholder="New password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" required />
+              <input type="password" placeholder="Confirm new password" value={password2} onChange={(e) => setPassword2(e.target.value)} autoComplete="new-password" required />
+              {password !== password2 && password2.length > 0 && (<div className="auth-error" role="alert">Passwords do not match.</div>)}
+              <button type="submit" className="auth-btn" disabled={loading || password !== password2}>{loading ? "Updating..." : "UPDATE PASSWORD"}</button>
+              <p className="auth-switch">Back to <button type="button" className="auth-link" onClick={() => setMode("login")}>Log In</button></p>
             </form>
           )}
         </div>

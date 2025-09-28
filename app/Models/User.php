@@ -3,41 +3,82 @@
 namespace App\Models;
 
 use Illuminate\Foundation\Auth\User as Authenticatable;
-use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class User extends Authenticatable
 {
-    use HasApiTokens, Notifiable;
+    use HasApiTokens, HasFactory, Notifiable;
 
     protected $fillable = [
-        'name','email','password'
-        ,'occupation','occupation_other'
+        'name',
+        'email',
+        'password',
+        'role_id',
+        'tenant_id',
+        'is_active'
     ];
-    
-    protected $hidden = ['password', 'remember_token'];
 
-    public function memberships()
+    protected $hidden = [
+        'password',
+        'remember_token',
+    ];
+
+    protected $casts = [
+        'email_verified_at' => 'datetime',
+        'is_active' => 'boolean',
+    ];
+
+    // Relationships
+    public function role()
     {
-        return $this->hasMany(UserTenant::class);
+        return $this->belongsTo(Role::class);
     }
 
-    public function roles()
+    public function tenant()
     {
-        return $this->belongsToMany(Role::class, 'user_tenants')
-            ->withPivot(['tenant_id','is_active'])
-            ->withTimestamps();
+        return $this->belongsTo(Tenant::class);
+    }
+
+    // Convenience
+    public function isSuperAdmin(): bool
+    {
+        return ($this->role?->name) === Role::SUPERADMIN;
+    }
+
+    public function isOrgAdmin(): bool
+    {
+        return ($this->role?->name) === Role::ORG_ADMIN;
+    }
+
+    public function isContributor(): bool
+    {
+        return ($this->role?->name) === Role::CONTRIBUTOR;
     }
 
     public function highestRoleName(): string
     {
-        $order = ['superadmin'=>4,'org_admin'=>3,'contributor'=>2,'public'=>1];
-        $best = 'public'; $rank = 0;
+        return $this->role?->name ?? Role::PUBLIC;
+    }
 
-        foreach ($this->roles as $role) {
-            $r = $order[$role->name] ?? 0;
-            if ($r > $rank) { $rank = $r; $best = $role->name; }
-        }
-        return $best;
+    public function hasRole(string $name): bool
+    {
+        return $this->role?->name === $name;
+    }
+
+    protected static function booted()
+    {
+        static::saving(function (User $user) {
+            // Enforce tenant/role pairing (secondary to DB trigger)
+            $roleName = $user->role?->name;
+            if (in_array($roleName, [Role::CONTRIBUTOR, Role::ORG_ADMIN]) && !$user->tenant_id) {
+                throw new \RuntimeException('tenant_id is required for tenant-scoped role.');
+            }
+            if (in_array($roleName, [Role::SUPERADMIN, Role::PUBLIC]) && $user->tenant_id) {
+                // Allow superadmin to temporarily switch? Business rule says must be null.
+                throw new \RuntimeException('tenant_id must be null for system role.');
+            }
+        });
     }
 }

@@ -35,26 +35,40 @@ class WaterQualityEvaluator
             return $this->markNotApplicable($result, $save, 'no_threshold');
         }
 
-        // Normalize evaluation type to be robust against casing/spacing/synonyms
+        // Normalize evaluation type to be robust against casing / spacing / symbol synonyms.
+        // Canonical meanings:
+        //   max  => "value must be <= limit"   (upper bound check)
+        //   min  => "value must be >= limit"   (lower bound check)
+        //   range => "value must be between [min,max] inclusive"
         $rawEvalType = $parameter->evaluation_type ?? null;
         $evalType = null;
         if ($rawEvalType !== null) {
             $s = strtolower(trim((string) $rawEvalType));
-            // strip non-alphanumeric for matching (e.g. '>=', 'Less-Than' -> 'lessthan')
-            $key = preg_replace('/[^a-z0-9]/', '', $s);
-            // map common synonyms to canonical types
-            $map = [
-                'max' => 'max', 'maximum' => 'max', 'upper' => 'max', 'upperlimit' => 'max', 'lessthanorequal' => 'max', 'lessthan' => 'max', 'lte' => 'max', '>' => 'max', 'gt' => 'max',
-                'min' => 'min', 'minimum' => 'min', 'lower' => 'min', 'lowerlimit' => 'min', 'greaterthanorequal' => 'min', 'greaterthan' => 'min', 'gte' => 'min', '<' => 'min', 'lt' => 'min',
-                'range' => 'range', 'between' => 'range',
+            $key = preg_replace('/[^a-z0-9]/', '', $s); // e.g. ">=" -> ">=" -> "" then handled below
+
+            // Symbol tokens: keep some quick direct matches first
+            $symbolMap = [
+                '<' => 'max', '<=' => 'max', '>' => 'min', '>=' => 'min',
             ];
-            if (isset($map[$key])) {
-                $evalType = $map[$key];
-            } elseif (isset($map[$s])) {
-                $evalType = $map[$s];
+            if (isset($symbolMap[$s])) {
+                $evalType = $symbolMap[$s];
             } else {
-                // fallback: use the simple trimmed lowercase if it matches known canonical types
-                if (in_array($s, ['min','max','range'], true)) {
+                // Synonym groups (operators previously inverted have been corrected)
+                $upperBound = [
+                    'max','maximum','upper','upperlimit','lessthan','lessthanorequal','lt','lte','below','under'
+                ];
+                $lowerBound = [
+                    'min','minimum','lower','lowerlimit','greaterthan','greaterthanorequal','gt','gte','above','over'
+                ];
+                $rangeGroup = ['range','between'];
+
+                if (in_array($key, $upperBound, true) || in_array($s, $upperBound, true)) {
+                    $evalType = 'max';
+                } elseif (in_array($key, $lowerBound, true) || in_array($s, $lowerBound, true)) {
+                    $evalType = 'min';
+                } elseif (in_array($key, $rangeGroup, true) || in_array($s, $rangeGroup, true)) {
+                    $evalType = 'range';
+                } elseif (in_array($s, ['min','max','range'], true)) { // already canonical
                     $evalType = $s;
                 }
             }
@@ -97,7 +111,7 @@ class WaterQualityEvaluator
         $result->evaluated_class_code = $lakeClass;
         $result->threshold_id = $threshold->id;
         $result->pass_fail = $outcome ? 'pass' : 'fail';
-        $result->evaluated_at = CarbonImmutable::now();
+    $result->evaluated_at = now();
 
         if ($save) {
             $result->save();
@@ -156,7 +170,7 @@ class WaterQualityEvaluator
     protected function markNotApplicable(SampleResult $result, bool $save, string $reason, ?ParameterThreshold $threshold = null): SampleResult
     {
         $result->pass_fail = 'not_applicable';
-        $result->evaluated_at = CarbonImmutable::now();
+    $result->evaluated_at = now();
         $result->evaluated_class_code = $threshold?->class_code;
         $result->threshold_id = $threshold?->id;
 

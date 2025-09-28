@@ -4,7 +4,7 @@
 .table-wrapper {
   width: 100%;
   max-width: 100%;
-  overflow-x: visible; /* inner scroller handles X */
+  overflow: auto; /* inner scroller handles X */
 }
 
 .lv-table-wrap { width: 100%; }
@@ -13,13 +13,15 @@
   overflow-x: auto;
   overflow-y: visible;     /* avoid inner vertical scrollbars */
   border-radius: 12px;
+  scrollbar-gutter: stable both-edges; /* guard against layout jump */
 }
 
 .lv-table {
   width: 100%;
+  min-width: 900px;
   border-collapse: separate;
   border-spacing: 0;
-  table-layout: fixed;     /* enables width control / wrapping */
+  table-layout: auto;      /* columns size to content */
   background: #fff;
   border-radius: 12px;
 }
@@ -35,10 +37,15 @@
   color: #111827;
   word-break: break-word;
   white-space: normal;
+  box-sizing: border-box;   /* ensure consistent width calc */
+  line-height: 1.25;
 }
 
+/* header cells */
 .lv-th {
-  position: relative;
+  position: sticky;
+  top: 0;
+  z-index: 3;
   background: #f8fafc;
   font-weight: 600;
   user-select: none;
@@ -48,23 +55,31 @@
 .lv-th .lv-th-label.lv-sortable { cursor: pointer; background: transparent; border: 0; padding: 0; color: inherit; text-align: left; }
 .lv-th .lv-th-label.lv-sortable:focus { outline: 2px solid rgba(59,130,246,0.35); outline-offset: 2px; border-radius: 4px; }
 
+/* Helpful inline label with icon */
+.th-with-icon { display: inline-flex; align-items: center; gap: .5rem; }
+
+/* column resizer (absolute so it doesn’t steal width) */
 .lv-resizer {
-  flex: 0 0 auto;
+  position: absolute;
+  right: 0; top: 0; bottom: -1px;
   width: 8px;
   cursor: col-resize;
-  align-self: stretch;
-  margin-right: -6px;
   background: transparent;
 }
-.lv-resizer:hover { background: rgba(59,130,246,0.12); }
+.lv-th:hover .lv-resizer { background: rgba(59,130,246,0.12); }
 
 .lv-empty { padding: 28px 12px; text-align: center; color: #6b7280; }
 
-/* Sticky actions column (icon-only actions) */
+/* Sticky actions column (both header + body) */
 .sticky-right {
   position: sticky; right: 0;
   background: #fff;
   box-shadow: -6px 0 8px -6px rgba(0,0,0,0.06);
+  z-index: 2;
+}
+.lv-th.sticky-right {
+  background: #f8fafc;
+  z-index: 4;
 }
 
 /* Inline action icons */
@@ -279,15 +294,25 @@
 @media (max-width: 580px) {
   .advanced-filters-grid { grid-template-columns: 1fr; }
 }
-/* ===== Forms / Layers ===== */
 
-.org-form {
+/* ====================================================================== */
+/* 🗂 ORG FORM                                                            */
+/* ====================================================================== */
+.org-form .form-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: 1fr 1fr;
   gap: 12px;
-  align-items: start;
 }
+.org-form .field.full { grid-column: 1 / -1; }
+.org-form .field label { display: block; font-weight: 600; margin-bottom: 6px; }
+.org-form .field input[type="text"],
+.org-form .field input[type="email"],
+.org-form .field select,
+.org-form .field textarea { width: 100%; }
+.org-form .form-actions { margin-top: 12px; display: flex; justify-content: flex-end; gap: 8px; }
+.req { color: #e53935; }
 
+/* ===== BodySelect (if used anywhere) ===== */
 .form-group { display: flex; flex-direction: column; gap: 6px; }
 .form-group input,
 .form-group select,
@@ -298,36 +323,25 @@
   outline: 0;
   background: #fff;
   color: #111827;
-  width: 100%;              /* never overflow the column */
+  width: 100%;
 }
 
 /* BodySelect layout */
-.form-group.bodyselect .bodyselect-search {
-  width: 100%;
-  margin-bottom: 8px;
-}
-
+.form-group.bodyselect .bodyselect-search { width: 100%; margin-bottom: 8px; }
 .form-group.bodyselect .bs-fields {
   display: grid;
   grid-template-columns: 1fr 180px;  /* select | manual id */
   gap: 8px;
   align-items: end;
 }
-
 .form-group.bodyselect .bs-select { width: 100%; }
-
-.form-group.bodyselect .bs-manual small {
-  display: block; color: #6b7280; margin-bottom: 4px;
-}
-.form-group.bodyselect .bs-manual input {
-  width: 100%; max-width: 180px;
-}
+.form-group.bodyselect .bs-manual small { display: block; color: #6b7280; margin-bottom: 4px; }
+.form-group.bodyselect .bs-manual input { width: 100%; max-width: 180px; }
 
 /* Stack on narrow screens */
 @media (max-width: 720px) {
-  .form-group.bodyselect .bs-fields {
-    grid-template-columns: 1fr;      /* select on top, manual below */
-  }
+  .org-form .form-grid { grid-template-columns: 1fr; }
+  .form-group.bodyselect .bs-fields { grid-template-columns: 1fr; }
   .form-group.bodyselect .bs-manual input { max-width: none; }
 }
 

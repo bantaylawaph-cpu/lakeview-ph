@@ -2,11 +2,16 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration {
     public function up(): void
     {
         // Backfill base, public, active layers from lakes.geom where no active layer exists
+        if (!Schema::hasColumn('lakes', 'geom')) {
+            return;
+        }
+
         DB::unprepared(<<<'SQL'
         WITH missing AS (
           SELECT l.id AS lake_id

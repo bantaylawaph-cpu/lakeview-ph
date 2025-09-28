@@ -32,10 +32,10 @@ class ParameterSeeder extends Seeder
             ['code' => 'C',  'name' => 'Recreational Water Class II'],
             ['code' => 'D',  'name' => 'Fishery Water Supply Class I'],
             ['code' => 'E',  'name' => 'Fishery Water Supply Class II'],
-            ['code' => 'SA', 'name' => 'Protected Waters – SA'],
-            ['code' => 'SB', 'name' => 'Protected Waters – SB'],
-            ['code' => 'SC', 'name' => 'Protected Waters – SC'],
-            ['code' => 'SD', 'name' => 'Protected Waters – SD'],
+            ['code' => 'SA', 'name' => 'Protected Waters - SA'],
+            ['code' => 'SB', 'name' => 'Protected Waters - SB'],
+            ['code' => 'SC', 'name' => 'Protected Waters - SC'],
+            ['code' => 'SD', 'name' => 'Protected Waters - SD'],
         ];
 
         foreach ($classes as $class) {
@@ -72,7 +72,7 @@ class ParameterSeeder extends Seeder
                 'aliases' => ['D.O.', 'Dissolved O2'],
             ],
             'BOD' => [
-                'name' => 'Biochemical Oxygen Demand (5-day, 20°C)',
+                'name' => 'Biochemical Oxygen Demand (5-day, 20Â°C)',
                 'unit' => 'mg/L',
                 'category' => 'organic',
                 'group' => 'primary',

@@ -7,8 +7,10 @@ app/
       Api/
         LayerController.php
         OptionsController.php
+        TenantController.php
       AuthController.php
       Controller.php
+      EmailOtpController.php
       LakeController.php
       WatershedController.php
     Middleware/
@@ -17,14 +19,17 @@ app/
       EnsureRole.php
     Requests/
       StoreLayerRequest.php
+      StoreTenantRequest.php
       UpdateLayerRequest.php
+      UpdateTenantRequest.php
+  Mail/
+    OtpMail.php
   Models/
     Lake.php
     Layer.php
     Role.php
     Tenant.php
     User.php
-    UserTenant.php
     Watershed.php
   Providers/
     AppServiceProvider.php
@@ -59,7 +64,12 @@ database/
     2025_09_10_034243_create_roles_table.php
     2025_09_10_034403_create_tenants_table.php
     2025_09_10_034404_create_user_tenants_table.php
-    2025_09_10_105719_create_personal_access_tokens_table.php
+    2025_09_15_000001_update_layers_on_activate_stop_mirroring.php
+    2025_09_15_000002_backfill_active_layers_from_lakes_geom.php
+    2025_09_15_000003_drop_legacy_columns.php
+    2025_09_16_125041_create_email_otps_table.php
+    2025_09_17_202004_add_role_to_users_table.php
+    2025_09_20_000001_align_tenants_table.php
   seeders/
     DatabaseSeeder.php
   .gitignore
@@ -127,6 +137,7 @@ resources/
       MapControls.jsx
       MeasureTool.jsx
       Modal.jsx
+      OrganizationForm.jsx
       RequireRole.jsx
       Screenshotbutton.jsx
       SearchBar.jsx
@@ -172,6 +183,8 @@ resources/
       geo.js
     app.jsx
   views/
+    mail/
+      plain.blade.php
     app.blade.php
 routes/
   api.php
@@ -212,6 +225,7 @@ storage/
       cc00a6290dbddc2216d77695c2d2e362.php
       ccc3b2570f163a7eaa3e7caf1954fefb.php
       d0569b5396cac6b33526e2c19dc67503.php
+      e03943306be6248ef55102f9b48f46b4.php
       fc2704edfa87e8b925e75054e9c38e91.php
       ff099658ab088fe1f4a48e6d50234cac.php
     .gitignore
@@ -5448,9 +5462,49 @@ vendor/
             Trait_.php
             TraitUse.php
             TraitUseAdaptation.php
-            Use_.php
-          Comment/
-            Doc.php
+          User.php
+          Watershed.php
+        ```
+
+        ---
+
+        ## Documentation Addendum (Sept 2025 Single-Tenant Refactor)
+
+        This project migrated from a multi-association pivot (`user_tenants`) to a strict single-tenant user model:
+
+        | Legacy | Current |
+        |--------|---------|
+        | `users` ⇄ `user_tenants` ⇄ `tenants` | `users.tenant_id` (nullable FK) |
+        | Role determined via pivot context | `users.role_id` (single role) |
+        | Implicit change history | Explicit `user_tenant_changes` audit rows |
+
+        Legacy `UserTenant` model has been fully removed; historical pivot logic retained here only for archival context.
+
+        ### Role Scopes
+        Roles classified as `system` or `tenant` scoped. Invariants:
+        * Tenant-scoped role → `tenant_id` required.
+        * System-scoped role → `tenant_id` must be null.
+
+        ### Integrity Verification
+        Artisan command:
+        ```
+        php artisan tenancy:verify        # Summary
+        php artisan tenancy:verify --json # JSON detail
+        ```
+        Fails (exit code 1) on:
+        1. Tenant role without tenant
+        2. System role with tenant
+        3. User missing role
+        4. Audit row with orphan new_role_id
+
+        ### Audit Table
+        `user_tenant_changes` keeps (user_id, old/new role & tenant, changed_by_user_id, created_at). Used for traceability and integrity checks.
+
+        ### Testing Notes
+        SQLite tests rely on stub lake / layer migrations guarded from Postgres-specific spatial DDL.
+
+        ---
+        ```
           ErrorHandler/
             Collecting.php
             Throwing.php
@@ -9714,6 +9768,7 @@ vendor/
 artisan
 composer.json
 composer.lock
+export.md
 package-lock.json
 package.json
 phpunit.xml
@@ -9769,7 +9824,7 @@ class LayerController extends Controller
         elseif (isset($decoded['type']) && isset($decoded['coordinates'])) {
             $geom = $decoded;
         }
-        // FeatureCollection not handled in MVP (to keep SQL simple). Dissolve client-side or send as a single dissolved geometry.
+        // FeatureCollection not handled in MVP (to keep SQL simple).
         elseif (($decoded['type'] ?? '') === 'FeatureCollection') {
             abort(422, 'FeatureCollection not supported yet. Please upload a dissolved Polygon/MultiPolygon GeoJSON.');
         }
@@ -9797,13 +9852,17 @@ class LayerController extends Controller
             'include'   => 'nullable|string'
         ]);
 
-        $include = collect(explode(',', (string) $request->query('include')))->map(fn($s) => trim($s))->filter()->values();
-        $query   = Layer::query()
+        $include = collect(explode(',', (string) $request->query('include')))
+            ->map(fn($s) => trim($s))->filter()->values();
+
+        $query = Layer::query()
             ->leftJoin('users', 'users.id', '=', 'layers.uploaded_by')
             ->where([
-            'body_type' => $request->query('body_type'),
-            'body_id'   => (int) $request->query('body_id'),
-        ])->orderByDesc('is_active')->orderByDesc('created_at');
+                'body_type' => $request->query('body_type'),
+                'body_id'   => (int) $request->query('body_id'),
+            ])
+            ->orderByDesc('is_active')
+            ->orderByDesc('created_at');
 
         // Select base columns
         $query->select('layers.*');
@@ -9870,38 +9929,38 @@ class LayerController extends Controller
             $srid     = (int)($data['srid'] ?? 4326);
 
             DB::update(
-            // Set SRID first, then transform when needed. Extract polygons (type=3) and force Multi.
-            "UPDATE layers
-              SET geom =
-                    CASE
-                      WHEN ? = 4326 THEN
-                        ST_Multi(
-                          ST_CollectionExtract(
-                            ST_ForceCollection(
-                              ST_MakeValid(
-                                ST_SetSRID(ST_GeomFromGeoJSON(?), 4326)
+                // Set SRID first, then transform when needed. Extract polygons (type=3) and force Multi.
+                "UPDATE layers
+                   SET geom =
+                        CASE
+                          WHEN ? = 4326 THEN
+                            ST_Multi(
+                              ST_CollectionExtract(
+                                ST_ForceCollection(
+                                  ST_MakeValid(
+                                    ST_SetSRID(ST_GeomFromGeoJSON(?), 4326)
+                                  )
+                                ), 3
                               )
-                            ), 3
-                          )
-                        )
-                      ELSE
-                        ST_Transform(
-                          ST_Multi(
-                            ST_CollectionExtract(
-                              ST_ForceCollection(
-                                ST_MakeValid(
-                                  ST_SetSRID(ST_GeomFromGeoJSON(?), ?)
-                                )
-                              ), 3
                             )
-                          ),
-                          4326
-                        )
-                    END,
-                  srid = 4326,
-                  updated_at = now()
-            WHERE id = ?",
-            [$srid, $geomJson, $geomJson, $srid, $layer->id]
+                          ELSE
+                            ST_Transform(
+                              ST_Multi(
+                                ST_CollectionExtract(
+                                  ST_ForceCollection(
+                                    ST_MakeValid(
+                                      ST_SetSRID(ST_GeomFromGeoJSON(?), ?)
+                                    )
+                                  ), 3
+                                )
+                              ),
+                              4326
+                            )
+                        END,
+                       srid = 4326,
+                       updated_at = now()
+                 WHERE id = ?",
+                [$srid, $geomJson, $geomJson, $srid, $layer->id]
             );
 
             // If requested active, deactivate siblings (no DB trigger dependency)
@@ -9940,6 +9999,7 @@ class LayerController extends Controller
             'notes'       => $data['notes']       ?? $layer->notes,
             'is_active'   => isset($data['is_active']) ? (bool)$data['is_active'] : $layer->is_active,
         ]);
+
         return DB::transaction(function () use ($layer, $data) {
             $activating = array_key_exists('is_active', $data) && (bool)$data['is_active'] === true;
             $layer->save();
@@ -9951,35 +10011,35 @@ class LayerController extends Controller
 
                 DB::update(
                     "UPDATE layers
-              SET geom =
-                    CASE
-                      WHEN ? = 4326 THEN
-                        ST_Multi(
-                          ST_CollectionExtract(
-                            ST_ForceCollection(
-                              ST_MakeValid(
-                                ST_SetSRID(ST_GeomFromGeoJSON(?), 4326)
-                              )
-                            ), 3
-                          )
-                        )
-                      ELSE
-                        ST_Transform(
-                          ST_Multi(
-                            ST_CollectionExtract(
-                              ST_ForceCollection(
-                                ST_MakeValid(
-                                  ST_SetSRID(ST_GeomFromGeoJSON(?), ?)
+                        SET geom =
+                            CASE
+                              WHEN ? = 4326 THEN
+                                ST_Multi(
+                                  ST_CollectionExtract(
+                                    ST_ForceCollection(
+                                      ST_MakeValid(
+                                        ST_SetSRID(ST_GeomFromGeoJSON(?), 4326)
+                                      )
+                                    ), 3
+                                  )
                                 )
-                              ), 3
-                            )
-                          ),
-                          4326
-                        )
-                    END,
-                  srid = 4326,
-                  updated_at = now()
-            WHERE id = ?",
+                              ELSE
+                                ST_Transform(
+                                  ST_Multi(
+                                    ST_CollectionExtract(
+                                      ST_ForceCollection(
+                                        ST_MakeValid(
+                                          ST_SetSRID(ST_GeomFromGeoJSON(?), ?)
+                                        )
+                                      ), 3
+                                    )
+                                  ),
+                                  4326
+                                )
+                            END,
+                            srid = 4326,
+                            updated_at = now()
+                      WHERE id = ?",
                     [$srid, $geomJson, $geomJson, $srid, $layer->id]
                 );
             }
@@ -10074,6 +10134,136 @@ class OptionsController extends Controller
 }
 ```
 
+## app/Http/Controllers/Api/TenantController.php
+
+```php
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreTenantRequest;
+use App\Http\Requests\UpdateTenantRequest;
+use App\Models\Tenant;
+use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+
+class TenantController extends Controller
+{
+    // List tenants with pagination, search, filter
+    public function index(Request $request)
+    {
+        $perPage = (int) $request->input('per_page', 10);
+        $q = $request->input('q');
+        $active = $request->input('active'); // '1' or '0' or null
+        $includeDeleted = filter_var($request->input('with_deleted'), FILTER_VALIDATE_BOOLEAN);
+
+        $query = Tenant::query();
+
+        if ($includeDeleted) {
+            $query = Tenant::withTrashed();
+        }
+
+        if (!is_null($active) && $active !== '') {
+            $query->where('active', (int) $active);
+        }
+
+        if ($q) {
+            $query->where(function ($sub) use ($q) {
+                $sub->where('name', 'ilike', "%{$q}%")
+                    ->orWhere('domain', 'ilike', "%{$q}%")
+                    ->orWhere('contact_email', 'ilike', "%{$q}%");
+            });
+        }
+
+        $tenants = $query->orderBy('created_at', 'desc')->paginate($perPage)->withQueryString();
+
+        return response()->json([
+            'data' => $tenants->items(),
+            'meta' => [
+                'total' => $tenants->total(),
+                'per_page' => $tenants->perPage(),
+                'current_page' => $tenants->currentPage(),
+                'last_page' => $tenants->lastPage(),
+            ],
+        ]);
+    }
+
+    // Store a new tenant
+    public function store(StoreTenantRequest $request)
+    {
+        $payload = $request->only([
+            'name', 'domain', 'contact_email', 'phone', 'address', 'metadata', 'active'
+        ]);
+
+        $payload['slug'] = Str::slug($payload['name'] ?? time());
+        if (!isset($payload['active'])) {
+            $payload['active'] = true;
+        }
+
+        // ensure slug uniqueness
+        $baseSlug = $payload['slug'];
+        $i = 1;
+        while (Tenant::where('slug', $payload['slug'])->exists()) {
+            $payload['slug'] = "{$baseSlug}-{$i}";
+            $i++;
+        }
+
+        $tenant = Tenant::create($payload);
+
+        return response()->json(['data' => $tenant, 'message' => 'Organization created'], 201);
+    }
+
+    // Show a single tenant
+    public function show(Tenant $tenant)
+    {
+        return response()->json(['data' => $tenant]);
+    }
+
+    // Update tenant
+    public function update(UpdateTenantRequest $request, Tenant $tenant)
+    {
+        $payload = $request->only([
+            'name', 'domain', 'contact_email', 'phone', 'address', 'metadata', 'active'
+        ]);
+
+        // If name changed, update slug (but do not break existing references)
+        if (isset($payload['name']) && $payload['name'] !== $tenant->name) {
+            $slug = Str::slug($payload['name']);
+            $baseSlug = $slug;
+            $i = 1;
+            while (Tenant::where('slug', $slug)->where('id', '!=', $tenant->id)->exists()) {
+                $slug = "{$baseSlug}-{$i}";
+                $i++;
+            }
+            $payload['slug'] = $slug;
+        }
+
+        $tenant->update($payload);
+
+        return response()->json(['data' => $tenant, 'message' => 'Organization updated'], 200);
+    }
+
+    // Soft-delete
+    public function destroy(Tenant $tenant)
+    {
+        $tenant->delete();
+        return response()->json(['message' => 'Organization deleted'], 200);
+    }
+
+    // Restore soft-deleted tenant
+    public function restore($id)
+    {
+        $tenant = Tenant::withTrashed()->findOrFail($id);
+        if ($tenant->trashed()) {
+            $tenant->restore();
+            return response()->json(['data' => $tenant, 'message' => 'Organization restored']);
+        }
+        return response()->json(['message' => 'Organization not deleted'], 400);
+    }
+}
+```
+
 ## app/Http/Controllers/AuthController.php
 
 ```php
@@ -10147,9 +10337,9 @@ class AuthController extends Controller
         $user = User::where("email", $credentials["email"])->first();
 
         if (!$user || !Hash::check($credentials["password"], $user->password)) {
-            throw ValidationException::withMessages([
-                "email" => ["The provided credentials are incorrect."],
-            ]);
+            return response()->json([
+                'message' => 'Invalid email or password.'
+            ], 401);
         }
 
         $role = $user->highestRoleName();
@@ -10215,6 +10405,257 @@ abstract class Controller
 }
 ```
 
+## app/Http/Controllers/EmailOtpController.php
+
+```php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Mail\OtpMail;
+use App\Models\User;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\{Cache, DB, Hash, Mail, Validator};
+use Illuminate\Support\Str;
+
+class EmailOtpController extends Controller
+{
+    // Tunables
+    private int $codeLength = 6;
+    private int $ttlMinutes = 10;              // OTP validity
+    private int $resendCooldownSeconds = 180;  // 3 minutes
+    private int $maxAttempts = 5;
+    private int $resetTicketTtlMinutes = 15;   // ticket validity for reset
+
+    private function now() { return now(); }
+
+    private function makeCode(): string {
+        return str_pad((string) random_int(0, 999999), $this->codeLength, '0', STR_PAD_LEFT);
+    }
+
+    private function codeHash(string $email, string $purpose, string $code): string {
+        $pepper = config('app.otp_pepper') ?? env('OTP_PEPPER', '');
+        return hash('sha256', "{$email}|{$purpose}|{$code}|{$pepper}");
+    }
+
+    private function sendOtp(string $email, string $code, string $purpose): void {
+        Mail::to($email)->queue(new OtpMail($email, $code, $purpose, $this->ttlMinutes));
+    }
+
+    private function cooldownRemaining(?\DateTimeInterface $lastSentAt): int {
+        if (!$lastSentAt) return 0;
+        $elapsed = $this->now()->diffInSeconds($lastSentAt, true);
+        return max(0, $this->resendCooldownSeconds - $elapsed);
+    }
+
+    private function upsertOtp(string $email, string $purpose, ?array $payload = null): array {
+        $existing = DB::table('email_otps')
+            ->where('email', $email)
+            ->where('purpose', $purpose)
+            ->whereNull('consumed_at')
+            ->orderByDesc('id')
+            ->first();
+
+        if ($existing) {
+            $remaining = $this->cooldownRemaining($existing->last_sent_at);
+            if ($remaining > 0) {
+                return ['ok' => false, 'cooldown' => $remaining];
+            }
+        }
+
+        $code = $this->makeCode();
+        $hash = $this->codeHash($email, $purpose, $code);
+        $now  = $this->now();
+
+        // Invalidate previous unconsumed codes for same email/purpose
+        DB::table('email_otps')
+            ->where('email', $email)
+            ->where('purpose', $purpose)
+            ->whereNull('consumed_at')
+            ->update(['consumed_at' => $now]);
+
+        DB::table('email_otps')->insert([
+            'email'        => $email,
+            'purpose'      => $purpose,
+            'code_hash'    => $hash,
+            'expires_at'   => $now->copy()->addMinutes($this->ttlMinutes),
+            'last_sent_at' => $now,
+            'attempts'     => 0,
+            'payload'      => $payload ? json_encode($payload) : null,
+            'created_at'   => $now,
+            'updated_at'   => $now,
+        ]);
+
+        $this->sendOtp($email, $code, $purpose);
+
+        return ['ok' => true, 'cooldown' => $this->resendCooldownSeconds];
+    }
+
+    private function checkOtp(string $email, string $purpose, string $code) {
+        $row = DB::table('email_otps')
+            ->where('email', $email)
+            ->where('purpose', $purpose)
+            ->whereNull('consumed_at')
+            ->orderByDesc('id')
+            ->first();
+
+        if (!$row) return ['ok' => false, 'reason' => 'not_found'];
+        if ($this->now()->greaterThan($row->expires_at)) return ['ok' => false, 'reason' => 'expired'];
+        if ($row->attempts >= $this->maxAttempts) return ['ok' => false, 'reason' => 'too_many_attempts'];
+
+        $expected = $row->code_hash;
+        $actual   = $this->codeHash($email, $purpose, $code);
+        $match    = hash_equals($expected, $actual);
+
+        if (!$match) {
+            DB::table('email_otps')->where('id', $row->id)->update([
+                'attempts'   => $row->attempts + 1,
+                'updated_at' => $this->now(),
+            ]);
+            return ['ok' => false, 'reason' => 'mismatch', 'attempts' => $row->attempts + 1];
+        }
+
+        // Consume
+        DB::table('email_otps')->where('id', $row->id)->update([
+            'consumed_at' => $this->now(),
+            'updated_at'  => $this->now(),
+        ]);
+
+        return ['ok' => true, 'row' => $row];
+    }
+
+    /* -------- Registration -------- */
+
+    public function registerRequestOtp(Request $r) {
+        $v = Validator::make($r->all(), [
+            'email' => ['required','email','max:255','unique:users,email'],
+            'name'  => ['required','string','max:255'],
+            'password' => ['required','string','min:8','confirmed'],
+        ]);
+        if ($v->fails()) return response()->json(['errors' => $v->errors()], 422);
+
+        $payload = [
+            'name'          => $r->name,
+            'email'         => $r->email,
+            'password_hash' => Hash::make($r->password),
+        ];
+
+        $res = $this->upsertOtp($r->email, 'register', $payload);
+        if (!$res['ok']) {
+            return response()->json(['ok' => false, 'cooldown_seconds' => $res['cooldown']], 429);
+        }
+
+        return response()->json(['ok' => true, 'cooldown_seconds' => $res['cooldown']]);
+    }
+
+    public function registerVerifyOtp(Request $r) {
+        $v = Validator::make($r->all(), [
+            'email'   => ['required','email'],
+            'code'    => ['required','digits:6'],
+            'remember'=> ['nullable','boolean'],
+        ]);
+        if ($v->fails()) return response()->json(['errors' => $v->errors()], 422);
+
+        $check = $this->checkOtp($r->email, 'register', $r->code);
+        if (!$check['ok']) return response()->json(['message' => 'Invalid or expired code.'], 422);
+
+        $payload = json_decode($check['row']->payload ?? 'null', true) ?: [];
+        $user = User::create([
+            'name'              => $payload['name'] ?? 'User',
+            'email'             => $r->email,
+            'password'          => $payload['password_hash'] ?? Hash::make(Str::uuid()->toString()),
+            'email_verified_at' => now(),
+        ]);
+
+        // Issue token (match your “remember me” durations)
+        $abilities = ['*'];
+        $expiry    = ($r->boolean('remember') ? now()->addDays(30) : now()->addHours(2));
+        $token     = $user->createToken('api', $abilities, $expiry)->plainTextToken;
+
+        return response()->json([
+            'ok'                   => true,
+            'user'                 => $user,
+            'token'                => $token,
+            'remember_expires_at'  => $expiry->toIso8601String(),
+        ]);
+    }
+
+    /* -------- Forgot Password -------- */
+
+    public function forgotRequestOtp(Request $r) {
+        $v = Validator::make($r->all(), ['email' => ['required','email']]);
+        if ($v->fails()) return response()->json(['errors' => $v->errors()], 422);
+
+        $user = User::where('email', $r->email)->first();
+        if ($user) {
+            $res = $this->upsertOtp($r->email, 'reset', null);
+            if (!$res['ok']) {
+                return response()->json(['ok' => true, 'cooldown_seconds' => $res['cooldown']]);
+            }
+            return response()->json(['ok' => true, 'cooldown_seconds' => $this->resendCooldownSeconds]);
+        }
+        // Don’t leak user existence
+        return response()->json(['ok' => true, 'cooldown_seconds' => $this->resendCooldownSeconds]);
+    }
+
+    public function forgotVerifyOtp(Request $r) {
+        $v = Validator::make($r->all(), [
+            'email' => ['required','email'],
+            'code'  => ['required','digits:6'],
+        ]);
+        if ($v->fails()) return response()->json(['errors' => $v->errors()], 422);
+
+        $check = $this->checkOtp($r->email, 'reset', $r->code);
+        if (!$check['ok']) return response()->json(['message' => 'Invalid or expired code.'], 422);
+
+        // Short-lived reset ticket
+        $ticket = (string) Str::uuid();
+        Cache::put("pwreset:{$ticket}", $r->email, now()->addMinutes($this->resetTicketTtlMinutes));
+
+        return response()->json([
+            'ok' => true,
+            'ticket' => $ticket,
+            'ticket_expires_in' => $this->resetTicketTtlMinutes * 60
+        ]);
+    }
+
+    public function forgotReset(Request $r) {
+        $v = Validator::make($r->all(), [
+            'ticket' => ['required','uuid'],
+            'password' => ['required','string','min:8','confirmed'],
+        ]);
+        if ($v->fails()) return response()->json(['errors' => $v->errors()], 422);
+
+        $email = Cache::pull("pwreset:{$r->ticket}");
+        if (!$email) return response()->json(['message' => 'Invalid or expired reset ticket.'], 422);
+
+        $user = User::where('email', $email)->first();
+        if (!$user) return response()->json(['message' => 'Account not found.'], 404);
+
+        $user->forceFill(['password' => Hash::make($r->password)])->save();
+        $user->tokens()->delete();
+
+        return response()->json(['ok' => true]);
+    }
+
+    /* -------- Resend shared -------- */
+
+    public function resend(Request $r) {
+        $v = Validator::make($r->all(), [
+            'email' => ['required','email'],
+            'purpose' => ['required','in:register,reset'],
+        ]);
+        if ($v->fails()) return response()->json(['errors' => $v->errors()], 422);
+
+        $res = $this->upsertOtp($r->email, $r->purpose, null);
+        if (!$res['ok']) {
+            return response()->json(['ok' => false, 'cooldown_seconds' => $res['cooldown']], 429);
+        }
+        return response()->json(['ok' => true, 'cooldown_seconds' => $this->resendCooldownSeconds]);
+    }
+}
+```
+
 ## app/Http/Controllers/LakeController.php
 
 ```php
@@ -10225,6 +10666,9 @@ namespace App\Http\Controllers;
 use App\Models\Lake;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+
 
 class LakeController extends Controller
 {
@@ -10286,6 +10730,65 @@ class LakeController extends Controller
         $lake->delete();
         return response()->json(['message' => 'Lake deleted']);
     }
+    
+    public function publicGeo()
+    {
+        try {
+            // ACTIVE + PUBLIC default layer per lake
+            $rows = DB::table('lakes as l')
+                ->join('layers as ly', function ($j) {
+                    $j->on('ly.body_id', '=', 'l.id')
+                    ->where('ly.body_type', 'lake')
+                    ->where('ly.is_active', true)
+                    ->where('ly.visibility', 'public');
+                })
+                ->leftJoin('watersheds as w', 'w.id', '=', 'l.watershed_id')
+                ->whereNotNull('ly.geom')
+                ->select(
+                    'l.id','l.name','l.alt_name','l.region','l.province','l.municipality',
+                    'l.surface_area_km2','l.elevation_m','l.mean_depth_m',
+                    'l.created_at','l.updated_at',
+                    'w.name as watershed_name',
+                    'ly.id as layer_id',
+                    DB::raw('ST_AsGeoJSON(ly.geom) as geom_geojson')
+                )
+                ->get();
+
+            $features = [];
+            foreach ($rows as $r) {
+                if (!$r->geom_geojson) continue;
+                $geom = json_decode($r->geom_geojson, true);
+                if (!$geom) continue;
+
+                $features[] = [
+                    'type' => 'Feature',
+                    'geometry' => $geom,
+                    'properties' => [
+                        'name'             => $r->name,
+                        'alt_name'         => $r->alt_name,
+                        'region'           => $r->region,
+                        'province'         => $r->province,
+                        'municipality'     => $r->municipality,
+                        'watershed_name'   => $r->watershed_name,
+                        'surface_area_km2' => $r->surface_area_km2,
+                        'elevation_m'      => $r->elevation_m,
+                        'mean_depth_m'     => $r->mean_depth_m,
+                    ],
+                ];
+            }
+
+            return response()->json([
+                'type' => 'FeatureCollection',
+                'features' => $features,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('publicGeo failed', ['error' => $e->getMessage()]);
+            return response()->json([
+                'message' => 'Failed to load public lakes',
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
+    }
 }
 ```
 
@@ -10345,25 +10848,36 @@ use Carbon\Carbon;
 class EnforceTokenTTL
 {
     public function handle(Request $request, Closure $next): Response
-    {
-        $user = $request->user();
-        if ($user && method_exists($user, 'currentAccessToken')) {
-            $token = $user->currentAccessToken();
-            if ($token && $token->created_at) {
-                $ttl = (int) config('auth.token_ttl_minutes', env('TOKEN_TTL_MINUTES', 1440)); // default 24h
-                if ($ttl > 0) {
-                    $created = Carbon::parse($token->created_at);
-                    if ($created->diffInMinutes(now()) > $ttl) {
-                        // Expire token and reject
-                        $token->delete();
-                        return response()->json(['message' => 'Token expired'], 401);
-                    }
+{
+    $user = $request->user();
+    if ($user && method_exists($user, 'currentAccessToken')) {
+        $token = $user->currentAccessToken();
+
+        if ($token) {
+            // 1) If token has an explicit expires_at, respect it.
+            if (!is_null($token->expires_at)) {
+                if (now()->greaterThan($token->expires_at)) {
+                    $token->delete();
+                    return response()->json(['message' => 'Token expired'], 401);
+                }
+                // If not expired yet, allow request; skip TTL check entirely.
+                return $next($request);
+            }
+
+            // 2) Otherwise, fall back to global TTL (if configured)
+            $ttl = (int) config('auth.token_ttl_minutes', env('TOKEN_TTL_MINUTES', 1440)); // default 24h
+            if ($ttl > 0 && $token->created_at) {
+                if (Carbon::parse($token->created_at)->diffInMinutes(now()) > $ttl) {
+                    $token->delete();
+                    return response()->json(['message' => 'Token expired'], 401);
                 }
             }
         }
-
-        return $next($request);
     }
+
+    return $next($request);
+}
+
 }
 ```
 
@@ -10432,6 +10946,38 @@ class StoreLayerRequest extends FormRequest
 }
 ```
 
+## app/Http/Requests/StoreTenantRequest.php
+
+```php
+<?php
+
+namespace App\Http\Requests;
+
+use Illuminate\Foundation\Http\FormRequest;
+
+class StoreTenantRequest extends FormRequest
+{
+    public function authorize()
+    {
+        // We'll rely on middleware to restrict access, but keep authorize true.
+        return true;
+    }
+
+    public function rules()
+    {
+        return [
+            'name' => 'required|string|max:255',
+            'domain' => 'nullable|string|max:255|unique:tenants,domain',
+            'contact_email' => 'nullable|email|max:255',
+            'phone' => 'nullable|string|max:50',
+            'address' => 'nullable|string',
+            'metadata' => 'nullable|array',
+            'active' => 'sometimes|boolean',
+        ];
+    }
+}
+```
+
 ## app/Http/Requests/UpdateLayerRequest.php
 
 ```php
@@ -10465,6 +11011,82 @@ class UpdateLayerRequest extends FormRequest
             // Optional geometry replacement
             'geom_geojson' => 'sometimes|string',
         ];
+    }
+}
+```
+
+## app/Http/Requests/UpdateTenantRequest.php
+
+```php
+<?php
+
+namespace App\Http\Requests;
+
+use Illuminate\Foundation\Http\FormRequest;
+
+class UpdateTenantRequest extends FormRequest
+{
+    public function authorize()
+    {
+        return true;
+    }
+
+    public function rules()
+    {
+        $tenantId = $this->route('tenant') ? $this->route('tenant')->id : null;
+
+        return [
+            'name' => 'required|string|max:255',
+            'domain' => 'nullable|string|max:255|unique:tenants,domain,' . $tenantId,
+            'contact_email' => 'nullable|email|max:255',
+            'phone' => 'nullable|string|max:50',
+            'address' => 'nullable|string',
+            'metadata' => 'nullable|array',
+            'active' => 'sometimes|boolean',
+        ];
+    }
+}
+```
+
+## app/Mail/OtpMail.php
+
+```php
+<?php
+
+namespace App\Mail;
+
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Mail\Mailable;
+use Illuminate\Queue\SerializesModels;
+
+class OtpMail extends Mailable implements ShouldQueue
+{
+    use Queueable, SerializesModels;
+
+    public function __construct(
+        public string $email,
+        public string $code,
+        public string $purpose, // 'register' | 'reset'
+        public int $ttlMinutes
+    ) {}
+
+    public function build() {
+        $subject = "Your LakeView PH verification code: {$this->code}";
+        return $this->subject($subject)
+            ->text('mail.plain', [
+                'content' => <<<TEXT
+Hi,
+
+Your LakeView PH verification code is:
+
+{$this->code}
+
+This code expires in {$this->ttlMinutes} minutes. If you didn’t request it, you can ignore this email.
+
+— LakeView PH
+TEXT
+            ]);
     }
 }
 ```
@@ -10572,11 +11194,33 @@ class Role extends Model
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Tenant extends Model
 {
-    protected $fillable = ['name','type','email','phone','address','active'];
+    use HasFactory, SoftDeletes;
+
+    protected $table = 'tenants';
+
+    protected $fillable = [
+        'name',
+        'slug',
+        'domain',
+        'contact_email',
+        'phone',
+        'address',
+        'metadata',
+        'active',
+    ];
+
+    protected $casts = [
+        'metadata' => 'array',
+        'active' => 'boolean',
+    ];
+
+    // If you want to auto-generate slug on create/update, we do it in controller.
 }
 ```
 
@@ -10588,8 +11232,9 @@ class Tenant extends Model
 namespace App\Models;
 
 use Illuminate\Foundation\Auth\User as Authenticatable;
-use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Arr;
+use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
@@ -10614,10 +11259,41 @@ class User extends Authenticatable
             ->withTimestamps();
     }
 
+    public function hasRole($roles): bool
+    {
+        $roles = Arr::flatten(is_array($roles) ? $roles : [$roles]);
+        $roles = array_values(array_filter(array_map(
+            static fn($role) => is_null($role) ? null : strtolower((string) trim($role)),
+            $roles
+        ), static fn($role) => !is_null($role) && $role !== ''));
+        if (empty($roles)) {
+            return false;
+        }
+
+        $current = $this->role ? strtolower($this->role) : null;
+        if ($current && in_array($current, $roles, true)) {
+            return true;
+        }
+
+        if ($this->relationLoaded('roles')) {
+            return $this->roles
+                ->pluck('name')
+                ->filter()
+                ->map(static fn($name) => strtolower($name))
+                ->intersect($roles)
+                ->isNotEmpty();
+        }
+
+        return $this->roles()
+            ->whereIn('roles.name', $roles)
+            ->exists();
+    }
+
     public function highestRoleName(): string
     {
         $order = ['superadmin'=>4,'org_admin'=>3,'contributor'=>2,'public'=>1];
-        $best = 'public'; $rank = 0;
+        $best = 'public';
+        $rank = 0;
 
         foreach ($this->roles as $role) {
             $r = $order[$role->name] ?? 0;
@@ -10628,21 +11304,9 @@ class User extends Authenticatable
 }
 ```
 
-## app/Models/UserTenant.php
+## (Legacy Removed) app/Models/UserTenant.php
 
-```php
-<?php
-
-namespace App\Models;
-
-use Illuminate\Database\Eloquent\Model;
-
-class UserTenant extends Model
-{
-    protected $table = 'user_tenants';
-    protected $fillable = ['user_id','tenant_id','role_id','joined_at','is_active'];
-}
-```
+Removed during single-tenant refactor (Sept 2025). Previous responsibilities: pivot join between users & tenants with role context. Replaced by direct `users.tenant_id` + `users.role_id` and audit table `user_tenant_changes`.
 
 ## app/Models/Watershed.php
 
@@ -10856,6 +11520,8 @@ return [
     | are secure. You should do this prior to deploying the application.
     |
     */
+
+    'otp_pepper' => env('OTP_PEPPER', ''),
 
     'cipher' => 'AES-256-CBC',
 
@@ -12398,7 +13064,184 @@ return new class extends Migration {
 };
 ```
 
-## database/migrations/2025_09_10_105719_create_personal_access_tokens_table.php
+## database/migrations/2025_09_15_000001_update_layers_on_activate_stop_mirroring.php
+
+```php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Support\Facades\DB;
+
+return new class extends Migration {
+    public function up(): void
+    {
+        // Keep/ensure one-active-per-body partial unique index (idempotent)
+        DB::statement("
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_layers_active_per_body
+            ON public.layers (body_type, body_id)
+            WHERE is_active
+        ");
+
+        // Replace function: remove mirroring into lakes/watersheds
+        DB::unprepared(<<<'SQL'
+        CREATE OR REPLACE FUNCTION public.layers_on_activate()
+        RETURNS trigger
+        LANGUAGE plpgsql
+        AS $$
+        BEGIN
+          IF NEW.is_active IS TRUE THEN
+            UPDATE layers
+               SET is_active = FALSE, updated_at = now()
+             WHERE body_type = NEW.body_type
+               AND body_id   = NEW.body_id
+               AND id       <> NEW.id
+               AND is_active = TRUE;
+          END IF;
+
+          RETURN NEW;
+        END;
+        $$;
+        SQL);
+    }
+
+    public function down(): void
+    {
+        // Recreate the previous behavior (mirroring) ONLY if you truly want to rollback.
+        DB::unprepared(<<<'SQL'
+        CREATE OR REPLACE FUNCTION public.layers_on_activate()
+        RETURNS trigger
+        LANGUAGE plpgsql
+        AS $$
+        BEGIN
+          IF NEW.is_active IS TRUE THEN
+            UPDATE layers
+               SET is_active = FALSE, updated_at = now()
+             WHERE body_type = NEW.body_type
+               AND body_id   = NEW.body_id
+               AND id       <> NEW.id
+               AND is_active = TRUE;
+
+            IF NEW.body_type = 'lake' THEN
+              UPDATE lakes SET geom = NEW.geom, updated_at = now()
+               WHERE id = NEW.body_id;
+            ELSIF NEW.body_type = 'watershed' THEN
+              UPDATE watersheds SET geom = NEW.geom, updated_at = now()
+               WHERE id = NEW.body_id;
+            END IF;
+          END IF;
+
+          RETURN NEW;
+        END;
+        $$;
+        SQL);
+    }
+};
+```
+
+## database/migrations/2025_09_15_000002_backfill_active_layers_from_lakes_geom.php
+
+```php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration {
+    public function up(): void
+    {
+        // Backfill base, public, active layers from lakes.geom where no active layer exists
+        if (!Schema::hasColumn('lakes', 'geom')) {
+            return;
+        }
+
+        DB::unprepared(<<<'SQL'
+        WITH missing AS (
+          SELECT l.id AS lake_id
+          FROM public.lakes l
+          WHERE l.geom IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM public.layers x
+              WHERE x.body_type = 'lake'
+                AND x.body_id   = l.id
+                AND x.is_active = TRUE
+            )
+        )
+        INSERT INTO public.layers (
+          body_type, body_id, uploaded_by,
+          name, type, category, srid,
+          visibility, is_active, status, version, notes, source_type,
+          geom, created_at, updated_at
+        )
+        SELECT
+          'lake'               AS body_type,
+          l.id                 AS body_id,
+          NULL                 AS uploaded_by,
+          COALESCE(l.name, CONCAT('Lake #', l.id)) || ' – Base' AS name,
+          'base'               AS type,
+          NULL                 AS category,
+          4326                 AS srid,
+          'public'             AS visibility,
+          TRUE                 AS is_active,
+          'ready'              AS status,
+          1                    AS version,
+          'Backfilled from lakes.geom' AS notes,
+          'geojson'            AS source_type,
+          CASE
+            WHEN ST_SRID(l.geom) = 4326 THEN ST_Multi(ST_CollectionExtract(ST_ForceCollection(ST_MakeValid(l.geom)), 3))
+            ELSE ST_Transform(ST_Multi(ST_CollectionExtract(ST_ForceCollection(ST_MakeValid(l.geom)), 3)), 4326)
+          END                  AS geom,
+          now(), now()
+        FROM public.lakes l
+        JOIN missing m ON m.lake_id = l.id;
+        SQL);
+    }
+
+    public function down(): void
+    {
+        // If you need to rollback, delete only the backfilled rows we just created
+        DB::statement("
+          DELETE FROM public.layers
+          WHERE notes = 'Backfilled from lakes.geom'
+        ");
+    }
+};
+```
+
+## database/migrations/2025_09_15_000003_drop_legacy_columns.php
+
+```php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Support\Facades\DB;
+
+return new class extends Migration {
+    public function up(): void
+    {
+        // Drop columns that are no longer needed
+        DB::statement("ALTER TABLE public.lakes  DROP COLUMN IF EXISTS geom");
+        DB::statement("ALTER TABLE public.lakes  DROP COLUMN IF EXISTS max_depth_m");
+
+        DB::statement("ALTER TABLE public.layers DROP COLUMN IF EXISTS file_hash");
+        DB::statement("ALTER TABLE public.layers DROP COLUMN IF EXISTS file_size_bytes");
+        DB::statement("ALTER TABLE public.layers DROP COLUMN IF EXISTS metadata");
+    }
+
+    public function down(): void
+    {
+        // Recreate columns if you need to rollback (types are typical; adjust if your schema differs)
+        DB::statement("ALTER TABLE public.lakes  ADD COLUMN IF NOT EXISTS geom geometry(MultiPolygon, 4326)");
+        DB::statement("ALTER TABLE public.lakes  ADD COLUMN IF NOT EXISTS max_depth_m double precision");
+
+        DB::statement("ALTER TABLE public.layers ADD COLUMN IF NOT EXISTS file_hash text");
+        DB::statement("ALTER TABLE public.layers ADD COLUMN IF NOT EXISTS file_size_bytes bigint");
+        DB::statement("ALTER TABLE public.layers ADD COLUMN IF NOT EXISTS metadata jsonb");
+    }
+};
+```
+
+## database/migrations/2025_09_16_125041_create_email_otps_table.php
 
 ```php
 <?php
@@ -12407,31 +13250,153 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
-{
-    /**
-     * Run the migrations.
-     */
+return new class extends Migration {
+    public function up(): void {
+        Schema::create('email_otps', function (Blueprint $t) {
+            $t->id();
+            $t->string('email')->index();
+            $t->enum('purpose', ['register','reset'])->index();
+            $t->string('code_hash', 64); // sha256 hex
+            $t->timestamp('expires_at');
+            $t->timestamp('last_sent_at');
+            $t->unsignedTinyInteger('attempts')->default(0);
+            $t->timestamp('consumed_at')->nullable();
+            $t->json('payload')->nullable(); // for pending registration fields, if any
+            $t->timestamps();
+            $t->index(['email','purpose','expires_at']);
+        });
+    }
+    public function down(): void {
+        Schema::dropIfExists('email_otps');
+    }
+};
+```
+
+## database/migrations/2025_09_17_202004_add_role_to_users_table.php
+
+```php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration {
     public function up(): void
     {
-        Schema::create('personal_access_tokens', function (Blueprint $table) {
-            $table->id();
-            $table->morphs('tokenable');
-            $table->text('name');
-            $table->string('token', 64)->unique();
-            $table->text('abilities')->nullable();
-            $table->timestamp('last_used_at')->nullable();
-            $table->timestamp('expires_at')->nullable()->index();
-            $table->timestamps();
+        Schema::table('users', function (Blueprint $table) {
+            $table->string('role')->default('user')->after('email'); // default role
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
-        Schema::dropIfExists('personal_access_tokens');
+        Schema::table('users', function (Blueprint $table) {
+            $table->dropColumn('role');
+        });
+    }
+};
+```
+
+## database/migrations/2025_09_20_000001_align_tenants_table.php
+
+```php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
+
+return new class extends Migration {
+    public function up(): void
+    {
+        if (!Schema::hasTable('tenants')) {
+            return;
+        }
+
+        Schema::table('tenants', function (Blueprint $table) {
+            if (!Schema::hasColumn('tenants', 'slug')) {
+                $table->string('slug')->nullable()->unique()->after('name');
+            }
+            if (!Schema::hasColumn('tenants', 'domain')) {
+                $table->string('domain')->nullable()->unique()->after('slug');
+            }
+            if (!Schema::hasColumn('tenants', 'contact_email')) {
+                $table->string('contact_email')->nullable()->after('domain');
+            }
+            if (!Schema::hasColumn('tenants', 'metadata')) {
+                $table->jsonb('metadata')->nullable()->after('address');
+            }
+            if (!Schema::hasColumn('tenants', 'deleted_at')) {
+                $table->softDeletes();
+            }
+        });
+
+        if (Schema::hasColumn('tenants', 'email')) {
+            DB::statement("UPDATE tenants SET contact_email = email WHERE contact_email IS NULL");
+            Schema::table('tenants', function (Blueprint $table) {
+                $table->dropColumn('email');
+            });
+        }
+
+        $tenants = DB::table('tenants')->select('id', 'name', 'slug')->orderBy('id')->get();
+        $used = DB::table('tenants')
+            ->whereNotNull('slug')
+            ->pluck('slug')
+            ->map(fn ($slug) => strtolower($slug))
+            ->toArray();
+
+        foreach ($tenants as $tenant) {
+            if (!empty($tenant->slug)) {
+                continue;
+            }
+
+            $base = Str::slug($tenant->name ?? '') ?: 'tenant-' . $tenant->id;
+            $candidate = $base;
+            $suffix = 1;
+            while (in_array(strtolower($candidate), $used, true)) {
+                $candidate = $base . '-' . $suffix;
+                $suffix++;
+            }
+
+            DB::table('tenants')->where('id', $tenant->id)->update(['slug' => $candidate]);
+            $used[] = strtolower($candidate);
+        }
+    }
+
+    public function down(): void
+    {
+        if (!Schema::hasTable('tenants')) {
+            return;
+        }
+
+        Schema::table('tenants', function (Blueprint $table) {
+            if (!Schema::hasColumn('tenants', 'email')) {
+                $table->string('email')->nullable()->after('type');
+            }
+        });
+
+        DB::statement("UPDATE tenants SET email = contact_email WHERE email IS NULL");
+
+        Schema::table('tenants', function (Blueprint $table) {
+            if (Schema::hasColumn('tenants', 'contact_email')) {
+                $table->dropColumn('contact_email');
+            }
+            if (Schema::hasColumn('tenants', 'domain')) {
+                $table->dropColumn('domain');
+            }
+            if (Schema::hasColumn('tenants', 'slug')) {
+                $table->dropColumn('slug');
+            }
+            if (Schema::hasColumn('tenants', 'metadata')) {
+                $table->dropColumn('metadata');
+            }
+            if (Schema::hasColumn('tenants', 'deleted_at')) {
+                $table->dropColumn('deleted_at');
+            }
+        });
     }
 };
 ```
@@ -14458,12 +15423,14 @@ h4.subsection {
 /* Buttons */
 .auth-btn {
   width: 100%;
+  height: 44px;
   padding: 12px;
   background: linear-gradient(135deg, #3b82f6, #06b6d4);
   border: none;
   border-radius: 12px;
   margin-top: 18px;
   font-weight: 700;
+  letter-spacing: .3px;
   color: #fff;
   font-size: 15px;
   cursor: pointer;
@@ -14477,6 +15444,14 @@ h4.subsection {
   transform: translateY(1px);
 }
 
+.auth-btn-secondary {
+  background: white;
+  color: #0f172a;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  width: auto; /* secondary is narrower in the OTP row */
+  padding: 0 14px;
+}
+
 /* Links */
 .auth-switch {
   margin-top: 20px;
@@ -14488,6 +15463,10 @@ h4.subsection {
   color: #60a5fa;
   font-weight: 700;
   text-decoration: none;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  padding: 0;
 }
 
 .auth-link:hover {
@@ -14566,6 +15545,31 @@ h4.subsection {
   height: 16px;
   margin: 0;
 }
+
+.auth-inline {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.auth-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+  align-items: center;
+}
+
+.auth-otp-input {
+  width: 100%;
+  height: 44px;
+  border-radius: 10px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: rgba(255,255,255,0.95);
+  padding: 0 12px;
+  font-size: 16px;
+  letter-spacing: 2px;
+}
 ```
 
 ## resources/css/app.css
@@ -14624,11 +15628,10 @@ import {
   FiLayers, FiLoader, FiEye, FiToggleRight, FiLock, FiUnlock, FiTrash2, FiEdit2,
 } from "react-icons/fi";
 
-// BodySelect removed from UI to unify with lake dropdown UX
 import Modal from "../Modal";
 import {
   fetchLayersForBody,
-  activateLayer,
+  // activateLayer,  // no longer used
   toggleLayerVisibility,
   deleteLayer,
   fetchBodyName,
@@ -14738,16 +15741,6 @@ function LayerList({
     } catch (_) {}
   }, [previewLayer]);
 
-  const doActivate = async (id) => {
-    try {
-      await activateLayer(id);
-      await refresh();
-    } catch (e) {
-      console.error('[LayerList] Activate layer failed', e);
-      alert(e?.message || "Failed to activate layer");
-    }
-  };
-
   const doToggleVisibility = async (row) => {
     try {
       await toggleLayerVisibility(row);
@@ -14766,6 +15759,32 @@ function LayerList({
     } catch (e) {
       console.error('[LayerList] Delete failed', e);
       alert(e?.message || "Failed to delete layer");
+    }
+  };
+
+  // NEW: default toggle with “one-at-a-time” guard (no auto-unset others)
+  const doToggleDefault = async (row) => {
+    try {
+      if (row.is_active) {
+        // Turn OFF current default
+        await updateLayer(row.id, { is_active: false });
+        await refresh();
+        return;
+      }
+      // Trying to turn ON -> block if another layer is already default
+      const existing = layers.find((l) => l.is_active && l.id !== row.id);
+      if (existing) {
+        alert(
+          `“${existing.name}” is already set as the default layer.\n\n` +
+          `Please turn it OFF first, then set “${row.name}” as the default.`
+        );
+        return;
+      }
+      await updateLayer(row.id, { is_active: true });
+      await refresh();
+    } catch (e) {
+      console.error('[LayerList] Toggle default failed', e);
+      alert(e?.message || "Failed to toggle default");
     }
   };
 
@@ -14914,18 +15933,13 @@ function LayerList({
                             <FiEdit2 />
                           </button>
 
-                          {allowActivate && !row.is_active && (
+                          {allowActivate && (
                             <button
-                              className="icon-btn simple accent"
-                              title="Set as Default"
-                              aria-label="Make Active"
-                              onClick={() => doActivate(row.id)}
+                              className={`icon-btn simple ${row.is_active ? "accent" : ""}`}
+                              title={row.is_active ? "Unset Default" : "Set as Default"}
+                              aria-label={row.is_active ? "Unset Default" : "Set as Default"}
+                              onClick={() => doToggleDefault(row)}
                             >
-                              <FiToggleRight />
-                            </button>
-                          )}
-                          {allowActivate && row.is_active && (
-                            <button className="icon-btn simple" title="Default" aria-label="Default" disabled>
                               <FiToggleRight />
                             </button>
                           )}
@@ -16092,12 +17106,20 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Modal from "./Modal";
 import { api, setToken } from "../lib/api";
-import { alertSuccess, alertError } from "../utils/alerts";
+import {
+  requestRegisterOtp, verifyRegisterOtp,
+  requestForgotOtp,   verifyForgotOtp,   resetWithTicket,
+  resendOtp
+} from "../lib/api";
+import { alertSuccess, alertError, alertInfo } from "../utils/alerts";
 import { FiX } from "react-icons/fi";
 
 export default function AuthModal({ open, onClose, mode: initialMode = "login" }) {
   const navigate = useNavigate();
-  const [mode, setMode] = useState(initialMode); // 'login' | 'register'
+
+  // Modes:
+  // 'login' | 'register' | 'forgot' | 'verify' | 'reset'
+  const [mode, setMode] = useState(initialMode);
 
   // Shared
   const [loading, setLoading] = useState(false);
@@ -16112,12 +17134,20 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
   const [fullName, setFullName] = useState("");
   const [regEmail, setRegEmail] = useState("");
   const [regPassword, setRegPassword] = useState("");
-  const [regPassword2, setRegPassword2] = useState(""); // confirm password
+  const [regPassword2, setRegPassword2] = useState("");
   const [occupation, setOccupation] = useState("");
   const [occupationOther, setOccupationOther] = useState("");
 
-  // Derived: password match (register)
+  // Forgot/Verify/Reset
+  const [verifyContext, setVerifyContext] = useState(null); // 'register' | 'reset'
+  const [verifyEmail, setVerifyEmail] = useState("");
+  const [otp, setOtp] = useState("");
+  const [resendIn, setResendIn] = useState(0); // seconds
+  const [ticket, setTicket] = useState(null);
+
+  // Derived
   const passwordsMatch = regPassword.length > 0 && regPassword === regPassword2;
+  const canResend = resendIn <= 0;
 
   useEffect(() => { setMode(initialMode); }, [initialMode]);
 
@@ -16125,12 +17155,35 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
     if (!open) {
       setErr("");
       setLoading(false);
-      setEmail(""); setPassword(""); setRemember(true);
-      setFullName(""); setRegEmail(""); setRegPassword(""); setRegPassword2("");
-      setOccupation(""); setOccupationOther("");
+
+      // login fields
+      setEmail("");
+      setPassword("");
       setRemember(false);
+
+      // register fields
+      setFullName("");
+      setRegEmail("");
+      setRegPassword("");
+      setRegPassword2("");
+      setOccupation("");
+      setOccupationOther("");
+
+      // otp/reset
+      setVerifyContext(null);
+      setVerifyEmail("");
+      setOtp("");
+      setResendIn(0);
+      setTicket(null);
     }
   }, [open]);
+
+  // resend countdown
+  useEffect(() => {
+    if (mode !== "verify" || resendIn <= 0) return;
+    const t = setInterval(() => setResendIn((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(t);
+  }, [mode, resendIn]);
 
   function redirectByRole(user) {
     const role = user?.role || "public";
@@ -16144,15 +17197,17 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
     try {
       const j = JSON.parse(errLike?.message ?? "");
       if (j?.errors) {
-        return Object.entries(j.errors)
-          .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`)
-          .join("\n");
+        const first = Object.values(j.errors).flat()[0];
+        return typeof first === "string" ? first : fallback;
       }
       if (j?.message) return j.message;
     } catch {}
     return fallback;
   }
 
+  /* =========================
+   * LOGIN
+   * ========================= */
   async function handleLogin(e) {
     e.preventDefault();
     setErr("");
@@ -16165,11 +17220,14 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
       });
 
       if (res?.token) {
-        setToken(res.token, { remember }); // store appropriately
+        setToken(res.token, { remember }); // store synchronously
       }
-      
+
+      // Confirm role from the source of truth
+      const me = await api("/auth/me"); // uses the freshly stored token
+
       alertSuccess("Welcome back!", "Login successful.");
-      redirectByRole(res?.user);
+      redirectByRole(me);
       onClose?.();
     } catch (e2) {
       const msg = extractMessage(e2, "Invalid email or password.");
@@ -16181,11 +17239,13 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
     }
   }
 
+  /* =========================
+   * REGISTER (→ OTP)
+   * ========================= */
   async function handleRegister(e) {
     e.preventDefault();
     setErr("");
 
-    // Frontend confirm-password guard
     if (!passwordsMatch) {
       setErr("Passwords do not match.");
       return;
@@ -16193,52 +17253,142 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
 
     setLoading(true);
     try {
-      const body = {
-        full_name: fullName,
+      // We start the OTP flow: do NOT create the user yet.
+      const out = await requestRegisterOtp({
+        name: fullName,
         email: regEmail,
         password: regPassword,
-        password_confirmation: regPassword2, // allow Laravel 'confirmed' rule
-        occupation: occupation || null,
-        occupation_other: occupation === "other" ? (occupationOther || null) : null,
-      };
-
-      const res = await api("/auth/register", {
-        method: "POST",
-        auth: false,
-        body,
+        password_confirmation: regPassword2,
+        // (If you later want to collect occupation on register, extend backend to store in payload.)
       });
 
-      await alertSuccess("Account created", "Please log in to continue.");
-
-      // Switch modal to LOGIN mode and prefill email
-      setMode("login");
-      setEmail(regEmail);
-      setPassword(""); // clear any junk
-      // Clear register form fields
-      setFullName("");
-      setRegEmail("");
-      setRegPassword("");
-      setRegPassword2("");
-      setOccupation("");
-      setOccupationOther("");
-
-      if (res?.token) {
-        // If you auto-login new public users:
-        setToken(res.token, { remember: true }); // new users generally want persistence
-        alertSuccess("Account created", "Welcome to LakeView PH!");
-        navigate("/", { replace: true });
-      } else {
-        alertSuccess("Account created", res?.message || "You can now sign in.");
-        navigate("/login", { replace: true });
-      }
-      onClose?.();
+      setVerifyContext("register");
+      setVerifyEmail(regEmail);
+      setMode("verify");
+      setResendIn(out?.cooldown_seconds ?? 180);
+      alertInfo("Check your inbox", "We sent a 6-digit code to verify your email.");
     } catch (e2) {
       const msg = extractMessage(e2, "Registration failed. Please review your entries.");
       setErr(msg);
       alertError("Registration failed", msg);
     } finally {
-      setRegPassword("");
-      setRegPassword2("");
+      setLoading(false);
+    }
+  }
+
+  /* =========================
+   * FORGOT (→ OTP)
+   * ========================= */
+  async function handleForgotStart(e) {
+    e.preventDefault();
+    setErr("");
+    setLoading(true);
+    try {
+      const out = await requestForgotOtp({ email });
+      setVerifyContext("reset");
+      setVerifyEmail(email);
+      setMode("verify");
+      setResendIn(out?.cooldown_seconds ?? 180);
+      alertInfo("Check your inbox", "We sent a 6-digit code to verify your email.");
+    } catch (e2) {
+      const msg = extractMessage(e2, "Please try again.");
+      setErr(msg);
+      alertError("Error", msg);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  /* =========================
+   * VERIFY OTP
+   * ========================= */
+  async function handleVerify(e) {
+    e.preventDefault();
+    if (otp.length !== 6) return;
+    setErr("");
+    setLoading(true);
+    try {
+      if (verifyContext === "register") {
+        const out = await verifyRegisterOtp({ email: verifyEmail, code: otp, remember });
+        if (out?.token) setToken(out.token, { remember });
+        const me = await api("/auth/me");
+        alertSuccess("Registered & verified", "Welcome to LakeView PH!");
+        redirectByRole(me);
+        onClose?.();
+
+        // clear registration fields after success
+        setFullName("");
+        setRegEmail("");
+        setRegPassword("");
+        setRegPassword2("");
+        setOccupation("");
+        setOccupationOther("");
+      } else {
+        const out = await verifyForgotOtp({ email: verifyEmail, code: otp });
+        setTicket(out?.ticket || null);
+        setMode("reset");
+        setPassword("");
+        setPassword2("");
+        alertSuccess("Email verified", "Please set a new password.");
+      }
+    } catch (e2) {
+      const msg = extractMessage(e2, "Invalid or expired code. Try again or resend.");
+      setErr(msg);
+      alertError("Verification failed", msg);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleResend(e) {
+    e.preventDefault();
+    if (!canResend) return;
+    setLoading(true);
+    try {
+      const out = await resendOtp({
+        email: verifyEmail,
+        purpose: verifyContext === "register" ? "register" : "reset",
+      });
+      setResendIn(out?.cooldown_seconds ?? 180);
+      alertInfo("Code sent", "Please check your email.");
+    } catch (e2) {
+      const msg = extractMessage(e2, "Please wait before requesting another code.");
+      setErr(msg);
+      alertError("Resend blocked", msg);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  /* =========================
+   * RESET PASSWORD (ticket)
+   * ========================= */
+  async function handleReset(e) {
+    e.preventDefault();
+    setErr("");
+
+    if (password !== password2) {
+      setErr("Passwords do not match.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await resetWithTicket({
+        ticket,
+        password,
+        password_confirmation: password2,
+      });
+      alertSuccess("Password updated", "You can now sign in with your new password.");
+      setMode("login");
+      setEmail(verifyEmail); // convenience
+      setPassword("");
+      setPassword2("");
+    } catch (e2) {
+      const msg = extractMessage(e2, "Please check your new password.");
+      setErr(msg);
+      alertError("Reset failed", msg);
+    } finally {
       setLoading(false);
     }
   }
@@ -16269,21 +17419,42 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
             <span>LakeView PH</span>
           </div>
 
-          {mode === "login" ? (
+          {/* Headings */}
+          {mode === "login" && (
             <>
               <h2>Welcome Back</h2>
               <p className="auth-subtitle">Log in to continue to LakeView PH</p>
             </>
-          ) : (
+          )}
+          {mode === "register" && (
             <>
               <h2>Create a New Account</h2>
               <p className="auth-subtitle">Sign up to access LakeView PH</p>
             </>
           )}
+          {mode === "forgot" && (
+            <>
+              <h2>Forgot Password</h2>
+              <p className="auth-subtitle">Enter your email to receive a verification code</p>
+            </>
+          )}
+          {mode === "verify" && (
+            <>
+              <h2>Email Verification</h2>
+              <p className="auth-subtitle">We sent a 6-digit code to <strong>{verifyEmail}</strong></p>
+            </>
+          )}
+          {mode === "reset" && (
+            <>
+              <h2>Set New Password</h2>
+              <p className="auth-subtitle">Email: <strong>{verifyEmail}</strong></p>
+            </>
+          )}
 
           {err ? <div className="auth-error" role="alert">{err}</div> : null}
 
-          {mode === "login" ? (
+          {/* ===== LOGIN ===== */}
+          {mode === "login" && (
             <form onSubmit={handleLogin}>
               <input
                 type="email"
@@ -16312,10 +17483,21 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
                 <span>Remember me</span>
               </label>
 
-              <div className="auth-forgot">Forgot your password?</div>
               <button type="submit" className="auth-btn" disabled={loading}>
                 {loading ? "Logging in..." : "LOG IN"}
               </button>
+
+              <div className="auth-inline">
+                <button
+                  type="button"
+                  className="auth-link"
+                  onClick={() => { setMode("forgot"); setErr(""); setEmail(email); }}
+                >
+                  Forgot your password?
+                </button>
+                <span />
+              </div>
+
               <p className="auth-switch">
                 Don’t have an account?{" "}
                 <button type="button" className="auth-link" onClick={() => setMode("register")}>
@@ -16323,7 +17505,10 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
                 </button>
               </p>
             </form>
-          ) : (
+          )}
+
+          {/* ===== REGISTER (→ OTP) ===== */}
+          {mode === "register" && (
             <form onSubmit={handleRegister}>
               <input
                 type="text"
@@ -16361,7 +17546,7 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
                 <div className="auth-error" role="alert">Passwords do not match.</div>
               )}
 
-              {/* Occupation (public users) */}
+              {/* Occupation (UI preserved for now; backend payload can be extended later) */}
               <label className="auth-label" htmlFor="occupation">Occupation</label>
               <select
                 id="occupation"
@@ -16393,11 +17578,118 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
               )}
 
               <div className="auth-hint">Use at least 8 characters for a strong password.</div>
+
+              {/* Remember me AFTER verify (applies to token created on successful OTP) */}
+              <label className="auth-remember">
+                <input
+                  type="checkbox"
+                  checked={remember}
+                  onChange={(e) => setRemember(e.target.checked)}
+                />
+                <span>Remember me after verify</span>
+              </label>
+
               <button type="submit" className="auth-btn" disabled={loading || !passwordsMatch}>
-                {loading ? "Creating account..." : "REGISTER"}
+                {loading ? "Sending code..." : "REGISTER"}
               </button>
+
               <p className="auth-switch">
                 Already have an account?{" "}
+                <button type="button" className="auth-link" onClick={() => setMode("login")}>
+                  Log In
+                </button>
+              </p>
+            </form>
+          )}
+
+          {/* ===== FORGOT (→ OTP) ===== */}
+          {mode === "forgot" && (
+            <form onSubmit={handleForgotStart}>
+              <input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+                required
+              />
+              <button type="submit" className="auth-btn" disabled={loading}>
+                {loading ? "Sending code..." : "SEND CODE"}
+              </button>
+              <p className="auth-switch">
+                Remembered it?{" "}
+                <button type="button" className="auth-link" onClick={() => setMode("login")}>
+                  Back to Log In
+                </button>
+              </p>
+            </form>
+          )}
+
+          {/* ===== VERIFY OTP ===== */}
+          {mode === "verify" && (
+            <form onSubmit={handleVerify}>
+              <input
+                className="auth-otp-input"
+                inputMode="numeric"
+                pattern="\d{6}"
+                maxLength={6}
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                placeholder="Enter 6-digit code"
+                autoFocus
+                required
+              />
+              <div className="auth-row">
+                <button type="submit" className="auth-btn" disabled={loading || otp.length !== 6}>
+                  {loading ? "Verifying..." : "VERIFY"}
+                </button>
+                <button
+                  type="button"
+                  className="auth-btn auth-btn-secondary"
+                  onClick={handleResend}
+                  disabled={!canResend || loading}
+                >
+                  {canResend
+                    ? "RESEND CODE"
+                    : `RESEND IN ${Math.floor(resendIn/60)}:${String(resendIn%60).padStart(2,"0")}`}
+                </button>
+              </div>
+              <p className="auth-switch">
+                Wrong email?{" "}
+                <button type="button" className="auth-link" onClick={() => setMode("login")}>
+                  Back to Log In
+                </button>
+              </p>
+            </form>
+          )}
+
+          {/* ===== RESET (ticket) ===== */}
+          {mode === "reset" && (
+            <form onSubmit={handleReset}>
+              <input
+                type="password"
+                placeholder="New password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password"
+                required
+              />
+              <input
+                type="password"
+                placeholder="Confirm new password"
+                value={password2}
+                onChange={(e) => setPassword2(e.target.value)}
+                autoComplete="new-password"
+                required
+              />
+              {password !== password2 && password2.length > 0 && (
+                <div className="auth-error" role="alert">Passwords do not match.</div>
+              )}
+              <button type="submit" className="auth-btn" disabled={loading || password !== password2}>
+                {loading ? "Updating..." : "UPDATE PASSWORD"}
+              </button>
+              <p className="auth-switch">
+                Back to{" "}
                 <button type="button" className="auth-link" onClick={() => setMode("login")}>
                   Log In
                 </button>
@@ -16854,13 +18146,13 @@ export default function LakeForm({
 
 ```jsx
 // src/components/LakeInfoPanel.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { FiX } from "react-icons/fi";
 
 function LakeInfoPanel({ isOpen, onClose, lake, onToggleHeatmap }) {
   const [activeTab, setActiveTab] = useState("overview");
   const [distance, setDistance] = useState(2); // km filter
-  const [estimatedPop, setEstimatedPop] = useState(0); // new state
+  const [estimatedPop, setEstimatedPop] = useState(0);
   const [closing, setClosing] = useState(false);
 
   // Reset closing when panel re-opens
@@ -16868,44 +18160,76 @@ function LakeInfoPanel({ isOpen, onClose, lake, onToggleHeatmap }) {
     if (isOpen) setClosing(false);
   }, [isOpen]);
 
-  // Mock population estimate (replace with real dataset later)
+  // Whenever a new lake is selected, return to Overview tab
+  useEffect(() => {
+    if (lake) setActiveTab("overview");
+  }, [lake?.id]);
+
+  // Mock population estimate (placeholder)
   useEffect(() => {
     if (activeTab === "population") {
-      // Example formula: base 15,000 + (distance * 20,000)
       const fakeEstimate = Math.round(15000 + distance * 20000);
       setEstimatedPop(fakeEstimate);
     }
   }, [distance, activeTab]);
+
+  // ---------- Formatting helpers ----------
+  const fmtNum = (v, suffix = "", digits = 2) => {
+    if (v === null || v === undefined || v === "") return "–";
+    const n = Number(v);
+    if (!Number.isFinite(n)) return "–";
+    return `${n.toFixed(digits)}${suffix}`;
+  };
+  const fmtDate = (v) => (v ? new Date(v).toLocaleString() : "–");
+
+  // ---------- Derived display strings ----------
+  const watershedName = useMemo(() => {
+    if (!lake) return "–";
+    // support either nested relation or flattened property
+    return lake?.watershed?.name || lake?.watershed_name || "–";
+  }, [lake]);
+
+  const locationStr = useMemo(() => {
+    if (!lake) return "–";
+    const parts = [lake.municipality, lake.province, lake.region].filter(Boolean);
+    return parts.length ? parts.join(", ") : "–";
+  }, [lake]);
+
+  const areaStr       = useMemo(() => fmtNum(lake?.surface_area_km2, " km²", 2), [lake]);
+  const elevationStr  = useMemo(() => fmtNum(lake?.elevation_m, " m", 1), [lake]);
+  const meanDepthStr  = useMemo(() => fmtNum(lake?.mean_depth_m, " m", 1), [lake]);
+  const createdAtStr  = useMemo(() => fmtDate(lake?.created_at), [lake]);
+  const updatedAtStr  = useMemo(() => fmtDate(lake?.updated_at), [lake]);
 
   // Prevent render if nothing to show
   if (!lake && !isOpen) return null;
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
-    if (tab === "population") {
-      onToggleHeatmap?.(true, distance);
-    } else {
-      onToggleHeatmap?.(false);
-    }
+    if (tab === "population") onToggleHeatmap?.(true, distance);
+    else onToggleHeatmap?.(false);
   };
 
   const handleClose = () => {
     setClosing(true);
-    setTimeout(() => {
-      onClose(); // trigger parent close after animation
-    }, 350); // must match CSS transition
+    setTimeout(() => { onClose?.(); }, 350); // match CSS transition
   };
 
   return (
-    <div
-      className={`lake-info-panel ${
-        isOpen && !closing ? "open" : "closing"
-      }`}
-    >
+    <div className={`lake-info-panel ${isOpen && !closing ? "open" : "closing"}`}>
       {/* Header */}
       <div className="lake-info-header">
-        <h2 className="lake-info-title">{lake?.name}</h2>
-        <button className="close-btn" onClick={handleClose}>
+        <div>
+          <h2 className="lake-info-title" style={{ marginBottom: 2 }}>
+            {lake?.name || "Lake"}
+          </h2>
+          {lake?.alt_name ? (
+            <div style={{ fontSize: 13, opacity: 0.7 }}>
+              Also known as <em>{lake.alt_name}</em>
+            </div>
+          ) : null}
+        </div>
+        <button className="close-btn" onClick={handleClose} aria-label="Close lake panel">
           <FiX size={20} />
         </button>
       </div>
@@ -16932,10 +18256,10 @@ function LakeInfoPanel({ isOpen, onClose, lake, onToggleHeatmap }) {
         </button>
       </div>
 
-      {/* Image (only on overview tab) */}
-      {activeTab === "overview" && (
+      {/* Image (only on overview tab, only if provided) */}
+      {activeTab === "overview" && lake?.image && (
         <div className="lake-info-image">
-          <img src={lake?.image} alt={lake?.name} />
+          <img src={lake.image} alt={lake.name} />
         </div>
       )}
 
@@ -16943,10 +18267,31 @@ function LakeInfoPanel({ isOpen, onClose, lake, onToggleHeatmap }) {
       <div className="lake-info-content">
         {activeTab === "overview" && (
           <>
-            <p><strong>Location:</strong> {lake?.location}</p>
-            <p><strong>Area:</strong> {lake?.area}</p>
-            <p><strong>Depth:</strong> {lake?.depth}</p>
-            <p><strong>Description:</strong> {lake?.description}</p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 16px" }}>
+              <div><strong>Watershed:</strong></div>
+              <div>{watershedName}</div>
+
+              <div><strong>Region:</strong></div>
+              <div>{lake?.region || "–"}</div>
+
+              <div><strong>Province:</strong></div>
+              <div>{lake?.province || "–"}</div>
+
+              <div><strong>Municipality/City:</strong></div>
+              <div>{lake?.municipality || "–"}</div>
+
+              <div><strong>Surface Area:</strong></div>
+              <div>{areaStr}</div>
+
+              <div><strong>Elevation:</strong></div>
+              <div>{elevationStr}</div>
+
+              <div><strong>Mean Depth:</strong></div>
+              <div>{meanDepthStr}</div>
+
+              <div><strong>Location (full):</strong></div>
+              <div>{locationStr}</div>
+            </div>
           </>
         )}
 
@@ -16980,7 +18325,7 @@ function LakeInfoPanel({ isOpen, onClose, lake, onToggleHeatmap }) {
                 step="1"
                 value={distance}
                 onChange={(e) => {
-                  const val = parseInt(e.target.value);
+                  const val = parseInt(e.target.value, 10);
                   setDistance(val);
                   onToggleHeatmap?.(true, val);
                 }}
@@ -17468,6 +18813,130 @@ export default function Modal({
 }
 ```
 
+## resources/js/components/OrganizationForm.jsx
+
+```jsx
+import React, { useState, useEffect } from 'react';
+import Modal from './Modal';
+import { alertError } from '../utils/alerts';
+
+export default function OrganizationForm({ isOpen, onClose, onSaved, initialData = null, api }) {
+  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState({
+    name: '',
+    domain: '',
+    contact_email: '',
+    phone: '',
+    address: '',
+    active: true,
+  });
+  const [errors, setErrors] = useState({});
+
+  useEffect(() => {
+    if (initialData) {
+      setForm({
+        name: initialData.name || '',
+        domain: initialData.domain || '',
+        contact_email: initialData.contact_email || '',
+        phone: initialData.phone || '',
+        address: initialData.address || '',
+        active: typeof initialData.active !== 'undefined' ? !!initialData.active : true,
+      });
+    } else {
+      setForm({
+        name: '',
+        domain: '',
+        contact_email: '',
+        phone: '',
+        address: '',
+        active: true,
+      });
+    }
+    setErrors({});
+  }, [initialData, isOpen]);
+
+  function onChange(e) {
+    const { name, value, type, checked } = e.target;
+    setForm(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setLoading(true);
+    setErrors({});
+    try {
+      if (initialData && initialData.id) {
+        const res = await api.put(`/admin/tenants/${initialData.id}`, form);
+        onSaved(res.data);
+      } else {
+        const res = await api.post('/admin/tenants', form);
+        onSaved(res.data);
+      }
+    } catch (err) {
+      if (err.response && err.response.status === 422 && err.response.data.errors) {
+        setErrors(err.response.data.errors);
+      } else {
+        alertError(err);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={initialData ? 'Edit Organization' : 'Add Organization'}>
+      <form onSubmit={handleSubmit} className="card" style={{ padding: 18 }}>
+        <div className="input-field">
+          <input name="name" value={form.name} onChange={onChange} required />
+          <label className={form.name ? 'active' : ''}>Name</label>
+          {errors.name && <span className="helper-text red-text">{errors.name[0]}</span>}
+        </div>
+
+        <div className="input-field">
+          <input name="domain" value={form.domain} onChange={onChange} />
+          <label className={form.domain ? 'active' : ''}>Domain (optional)</label>
+          {errors.domain && <span className="helper-text red-text">{errors.domain[0]}</span>}
+        </div>
+
+        <div className="input-field">
+          <input name="contact_email" value={form.contact_email} onChange={onChange} />
+          <label className={form.contact_email ? 'active' : ''}>Contact Email</label>
+          {errors.contact_email && <span className="helper-text red-text">{errors.contact_email[0]}</span>}
+        </div>
+
+        <div className="input-field">
+          <input name="phone" value={form.phone} onChange={onChange} />
+          <label className={form.phone ? 'active' : ''}>Phone</label>
+          {errors.phone && <span className="helper-text red-text">{errors.phone[0]}</span>}
+        </div>
+
+        <div className="input-field">
+          <textarea name="address" className="materialize-textarea" value={form.address} onChange={onChange} />
+          <label className={form.address ? 'active' : ''}>Address</label>
+          {errors.address && <span className="helper-text red-text">{errors.address[0]}</span>}
+        </div>
+
+        <div className="switch" style={{ marginBottom: 12 }}>
+          <label>
+            Inactive
+            <input type="checkbox" name="active" checked={form.active} onChange={onChange} />
+            <span className="lever"></span>
+            Active
+          </label>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button type="button" className="btn-flat" onClick={onClose} disabled={loading}>Cancel</button>
+          <button type="submit" className="btn waves-effect waves-light" disabled={loading}>
+            {loading ? (initialData ? 'Saving...' : 'Creating...') : (initialData ? 'Save' : 'Create')}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+```
+
 ## resources/js/components/RequireRole.jsx
 
 ```jsx
@@ -17593,7 +19062,7 @@ import {
 } from "react-icons/fi";
 import { MapContainer, TileLayer, Rectangle, useMap } from "react-leaflet";
 import { Link, useNavigate } from "react-router-dom";
-import { api, clearToken } from "../lib/api";
+import { api, clearToken, getToken } from "../lib/api";
 import "leaflet/dist/leaflet.css";
 import { confirm, alertSuccess } from "../utils/alerts";
 
@@ -17663,24 +19132,22 @@ function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth }) {
     }
   };
 
-useEffect(() => {
-  const fetchMe = async () => {
-    try { setMe(await api("/auth/me")); } catch { setMe(null); }
-  };
+  useEffect(() => {
+    const fetchMe = async () => {
+      try { setMe(await api("/auth/me")); } catch { setMe(null); }
+    };
+    if (getToken()) fetchMe(); // gate initial fetch
 
-  fetchMe();
+    const onAuthChange = () => (getToken() ? fetchMe() : setMe(null));
+    const onFocus = () => (getToken() ? fetchMe() : setMe(null));
 
-  const onAuthChange = () => fetchMe();
-  const onFocus = () => fetchMe();
-
-  window.addEventListener("lv-auth-change", onAuthChange);
-  window.addEventListener("focus", onFocus);
-
-  return () => {
-    window.removeEventListener("lv-auth-change", onAuthChange);
-    window.removeEventListener("focus", onFocus);
-  };
-}, []);
+    window.addEventListener("lv-auth-change", onAuthChange);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.removeEventListener("lv-auth-change", onAuthChange);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, []);
 
 
   const isLoggedIn = !!me?.id;
@@ -17955,7 +19422,7 @@ import {
   FiChevronsLeft,
   FiChevronsRight,
 } from "react-icons/fi";
-import { api, clearToken } from "../lib/api";
+import { api, clearToken, getToken } from "../lib/api";
 import { confirm, alertSuccess } from "../utils/alerts"; // ⬅️ SweetAlert2 helpers
 
 export default function DashboardLayout({ links, user, children }) {
@@ -17968,15 +19435,12 @@ export default function DashboardLayout({ links, user, children }) {
     let mounted = true;
     (async () => {
       try {
+        if (!getToken()) return; // gate
         const u = await api("/auth/me");
         if (mounted) setMe(u);
-      } catch {
-        // ignore; user not authenticated or token invalid
-      }
+      } catch {}
     })();
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, []);
 
   // Find active link
@@ -18255,6 +19719,27 @@ const API_BASE = "/api";
 const LS_KEY = "lv_token";
 const STORE_KEY = "lv_token_store"; // "local" or "session"
 
+// -----------------------------
+// OTP & Auth helper requests
+// -----------------------------
+export const requestRegisterOtp = (body) =>
+  api("/auth/register/request-otp", { method: "POST", body, auth: false });
+export const verifyRegisterOtp = (body) =>
+  api("/auth/register/verify-otp", { method: "POST", body, auth: false });
+
+export const requestForgotOtp = (body) =>
+  api("/auth/forgot/request-otp", { method: "POST", body, auth: false });
+export const verifyForgotOtp = (body) =>
+  api("/auth/forgot/verify-otp", { method: "POST", body, auth: false });
+export const resetWithTicket = (body) =>
+  api("/auth/forgot/reset", { method: "POST", body, auth: false });
+
+export const resendOtp = (body) =>
+  api("/auth/otp/resend", { method: "POST", body, auth: false });
+
+// -----------------------------
+// Token storage
+// -----------------------------
 function notifyAuthChange() {
   try {
     window.dispatchEvent(new CustomEvent("lv-auth-change"));
@@ -18269,12 +19754,10 @@ export function getToken() {
 }
 
 export function setToken(tok, { remember = false } = {}) {
-  // clear both
   try {
     localStorage.removeItem(LS_KEY);
     sessionStorage.removeItem(LS_KEY);
   } catch {}
-
   if (remember) {
     localStorage.setItem(LS_KEY, tok);
     localStorage.setItem(STORE_KEY, "local");
@@ -18282,7 +19765,6 @@ export function setToken(tok, { remember = false } = {}) {
     sessionStorage.setItem(LS_KEY, tok);
     localStorage.setItem(STORE_KEY, "session");
   }
-
   notifyAuthChange();
 }
 
@@ -18295,12 +19777,19 @@ export function clearToken() {
   notifyAuthChange();
 }
 
-export async function api(path, { method = "GET", body, headers = {}, auth = true } = {}) {
+// -----------------------------
+// Core fetch wrapper
+// -----------------------------
+export async function api(
+  path,
+  { method = "GET", body, headers = {}, auth = true } = {}
+) {
+  const hadToken = !!getToken();
   const res = await fetch(`${API_BASE}${path}`, {
     method,
     headers: {
       "Content-Type": "application/json",
-      'Accept': 'application/json',
+      Accept: "application/json",
       ...(auth && getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
       ...headers,
     },
@@ -18309,7 +19798,8 @@ export async function api(path, { method = "GET", body, headers = {}, auth = tru
 
   if (res.status === 401) {
     clearToken();
-    if (!window.__lv401Shown) {
+    // Only show the alert if we *were* authenticated previously
+    if (hadToken && !window.__lv401Shown) {
       window.__lv401Shown = true;
       alertInfo("Session expired", "Please sign in again.");
     }
@@ -18322,6 +19812,27 @@ export async function api(path, { method = "GET", body, headers = {}, auth = tru
 
   return res.json().catch(() => ({}));
 }
+
+// -----------------------------
+// Default export (Axios-like API)
+// -----------------------------
+const apiWrapper = {
+  get: (url, config = {}) =>
+    api(
+      url +
+        (config.params
+          ? "?" + new URLSearchParams(config.params).toString()
+          : ""),
+      { method: "GET", ...config }
+    ),
+  post: (url, body, config = {}) =>
+    api(url, { method: "POST", body, ...config }),
+  put: (url, body, config = {}) =>
+    api(url, { method: "PUT", body, ...config }),
+  delete: (url, config = {}) => api(url, { method: "DELETE", ...config }),
+};
+
+export default apiWrapper;
 ```
 
 ## resources/js/lib/layers.js
@@ -18411,6 +19922,13 @@ export const fetchBodyName = async (bodyType, id) => {
 /** Update layer metadata (no geometry) */
 export const updateLayer = (id, payload) =>
   api(`/layers/${id}`, { method: 'PATCH', body: payload });
+
+export async function setLayerDefault(layerId, isActive) {
+  return api(`/layers/${layerId}/default`, {
+    method: 'PATCH',
+    body: { is_active: !!isActive },
+  });
+}
 ```
 
 ## resources/js/pages/AdminInterface/AdminDashboard.jsx
@@ -18584,6 +20102,219 @@ export default function AdminLayers() {
 
 ```jsx
 
+```
+
+## resources/js/pages/AdminInterface/adminOrganizations.jsx
+
+```jsx
+import React, { useState, useEffect, useCallback } from 'react';
+import RequireRole from '../../components/RequireRole';
+import OrganizationForm from '../../components/OrganizationForm';
+import api from '../../lib/api';
+import { alertSuccess, alertError, confirm } from '../../utils/alerts';
+
+export default function AdminOrganizations() {
+  const [tenants, setTenants] = useState([]);
+  const [meta, setMeta] = useState({ total: 0, per_page: 10, current_page: 1 });
+  const [loading, setLoading] = useState(false);
+  const [query, setQuery] = useState('');
+  const [filterActive, setFilterActive] = useState(''); // '', '1', '0'
+  const [perPage, setPerPage] = useState(10);
+
+  const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState(null);
+
+const fetchTenants = useCallback(async (page = 1) => {
+  setLoading(true);
+  try {
+    const res = await api.get('/admin/tenants', {
+      params: {
+        q: query || undefined,
+        page,
+        per_page: perPage,
+        active: filterActive !== '' ? filterActive : undefined,
+      },
+    });
+
+    // res is the whole Laravel JSON { data: [...], meta: {...} }
+    setTenants(res.data ?? []);
+    setMeta(res.meta ?? { total: 0, per_page: perPage, current_page: page });
+  } catch (err) {
+    alertError(err);
+  } finally {
+    setLoading(false);
+  }
+}, [query, filterActive, perPage]);
+
+
+  useEffect(() => {
+    fetchTenants(1);
+  }, [fetchTenants]);
+
+  function openAdd() {
+    setEditing(null);
+    setShowForm(true);
+  }
+
+  function openEdit(t) {
+    setEditing(t);
+    setShowForm(true);
+  }
+
+ async function handleSaved(savedTenant) {
+   setShowForm(false);
+   // refresh from server to get latest meta & pagination
+   await fetchTenants(meta.current_page || 1);
+   alertSuccess(`Organization "${savedTenant.name}" saved`);
+ }
+
+  async function handleDelete(t) {
+    const confirmed = await confirm({
+      title: 'Delete organization?',
+      text: `Are you sure you want to delete "${t.name}"? This can be restored from the deleted list.`,
+    });
+    if (!confirmed) return;
+
+    try {
+      await api.delete(`/admin/tenants/${t.id}`);
+      // optimistic remove
+      setTenants(prev => prev.filter(x => x.id !== t.id));
+      alertSuccess('Organization deleted');
+      // refresh meta if needed
+      fetchTenants(meta.current_page || 1);
+    } catch (err) {
+      alertError(err);
+    }
+  }
+
+  function handleSearchChange(e) {
+    setQuery(e.target.value);
+  }
+
+  function handleFilterChange(e) {
+    setFilterActive(e.target.value);
+  }
+
+  function handlePageChange(page) {
+    fetchTenants(page);
+  }
+
+  return (
+    <RequireRole role="superadmin">
+      <div className="row">
+        <div className="col s12">
+          <div className="card" style={{ padding: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h5>Organizations</h5>
+                <p className="small">Manage organizations (tenants) — create, edit, delete, and view organizations.</p>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input
+                  placeholder="Search organizations..."
+                  value={query}
+                  onChange={handleSearchChange}
+                  style={{ padding: '8px 12px', borderRadius: 4, border: '1px solid #ddd' }}
+                />
+                <select value={filterActive} onChange={handleFilterChange} className="browser-default">
+                  <option value="">All</option>
+                  <option value="1">Active</option>
+                  <option value="0">Inactive</option>
+                </select>
+                <button className="btn waves-effect waves-light" onClick={() => fetchTenants(1)}>Search</button>
+                <button className="btn" onClick={openAdd} style={{ background: '#8e94f0' }}>Add Organization</button>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <table className="striped">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Domain</th>
+                    <th>Contact</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th style={{ textAlign: 'right' }}>Actions</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {loading ? (
+                    <tr><td colSpan="6">Loading...</td></tr>
+                  ) : tenants.length === 0 ? (
+                    <tr><td colSpan="6">No organizations found.</td></tr>
+                  ) : tenants.map(t => (
+                    <tr key={t.id}>
+                      <td>{t.name}</td>
+                      <td>{t.domain || '—'}</td>
+                      <td>{t.contact_email || t.phone || '—'}</td>
+                      <td>{t.active ? <span className="chip green">Active</span> : <span className="chip grey">Inactive</span>}</td>
+                      <td>{t.created_at ? new Date(t.created_at).toLocaleDateString() : '—'}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        <button className="btn-flat" onClick={() => openEdit(t)} title="Edit">
+                          <i className="material-icons">edit</i>
+                        </button>
+                        <button className="btn-flat" onClick={() => handleDelete(t)} title="Delete">
+                          <i className="material-icons red-text">delete</i>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+                <div>
+                  <small>Showing page {meta.current_page} — {meta.total} total</small>
+                </div>
+
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <select
+                    className="browser-default"
+                    value={perPage}
+                    onChange={(e) => { setPerPage(Number(e.target.value)); fetchTenants(1); }}
+                  >
+                    <option value={5}>5</option>
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                  </select>
+
+                  <div>
+                    {/* Simple prev/next pagination */}
+                    <button
+                      className="btn-flat"
+                      onClick={() => handlePageChange(Math.max(1, meta.current_page - 1))}
+                      disabled={meta.current_page <= 1}
+                    >
+                      Prev
+                    </button>
+                    <button
+                      className="btn-flat"
+                      onClick={() => handlePageChange(Math.min(meta.last_page || 1, meta.current_page + 1))}
+                      disabled={meta.current_page >= (meta.last_page || 1)}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <OrganizationForm
+          isOpen={showForm}
+          onClose={() => setShowForm(false)}
+          initialData={editing}
+          onSaved={handleSaved}
+          api={api}
+        />
+      </div>
+    </RequireRole>
+  );
+}
 ```
 
 ## resources/js/pages/AdminInterface/adminOverview.jsx
@@ -19189,6 +20920,7 @@ export default function AdminWaterCat() {
 
   /* ----------------------------- Map ----------------------------- */
   const mapRef = useRef(null);
+  const lakeGeoRef = useRef(null);
   const [showLakePoly, setShowLakePoly] = useState(false);
   const [showWatershed, setShowWatershed] = useState(false);
   const [showInflow, setShowInflow] = useState(false);
@@ -19343,8 +21075,16 @@ export default function AdminWaterCat() {
   /* ----------------------------- Map fit on selected bounds ----------------------------- */
   useEffect(() => {
     if (!mapRef.current || !lakeBounds) return;
-    mapRef.current.fitBounds(lakeBounds, { padding: [24, 24] });
+    // Teleport to bounds that fit the lake entirely; limit over-zoom
+    mapRef.current.fitBounds(lakeBounds, { padding: [24, 24], maxZoom: 14, animate: false });
   }, [lakeBounds]);
+
+  // Bring polygon to front after render (nice visual emphasis)
+  useEffect(() => {
+    if (lakeGeoRef.current && showLakePoly) {
+      try { lakeGeoRef.current.bringToFront(); } catch {}
+    }
+  }, [lakeFeature, showLakePoly]);
 
   /* ----------------------------- Row actions ----------------------------- */
   const viewLake = async (row) => {
@@ -19355,16 +21095,25 @@ export default function AdminWaterCat() {
       let feature = null;
       if (detail?.geom_geojson) { try { feature = JSON.parse(detail.geom_geojson); } catch {} }
       setLakeFeature(feature);
+
       if (feature) {
         const layer = L.geoJSON(feature);
         const b = layer.getBounds();
-        if (b?.isValid?.() === true) setLakeBounds(b);
-      } else setLakeBounds(null);
+        if (b?.isValid?.() === true) {
+          setLakeBounds(b);
+          setShowLakePoly(true); // ensure visible when clicking View
+        } else {
+          setLakeBounds(null);
+        }
+      } else {
+        setLakeBounds(null);
+      }
     } catch (e) {
       console.error(e); setErrorMsg("Failed to load lake details.");
       setLakeFeature(null); setLakeBounds(null);
     } finally { setLoading(false); }
   };
+
   const openCreate = () => { setFormMode("create"); setFormInitial({}); setFormOpen(true); };
   const openEdit = (row) => {
     const r = row?._raw ?? row;
@@ -19579,9 +21328,10 @@ export default function AdminWaterCat() {
           >
             {showLakePoly && lakeFeature ? (
               <GeoJSON
+                ref={lakeGeoRef}
                 key={JSON.stringify(lakeFeature).length}
                 data={lakeFeature}
-                style={{ weight: 2, fillOpacity: 0.1 }}
+                style={{ weight: 2, color: "#2563eb", fillOpacity: 0.1 }}
               />
             ) : null}
           </AppMap>
@@ -20898,257 +22648,217 @@ export default function LoginPage() {
 // ----------------------------------------------------
 // Main Map Page Component for LakeView PH
 // ----------------------------------------------------
-// Responsibilities:
-// - Render the interactive map with basemap layers
-// - Integrate sidebar, context menu, and map utilities
-// - Handle measurement tools (distance & area)
-// - Provide layout for search, layer control, and screenshots
-//
-// Notes:
-// - Built with react-leaflet
-// - Uses state hooks for sidebar, basemap, and measurement control
-// - Map utilities are modular components imported from /components
-// ----------------------------------------------------
-
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { FiArrowLeft } from "react-icons/fi";
 import { api } from "../../lib/api";
-import { useMap } from "react-leaflet";
+import { useMap, GeoJSON } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
+import L from "leaflet";
+
 import AppMap from "../../components/AppMap";
 import MapControls from "../../components/MapControls";
-
-// Local Components
 import SearchBar from "../../components/SearchBar";
 import LayerControl from "../../components/LayerControl";
-// CoordinatesScale and MapControls are included in AppMap
 import ScreenshotButton from "../../components/ScreenshotButton";
 import Sidebar from "../../components/Sidebar";
 import ContextMenu from "../../components/ContextMenu";
-import MeasureTool from "../../components/MeasureTool"; // Unified measuring tool
+import MeasureTool from "../../components/MeasureTool";
 import LakeInfoPanel from "../../components/LakeInfoPanel";
 import AuthModal from "../../components/AuthModal";
 
-// ----------------------------------------------------
 // Utility: Context Menu Wrapper
-// Passes map instance to children so they can bind events
-// ----------------------------------------------------
 function MapWithContextMenu({ children }) {
   const map = useMap();
   return children(map);
 }
 
 function MapPage() {
-  // ----------------------------------------------------
-  // State Management
-  // ----------------------------------------------------
-
-  // Selected basemap view: "satellite", "street", "topographic", "osm"
+  // ---------------- State ----------------
   const [selectedView, setSelectedView] = useState("satellite");
-
-  // Sidebar toggle and pinned state
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarPinned, setSidebarPinned] = useState(false);
 
-  // Lake Info Panel state
   const [selectedLake, setSelectedLake] = useState(null);
   const [lakePanelOpen, setLakePanelOpen] = useState(false);
 
-  // Measurement tool (distance / area)
   const [measureActive, setMeasureActive] = useState(false);
-  const [measureMode, setMeasureMode] = useState("distance"); // "distance" | "area"
+  const [measureMode, setMeasureMode] = useState("distance");
 
-  // Determine if a logged-in user with a dashboard is present
   const [userRole, setUserRole] = useState(null);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState("login");
+
+  // Public FeatureCollection of lakes (active Public layer only)
+  const [publicFC, setPublicFC] = useState(null);
+
   const navigate = useNavigate();
   const location = useLocation();
+  const mapRef = useRef(null);
+
+  // ---------------- Auth / route modal ----------------
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
-        const me = await api('/auth/me');
+        const me = await api("/auth/me");
         if (!mounted) return;
-        if (['superadmin','org_admin','contributor'].includes(me.role)) {
-          setUserRole(me.role);
-        } else {
-          setUserRole(null);
-        }
-      } catch {
-        if (mounted) setUserRole(null);
-      }
+        setUserRole(['superadmin','org_admin','contributor'].includes(me.role) ? me.role : null);
+      } catch { if (mounted) setUserRole(null); }
     })();
     return () => { mounted = false; };
   }, []);
 
-  // Auth modal visibility and mode, controlled by URL path or sidebar action
-  const [authOpen, setAuthOpen] = useState(false);
-  const [authMode, setAuthMode] = useState("login");
-
-  // Open modal if route is /login or /register
   useEffect(() => {
     const p = location.pathname;
-    if (p === "/login") {
-      setAuthMode("login");
-      setAuthOpen(true);
-    } else if (p === "/register") {
-      setAuthMode("register");
-      setAuthOpen(true);
-    }
+    if (p === "/login")  { setAuthMode("login"); setAuthOpen(true); }
+    if (p === "/register") { setAuthMode("register"); setAuthOpen(true); }
   }, [location.pathname]);
 
-  // Map basemap and bounds come from AppMap
-  const worldBounds = [
-    [4.6, 116.4], // SW
-    [21.1, 126.6], // NE
-  ];
+  // ---------------- Fetch public lake geometries ----------------
+  const loadPublicLakes = async () => {
+    try {
+      const fc = await api("/public/lakes-geo"); // FeatureCollection
+      if (fc?.type === "FeatureCollection") {
+        setPublicFC(fc);
 
-  // Theme class toggled depending on basemap
-  const themeClass = selectedView === "satellite" ? "map-dark" : "map-light";
-
-  // ----------------------------------------------------
-  // TEMP: Hotkeys (L to toggle panel, Esc to close)
-  // ----------------------------------------------------
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      const tag = (e.target?.tagName || "").toLowerCase();
-      // Avoid triggering hotkeys while typing in inputs/textareas/selects
-      if (tag === "input" || tag === "textarea" || tag === "select") return;
-
-      const k = e.key?.toLowerCase?.();
-
-      // Toggle Lake Info Panel with "L"
-      if (k === "l") {
-        setLakePanelOpen((prev) => {
-          const opening = !prev;
-          if (opening) {
-            // Prefill mock lake data on open (replace with real selection later)
-            setSelectedLake({
-              name: "Laguna de Bay",
-              location: "Luzon, Philippines",
-              area: "≈ 911 km²",
-              depth: "≈ 2.8 m (avg)",
-              description:
-                "The largest inland water body in the Philippines. Used for fisheries, recreation, and water supply.",
-              image: "/laguna-de-bay.jpg", // optional; add asset if available
-            });
+        // Fit to all lakes
+        if (mapRef.current && fc.features?.length) {
+          const gj = L.geoJSON(fc);
+          const b = gj.getBounds();
+          if (b?.isValid?.() === true) {
+            mapRef.current.fitBounds(b, { padding: [24, 24], maxZoom: 9, animate: false });
           }
-          return opening;
-        });
+        }
+      } else {
+        setPublicFC({ type: "FeatureCollection", features: [] });
       }
+    } catch (e) {
+      console.error("[MapPage] Failed to load public lakes", e);
+      setPublicFC({ type: "FeatureCollection", features: [] });
+    }
+  };
 
-      // Close panel with Escape
-      if (k === "escape") {
-        setLakePanelOpen(false);
-      }
+  useEffect(() => { loadPublicLakes(); }, []);
+
+  // ---------------- Hotkeys (L / Esc) ----------------
+  useEffect(() => {
+    const onKey = (e) => {
+      const tag = (e.target?.tagName || "").toLowerCase();
+      if (["input","textarea","select"].includes(tag)) return;
+      const k = e.key?.toLowerCase?.();
+      if (k === "l") setLakePanelOpen(v => !v);
+      if (k === "escape") setLakePanelOpen(false);
     };
-
-    window.addEventListener("keydown", handleKeyDown, true);
-    return () => window.removeEventListener("keydown", handleKeyDown, true);
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, []);
 
-  // ----------------------------------------------------
-  // TEMP: Population heatmap toggle (stub)
-  // ----------------------------------------------------
+  // ---------------- Heatmap stub ----------------
   const togglePopulationHeatmap = (on, distanceKm) => {
-    // TODO: wire to real heatmap layer
-    // For now, just log the intent so you can verify the panel is calling it.
     console.log("[Heatmap]", on ? "ON" : "OFF", "distance:", distanceKm, "km");
   };
 
-  // ----------------------------------------------------
-  // Component Render
-  // ----------------------------------------------------
-  return (
-    <div
-      className={themeClass}
-      style={{ height: "100vh", width: "100vw", margin: 0, padding: 0 }}
-    >
-      {/* Main Map Container */}
-      <AppMap view={selectedView} zoomControl={false}>
+  // ---------------- Render ----------------
+  const themeClass = selectedView === "satellite" ? "map-dark" : "map-light";
+  const worldBounds = [[4.6,116.4],[21.1,126.6]];
 
-        {/* Sidebar (with minimap + links) */}
+  return (
+    <div className={themeClass} style={{ height: "100vh", width: "100vw", margin: 0, padding: 0 }}>
+      <AppMap
+        view={selectedView}
+        zoomControl={false}
+        whenCreated={(m) => (mapRef.current = m)}
+      >
+        {/* Render all public default lake geometries */}
+        {publicFC && (
+          <GeoJSON
+            key={JSON.stringify(publicFC).length}
+            data={publicFC}
+            style={{ weight: 2, fillOpacity: 0.12 }}
+            onEachFeature={(feat, layer) => {
+            layer.on("click", () => {
+              const p = feat?.properties || {};
+              setSelectedLake({
+                name: p.name,
+                alt_name: p.alt_name,
+                region: p.region,
+                province: p.province,
+                municipality: p.municipality,
+                watershed_name: p.watershed_name,
+                surface_area_km2: p.surface_area_km2,
+                elevation_m: p.elevation_m,
+                mean_depth_m: p.mean_depth_m,
+              });
+              setLakePanelOpen(true);
+              if (mapRef.current) {
+                const b = layer.getBounds();
+                if (b?.isValid?.() === true) {
+                  mapRef.current.fitBounds(b, { padding: [24, 24], maxZoom: 12 });
+                }
+              }
+            });
+            layer.on("mouseover", () => layer.setStyle({ weight: 3 }));
+            layer.on("mouseout",  () => layer.setStyle({ weight: 2 }));
+          }}
+          />
+        )}
+
+        {/* Sidebar */}
         <Sidebar
           isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
           pinned={sidebarPinned}
           setPinned={setSidebarPinned}
-          onOpenAuth={(m) => {
-            setAuthMode(m || "login");
-            setAuthOpen(true);
-          }}
+          onOpenAuth={(m) => { setAuthMode(m || "login"); setAuthOpen(true); }}
         />
 
-        {/* Context Menu (right-click actions) */}
+        {/* Context Menu */}
         <MapWithContextMenu>
           {(map) => {
-            // Auto-close sidebar when clicking/dragging if not pinned
-            map.on("click", () => {
-              if (!sidebarPinned) setSidebarOpen(false);
-            });
-            map.on("dragstart", () => {
-              if (!sidebarPinned) setSidebarOpen(false);
-            });
-
-            // Inject Context Menu component
+            map.on("click", () => { if (!sidebarPinned) setSidebarOpen(false); });
+            map.on("dragstart", () => { if (!sidebarPinned) setSidebarOpen(false); });
             return (
               <ContextMenu
                 map={map}
-                onMeasureDistance={() => {
-                  setMeasureMode("distance");
-                  setMeasureActive(true);
-                }}
-                onMeasureArea={() => {
-                  setMeasureMode("area");
-                  setMeasureActive(true);
-                }}
+                onMeasureDistance={() => { setMeasureMode("distance"); setMeasureActive(true); }}
+                onMeasureArea={() => { setMeasureMode("area"); setMeasureActive(true); }}
               />
             );
           }}
         </MapWithContextMenu>
 
-        {/* Measurement Tool Overlay (distance/area) */}
-        <MeasureTool
-          active={measureActive}
-          mode={measureMode}
-          onFinish={() => setMeasureActive(false)}
-        />
+        {/* Measure Tool */}
+        <MeasureTool active={measureActive} mode={measureMode} onFinish={() => setMeasureActive(false)} />
 
-        {/* Right-side floating controls (only on MapPage) */}
+        {/* Map Controls */}
         <MapControls defaultBounds={worldBounds} />
       </AppMap>
 
-      {/* Lake Info Panel (hotkey-controlled) */}
+      {/* Lake Info Panel */}
       <LakeInfoPanel
         isOpen={lakePanelOpen}
         onClose={() => setLakePanelOpen(false)}
         lake={selectedLake}
-        onToggleHeatmap={(on, distanceKm) => togglePopulationHeatmap(on, distanceKm)}
+        onToggleHeatmap={(on, km) => togglePopulationHeatmap(on, km)}
       />
 
-      {/* UI Overlays outside MapContainer */}
-      <SearchBar onMenuClick={() => setSidebarOpen(true)} /> {/* Top-left search */}
-      <LayerControl selectedView={selectedView} setSelectedView={setSelectedView} />{" "}
-      {/* Basemap switcher */}
-      <ScreenshotButton /> {/* Bottom-center screenshot */}
+      {/* UI overlays */}
+      <SearchBar onMenuClick={() => setSidebarOpen(true)} />
+      <LayerControl selectedView={selectedView} setSelectedView={setSelectedView} />
+      <ScreenshotButton />
 
-      {/* Back to Dashboard button for logged-in roles */}
+      {/* Back to Dashboard */}
       {userRole && (
         <button
           className="map-back-btn"
           onClick={() => {
-            if (userRole === 'superadmin') navigate('/admin-dashboard');
-            else if (userRole === 'org_admin') navigate('/org-dashboard');
-            else if (userRole === 'contributor') navigate('/contrib-dashboard');
+            if (userRole === "superadmin") navigate("/admin-dashboard");
+            else if (userRole === "org_admin") navigate("/org-dashboard");
+            else if (userRole === "contributor") navigate("/contrib-dashboard");
           }}
           title="Back to Dashboard"
-          style={{
-            position: 'absolute',
-            bottom: 20,
-            right: 20,
-            zIndex: 1100,
-            display: 'inline-flex'
-          }}
+          style={{ position: "absolute", bottom: 20, right: 20, zIndex: 1100, display: "inline-flex" }}
         >
           <FiArrowLeft />
         </button>
@@ -21160,7 +22870,6 @@ function MapPage() {
         mode={authMode}
         onClose={() => {
           setAuthOpen(false);
-          // If modal was opened via /login or /register, navigate back to /
           if (location.pathname === "/login" || location.pathname === "/register") {
             navigate("/", { replace: true });
           }
@@ -21650,6 +23359,12 @@ ReactDOM.createRoot(document.getElementById("root")).render(
 );
 ```
 
+## resources/views/mail/plain.blade.php
+
+```php
+{{ $content }}
+```
+
 ## resources/views/app.blade.php
 
 ```php
@@ -21677,58 +23392,81 @@ ReactDOM.createRoot(document.getElementById("root")).render(
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\LakeController;
 use App\Http\Controllers\WatershedController;
-use App\Http\Controllers\Api\LayerController;
+use App\Http\Controllers\Api\LayerController as ApiLayerController;
 use App\Http\Controllers\Api\OptionsController;
-
+use App\Http\Controllers\EmailOtpController;
+use App\Http\Controllers\Api\TenantController;
 
 Route::prefix('auth')->group(function () {
+
+    // Registration OTP
+    Route::post('/register/request-otp', [EmailOtpController::class, 'registerRequestOtp'])->middleware('throttle:6,1');
+    Route::post('/register/verify-otp',  [EmailOtpController::class, 'registerVerifyOtp'])->middleware('throttle:12,1');
+
+    // Forgot Password OTP
+    Route::post('/forgot/request-otp',   [EmailOtpController::class, 'forgotRequestOtp'])->middleware('throttle:6,1');
+    Route::post('/forgot/verify-otp',    [EmailOtpController::class, 'forgotVerifyOtp'])->middleware('throttle:12,1');
+    Route::post('/forgot/reset',         [EmailOtpController::class, 'forgotReset'])->middleware('throttle:6,1');
+
+    // Resend
+    Route::post('/otp/resend',           [EmailOtpController::class, 'resend'])->middleware('throttle:6,1');
+
     Route::post('/register', [AuthController::class, 'register']); // public
     Route::post('/login',    [AuthController::class, 'login']);    // public
 
     Route::middleware('auth:sanctum')->group(function () {
-        Route::get('/me',    [AuthController::class, 'me']);
-        Route::post('/logout',[AuthController::class, 'logout']);
+        Route::get('/me',      [AuthController::class, 'me']);
+        Route::post('/logout', [AuthController::class, 'logout']);
     });
 });
 
 // Example protected API groups (wire later as you build)
 Route::middleware(['auth:sanctum','role:superadmin'])->prefix('admin')->group(function () {
-    Route::get('/whoami', fn() => ['ok'=>true]); // placeholder
+    Route::get('/whoami', fn() => ['ok' => true]);
+
+    Route::get('/tenants', [TenantController::class, 'index']);
+    Route::post('/tenants', [TenantController::class, 'store']);
+    Route::get('/tenants/{tenant}', [TenantController::class, 'show']);
+    Route::put('/tenants/{tenant}', [TenantController::class, 'update']);
+    Route::delete('/tenants/{tenant}', [TenantController::class, 'destroy']);
+    Route::post('/tenants/{id}/restore', [TenantController::class, 'restore']);
 });
 
 Route::middleware(['auth:sanctum','role:org_admin'])->prefix('org')->group(function () {
-    Route::get('/whoami', fn() => ['ok'=>true]);
+    Route::get('/whoami', fn() => ['ok' => true]);
 });
 
 Route::middleware(['auth:sanctum','role:contributor'])->prefix('contrib')->group(function () {
-    Route::get('/whoami', fn() => ['ok'=>true]);
+    Route::get('/whoami', fn() => ['ok' => true]);
 });
 
 // Lakes
-Route::get('/lakes', [LakeController::class, 'index']);
-Route::get('/lakes/{lake}', [LakeController::class, 'show']);
-Route::post('/lakes', [LakeController::class, 'store']);
-Route::put('/lakes/{lake}', [LakeController::class, 'update']);   // or PATCH
-Route::delete('/lakes/{lake}', [LakeController::class, 'destroy']);
+Route::get('/lakes',            [LakeController::class, 'index']);
+Route::get('/lakes/{lake}',     [LakeController::class, 'show']);
+Route::post('/lakes',           [LakeController::class, 'store']);
+Route::put('/lakes/{lake}',     [LakeController::class, 'update']);   // or PATCH
+Route::delete('/lakes/{lake}',  [LakeController::class, 'destroy']);
+Route::get('/public/lakes-geo', [LakeController::class, 'publicGeo']); // public FeatureCollection
 
 // Watersheds
-Route::get('/watersheds', [WatershedController::class, 'index']); // for dropdown
+Route::get('/watersheds', [WatershedController::class, 'index']); // for dropdowns
 
-// Layers
+// Layers (single canonical controller)
 Route::middleware('auth:sanctum')->group(function () {
-    Route::get('/layers',            [LayerController::class, 'index']);       // ?body_type=lake&body_id=1&include=bounds
-    Route::get('/layers/active',     [LayerController::class, 'active']);      // active for a body
-    Route::post('/layers',           [LayerController::class, 'store']);       // superadmin only
-    Route::patch('/layers/{id}',     [LayerController::class, 'update']);      // superadmin only
-    Route::delete('/layers/{id}',    [LayerController::class, 'destroy']);     // superadmin only
+    Route::get('/layers',           [ApiLayerController::class, 'index']);   // ?body_type=lake&body_id=1&include=bounds
+    Route::get('/layers/active',    [ApiLayerController::class, 'active']);  // active for a body
+    Route::post('/layers',          [ApiLayerController::class, 'store']);   // superadmin only (enforced in controller)
+    Route::patch('/layers/{id}',    [ApiLayerController::class, 'update']);  // superadmin only (enforced in controller)
+    Route::delete('/layers/{id}',   [ApiLayerController::class, 'destroy']); // superadmin only (enforced in controller)
 });
 
 // Slim options for dropdowns (id + name), with optional ?q=
-Route::get('/options/lakes',       [OptionsController::class, 'lakes']);
-Route::get('/options/watersheds',  [OptionsController::class, 'watersheds']);
+Route::get('/options/lakes',      [OptionsController::class, 'lakes']);
+Route::get('/options/watersheds', [OptionsController::class, 'watersheds']);
 ```
 
 ## routes/console.php
@@ -21812,14 +23550,17 @@ REDIS_HOST=127.0.0.1
 REDIS_PASSWORD=null
 REDIS_PORT=6379
 
-MAIL_MAILER=log
+MAIL_MAILER=smtp
 MAIL_SCHEME=null
-MAIL_HOST=127.0.0.1
-MAIL_PORT=2525
-MAIL_USERNAME=null
-MAIL_PASSWORD=null
-MAIL_FROM_ADDRESS="hello@example.com"
-MAIL_FROM_NAME="${APP_NAME}"
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USERNAME=dormshtslvph@gmail.com
+MAIL_PASSWORD="abhb cdow hwnv oipg"
+MAIL_ENCRYPTION=tls
+MAIL_FROM_ADDRESS=dormshtslvph@gmail.com
+MAIL_FROM_NAME="LakeView PH"
+
+OTP_PEPPER=d7f28967e43cb0f4268691d369f27a17efa765e5144f4fe6e5870d361b53bf5b
 
 AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=

@@ -1,61 +1,103 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+<h1 align="center">LakeView Platform (Backend)</h1>
+<p align="center"><strong>Single-tenant user model • Role-scoped authorization • Auditable tenant / role transitions</strong></p>
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+## Overview
 
-## About Laravel
+LakeView is a Laravel 12 API powering water quality data, geospatial layers, organizations (tenants) and role‑scoped access. The system was refactored from a pseudo multi‑tenant pivot (user_tenants) to a strict single-tenant user model (one user → zero or one tenant) with explicit role scoping.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+Core design goals:
+1. Simpler invariants (no multi-association explosion) while preserving future extensibility.
+2. Deterministic authorization – a user has exactly one role; roles define scope (system vs tenant).
+3. Transparent, queryable audit trail of role / tenant transitions.
+4. Test portability (Postgres production with spatial; SQLite for CI) via guarded migrations and stub tables.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Data Model Shift (September 2025)
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+| Before (Legacy) | After (Current) |
+|-----------------|-----------------|
+| users ⇄ user_tenants ⇄ tenants (many to many) | users.tenant_id nullable (direct) |
+| roles linked through pivot state | users.role_id (FK) |
+| Pivot carried historical admin changes implicitly | Explicit `user_tenant_changes` audit table |
 
-## Learning Laravel
+Legacy pivot model `UserTenant` has been removed. All code must use `users.tenant_id` + `users.role_id`.
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+## Roles & Scopes
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+Roles define scope classification:
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+| Role (example) | Scope | Tenant Required? | Notes |
+|----------------|-------|------------------|-------|
+| superadmin | system | No | Full platform visibility. |
+| org_admin | tenant | Yes | Manages their tenant’s members & layers. |
+| contributor | tenant | Yes | Limited create/upload within tenant. |
+| public | system | No | Read-only public endpoints. |
 
-## Laravel Sponsors
+Constraints enforced (runtime + integrity command):
+* Tenant-scoped roles MUST have non-null `tenant_id`.
+* System-scoped roles MUST have null `tenant_id`.
+* Each user MUST have a valid `role_id`.
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+## Audit Trail (`user_tenant_changes`)
 
-### Premium Partners
+Columns (simplified): user_id, old_role_id, new_role_id, old_tenant_id, new_tenant_id, changed_by_user_id, created_at.
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+Recorded when role or tenant association changes via service/controller helpers. Use it to trace historical privilege or organization membership. Orphan role references are flagged by verification.
 
-## Contributing
+## Tenancy Verification Command
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+Run integrity checks:
 
-## Code of Conduct
+```bash
+php artisan tenancy:verify        # human readable summary
+php artisan tenancy:verify --json # machine-readable JSON
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+Checks performed:
+1. Tenant-scoped roles missing tenant.
+2. System-scoped roles that wrongly have a tenant.
+3. Users missing a role assignment.
+4. Audit rows whose new_role_id is missing / orphaned.
 
-## Security Vulnerabilities
+Exit codes: 0 (OK), 1 (issues found).
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+## Migrations & Test Portability
+
+Spatial / Postgres specific statements are wrapped with driver guards. SQLite test database uses lightweight stub migrations (e.g., lakes, layers) sufficient for factories and feature tests.
+
+## Feature Tests
+
+Key suites cover:
+* Tenancy flows (assign/demote admin, contributor restrictions, cross-tenant access denial, system role constraints).
+* Layer visibility differences between organization admins and superadmins.
+* Integrity command success & failure paths.
+
+## Development
+
+Install dependencies & run tests:
+```bash
+composer install
+cp .env.example .env
+php artisan key:generate
+# Adjust DB credentials (.env) for Postgres dev; tests default to sqlite memory
+php artisan migrate --seed
+php artisan test
+```
+
+Reset database:
+```bash
+php artisan migrate:fresh --seed
+```
+
+## Conventions
+* Always manipulate role / tenant transitions through provided services or controllers that log audits.
+* Pivot model (`UserTenant`) fully removed – do not reintroduce.
+* Use middleware `EnsureRole` for route-level role gating (single role param or pipe/list supported).
+
+## Roadmap (Short Term)
+* (Done) Remove placeholder `UserTenant.php`; consider pruning the legacy pivot migration file after release tag.
+* Expand JSON API docs (OpenAPI spec) for tenancy endpoints.
+* Add permission matrix to documentation.
 
 ## License
+Proprietary – internal project (update if licensing changes).
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).

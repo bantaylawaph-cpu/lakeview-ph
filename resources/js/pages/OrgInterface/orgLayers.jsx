@@ -4,13 +4,14 @@ import { FiLayers } from "react-icons/fi";
 
 import LayerWizard from "../../components/layers/LayerWizard";
 import LayerList from "../../components/layers/LayerList";
+import { ROLES } from "../../lib/roles";
 
 const ORG_VISIBILITY_OPTIONS = [
   { value: "public", label: "Public" },
   { value: "admin", label: "Admin" },
 ];
 
-export default function OrgLayers() {
+export default function OrgLayers({ currentUserRole = ROLES.ORG_ADMIN }) { // default assumption
   const [lastBody, setLastBody] = useState({ type: "lake", id: "" });
   const [activeTab, setActiveTab] = useState("upload");
 
@@ -66,6 +67,7 @@ export default function OrgLayers() {
           allowDelete
           showPreview={false}
           visibilityOptions={ORG_VISIBILITY_OPTIONS}
+          currentUserRole={currentUserRole}
         />
       )}
     </div>

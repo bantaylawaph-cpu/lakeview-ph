@@ -16,6 +16,7 @@ import {
 import { MapContainer, TileLayer, Rectangle, useMap } from "react-leaflet";
 import { Link, useNavigate } from "react-router-dom";
 import { api, clearToken, getToken } from "../lib/api";
+import { getCurrentUser, setCurrentUser, ensureUser, isStale } from "../lib/authState";
 import "leaflet/dist/leaflet.css";
 import { confirm, alertSuccess } from "../utils/alerts";
 
@@ -72,34 +73,63 @@ function MiniMapWrapper() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth }) {
-  const [me, setMe] = useState(null); // { id, name, role }
+  const [me, setMe] = useState(() => getCurrentUser()); // start with cached user if available
   const navigate = useNavigate();
 
-  // Centralized fetch for /auth/me
-  const fetchMe = async () => {
+  // Fetch and cache user (avoids duplicate network calls across components)
+  const fetchAndCache = async () => {
     try {
-      const u = await api("/auth/me");
-      setMe(u && u.id ? u : null);
+      const res = await api("/auth/me");
+      const u = res?.data || res;
+      const finalUser = u && u.id ? u : null;
+      setCurrentUser(finalUser);
+      setMe(finalUser);
     } catch {
+      setCurrentUser(null);
       setMe(null);
     }
   };
 
   useEffect(() => {
-    const fetchMe = async () => {
-      try { setMe(await api("/auth/me")); } catch { setMe(null); }
-    };
-    if (getToken()) fetchMe(); // gate initial fetch
+    // Initial hydrate: if we already have a cached user, skip fetch unless stale
+    if (getToken()) {
+      if (!me || isStale()) {
+        fetchAndCache();
+      }
+    } else {
+      setMe(null);
+    }
 
-    const onAuthChange = () => (getToken() ? fetchMe() : setMe(null));
-    const onFocus = () => (getToken() ? fetchMe() : setMe(null));
+    const onAuthChange = () => {
+      if (getToken()) {
+        // Optimistic: if login flow has already set user via event, just use it; otherwise fetch
+        const cached = getCurrentUser();
+        if (!cached) fetchAndCache();
+        else setMe(cached);
+      } else {
+        setCurrentUser(null);
+        setMe(null);
+      }
+    };
+
+    const onUserUpdate = (e) => {
+      setMe(e.detail || getCurrentUser());
+    };
+
+    // Optional: refresh on focus only if stale (avoid spamming)
+    const onFocus = () => {
+      if (getToken() && isStale()) fetchAndCache();
+    };
 
     window.addEventListener("lv-auth-change", onAuthChange);
+    window.addEventListener("lv-user-update", onUserUpdate);
     window.addEventListener("focus", onFocus);
     return () => {
       window.removeEventListener("lv-auth-change", onAuthChange);
+      window.removeEventListener("lv-user-update", onUserUpdate);
       window.removeEventListener("focus", onFocus);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
 
@@ -218,7 +248,8 @@ function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth }) {
                   try {
                     await api("/auth/logout", { method: "POST" });
                   } catch {}
-                  clearToken(); // dispatches lv-auth-change if you patched api.js
+                  clearToken();
+                  setCurrentUser(null);
                   setMe(null);
                   if (!pinned) onClose?.();
 

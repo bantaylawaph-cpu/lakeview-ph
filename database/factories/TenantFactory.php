@@ -14,12 +14,16 @@ class TenantFactory extends Factory
 
     public function definition(): array
     {
+        $name = $this->faker->company() . ' Cooperative';
+        $slug = str($name)->slug('-');
         return [
-            'name' => $this->faker->company() . ' Cooperative',
+            'name' => $name,
             'type' => $this->faker->randomElement(['Government', 'Academic', 'Private', 'LGU']),
-            'email' => $this->faker->unique()->safeEmail(),
+            'contact_email' => $this->faker->unique()->safeEmail(),
             'phone' => $this->faker->phoneNumber(),
             'address' => $this->faker->address(),
+            'slug' => $slug,
+            'domain' => $slug . '.example.test',
             'active' => true,
         ];
     }
