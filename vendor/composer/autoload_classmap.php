@@ -6,6 +6,7 @@ $vendorDir = dirname(__DIR__);
 $baseDir = dirname($vendorDir);
 
 return array(
+    'App\\Console\\Commands\\TenancyVerify' => $baseDir . '/app/Console/Commands/TenancyVerify.php',
     'App\\Http\\Controllers\\Api\\Admin\\Concerns\\ResolvesTenantContext' => $baseDir . '/app/Http/Controllers/Api/Admin/Concerns/ResolvesTenantContext.php',
     'App\\Http\\Controllers\\Api\\Admin\\ParameterAliasController' => $baseDir . '/app/Http/Controllers/Api/Admin/ParameterAliasController.php',
     'App\\Http\\Controllers\\Api\\Admin\\ParameterController' => $baseDir . '/app/Http/Controllers/Api/Admin/ParameterController.php',
@@ -16,17 +17,15 @@ return array(
     'App\\Http\\Controllers\\Api\\Admin\\WqStandardController' => $baseDir . '/app/Http/Controllers/Api/Admin/WqStandardController.php',
     'App\\Http\\Controllers\\Api\\LayerController' => $baseDir . '/app/Http/Controllers/Api/LayerController.php',
     'App\\Http\\Controllers\\Api\\OptionsController' => $baseDir . '/app/Http/Controllers/Api/OptionsController.php',
-<<<<<<< HEAD
-    'App\\Http\\Controllers\\Api\\StatsController' => $baseDir . '/app/Http/Controllers/Api/StatsController.php',
-=======
     'App\\Http\\Controllers\\Api\\OrgUserController' => $baseDir . '/app/Http/Controllers/Api/OrgUserController.php',
+    'App\\Http\\Controllers\\Api\\StatsController' => $baseDir . '/app/Http/Controllers/Api/StatsController.php',
     'App\\Http\\Controllers\\Api\\TenantController' => $baseDir . '/app/Http/Controllers/Api/TenantController.php',
     'App\\Http\\Controllers\\Api\\UserController' => $baseDir . '/app/Http/Controllers/Api/UserController.php',
->>>>>>> origin/lakeview
     'App\\Http\\Controllers\\AuthController' => $baseDir . '/app/Http/Controllers/AuthController.php',
     'App\\Http\\Controllers\\Controller' => $baseDir . '/app/Http/Controllers/Controller.php',
     'App\\Http\\Controllers\\EmailOtpController' => $baseDir . '/app/Http/Controllers/EmailOtpController.php',
     'App\\Http\\Controllers\\LakeController' => $baseDir . '/app/Http/Controllers/LakeController.php',
+    'App\\Http\\Controllers\\PopulationController' => $baseDir . '/app/Http/Controllers/PopulationController.php',
     'App\\Http\\Controllers\\WatershedController' => $baseDir . '/app/Http/Controllers/WatershedController.php',
     'App\\Http\\Middleware\\Authenticate' => $baseDir . '/app/Http/Middleware/Authenticate.php',
     'App\\Http\\Middleware\\EnforceTokenTTL' => $baseDir . '/app/Http/Middleware/EnforceTokenTTL.php',
@@ -57,14 +56,10 @@ return array(
     'App\\Models\\WqStandard' => $baseDir . '/app/Models/WqStandard.php',
     'App\\Policies\\UserPolicy' => $baseDir . '/app/Policies/UserPolicy.php',
     'App\\Providers\\AppServiceProvider' => $baseDir . '/app/Providers/AppServiceProvider.php',
-<<<<<<< HEAD
-    'App\\Services\\Stats\\AdaptiveStatsService' => $baseDir . '/app/Services/Stats/AdaptiveStatsService.php',
-    'App\\Services\\Stats\\ManualStatsService' => $baseDir . '/app/Services/Stats/ManualStatsService.php',
-    'App\\Services\\Stats\\TTestService' => $baseDir . '/app/Services/Stats/TTestService.php',
-=======
     'App\\Providers\\AuthServiceProvider' => $baseDir . '/app/Providers/AuthServiceProvider.php',
->>>>>>> origin/lakeview
+    'App\\Services\\UserRoleAuditLogger' => $baseDir . '/app/Services/UserRoleAuditLogger.php',
     'App\\Services\\WaterQualityEvaluator' => $baseDir . '/app/Services/WaterQualityEvaluator.php',
+    'App\\Support\\Serializers\\UserSerializer' => $baseDir . '/app/Support/Serializers/UserSerializer.php',
     'Attribute' => $vendorDir . '/symfony/polyfill-php80/Resources/stubs/Attribute.php',
     'Brick\\Math\\BigDecimal' => $vendorDir . '/brick/math/src/BigDecimal.php',
     'Brick\\Math\\BigInteger' => $vendorDir . '/brick/math/src/BigInteger.php',
@@ -189,6 +184,7 @@ return array(
     'Database\\Factories\\StationFactory' => $baseDir . '/database/factories/StationFactory.php',
     'Database\\Factories\\TenantFactory' => $baseDir . '/database/factories/TenantFactory.php',
     'Database\\Factories\\UserFactory' => $baseDir . '/database/factories/UserFactory.php',
+    'Database\\Seeders\\AdminUserSeeder' => $baseDir . '/database/seeders/AdminUserSeeder.php',
     'Database\\Seeders\\DatabaseSeeder' => $baseDir . '/database/seeders/DatabaseSeeder.php',
     'Database\\Seeders\\ParameterSeeder' => $baseDir . '/database/seeders/ParameterSeeder.php',
     'Database\\Seeders\\RolesSeeder' => $baseDir . '/database/seeders/RolesSeeder.php',
@@ -6384,6 +6380,8 @@ return array(
     'Termwind\\ValueObjects\\Styles' => $vendorDir . '/nunomaduro/termwind/src/ValueObjects/Styles.php',
     'Tests\\Feature\\ExampleTest' => $baseDir . '/tests/Feature/ExampleTest.php',
     'Tests\\Feature\\LayerVisibilityTest' => $baseDir . '/tests/Feature/LayerVisibilityTest.php',
+    'Tests\\Feature\\TenancyFlowsTest' => $baseDir . '/tests/Feature/TenancyFlowsTest.php',
+    'Tests\\Feature\\TenancyIntegrityCommandTest' => $baseDir . '/tests/Feature/TenancyIntegrityCommandTest.php',
     'Tests\\Feature\\TenantAdminTest' => $baseDir . '/tests/Feature/TenantAdminTest.php',
     'Tests\\TestCase' => $baseDir . '/tests/TestCase.php',
     'Tests\\Unit\\ExampleTest' => $baseDir . '/tests/Unit/ExampleTest.php',

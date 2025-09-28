@@ -544,6 +544,7 @@ class ComposerStaticInitc514d8f7b9fc5970bdd94287905ef584
     );
 
     public static $classMap = array (
+        'App\\Console\\Commands\\TenancyVerify' => __DIR__ . '/../..' . '/app/Console/Commands/TenancyVerify.php',
         'App\\Http\\Controllers\\Api\\Admin\\Concerns\\ResolvesTenantContext' => __DIR__ . '/../..' . '/app/Http/Controllers/Api/Admin/Concerns/ResolvesTenantContext.php',
         'App\\Http\\Controllers\\Api\\Admin\\ParameterAliasController' => __DIR__ . '/../..' . '/app/Http/Controllers/Api/Admin/ParameterAliasController.php',
         'App\\Http\\Controllers\\Api\\Admin\\ParameterController' => __DIR__ . '/../..' . '/app/Http/Controllers/Api/Admin/ParameterController.php',
@@ -554,17 +555,15 @@ class ComposerStaticInitc514d8f7b9fc5970bdd94287905ef584
         'App\\Http\\Controllers\\Api\\Admin\\WqStandardController' => __DIR__ . '/../..' . '/app/Http/Controllers/Api/Admin/WqStandardController.php',
         'App\\Http\\Controllers\\Api\\LayerController' => __DIR__ . '/../..' . '/app/Http/Controllers/Api/LayerController.php',
         'App\\Http\\Controllers\\Api\\OptionsController' => __DIR__ . '/../..' . '/app/Http/Controllers/Api/OptionsController.php',
-<<<<<<< HEAD
-        'App\\Http\\Controllers\\Api\\StatsController' => __DIR__ . '/../..' . '/app/Http/Controllers/Api/StatsController.php',
-=======
         'App\\Http\\Controllers\\Api\\OrgUserController' => __DIR__ . '/../..' . '/app/Http/Controllers/Api/OrgUserController.php',
+        'App\\Http\\Controllers\\Api\\StatsController' => __DIR__ . '/../..' . '/app/Http/Controllers/Api/StatsController.php',
         'App\\Http\\Controllers\\Api\\TenantController' => __DIR__ . '/../..' . '/app/Http/Controllers/Api/TenantController.php',
         'App\\Http\\Controllers\\Api\\UserController' => __DIR__ . '/../..' . '/app/Http/Controllers/Api/UserController.php',
->>>>>>> origin/lakeview
         'App\\Http\\Controllers\\AuthController' => __DIR__ . '/../..' . '/app/Http/Controllers/AuthController.php',
         'App\\Http\\Controllers\\Controller' => __DIR__ . '/../..' . '/app/Http/Controllers/Controller.php',
         'App\\Http\\Controllers\\EmailOtpController' => __DIR__ . '/../..' . '/app/Http/Controllers/EmailOtpController.php',
         'App\\Http\\Controllers\\LakeController' => __DIR__ . '/../..' . '/app/Http/Controllers/LakeController.php',
+        'App\\Http\\Controllers\\PopulationController' => __DIR__ . '/../..' . '/app/Http/Controllers/PopulationController.php',
         'App\\Http\\Controllers\\WatershedController' => __DIR__ . '/../..' . '/app/Http/Controllers/WatershedController.php',
         'App\\Http\\Middleware\\Authenticate' => __DIR__ . '/../..' . '/app/Http/Middleware/Authenticate.php',
         'App\\Http\\Middleware\\EnforceTokenTTL' => __DIR__ . '/../..' . '/app/Http/Middleware/EnforceTokenTTL.php',
@@ -595,14 +594,10 @@ class ComposerStaticInitc514d8f7b9fc5970bdd94287905ef584
         'App\\Models\\WqStandard' => __DIR__ . '/../..' . '/app/Models/WqStandard.php',
         'App\\Policies\\UserPolicy' => __DIR__ . '/../..' . '/app/Policies/UserPolicy.php',
         'App\\Providers\\AppServiceProvider' => __DIR__ . '/../..' . '/app/Providers/AppServiceProvider.php',
-<<<<<<< HEAD
-        'App\\Services\\Stats\\AdaptiveStatsService' => __DIR__ . '/../..' . '/app/Services/Stats/AdaptiveStatsService.php',
-        'App\\Services\\Stats\\ManualStatsService' => __DIR__ . '/../..' . '/app/Services/Stats/ManualStatsService.php',
-        'App\\Services\\Stats\\TTestService' => __DIR__ . '/../..' . '/app/Services/Stats/TTestService.php',
-=======
         'App\\Providers\\AuthServiceProvider' => __DIR__ . '/../..' . '/app/Providers/AuthServiceProvider.php',
->>>>>>> origin/lakeview
+        'App\\Services\\UserRoleAuditLogger' => __DIR__ . '/../..' . '/app/Services/UserRoleAuditLogger.php',
         'App\\Services\\WaterQualityEvaluator' => __DIR__ . '/../..' . '/app/Services/WaterQualityEvaluator.php',
+        'App\\Support\\Serializers\\UserSerializer' => __DIR__ . '/../..' . '/app/Support/Serializers/UserSerializer.php',
         'Attribute' => __DIR__ . '/..' . '/symfony/polyfill-php80/Resources/stubs/Attribute.php',
         'Brick\\Math\\BigDecimal' => __DIR__ . '/..' . '/brick/math/src/BigDecimal.php',
         'Brick\\Math\\BigInteger' => __DIR__ . '/..' . '/brick/math/src/BigInteger.php',
@@ -727,6 +722,7 @@ class ComposerStaticInitc514d8f7b9fc5970bdd94287905ef584
         'Database\\Factories\\StationFactory' => __DIR__ . '/../..' . '/database/factories/StationFactory.php',
         'Database\\Factories\\TenantFactory' => __DIR__ . '/../..' . '/database/factories/TenantFactory.php',
         'Database\\Factories\\UserFactory' => __DIR__ . '/../..' . '/database/factories/UserFactory.php',
+        'Database\\Seeders\\AdminUserSeeder' => __DIR__ . '/../..' . '/database/seeders/AdminUserSeeder.php',
         'Database\\Seeders\\DatabaseSeeder' => __DIR__ . '/../..' . '/database/seeders/DatabaseSeeder.php',
         'Database\\Seeders\\ParameterSeeder' => __DIR__ . '/../..' . '/database/seeders/ParameterSeeder.php',
         'Database\\Seeders\\RolesSeeder' => __DIR__ . '/../..' . '/database/seeders/RolesSeeder.php',
@@ -6922,6 +6918,8 @@ class ComposerStaticInitc514d8f7b9fc5970bdd94287905ef584
         'Termwind\\ValueObjects\\Styles' => __DIR__ . '/..' . '/nunomaduro/termwind/src/ValueObjects/Styles.php',
         'Tests\\Feature\\ExampleTest' => __DIR__ . '/../..' . '/tests/Feature/ExampleTest.php',
         'Tests\\Feature\\LayerVisibilityTest' => __DIR__ . '/../..' . '/tests/Feature/LayerVisibilityTest.php',
+        'Tests\\Feature\\TenancyFlowsTest' => __DIR__ . '/../..' . '/tests/Feature/TenancyFlowsTest.php',
+        'Tests\\Feature\\TenancyIntegrityCommandTest' => __DIR__ . '/../..' . '/tests/Feature/TenancyIntegrityCommandTest.php',
         'Tests\\Feature\\TenantAdminTest' => __DIR__ . '/../..' . '/tests/Feature/TenantAdminTest.php',
         'Tests\\TestCase' => __DIR__ . '/../..' . '/tests/TestCase.php',
         'Tests\\Unit\\ExampleTest' => __DIR__ . '/../..' . '/tests/Unit/ExampleTest.php',
