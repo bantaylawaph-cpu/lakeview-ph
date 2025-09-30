@@ -12,7 +12,7 @@
   margin: 16px;
   border-radius: 20px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
-  overflow: auto;
+  overflow: hidden;
   transition: width 0.3s ease, transform 0.25s ease, box-shadow 0.25s ease;
   height: calc(100vh - 32px);
   position: relative; /* ✅ allow drawer toggle positioning */
@@ -69,7 +69,7 @@
   padding: 0 12px;
   margin: 0;
   flex: 1 1 auto;
-  overflow-y: auto;
+  overflow-y: hidden;
   padding-right: 6px;
 }
 /* Dynamic scrollbar styling (dashboard sidebar + nav) */
