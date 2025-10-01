@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 
-export default function Popover({ anchorRef, open, onClose = () => {}, minWidth = 220, children, offset = 6, zIndex = 1400, maxHeight = 320 }) {
+export default function Popover({ anchorRef, open, onClose = () => {}, minWidth = 220, children, offset = 6, zIndex = 30050, maxHeight = 320 }) {
   const [pos, setPos] = useState({ left: 0, top: 0, width: minWidth });
   const rootRef = useRef(null);
 

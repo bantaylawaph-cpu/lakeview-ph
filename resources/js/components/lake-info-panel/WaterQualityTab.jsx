@@ -545,14 +545,14 @@ function WaterQualityTab({ lake }) {
               ))}
             </select>
           </div>
-        ) : (
-          <div className="form-group" style={{ minWidth: 0 }}>
-            <label style={{ marginBottom: 2, fontSize: 11 }}>Station</label>
-            <select disabled aria-disabled="true" title={stations && stations.length ? "No named stations — samples have coordinates only" : "No stations"} style={{ padding: '6px 8px', color: '#bbb', backgroundColor: 'transparent' }}>
-              <option>{stations && stations.length ? 'No named stations — coordinates only' : 'No stations'}</option>
-            </select>
-          </div>
-        )}
+          ) : (
+            <div className="form-group" style={{ minWidth: 0 }}>
+              <label style={{ marginBottom: 2, fontSize: 11 }}>Station</label>
+              <select disabled aria-disabled="true" title="Samples only have coordinates" style={{ padding: '6px 8px', color: '#bbb', backgroundColor: 'transparent' }}>
+                <option>No stations</option>
+              </select>
+            </div>
+          )}
       </div>
       {loading && (
         <div style={{ margin: '2px 0 8px 0' }}>

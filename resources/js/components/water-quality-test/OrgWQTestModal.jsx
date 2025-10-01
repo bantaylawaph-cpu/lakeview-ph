@@ -58,12 +58,12 @@ export default function OrgWQTestModal({
   parameterCatalog = [],
   basePath = '/admin/sample-events', // injected by pages so modal stays agnostic
 }) {
-  const [draft, setDraft] = useState(record || null);
+  const [sampleEvent, setSampleEvent] = useState(record || null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    setDraft(record || null);
+    setSampleEvent(record || null);
   }, [record, open]);
 
   // When opened with a record id, fetch full event details (includes results + parameter info)
@@ -102,16 +102,16 @@ export default function OrgWQTestModal({
 
         if (!mounted) return;
         // Merge list-row record with full details; prefer detailed fields
-        setDraft({
+        setSampleEvent({
           ...(record || {}),
           ...(data || {}),
           results: normalizedResults,
         });
       } catch (e) {
-        if (!mounted) return;
-        setError(e);
-        // Fallback: keep whatever we had from the list
-        setDraft(record || null);
+  if (!mounted) return;
+  setError(e);
+  // Fallback: keep whatever we had from the list
+  setSampleEvent(record || null);
       } finally {
         if (mounted) setLoading(false);
       }
@@ -124,30 +124,30 @@ export default function OrgWQTestModal({
 
   // derive geographic values from multiple possible field names
   const geo = useMemo(() => {
-    if (!draft) return { hasPoint: false, lat: NaN, lng: NaN, bounds: null };
-    const lat = Number(draft.lat ?? draft.latitude ?? draft.latitude_dd ?? draft.latitude_decimal);
-    const lng = Number(draft.lng ?? draft.longitude ?? draft.longitude_dd ?? draft.longitude_decimal);
+    if (!sampleEvent) return { hasPoint: false, lat: NaN, lng: NaN, bounds: null };
+    const lat = Number(sampleEvent.lat ?? sampleEvent.latitude ?? sampleEvent.latitude_dd ?? sampleEvent.latitude_decimal);
+    const lng = Number(sampleEvent.lng ?? sampleEvent.longitude ?? sampleEvent.longitude_dd ?? sampleEvent.longitude_decimal);
     const hasPoint = Number.isFinite(lat) && Number.isFinite(lng);
     const bounds = hasPoint ? [[lat - 0.02, lng - 0.02], [lat + 0.02, lng + 0.02]] : null;
     return { hasPoint, lat, lng, bounds };
-  }, [draft]);
+  }, [sampleEvent]);
 
-  if (!open || !draft) return null;
+  if (!open || !sampleEvent) return null;
 
-  const { year, quarter, month, day } = yqmFrom(draft);
+  const { year, quarter, month, day } = yqmFrom(sampleEvent);
   // derive displayable lake name and nicely formatted sampled date
-  const lakeName = draft?.lake?.name ?? draft?.lake_name ?? draft?.lake?.display_name ?? "—";
-  const lakeClass = draft?.lake?.class_code ?? draft?.lake_class_code ?? draft?.lake?.class ?? null;
+  const lakeName = sampleEvent?.lake?.name ?? sampleEvent?.lake_name ?? sampleEvent?.lake?.display_name ?? "—";
+  const lakeClass = sampleEvent?.lake?.class_code ?? sampleEvent?.lake_class_code ?? sampleEvent?.lake?.class ?? null;
   const formattedDate = (() => {
     try {
-      return new Date(draft.sampled_at).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
+      return new Date(sampleEvent.sampled_at).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
     } catch (e) {
-      return new Date(draft.sampled_at).toLocaleDateString();
+      return new Date(sampleEvent.sampled_at).toLocaleDateString();
     }
   })();
   // derive station display name (fall back to coords if no station name)
   const stationName = (() => {
-    const n = draft?.station?.name ?? draft?.station_name ?? draft?.station?.display_name;
+    const n = sampleEvent?.station?.name ?? sampleEvent?.station_name ?? sampleEvent?.station?.display_name;
     if (n) return n;
     if (Number.isFinite(geo.lat) && Number.isFinite(geo.lng)) {
       try { return `${geo.lat.toFixed(6)}, ${geo.lng.toFixed(6)}`; } catch (e) { /* fallthrough */ }
@@ -156,22 +156,22 @@ export default function OrgWQTestModal({
   })();
 
   // ---- parameter edit helpers ----
-  const rows = Array.isArray(draft.results) ? draft.results : [];
+  const rows = Array.isArray(sampleEvent.results) ? sampleEvent.results : [];
 
   const updateRow = (idx, patch) => {
     const next = rows.map((r, i) => (i === idx ? { ...r, ...patch } : r));
-    setDraft({ ...draft, results: next });
+    setSampleEvent({ ...sampleEvent, results: next });
   };
 
   const removeRow = (idx) => {
     const next = rows.filter((_, i) => i !== idx);
-    setDraft({ ...draft, results: next });
+    setSampleEvent({ ...sampleEvent, results: next });
   };
 
   const addRow = () => {
     const firstParam = parameterCatalog?.[0] || {};
-    setDraft({
-      ...draft,
+    setSampleEvent({
+      ...sampleEvent,
       results: [
         ...rows,
         {
@@ -192,18 +192,18 @@ export default function OrgWQTestModal({
       try {
         // send updated sampling event to backend
         const payload = {
-          lake_id: draft.lake_id,
-          station_id: draft.station_id,
-          sampled_at: draft.sampled_at,
-          sampler_name: draft.sampler_name,
-          method: draft.method,
-          weather: draft.weather,
-          notes: draft.notes,
-          applied_standard_id: draft.applied_standard_id,
-          status: draft.status,
-          latitude: Number.isFinite(geo.lat) ? geo.lat : (draft.lat ?? draft.latitude ?? null),
-          longitude: Number.isFinite(geo.lng) ? geo.lng : (draft.lng ?? draft.longitude ?? null),
-          measurements: (draft.results || []).map((r) => ({
+          lake_id: sampleEvent.lake_id,
+          station_id: sampleEvent.station_id,
+          sampled_at: sampleEvent.sampled_at,
+          sampler_name: sampleEvent.sampler_name,
+          method: sampleEvent.method,
+          weather: sampleEvent.weather,
+          notes: sampleEvent.notes,
+          applied_standard_id: sampleEvent.applied_standard_id,
+          status: sampleEvent.status,
+          latitude: Number.isFinite(geo.lat) ? geo.lat : (sampleEvent.lat ?? sampleEvent.latitude ?? null),
+          longitude: Number.isFinite(geo.lng) ? geo.lng : (sampleEvent.lng ?? sampleEvent.longitude ?? null),
+          measurements: (sampleEvent.results || []).map((r) => ({
             parameter_id: r.parameter_id ?? null,
             value: r.value ?? null,
             unit: r.unit ?? null,
@@ -213,8 +213,8 @@ export default function OrgWQTestModal({
           })),
         };
 
-  const res = await api(`${basePath}/${draft.id}`, { method: 'PUT', body: payload });
-        const updated = res.data || draft;
+  const res = await api(`${basePath}/${sampleEvent.id}`, { method: 'PUT', body: payload });
+    const updated = res.data || sampleEvent;
         onSave?.(updated);
         await alertSuccess('Saved', 'Sampling event updated successfully.');
         onClose?.();
@@ -237,7 +237,7 @@ export default function OrgWQTestModal({
           <div style={{ display: "flex", gap: 8 }}>
             {canPublish && (
               <button className="pill-btn" onClick={async () => {
-                const will = draft.status === 'public' ? 'Unpublish' : 'Publish';
+                const will = sampleEvent.status === 'public' ? 'Unpublish' : 'Publish';
                 const ok = await (await import('../../lib/alerts')).confirm({ title: `${will} this test?`, confirmButtonText: will });
                 if (!ok) return;
                 try {
@@ -246,7 +246,7 @@ export default function OrgWQTestModal({
                   await (await import('../../lib/alerts')).alertWarning('Toggle failed', e?.message || 'Toggled locally.');
                 }
               }}>
-                {draft.status === "public" ? "Unpublish" : "Publish"}
+                {sampleEvent.status === "public" ? "Unpublish" : "Publish"}
               </button>
             )}
           </div>
@@ -272,8 +272,8 @@ export default function OrgWQTestModal({
       >
         {/* Context pills */}
         <div className="info-row" style={{ gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-          <Pill tone={draft.status === "public" ? "success" : "muted"}>
-            {draft.status === "public" ? "Published" : "Draft"}
+          <Pill tone={sampleEvent.status === "public" ? "success" : "muted"}>
+            {sampleEvent.status === "public" ? "Published" : "Draft"}
           </Pill>
           {lakeName ? <Pill>{lakeName}</Pill> : null}
           {stationName ? <Pill>{stationName}</Pill> : null}
@@ -306,14 +306,14 @@ export default function OrgWQTestModal({
             </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              <div><strong>Sampled At:</strong> {new Date(draft.sampled_at).toLocaleString()}</div>
-              <div><strong>Sampler:</strong> {draft.sampler_name || "—"}</div>
-              <div><strong>Method:</strong> {draft.method || "—"}</div>
-              <div><strong>Weather:</strong> {draft.weather || "—"}</div>
-              <div><strong>Standard:</strong> {draft.applied_standard_code || draft.applied_standard_name || draft.applied_standard?.code || draft.applied_standard?.name || "—"}</div>
+              <div><strong>Sampled At:</strong> {new Date(sampleEvent.sampled_at).toLocaleString()}</div>
+              <div><strong>Sampler:</strong> {sampleEvent.sampler_name || "—"}</div>
+              <div><strong>Method:</strong> {sampleEvent.method || "—"}</div>
+              <div><strong>Weather:</strong> {sampleEvent.weather || "—"}</div>
+              <div><strong>Standard:</strong> {sampleEvent.applied_standard_code || sampleEvent.applied_standard_name || sampleEvent.applied_standard?.code || sampleEvent.applied_standard?.name || "—"}</div>
               <div><strong>Lake Class:</strong> {lakeClass || "—"}</div>
               <div><strong>Period:</strong> {Number.isFinite(year) ? `${year} · Q${quarter} · M${month} · D${day}` : "—"}</div>
-              <div style={{ gridColumn: "1 / -1" }}><strong>Notes:</strong> {draft.notes || "—"}</div>
+              <div style={{ gridColumn: "1 / -1" }}><strong>Notes:</strong> {sampleEvent.notes || "—"}</div>
             </div>
           </div>
         </div>
@@ -355,7 +355,7 @@ export default function OrgWQTestModal({
                     <tr><td className="lv-empty" colSpan={editable ? 7 : 6}>Failed to load parameters.</td></tr>
                   )}
                   {!loading && !error && rows.map((r, i) => (
-                    <tr key={`${draft.id}-${i}`}>
+                    <tr key={`${sampleEvent.id}-${i}`}>
                       <td>
                         {editable ? (
                           <div className="form-group" style={{ margin: 0, minWidth: 0 }}>

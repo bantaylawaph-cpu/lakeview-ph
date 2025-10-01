@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { FiEye, FiMapPin } from 'react-icons/fi';
 import { apiPublic, buildQuery } from '../../lib/api';
 import { alertError } from '../../utils/alerts';
+import PublicWQTestModal from '../modals/PublicWQTestModal';
 
 // Lightweight inline spinner that doesn't rely on global CSS
 const LoadingSpinner = ({ label = "Loading…", size = 16, color = "#fff" }) => (
@@ -28,21 +29,87 @@ export default function TestsTab({ lake, onJumpToStation }) {
   const [loading, setLoading] = useState(false);
   const [orgs, setOrgs] = useState([]);
   const [orgId, setOrgId] = useState("");
+  const [stations, setStations] = useState([]);
+  const [stationId, setStationId] = useState("");
+  const [years, setYears] = useState([]);
+  const [yearFrom, setYearFrom] = useState("");
+  const [yearTo, setYearTo] = useState("");
+  const [viewOpen, setViewOpen] = useState(false);
+  const [viewRecord, setViewRecord] = useState(null);
 
+  // Determine whether there are any named stations (not coordinate-only entries).
+  // Coordinate-only station labels are formatted like: "12.345678, 98.765432".
+  const hasNamedStations = useMemo(() => {
+    if (!stations || stations.length === 0) return false;
+    const coordRe = /^\s*-?\d+\.\d+\s*,\s*-?\d+\.\d+\s*$/;
+    return stations.some((s) => typeof s.name === 'string' && s.name.trim() !== '' && !coordRe.test(s.name));
+  }, [stations]);
+
+  // If there are no named stations, clear any selected station so filtering doesn't apply.
+  useEffect(() => { if (!hasNamedStations) setStationId(""); }, [hasNamedStations]);
+
+  // Fetch tests and dispatch markers. Depend on filter state so markers/tests update when filters change.
   useEffect(() => {
-    if (!lakeId) { setTests([]); return; }
+    if (!lakeId) { setTests([]); setOrgs([]); setStations([]); setYears([]); return; }
     let mounted = true;
     (async () => {
       setLoading(true);
       try {
-        const qs = buildQuery({ lake_id: lakeId, limit: 50 });
+        const qs = buildQuery({ lake_id: lakeId, limit: 500 });
         const res = await apiPublic(`/public/sample-events${qs}`);
         if (!mounted) return;
-        const rows = Array.isArray(res?.data) ? res.data : [];
-        setTests(rows);
+        let rows = Array.isArray(res?.data) ? res.data : [];
+
+        // Derive org list and station list and years
+        const uniqOrgs = new Map();
+        const uniqStations = new Map();
+        const uniqYears = new Set();
+        rows.forEach((r) => {
+          const oid = r.organization_id ?? r.organization?.id;
+          const oname = r.organization_name ?? r.organization?.name;
+          if (oid && oname && !uniqOrgs.has(String(oid))) uniqOrgs.set(String(oid), { id: oid, name: oname });
+
+          const sid = r.station?.id ?? null;
+          const sname = r.station?.name ?? r.station_name ?? (r.latitude != null && r.longitude != null ? `${Number(r.latitude).toFixed(6)}, ${Number(r.longitude).toFixed(6)}` : null);
+          const skey = sid ?? sname;
+          if (skey && sname && !uniqStations.has(String(skey))) uniqStations.set(String(skey), { id: skey, name: sname });
+
+          if (r.sampled_at) {
+            const d = new Date(r.sampled_at);
+            if (!isNaN(d)) uniqYears.add(String(d.getFullYear()));
+          }
+        });
+        setOrgs(Array.from(uniqOrgs.values()));
+        setStations(Array.from(uniqStations.values()));
+        setYears(Array.from(uniqYears).map((y) => Number(y)).sort((a,b) => a - b));
+
+        // Apply client-side filtering for org, station and year range
+        let filtered = rows.filter((r) => {
+          if (orgId) {
+            const oid = r.organization_id ?? r.organization?.id;
+            if (!oid || String(oid) !== String(orgId)) return false;
+          }
+          if (stationId) {
+            const sid = r.station?.id ?? null;
+            const sname = r.station?.name ?? r.station_name ?? (r.latitude != null && r.longitude != null ? `${Number(r.latitude).toFixed(6)}, ${Number(r.longitude).toFixed(6)}` : null);
+            const skey = sid ?? sname;
+            if (!skey || String(skey) !== String(stationId)) return false;
+          }
+          if (yearFrom || yearTo) {
+            if (!r.sampled_at) return false;
+            const d = new Date(r.sampled_at);
+            if (isNaN(d)) return false;
+            const y = d.getFullYear();
+            if (yearFrom && y < Number(yearFrom)) return false;
+            if (yearTo && y > Number(yearTo)) return false;
+          }
+          return true;
+        });
+
+        setTests(filtered);
 
         // Dispatch markers for MapPage so tests render on the map while this tab is active
-        const markers = rows
+        const markers = filtered
           .map((r) => {
             // support multiple coordinate shapes
             const lat = r.latitude ?? r.lat ?? (r.point?.coordinates ? (Array.isArray(r.point.coordinates) ? r.point.coordinates[1] : null) : null) ?? r.station?.latitude ?? r.station?.lat;
@@ -62,7 +129,7 @@ export default function TestsTab({ lake, onJumpToStation }) {
       } finally { if (mounted) setLoading(false); }
     })();
     return () => { mounted = false; };
-  }, [lakeId]);
+  }, [lakeId, orgId, stationId, yearFrom, yearTo]);
 
   // Respond to explicit requests to emit markers (sent when tab becomes active)
   useEffect(() => {
@@ -159,7 +226,8 @@ export default function TestsTab({ lake, onJumpToStation }) {
   };
 
   const viewDetails = (t) => {
-    try { window.dispatchEvent(new CustomEvent('lv-view-test', { detail: { test: t } })); } catch {}
+    setViewRecord(t || null);
+    setViewOpen(true);
   };
 
   return (
@@ -173,6 +241,38 @@ export default function TestsTab({ lake, onJumpToStation }) {
                 {orgs.map((o) => (<option key={o.id} value={String(o.id)}>{o.name}</option>))}
               </select>
             </div>
+            {hasNamedStations ? (
+              <div className="form-group" style={{ flex: 1, minWidth: 0 }}>
+                <label style={{ fontSize: 11, marginBottom: 2 }}>Station</label>
+                <select value={stationId} onChange={(e) => setStationId(e.target.value)} style={{ padding: '6px 8px' }}>
+                  <option value="">All</option>
+                  {stations.map((s) => (<option key={s.id} value={String(s.id)}>{s.name}</option>))}
+                </select>
+              </div>
+            ) : (
+              <div className="form-group" style={{ flex: 1, minWidth: 0 }}>
+                <label style={{ fontSize: 11, marginBottom: 2 }}>Station</label>
+                <select disabled aria-disabled="true" title="Samples only have coordinates" style={{ padding: '6px 8px', color: '#bbb', backgroundColor: 'transparent' }}>
+                  <option>No stations</option>
+                </select>
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'end' }}>
+              <div className="form-group" style={{ minWidth: 0 }}>
+                <label style={{ fontSize: 11, marginBottom: 2 }}>Year from</label>
+                <select value={yearFrom} onChange={(e) => setYearFrom(e.target.value)} style={{ padding: '6px 8px' }}>
+                  <option value="">Any</option>
+                  {years.map((y) => (<option key={`f-${y}`} value={String(y)}>{y}</option>))}
+                </select>
+              </div>
+              <div className="form-group" style={{ minWidth: 0 }}>
+                <label style={{ fontSize: 11, marginBottom: 2 }}>Year to</label>
+                <select value={yearTo} onChange={(e) => setYearTo(e.target.value)} style={{ padding: '6px 8px' }}>
+                  <option value="">Any</option>
+                  {years.map((y) => (<option key={`t-${y}`} value={String(y)}>{y}</option>))}
+                </select>
+              </div>
+            </div>
           </div>
           {loading && (
             <div style={{ margin: '2px 0 8px 0' }}>
@@ -184,18 +284,27 @@ export default function TestsTab({ lake, onJumpToStation }) {
           <div className="insight-card" key={t.id}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>{t.organization_name || t.organization?.name || 'Organization'}</div>
-                <div style={{ fontSize: 12, opacity: 0.85 }}>{t.sampled_at ? new Date(t.sampled_at).toLocaleString() : '–'}</div>
-                <div style={{ fontSize: 12, opacity: 0.85 }}>{t.station?.name || (t.latitude != null && t.longitude != null ? `${Number(t.latitude).toFixed(6)}, ${Number(t.longitude).toFixed(6)}` : 'Station: –')}</div>
+                <div style={{ fontSize: 13, fontWeight: 700 }}>{t.sampled_at ? new Date(t.sampled_at).toLocaleString() : '–'}</div>
+                <div style={{ fontSize: 12, opacity: 0.9, marginTop: 4 }}>{t.station?.name || (t.latitude != null && t.longitude != null ? `${Number(t.latitude).toFixed(6)}, ${Number(t.longitude).toFixed(6)}` : 'Station: –')}</div>
+                <div style={{ fontSize: 12, opacity: 0.8, marginTop: 2 }}>{t.organization_name || t.organization?.name || 'Organization'}</div>
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
-                  <button className="pill-btn liquid" type="button" onClick={() => viewDetails(t)} title="View test"><FiEye /></button>
-                  <button className="pill-btn liquid" type="button" onClick={() => jumpTo(t)} title="Jump to station"><FiMapPin /></button>
+                <button className="pill-btn liquid" type="button" onClick={() => viewDetails(t)} title="View test"><FiEye /></button>
+                <button className="pill-btn liquid" type="button" onClick={() => jumpTo(t)} title="Jump to station"><FiMapPin /></button>
               </div>
             </div>
           </div>
         ))}
-      </div>
+      {/* Modal */}
+      <PublicWQTestModal open={viewOpen} record={viewRecord} onClose={() => setViewOpen(false)} />
     </div>
+    </div>
+  );
+}
+
+// Render modal at file end to avoid returning siblings from main component
+export function TestsTabModalHost({ open, record, onClose }) {
+  return (
+    <PublicWQTestModal open={open} record={record} onClose={onClose} />
   );
 }

@@ -14,7 +14,9 @@ export default function Modal({
   cardClassName = "",
   bodyClassName = "",
   style = {},
+  footerStyle = {},
   animationDuration = 200,
+  overlayZIndex = 10000,
 }) {
   // Keep the modal mounted while playing the fade-out animation
   const [shouldRender, setShouldRender] = useState(open);
@@ -47,6 +49,7 @@ export default function Modal({
       style={{
         // provide duration via CSS variable for flexibility
         ["--lv-modal-anim"]: `${animationDuration}ms`,
+        zIndex: overlayZIndex,
       }}
     >
       <div
@@ -62,9 +65,9 @@ export default function Modal({
           </div>
         )}
 
-  <div className={`lv-modal-body ${bodyClassName}`} style={{ overflowY: 'auto', maxHeight: 'calc(100vh - 180px)' }}>{children}</div>
+  <div className={`lv-modal-body ${bodyClassName}`} style={{ overflowY: 'auto', flex: '1 1 auto' }}>{children}</div>
 
-        {footer && <div className="lv-modal-footer">{footer}</div>}
+        {footer && <div className="lv-modal-footer" style={footerStyle}>{footer}</div>}
       </div>
     </div>,
     document.body

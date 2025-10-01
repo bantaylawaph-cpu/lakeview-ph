@@ -837,7 +837,7 @@ export default function AdvancedStat({ lakes = [], params = [], paramOptions: pa
 
         {events ? (
           <div style={{ marginTop:8 }}>
-            <div style={{ maxHeight: 240, overflowY: 'auto', overflowX: 'auto', border: '1px solid rgba(255,255,255,0.02)', borderRadius:6, minWidth:0 }}>
+            <div style={{ overflowX: 'auto', border: '1px solid rgba(255,255,255,0.02)', borderRadius:6, minWidth:0 }}>
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13, tableLayout: 'fixed', minWidth:0 }}>
               <thead>
                 <tr style={{ textAlign:'left', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
@@ -897,7 +897,7 @@ export default function AdvancedStat({ lakes = [], params = [], paramOptions: pa
   };
 
   return (
-  <div ref={containerRef} className="insight-card" style={{ position:'relative', minWidth: 0, maxWidth: '100%', maxHeight: '90vh', overflowY: 'auto', padding: 8 }}>
+  <div ref={containerRef} className="insight-card" style={{ position:'relative', minWidth: 0, maxWidth: '100%', padding: 8 }}>
     <h4 style={{ margin: '2px 0 8px' }}>Advanced Statistics</h4>
     {/* gear was moved back to the actions area */}
   <div>

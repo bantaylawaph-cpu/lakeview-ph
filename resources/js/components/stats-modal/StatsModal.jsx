@@ -260,7 +260,30 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
   // Removed auto-selection: user must manually choose parameter
 
   return (
-    <Modal open={open} onClose={onClose} title={title} ariaLabel="Lake statistics modal" width={1100} style={modalStyle}>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={title}
+      ariaLabel="Lake statistics modal"
+      width={1100}
+      style={modalStyle}
+      footerStyle={{
+        background: 'transparent',
+        borderTop: '1px solid rgba(255,255,255,0.18)',
+        color: '#fff',
+      }}
+      footer={
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: 'center', gap: 8 }}>
+          <div>
+            <button className="pill-btn" onClick={handleClear}>Clear</button>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="pill-btn" onClick={handleExport}>Export</button>
+            <button className="pill-btn liquid" onClick={onClose}>Close</button>
+          </div>
+        </div>
+      }
+    >
       {/* Header controls: Bucket & Range + Tabs */}
       <div style={{ display: "flex", gap: 8, alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'nowrap' }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -355,16 +378,6 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
 
   {activeTab === 'advanced' && <AdvancedStat lakes={lakeOptions} params={paramOptions} staticThresholds={thresholds} />}
 
-      {/* Footer actions */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: 'center', gap: 8, marginTop: 12 }}>
-        <div>
-          <button className="pill-btn" onClick={handleClear}>Clear</button>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="pill-btn" onClick={handleExport}>Export</button>
-          <button className="pill-btn liquid" onClick={onClose}>Close</button>
-        </div>
-      </div>
     </Modal>
   );
 }
