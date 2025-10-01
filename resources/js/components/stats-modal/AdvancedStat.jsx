@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useImperativeHandle } from "react";
 import { FiSettings, FiX } from 'react-icons/fi';
 import Popover from "../common/Popover";
 import { apiPublic } from "../../lib/api";
@@ -6,7 +6,7 @@ import { fetchParameters, fetchSampleEvents, deriveOrgOptions } from "./data/fet
 import { alertSuccess, alertError } from '../../utils/alerts';
 import { tOneSampleAsync, tTwoSampleWelchAsync, tTwoSampleStudentAsync, mannWhitney, signTestAsync, tostEquivalenceAsync, wilcoxonSignedRankAsync, moodMedianAsync } from '../../stats/statsUtils';
 
-export default function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOptions = [], staticThresholds = {} }) {
+function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOptions = [], staticThresholds = {} }, ref) {
   // test mode is now inferred from the user's compare selection (class vs lake)
   const [lakeId, setLakeId] = useState(''); // primary lake selection (first dropdown)
   // Comparison target encoded as "class:CODE" or "lake:ID"
@@ -727,6 +727,68 @@ export default function AdvancedStat({ lakes = [], params = [], paramOptions: pa
     );
   };
 
+  // Exposed actions: clear selections and export to PDF
+  const clearAll = () => {
+  console.debug('[AdvancedStat] clearAll invoked');
+    setLakeId('');
+    setClassCode('');
+    setCompareValue('');
+    setYearFrom('');
+    setYearTo('');
+    setOrganizationId('');
+    setSecondaryOrganizationId('');
+    setAppliedStandardId('');
+    setParamCode('');
+    setSelectedTest('');
+    setResult(null);
+    setError(null);
+    setShowAllValues(false);
+    // no user-facing alert for clear (kept silent)
+  };
+
+  const exportPdf = async () => {
+    try {
+      console.debug('[AdvancedStat] exportPdf invoked', { paramCode, result });
+      if (!result) {
+        console.debug('[AdvancedStat] exportPdf aborted - no result to export');
+        return;
+      }
+      const title = `Advanced statistics - ${paramCode || ''}`;
+      const style = `body { font-family: Arial, Helvetica, sans-serif; color: #111; padding: 18px; } h1 { font-size: 18px; } table { border-collapse: collapse; width: 100%; } th, td { border: 1px solid #ddd; padding: 6px; }`;
+      const summaryRows = [];
+      if (result) {
+        summaryRows.push(`<tr><th>Test</th><td>${result.test_used || result.type || ''}</td></tr>`);
+        if (result.p_value != null) summaryRows.push(`<tr><th>p-value</th><td>${result.p_value}</td></tr>`);
+        if (result.mean != null) summaryRows.push(`<tr><th>Mean</th><td>${result.mean}</td></tr>`);
+        if (result.n != null) summaryRows.push(`<tr><th>N</th><td>${result.n}</td></tr>`);
+      }
+
+      let valuesSection = '';
+      if (Array.isArray(result?.events) && result.events.length) {
+        const rowsHtml = result.events.slice(0, 1000).map(ev => `<tr><td>${ev.sampled_at || ''}</td><td>${ev.lake_id || ''}</td><td>${ev.station_id ?? ''}</td><td>${ev.value ?? ''}</td></tr>`).join('');
+        valuesSection = `<h3>Events (first ${Math.min(result.events.length, 1000)})</h3><table><thead><tr><th>Sampled at</th><th>Lake</th><th>Station</th><th>Value</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
+      } else if (Array.isArray(result?.sample_values) && result.sample_values.length) {
+        valuesSection = `<h3>Values</h3><div>${(result.sample_values || []).slice(0,1000).join(', ')}</div>`;
+      } else if (Array.isArray(result?.sample1_values) || Array.isArray(result?.sample2_values)) {
+        const a = (result.sample1_values || []).slice(0,1000).join(', ');
+        const b = (result.sample2_values || []).slice(0,1000).join(', ');
+        valuesSection = `<h3>Group values</h3><div>Group 1: ${a}</div><div style="margin-top:8px">Group 2: ${b}</div>`;
+      }
+
+      const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>${style}</style></head><body><h1>${title}</h1><table>${summaryRows.join('')}</table>${valuesSection}</body></html>`;
+      const w = window.open('', '_blank');
+      if (!w) throw new Error('Popup blocked');
+      w.document.write(html);
+      w.document.close();
+      setTimeout(() => { try { w.focus(); w.print(); } catch(e){ /* ignore */ } }, 250);
+    } catch (e) {
+      console.error('Export failed', e);
+      // no user-facing alert here; keep console error for debugging
+    }
+  };
+
+  useImperativeHandle(ref, () => ({ clearAll, exportPdf }));
+
   const renderValuesUsed = (r) => {
     // Prefer events array (contains sampled_at, station_id, lake_id, value) if available
     const events = Array.isArray(r.events) ? r.events : null;
@@ -737,7 +799,7 @@ export default function AdvancedStat({ lakes = [], params = [], paramOptions: pa
     const two2 = Array.isArray(r.sample2_values) ? r.sample2_values : null;
     if (!events && !one && !(two1 && two2)) return null;
 
-    const limit = 200;
+  const limit = 20;
     const showAll = showAllValues;
     const slice = (arr) => (showAll ? arr : arr.slice(0, limit));
 
@@ -824,10 +886,65 @@ export default function AdvancedStat({ lakes = [], params = [], paramOptions: pa
       return 'Group 2';
     };
 
+    const clearAll = () => {
+      // reset all local selection state
+      setLakeId('');
+      setClassCode('');
+      setCompareValue('');
+      setYearFrom('');
+      setYearTo('');
+      setOrganizationId('');
+      setSecondaryOrganizationId('');
+      setAppliedStandardId('');
+      setParamCode('');
+      setSelectedTest('');
+      setResult(null);
+      setError(null);
+      setShowAllValues(false);
+    };
+
+    const exportPdf = async () => {
+      try {
+        // Build a simple printable HTML summary. Users can choose "Save as PDF" in the print dialog.
+        const title = `Advanced statistics - ${paramCode || ''}`;
+        const style = `body { font-family: Arial, Helvetica, sans-serif; color: #111; padding: 18px; } h1 { font-size: 18px; } table { border-collapse: collapse; width: 100%; } th, td { border: 1px solid #ddd; padding: 6px; }`;
+        const summaryRows = [];
+        if (result) {
+          summaryRows.push(`<tr><th>Test</th><td>${result.test_used || result.type || ''}</td></tr>`);
+          if (result.p_value != null) summaryRows.push(`<tr><th>p-value</th><td>${result.p_value}</td></tr>`);
+          if (result.mean != null) summaryRows.push(`<tr><th>Mean</th><td>${result.mean}</td></tr>`);
+          if (result.n != null) summaryRows.push(`<tr><th>N</th><td>${result.n}</td></tr>`);
+        }
+
+        let valuesSection = '';
+        if (Array.isArray(result?.events) && result.events.length) {
+          const rowsHtml = result.events.slice(0, 1000).map(ev => `<tr><td>${ev.sampled_at || ''}</td><td>${ev.lake_id || ''}</td><td>${ev.station_id ?? ''}</td><td>${ev.value ?? ''}</td></tr>`).join('');
+          valuesSection = `<h3>Events (first ${Math.min(result.events.length, 1000)})</h3><table><thead><tr><th>Sampled at</th><th>Lake</th><th>Station</th><th>Value</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
+        } else if (Array.isArray(result?.sample_values) && result.sample_values.length) {
+          valuesSection = `<h3>Values</h3><div>${(result.sample_values || []).slice(0,1000).join(', ')}</div>`;
+        } else if (Array.isArray(result?.sample1_values) || Array.isArray(result?.sample2_values)) {
+          const a = (result.sample1_values || []).slice(0,1000).join(', ');
+          const b = (result.sample2_values || []).slice(0,1000).join(', ');
+          valuesSection = `<h3>Group values</h3><div>Group 1: ${a}</div><div style="margin-top:8px">Group 2: ${b}</div>`;
+        }
+
+        const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>${style}</style></head><body><h1>${title}</h1><table>${summaryRows.join('')}</table>${valuesSection}</body></html>`;
+        const w = window.open('', '_blank');
+        if (!w) throw new Error('Popup blocked');
+        w.document.write(html);
+        w.document.close();
+        // Give the window a moment to render then open print dialog
+        setTimeout(() => { try { w.focus(); w.print(); } catch(e){ /* ignore */ } }, 250);
+      } catch (e) {
+        console.error('Export failed', e);
+        alertError('Export failed', e?.message || 'Could not open print dialog');
+      }
+    };
+
     return (
       <div style={{ marginTop:10, padding:10, background:'rgba(255,255,255,0.02)', borderRadius:6 }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <strong>Values used</strong>
+          <strong>Data used</strong>
           <div style={{ display:'flex', gap:8 }}>
             <button className="pill-btn" onClick={()=>setShowAllValues(s=>!s)}>{showAll ? `Show first ${limit}` : 'Show all'}</button>
             <button className="pill-btn" onClick={copyValues}>Copy</button>
@@ -905,7 +1022,7 @@ export default function AdvancedStat({ lakes = [], params = [], paramOptions: pa
       {/* Row 1: Applied Standard, Parameter, Confidence Level (compact) */}
       <div style={{ gridColumn: '1 / span 1', minWidth:0 }}>
         <select className="pill-btn" value={appliedStandardId} onChange={e=>{setAppliedStandardId(e.target.value); setResult(null);}} style={{ width:'100%', minWidth:0, boxSizing:'border-box', padding:'10px 12px', height:40, lineHeight:'20px' }}>
-          <option value="">Applied Standard</option>
+          <option value="">Select Applied Standard</option>
           {standards.map(s => <option key={s.id} value={s.id}>{s.code || s.name || s.id}</option>)}
         </select>
       </div>
@@ -965,7 +1082,7 @@ export default function AdvancedStat({ lakes = [], params = [], paramOptions: pa
       </div>
       <div style={{ gridColumn: '3 / span 1', minWidth:0 }}>
         <select className="pill-btn" value={organizationId} onChange={e=>{ setOrganizationId(e.target.value); setResult(null); }} style={{ width:'100%', minWidth:0, boxSizing:'border-box', padding:'10px 12px', height:40, lineHeight:'20px' }}>
-          <option value="">Organization (optional)</option>
+          <option value="">Organization</option>
           {orgOptions.map(o => <option key={`org-${o.id}`} value={o.id}>{o.name || o.id}</option>)}
         </select>
       </div>
@@ -1044,3 +1161,6 @@ function suggestThreshold(paramCode, classCode, staticThresholds) {
   const num = Number(val);
   return Number.isFinite(num) ? num : null;
 }
+
+// Export wrapped with forwardRef so parent components can call imperative methods via ref
+export default React.forwardRef(AdvancedStat);

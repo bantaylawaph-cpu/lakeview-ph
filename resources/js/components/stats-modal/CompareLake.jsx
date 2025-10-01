@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useRef } from "react";
+import React, { useEffect, useMemo, useState, useRef, useImperativeHandle } from "react";
 import { Line } from "react-chartjs-2";
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend } from "chart.js";
 import { FiActivity, FiBarChart2 } from "react-icons/fi";
@@ -8,7 +8,7 @@ import { apiPublic, buildQuery } from "../../lib/api";
 import { fetchParameters } from "./data/fetchers";
 import Popover from "../common/Popover";
 
-export default function CompareLake({
+function CompareLake({
   lakeOptions = [],
   params = [],
   thresholds = {},
@@ -19,7 +19,7 @@ export default function CompareLake({
   dateFrom = "",
   dateTo = "",
   onParamChange = () => {},
-}) {
+}, ref) {
   const [lakeA, setLakeA] = useState("");
   const [lakeB, setLakeB] = useState("");
   const [selectedOrgA, setSelectedOrgA] = useState("");
@@ -252,6 +252,22 @@ export default function CompareLake({
     if (thMax != null) datasets.push({ label:'Max Threshold', data: labels.map(()=>thMax), borderColor:'rgba(239,68,68,1)', backgroundColor:'rgba(239,68,68,0.15)', borderDash:[4,4], pointRadius:0, tension:0 });
     return { labels, datasets };
   }, [eventsA, eventsB, lakeA, lakeB, selectedStationsA, selectedStationsB, selectedOrgA, selectedOrgB, selectedParam, bucket, lakeOptions, seriesMode]);
+
+  // Expose imperative clearAll to parent
+  useImperativeHandle(ref, () => ({
+    clearAll: () => {
+      setLakeA('');
+      setLakeB('');
+      setSelectedOrgA('');
+      setSelectedOrgB('');
+      setSelectedStationsA([]);
+      setSelectedStationsB([]);
+      setSelectedParam('');
+      setApplied(false);
+      setEventsA([]);
+      setEventsB([]);
+    }
+  }));
 
   const compareChartOptions = useMemo(() => ({
     responsive: true,
@@ -487,3 +503,5 @@ export default function CompareLake({
     </div>
   );
 }
+
+export default React.forwardRef(CompareLake);

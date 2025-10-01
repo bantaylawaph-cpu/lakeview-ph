@@ -44,6 +44,8 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
   const singleChartRef = useRef(null);
   const compareChartRef = useRef(null);
   const [compareSelectedParam, setCompareSelectedParam] = useState("");
+  const advancedRef = useRef(null);
+  const compareRef = useRef(null);
   // Compare tab now fetches on-demand inside CompareLake to avoid rate limits
 
   const fmtIso = (d) => {
@@ -86,6 +88,9 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
     setSelectedParam("");
     setEffectiveAllRecords([]);
   // CompareLake manages its own records; nothing to clear here
+    if (activeTab === 'compare' && compareRef.current && typeof compareRef.current.clearAll === 'function') {
+      compareRef.current.clearAll();
+    }
     setDateFrom("");
     setDateTo("");
     setTimeRange("all");
@@ -263,7 +268,7 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
     <Modal
       open={open}
       onClose={onClose}
-      title={title}
+      title={<span style={{ color: '#fff' }}>{title}</span>}
       ariaLabel="Lake statistics modal"
       width={1100}
       style={modalStyle}
@@ -275,11 +280,24 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
       footer={
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: 'center', gap: 8 }}>
           <div>
-            <button className="pill-btn" onClick={handleClear}>Clear</button>
+            <button className="pill-btn" onClick={async () => {
+              console.debug('[StatsModal] Clear clicked, activeTab=', activeTab);
+              if (activeTab === 'advanced' && advancedRef.current && typeof advancedRef.current.clearAll === 'function') {
+                advancedRef.current.clearAll();
+              } else {
+                handleClear();
+              }
+            }}>Clear</button>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button className="pill-btn" onClick={handleExport}>Export</button>
-            <button className="pill-btn liquid" onClick={onClose}>Close</button>
+            <button className="pill-btn" onClick={async () => {
+              console.debug('[StatsModal] Export clicked, activeTab=', activeTab);
+              if (activeTab === 'advanced' && advancedRef.current && typeof advancedRef.current.exportPdf === 'function') {
+                advancedRef.current.exportPdf();
+              } else {
+                handleExport();
+              }
+            }}>Export</button>
           </div>
         </div>
       }
@@ -363,6 +381,7 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
 
       {activeTab === 'compare' && (
         <CompareLake
+          ref={compareRef}
           lakeOptions={lakeOptions}
           params={paramOptions}
           thresholds={thresholds}
@@ -376,7 +395,7 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
         />
       )}
 
-  {activeTab === 'advanced' && <AdvancedStat lakes={lakeOptions} params={paramOptions} staticThresholds={thresholds} />}
+  {activeTab === 'advanced' && <AdvancedStat ref={advancedRef} lakes={lakeOptions} params={paramOptions} staticThresholds={thresholds} />}
 
     </Modal>
   );
