@@ -14,6 +14,8 @@ import { FiColumns } from "react-icons/fi";
  * - columnPicker: boolean | { label?: string, defaultHidden?: string[], locked?: string[] }
  * - toolbar: React.ReactNode | { left?: React.ReactNode, right?: React.ReactNode }
  */
+import LoadingSpinner from "../components/LoadingSpinner";
+
 export default function TableLayout({
   tableId = "lv-table",
   columns = [],
@@ -23,6 +25,8 @@ export default function TableLayout({
   resetSignal = 0,
   columnPicker = false,
   toolbar = null,
+  loading = false,
+  loadingLabel = null,
 }) {
   const enableColumnPicker = !!columnPicker;
   const columnPickerConfig = typeof columnPicker === "object" && columnPicker !== null ? columnPicker : {};
@@ -482,7 +486,11 @@ export default function TableLayout({
             {!paged.length && (
               <tr>
                 <td className="lv-empty" colSpan={displayColumns.length + (actions?.length ? 1 : 0)}>
-                  No records found.
+                  {loading ? (
+                    <LoadingSpinner label={loadingLabel || 'Loading…'} />
+                  ) : (
+                    'No records found.'
+                  )}
                 </td>
               </tr>
             )}

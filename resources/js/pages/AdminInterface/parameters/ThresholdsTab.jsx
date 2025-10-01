@@ -191,12 +191,8 @@ function ThresholdsTab() {
       header: "Unit",
       width: 140,
       render: (row) => (
-        <input
-          type="text"
-          value={row.unit ?? ""}
-          onChange={(e) => updateGridCell(row.class_code, "unit", e.target.value)}
-          style={{ width: "100%" }}
-        />
+        // Unit is a display-only cell (not an editable field)
+        <div style={{ padding: '6px 8px', color: '#111827' }}>{row.unit ?? ""}</div>
       ),
     },
     {
@@ -208,6 +204,8 @@ function ThresholdsTab() {
           type="number"
           step="any"
           value={row.min_value ?? ""}
+          placeholder="Numeric value (leave blank to unset)"
+          title="Enter a numeric minimum value; leave blank to unset"
           onChange={(e) => updateGridCell(row.class_code, "min_value", e.target.value)}
           style={{ width: "100%" }}
         />
@@ -222,6 +220,8 @@ function ThresholdsTab() {
           type="number"
           step="any"
           value={row.max_value ?? ""}
+          placeholder="Numeric value (leave blank to unset)"
+          title="Enter a numeric maximum value; leave blank to unset"
           onChange={(e) => updateGridCell(row.class_code, "max_value", e.target.value)}
           style={{ width: "100%" }}
         />
@@ -249,7 +249,7 @@ function ThresholdsTab() {
       {/* Editable grid */}
       <div id="thresholds-grid-anchor" className="dashboard-card-header">
         <div className="dashboard-card-title">
-          <span>Edit Thresholds (Inline)</span>
+          <span>Thresholds Catalogue</span>
         </div>
       </div>
 
@@ -294,6 +294,8 @@ function ThresholdsTab() {
               { label: "Delete", type: "delete", icon: <FiTrash2 />, onClick: (row) => deleteGridRow(row) },
             ]}
             columnPicker={{ label: "Columns", locked: ["class_code"], defaultHidden: ["notes"] }}
+            loading={loading}
+            loadingLabel="Loading thresholds…"
           />
         </div>
       </div>

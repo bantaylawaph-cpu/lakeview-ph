@@ -17,20 +17,7 @@ import { FiActivity, FiBarChart2 } from "react-icons/fi";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, Tooltip, Legend);
 
-// Lightweight inline spinner that doesn't rely on global CSS
-const LoadingSpinner = ({ label = "Loading…", size = 16, color = "#fff" }) => (
-  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '2px 0 8px 0' }}>
-    <svg width={size} height={size} viewBox="0 0 24 24" role="img" aria-label={label}>
-      <g>
-        <circle cx="12" cy="12" r="10" stroke={color} strokeWidth="3" fill="none" opacity="0.2" />
-        <path d="M22 12a10 10 0 0 1-10 10" stroke={color} strokeWidth="3" fill="none">
-          <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.8s" repeatCount="indefinite" />
-        </path>
-      </g>
-    </svg>
-    <span style={{ fontSize: 12, color: '#ddd' }}>{label}</span>
-  </div>
-);
+import LoadingSpinner from "../LoadingSpinner";
 
 /**
  * Props
@@ -555,7 +542,7 @@ function WaterQualityTab({ lake }) {
       </div>
       {loading && (
         <div style={{ margin: '2px 0 8px 0' }}>
-          <LoadingSpinner label="Loading data..." />
+          <LoadingSpinner label="Loading data..." color="#fff" />
         </div>
       )}
 

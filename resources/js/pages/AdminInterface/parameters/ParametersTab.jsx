@@ -44,9 +44,7 @@ const emptyForm = {
   group: "",
   data_type: "",
   evaluation_type: "",
-  is_active: true,
   notes: "",
-  aliases_text: "",
 };
 
 const ensureOption = (options, value) => {
@@ -57,6 +55,9 @@ const ensureOption = (options, value) => {
 };
 
 function ParametersTab() {
+
+  // TableLayout now supports an in-table loading spinner via its loading prop
+
   const [form, setForm] = useState(emptyForm);
   const [params, setParams] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -93,7 +94,7 @@ function ParametersTab() {
   }, [params, query]);
 
   const gridRows = useMemo(() => {
-    const rows = filtered.map((p) => ({
+    const existing = filtered.map((p) => ({
       id: p.id,
       code: p.code,
       name: p.name || "",
@@ -102,12 +103,12 @@ function ParametersTab() {
       unit: p.unit || "",
       data_type: p.data_type || "",
       evaluation_type: p.evaluation_type || "",
-      is_active: !!p.is_active,
-      aliases_display: (p.aliases || []).map((a) => a.alias).join(", ") || "",
       notes: p.notes || "",
       __id: p.id,
     }));
-    newRows.forEach((rid) => rows.push({ id: rid, code: "", name: "", category: "", group: "", unit: "", data_type: "", evaluation_type: "", is_active: true, aliases_display: "", notes: "", __id: null }));
+    // New rows should appear at the beginning (first page)
+    const newRowObjects = newRows.map((rid) => ({ id: rid, code: "", name: "", category: "", group: "", unit: "", data_type: "", evaluation_type: "", notes: "", __id: null }));
+    const rows = [...newRowObjects, ...existing];
     return rows.map((r) => ({ ...r, ...(gridEdits[r.id] || {}) }));
   }, [filtered, newRows, gridEdits]);
 
@@ -129,9 +130,8 @@ function ParametersTab() {
       group: effectiveRow.group || null,
       data_type: effectiveRow.data_type || null,
       evaluation_type: effectiveRow.evaluation_type || null,
-      is_active: !!effectiveRow.is_active,
       notes: (effectiveRow.notes || "").trim() || null,
-      aliases: (effectiveRow.aliases_display || "").split(",").map((a) => a.trim()).filter(Boolean),
+      // aliases removed from UI; backend may still accept aliases if needed
     };
 
     try {
@@ -252,24 +252,7 @@ function ParametersTab() {
         </select>
       );
     }},
-    { id: "is_active", header: "Active", width: 110, render: (row) => {
-      const key = row.id;
-      const wrapper = { ...row, ...(gridEdits[key] || {}) };
-      return (
-        <select value={wrapper.is_active ? "1" : "0"} onChange={(e) => updateGridCell(key, "is_active", e.target.value === "1")} style={{ width: "100%" }}>
-          <option value="1">Yes</option>
-          <option value="0">No</option>
-        </select>
-      );
-    }},
-    { id: "aliases", header: "Aliases", defaultHidden: true, render: (row) => {
-      const key = row.id;
-      const wrapper = { ...row, ...(gridEdits[key] || {}) };
-      return (
-        <input type="text" value={wrapper.aliases_display ?? ""} placeholder="Comma separated aliases..."
-          onChange={(e) => updateGridCell(key, "aliases_display", e.target.value)} style={{ width: "100%" }} />
-      );
-    }},
+    // 'Active' and 'Aliases' columns removed per product decision
   ], [gridEdits]);
 
   const handleRefresh = useCallback(() => {
@@ -353,7 +336,6 @@ function ParametersTab() {
         type: "edit",
         icon: <FiEdit2 />,
         onClick: (row) => {
-          const aliases = row.aliases?.map((a) => a.alias).join(", ") || "";
           setForm({
             code: row.code,
             name: row.name,
@@ -362,9 +344,7 @@ function ParametersTab() {
             group: row.group || "",
             data_type: row.data_type || "",
             evaluation_type: row.evaluation_type || "",
-            is_active: !!row.is_active,
             notes: row.notes || "",
-            aliases_text: aliases,
             __id: row.id,
           });
           window.scrollTo({ top: 0, behavior: "smooth" });
@@ -410,12 +390,7 @@ function ParametersTab() {
         group: form.group || null,
         data_type: form.data_type || null,
         evaluation_type: form.evaluation_type || null,
-        is_active: !!form.is_active,
         notes: form.notes.trim() || null,
-        aliases: form.aliases_text
-          .split(",")
-          .map((a) => a.trim())
-          .filter(Boolean),
       };
 
       if (form.__id) {
@@ -441,7 +416,7 @@ function ParametersTab() {
     <div className="dashboard-card">
       <div className="dashboard-card-header">
         <div className="dashboard-card-title">
-          <span>Edit Parameters (Inline)</span>
+          <span>Parameter Catalogue</span>
         </div>
       </div>
 
@@ -455,17 +430,18 @@ function ParametersTab() {
             { label: "Save", type: "edit", icon: <FiSave />, onClick: (row) => saveGridRow(row) },
             { label: "Delete", type: "delete", icon: <FiTrash2 />, onClick: (row) => deleteGridRow(row) },
           ]}
-          columnPicker={{ label: "Columns", locked: ["code"], defaultHidden: ["aliases"] }}
+          columnPicker={{ label: "Columns", locked: ["code"], defaultHidden: [] }}
           toolbar={{
             left: (
-              <button type="button" className="pill-btn primary" onClick={() => setNewRows((prev) => [...prev, `__new__-${Date.now()}`])}>
+              <button type="button" className="pill-btn primary" onClick={() => setNewRows((prev) => [`__new__-${Date.now()}`, ...prev])}>
                 <FiPlus />
-                <span>Add Row</span>
+                <span>Add Parameter</span>
               </button>
             ),
           }}
+          loading={loading}
+          loadingLabel="Loading parameters…"
         />
-        {loading && <p style={{ marginTop: 12, color: "#6b7280" }}>Loading...</p>}
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import axios from "axios";
+import LoadingSpinner from "../LoadingSpinner";
 
 /**
  * Props
@@ -135,11 +136,8 @@ function HeatmapTab({ lake, onToggleHeatmap, currentLayerId = null }) {
       <h4 style={{ margin: 0, color: '#fff' }}>Estimated Population</h4>
       <div style={{ marginTop: 8 }}>
         {loading ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div className="lv-progress" role="progressbar" aria-busy="true" aria-label="Estimating population">
-              <div className="lv-progress-bar" />
-            </div>
-            <span style={{ fontSize: 12, color: '#ddd' }}>Estimating…</span>
+          <div style={{ margin: '2px 0 8px 0' }}>
+            <LoadingSpinner label="Estimating population…" color="#fff" />
           </div>
         ) : (
           <p style={{ margin: 0, color: '#fff' }}>

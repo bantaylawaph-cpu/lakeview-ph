@@ -8,7 +8,6 @@ import { alertSuccess, alertError } from "../../../lib/alerts";
 const emptyStandard = {
   code: "",
   name: "",
-  priority: 0,
   is_current: false,
   notes: "",
 };
@@ -49,14 +48,13 @@ function StandardsTab() {
       id: s.id,
       code: s.code,
       name: s.name || "",
-      priority: s.priority ?? 0,
       is_current: !!s.is_current,
       notes: s.notes || "",
       __id: s.id,
     }));
     // New rows
     newRows.forEach((rid) => {
-      rows.push({ id: rid, code: "", name: "", priority: 0, is_current: false, notes: "", __id: null });
+      rows.push({ id: rid, code: "", name: "", is_current: false, notes: "", __id: null });
     });
     // Overlay edits
     return rows.map((r) => ({ ...r, ...(gridEdits[r.id] || {}) }));
@@ -66,7 +64,6 @@ function StandardsTab() {
     const payload = {
       code: String(row.code || "").trim(),
       name: (row.name || "").trim() || null,
-      priority: Number.isFinite(Number(row.priority)) ? Number(row.priority) : 0,
       is_current: !!row.is_current,
       notes: (row.notes || "").trim() || null,
     };
@@ -127,15 +124,6 @@ function StandardsTab() {
       ),
     },
     {
-      id: "priority",
-      header: "Priority",
-      width: 110,
-      render: (row) => (
-        <input type="number" value={row.priority ?? 0} placeholder="0"
-          onChange={(e) => updateGridCell(row.id, "priority", e.target.value)} style={{ width: "100%" }} />
-      ),
-    },
-    {
       id: "is_current",
       header: "Current",
       width: 120,
@@ -171,7 +159,6 @@ function StandardsTab() {
       const payload = {
         code: form.code.trim(),
         name: form.name.trim() || null,
-        priority: Number.isFinite(Number(form.priority)) ? Number(form.priority) : 0,
         is_current: !!form.is_current,
         notes: form.notes.trim() || null,
       };
@@ -197,7 +184,7 @@ function StandardsTab() {
     <div className="dashboard-card">
       <div className="dashboard-card-header">
         <div className="dashboard-card-title">
-          <span>Edit Standards (Inline)</span>
+          <span>Standards Catalogue</span>
         </div>
       </div>
 
@@ -214,14 +201,15 @@ function StandardsTab() {
           columnPicker={{ label: "Columns", locked: ["code"], defaultHidden: ["notes"] }}
           toolbar={{
             left: (
-              <button type="button" className="pill-btn primary" onClick={() => setNewRows((prev) => [...prev, `__new__-${Date.now()}`])}>
+              <button type="button" className="pill-btn primary" onClick={() => setNewRows((prev) => [`__new__-${Date.now()}`, ...prev])}>
                 <FiPlus />
-                <span>Add Row</span>
+                    <span>Add Standard</span>
               </button>
             ),
           }}
+          loading={loading}
+          loadingLabel="Loading standards…"
         />
-        {loading && <p style={{ marginTop: 12, color: "#6b7280" }}>Loading...</p>}
       </div>
       {/* Create/Edit form replaced by inline Add Row workflow */}
     </div>
