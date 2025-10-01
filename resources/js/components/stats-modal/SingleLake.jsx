@@ -33,7 +33,6 @@ export default function SingleLake({
 }) {
   const [stationsOpen, setStationsOpen] = useState(false);
   const stationBtnRef = useRef(null);
-  const [stationsPos, setStationsPos] = useState(null);
   const [applied, setApplied] = useState(false);
   const [viewMode, setViewMode] = useState('time'); // 'time' | 'depth'
   const [seriesMode, setSeriesMode] = useState('avg'); // 'avg' | 'per-station'
@@ -44,17 +43,7 @@ export default function SingleLake({
     // Build station display name similar to WaterQualityTab
     const eventStationName = (ev) => ev?.station?.name || ev?.station_name || ((ev?.latitude != null && ev?.longitude != null) ? `${Number(ev.latitude).toFixed(6)}, ${Number(ev.longitude).toFixed(6)}` : null);
 
-    // Latest test date from fetched events
-    const latestTestDate = useMemo(() => {
-      if (!events || !events.length) return null;
-      let max = null;
-      for (const t of events) {
-        if (!t?.sampled_at) continue;
-        const d = new Date(t.sampled_at);
-        if (!isNaN(d)) { if (!max || d > max) max = d; }
-      }
-      return max;
-    }, [events]);
+    // (latestTestDate removed - unused)
 
   // Fetch raw sample-events using WaterQualityTab logic
     useEffect(() => {
@@ -288,8 +277,8 @@ export default function SingleLake({
           <div style={{ position: 'relative', flex: '0 0 auto' }}>
             <button ref={stationBtnRef} type="button" className="pill-btn" disabled={!selectedLake || !stations?.length} title={!stations?.length ? 'No stations available' : undefined} onClick={() => {
               if (!stationsOpen) {
-                const r = stationBtnRef.current?.getBoundingClientRect();
-                setStationsPos(r ? { left: r.left, top: r.bottom, width: Math.max(220, r.width) } : null);
+                // we used to capture button position here but the state was removed; keep this lookup if needed later
+                try { stationBtnRef.current?.getBoundingClientRect(); } catch {};
               }
               setStationsOpen((v) => !v);
             }} style={{ minWidth: 140 }}>

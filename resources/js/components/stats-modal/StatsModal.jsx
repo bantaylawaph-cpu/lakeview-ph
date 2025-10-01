@@ -1,6 +1,6 @@
 // resources/js/components/modals/StatsModal.jsx
 import React, { useMemo, useState, useEffect, useRef } from "react";
-import { api, apiPublic, buildQuery } from "../../lib/api";
+import { apiPublic, buildQuery } from "../../lib/api";
 import { fetchParameters, fetchSampleEvents, fetchStationsForLake, deriveOrgOptions, deriveParamOptions } from "./data/fetchers";
 import Modal from "../Modal";
 import SingleLake from "./SingleLake";
@@ -306,14 +306,30 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
       <div style={{ display: "flex", gap: 8, alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'nowrap' }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <span style={{ fontSize: 12, opacity: 0.9 }}>Bucket</span>
-          <select className="pill-btn" value={bucket} onChange={(e) => setBucket(e.target.value)}>
+          <select
+            className="pill-btn"
+            value={bucket}
+            onChange={(e) => setBucket(e.target.value)}
+            disabled={activeTab === 'advanced'}
+            aria-disabled={activeTab === 'advanced'}
+            title={activeTab === 'advanced' ? 'Disabled while Advanced tab is active' : undefined}
+            style={activeTab === 'advanced' ? { opacity: 0.55, cursor: 'not-allowed', pointerEvents: 'none' } : undefined}
+          >
             <option value="year">Year</option>
             <option value="quarter">Quarter</option>
             <option value="month">Month</option>
           </select>
 
           <span style={{ fontSize: 12, opacity: 0.9, marginLeft: 8 }}>Range</span>
-          <select className="pill-btn" value={timeRange} onChange={(e) => applyRange(e.target.value)}>
+          <select
+            className="pill-btn"
+            value={timeRange}
+            onChange={(e) => applyRange(e.target.value)}
+            disabled={activeTab === 'advanced'}
+            aria-disabled={activeTab === 'advanced'}
+            title={activeTab === 'advanced' ? 'Disabled while Advanced tab is active' : undefined}
+            style={activeTab === 'advanced' ? { opacity: 0.55, cursor: 'not-allowed', pointerEvents: 'none' } : undefined}
+          >
             <option value="all">All Time</option>
             <option value="5y">5 Yr</option>
             <option value="3y">3 Yr</option>
@@ -323,10 +339,28 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
           </select>
 
           {timeRange === 'custom' && (
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <input type="date" className="pill-btn" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setTimeRange('custom'); }} />
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', opacity: activeTab === 'advanced' ? 0.65 : 1 }}>
+              <input
+                type="date"
+                className="pill-btn"
+                value={dateFrom}
+                onChange={(e) => { setDateFrom(e.target.value); setTimeRange('custom'); }}
+                disabled={activeTab === 'advanced'}
+                aria-disabled={activeTab === 'advanced'}
+                title={activeTab === 'advanced' ? 'Disabled while Advanced tab is active' : undefined}
+                style={activeTab === 'advanced' ? { cursor: 'not-allowed', pointerEvents: 'none' } : undefined}
+              />
               <span>to</span>
-              <input type="date" className="pill-btn" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setTimeRange('custom'); }} />
+              <input
+                type="date"
+                className="pill-btn"
+                value={dateTo}
+                onChange={(e) => { setDateTo(e.target.value); setTimeRange('custom'); }}
+                disabled={activeTab === 'advanced'}
+                aria-disabled={activeTab === 'advanced'}
+                title={activeTab === 'advanced' ? 'Disabled while Advanced tab is active' : undefined}
+                style={activeTab === 'advanced' ? { cursor: 'not-allowed', pointerEvents: 'none' } : undefined}
+              />
             </div>
           )}
         </div>

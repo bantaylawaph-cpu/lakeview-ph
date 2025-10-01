@@ -31,8 +31,6 @@ function CompareLake({
   const [stationsOpenB, setStationsOpenB] = useState(false);
   const stationBtnARef = useRef(null);
   const stationBtnBRef = useRef(null);
-  const [stationsAPos, setStationsAPos] = useState(null);
-  const [stationsBPos, setStationsBPos] = useState(null);
   const [loading, setLoading] = useState(false);
   const [eventsA, setEventsA] = useState([]);
   const [eventsB, setEventsB] = useState([]);
@@ -359,7 +357,7 @@ function CompareLake({
             <button ref={stationBtnARef} type="button" className="pill-btn" disabled={!lakeA} onClick={() => {
               if (!stationsOpenA) {
                 const r = stationBtnARef.current?.getBoundingClientRect();
-                setStationsAPos(r ? { left: r.left, top: r.bottom, width: Math.max(220, r.width) } : null);
+                /* position not used; kept for future */
               }
               setStationsOpenA((v) => !v);
             }} aria-label="Select locations for Lake A" title="Select locations" style={{ minWidth: 140 }}>
@@ -402,7 +400,7 @@ function CompareLake({
             <button ref={stationBtnBRef} type="button" className="pill-btn" disabled={!lakeB} onClick={() => {
               if (!stationsOpenB) {
                 const r = stationBtnBRef.current?.getBoundingClientRect();
-                setStationsBPos(r ? { left: r.left, top: r.bottom, width: Math.max(220, r.width) } : null);
+                /* position not used; kept for future */
               }
               setStationsOpenB((v) => !v);
             }} aria-label="Select locations for Lake B" title="Select locations" style={{ minWidth: 140 }}>

@@ -886,60 +886,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
       return 'Group 2';
     };
 
-    const clearAll = () => {
-      // reset all local selection state
-      setLakeId('');
-      setClassCode('');
-      setCompareValue('');
-      setYearFrom('');
-      setYearTo('');
-      setOrganizationId('');
-      setSecondaryOrganizationId('');
-      setAppliedStandardId('');
-      setParamCode('');
-      setSelectedTest('');
-      setResult(null);
-      setError(null);
-      setShowAllValues(false);
-    };
-
-    const exportPdf = async () => {
-      try {
-        // Build a simple printable HTML summary. Users can choose "Save as PDF" in the print dialog.
-        const title = `Advanced statistics - ${paramCode || ''}`;
-        const style = `body { font-family: Arial, Helvetica, sans-serif; color: #111; padding: 18px; } h1 { font-size: 18px; } table { border-collapse: collapse; width: 100%; } th, td { border: 1px solid #ddd; padding: 6px; }`;
-        const summaryRows = [];
-        if (result) {
-          summaryRows.push(`<tr><th>Test</th><td>${result.test_used || result.type || ''}</td></tr>`);
-          if (result.p_value != null) summaryRows.push(`<tr><th>p-value</th><td>${result.p_value}</td></tr>`);
-          if (result.mean != null) summaryRows.push(`<tr><th>Mean</th><td>${result.mean}</td></tr>`);
-          if (result.n != null) summaryRows.push(`<tr><th>N</th><td>${result.n}</td></tr>`);
-        }
-
-        let valuesSection = '';
-        if (Array.isArray(result?.events) && result.events.length) {
-          const rowsHtml = result.events.slice(0, 1000).map(ev => `<tr><td>${ev.sampled_at || ''}</td><td>${ev.lake_id || ''}</td><td>${ev.station_id ?? ''}</td><td>${ev.value ?? ''}</td></tr>`).join('');
-          valuesSection = `<h3>Events (first ${Math.min(result.events.length, 1000)})</h3><table><thead><tr><th>Sampled at</th><th>Lake</th><th>Station</th><th>Value</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
-        } else if (Array.isArray(result?.sample_values) && result.sample_values.length) {
-          valuesSection = `<h3>Values</h3><div>${(result.sample_values || []).slice(0,1000).join(', ')}</div>`;
-        } else if (Array.isArray(result?.sample1_values) || Array.isArray(result?.sample2_values)) {
-          const a = (result.sample1_values || []).slice(0,1000).join(', ');
-          const b = (result.sample2_values || []).slice(0,1000).join(', ');
-          valuesSection = `<h3>Group values</h3><div>Group 1: ${a}</div><div style="margin-top:8px">Group 2: ${b}</div>`;
-        }
-
-        const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>${style}</style></head><body><h1>${title}</h1><table>${summaryRows.join('')}</table>${valuesSection}</body></html>`;
-        const w = window.open('', '_blank');
-        if (!w) throw new Error('Popup blocked');
-        w.document.write(html);
-        w.document.close();
-        // Give the window a moment to render then open print dialog
-        setTimeout(() => { try { w.focus(); w.print(); } catch(e){ /* ignore */ } }, 250);
-      } catch (e) {
-        console.error('Export failed', e);
-        alertError('Export failed', e?.message || 'Could not open print dialog');
-      }
-    };
+    // (no-op) clearing/export handled by outer AdvancedStat.clearAll/exportPdf
 
     return (
       <div style={{ marginTop:10, padding:10, background:'rgba(255,255,255,0.02)', borderRadius:6 }}>
