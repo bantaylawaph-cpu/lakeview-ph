@@ -492,11 +492,10 @@ function WaterQualityTab({ lake }) {
 
   return (
     <>
-      <h3 style={{ margin: '2px 0 8px 0', fontSize: 14, color: '#fff' }}>Primary Water Quality Parameters</h3>
-      <div style={{ display: 'grid', gridTemplateColumns: 'auto auto 1fr 1fr auto', alignItems: 'end', gap: 6, marginBottom: 6, overflow: 'hidden' }}>
+  <div style={{ display: 'grid', gridTemplateColumns: 'auto auto 1fr 1fr auto', alignItems: 'end', gap: 6, marginBottom: 6, overflow: 'hidden' }}>
         {/* Range */}
         <div className="form-group" style={{ minWidth: 120 }}>
-          <label style={{ marginBottom: 2, fontSize: 11 }}>Range</label>
+          <label style={{ marginBottom: 2, fontSize: 11, color: '#fff' }}>Range</label>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <select value={timeRange} onChange={(e) => applyRange(e.target.value)} style={{ padding: '6px 8px' }}>
               <option value="all">All Time</option>
@@ -517,7 +516,7 @@ function WaterQualityTab({ lake }) {
         </div>
         {/* Bucket */}
         <div className="form-group" style={{ minWidth: 90 }}>
-          <label style={{ marginBottom: 2, fontSize: 11 }}>Bucket</label>
+          <label style={{ marginBottom: 2, fontSize: 11, color: '#fff' }}>Bucket</label>
           <select value={bucket} onChange={(e) => setBucket(e.target.value)} style={{ padding: '6px 8px' }}>
             <option value="year">Year</option>
             <option value="quarter">Quarter</option>
@@ -526,7 +525,7 @@ function WaterQualityTab({ lake }) {
         </div>
         {/* Organization */}
         <div className="form-group" style={{ minWidth: 0 }}>
-          <label style={{ marginBottom: 2, fontSize: 11 }}>Organization</label>
+          <label style={{ marginBottom: 2, fontSize: 11, color: '#fff' }}>Organization</label>
           <select value={orgId} onChange={(e) => setOrgId(e.target.value)} style={{ padding: '6px 8px' }}>
             <option value="">All</option>
             {orgs.map((o) => (
@@ -536,8 +535,8 @@ function WaterQualityTab({ lake }) {
         </div>
         {/* Station: show normal select when named stations exist; otherwise show a disabled select with explanation */}
         {hasNamedStations ? (
-          <div className="form-group" style={{ minWidth: 0 }}>
-            <label style={{ marginBottom: 2, fontSize: 11 }}>Station</label>
+            <div className="form-group" style={{ minWidth: 0 }}>
+            <label style={{ marginBottom: 2, fontSize: 11, color: '#fff' }}>Station</label>
             <select value={station} onChange={(e) => setStation(e.target.value)} style={{ padding: '6px 8px' }}>
               <option value="">All Stations</option>
               {stations.map((s) => (
@@ -546,9 +545,9 @@ function WaterQualityTab({ lake }) {
             </select>
           </div>
           ) : (
-            <div className="form-group" style={{ minWidth: 0 }}>
-              <label style={{ marginBottom: 2, fontSize: 11 }}>Station</label>
-              <select disabled aria-disabled="true" title="Samples only have coordinates" style={{ padding: '6px 8px', color: '#bbb', backgroundColor: 'transparent' }}>
+        <div className="form-group" style={{ minWidth: 0 }}>
+          <label style={{ marginBottom: 2, fontSize: 11, color: '#fff' }}>Station</label>
+          <select disabled aria-disabled="true" title="Samples only have coordinates" style={{ padding: '6px 8px', color: '#bbb', backgroundColor: 'transparent' }}>
                 <option>No stations</option>
               </select>
             </div>

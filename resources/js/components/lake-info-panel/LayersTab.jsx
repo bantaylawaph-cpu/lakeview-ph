@@ -101,9 +101,7 @@ function LayersTab({
         </div>
       )}
 
-      <p style={{ fontSize: 12, opacity: 0.75, marginTop: 8 }}>
-        Selecting a layer here only changes the current view. Saving or publishing an “active” layer will be added later.
-      </p>
+      
     </>
   );
 }

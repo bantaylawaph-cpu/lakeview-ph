@@ -19,10 +19,6 @@ const LoadingSpinner = ({ label = "Loading…", size = 16, color = "#fff" }) => 
   </div>
 );
 
-/**
- * Props
- * - lake: { id, name }
- */
 export default function TestsTab({ lake, onJumpToStation }) {
   const lakeId = lake?.id ?? null;
   const [tests, setTests] = useState([]);
@@ -235,7 +231,7 @@ export default function TestsTab({ lake, onJumpToStation }) {
       <div style={{ display: 'grid', gap: 8 }}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'end', marginBottom: 6 }}>
             <div className="form-group" style={{ flex: 1, minWidth: 0 }}>
-              <label style={{ fontSize: 11, marginBottom: 2 }}>Organization</label>
+              <label style={{ fontSize: 11, marginBottom: 2, color: '#fff' }}>Organization</label>
               <select value={orgId} onChange={(e) => setOrgId(e.target.value)} style={{ padding: '6px 8px' }}>
                 <option value="">All</option>
                 {orgs.map((o) => (<option key={o.id} value={String(o.id)}>{o.name}</option>))}
@@ -243,7 +239,7 @@ export default function TestsTab({ lake, onJumpToStation }) {
             </div>
             {hasNamedStations ? (
               <div className="form-group" style={{ flex: 1, minWidth: 0 }}>
-                <label style={{ fontSize: 11, marginBottom: 2 }}>Station</label>
+                <label style={{ fontSize: 11, marginBottom: 2, color: '#fff' }}>Station</label>
                 <select value={stationId} onChange={(e) => setStationId(e.target.value)} style={{ padding: '6px 8px' }}>
                   <option value="">All</option>
                   {stations.map((s) => (<option key={s.id} value={String(s.id)}>{s.name}</option>))}
@@ -251,7 +247,7 @@ export default function TestsTab({ lake, onJumpToStation }) {
               </div>
             ) : (
               <div className="form-group" style={{ flex: 1, minWidth: 0 }}>
-                <label style={{ fontSize: 11, marginBottom: 2 }}>Station</label>
+                <label style={{ fontSize: 11, marginBottom: 2, color: '#fff' }}>Station</label>
                 <select disabled aria-disabled="true" title="Samples only have coordinates" style={{ padding: '6px 8px', color: '#bbb', backgroundColor: 'transparent' }}>
                   <option>No stations</option>
                 </select>
@@ -259,14 +255,14 @@ export default function TestsTab({ lake, onJumpToStation }) {
             )}
             <div style={{ display: 'flex', gap: 8, alignItems: 'end' }}>
               <div className="form-group" style={{ minWidth: 0 }}>
-                <label style={{ fontSize: 11, marginBottom: 2 }}>Year from</label>
+                <label style={{ fontSize: 11, marginBottom: 2, color: '#fff' }}>Year from</label>
                 <select value={yearFrom} onChange={(e) => setYearFrom(e.target.value)} style={{ padding: '6px 8px' }}>
                   <option value="">Any</option>
                   {years.map((y) => (<option key={`f-${y}`} value={String(y)}>{y}</option>))}
                 </select>
               </div>
               <div className="form-group" style={{ minWidth: 0 }}>
-                <label style={{ fontSize: 11, marginBottom: 2 }}>Year to</label>
+                <label style={{ fontSize: 11, marginBottom: 2, color: '#fff' }}>Year to</label>
                 <select value={yearTo} onChange={(e) => setYearTo(e.target.value)} style={{ padding: '6px 8px' }}>
                   <option value="">Any</option>
                   {years.map((y) => (<option key={`t-${y}`} value={String(y)}>{y}</option>))}
