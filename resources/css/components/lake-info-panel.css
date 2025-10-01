@@ -5,8 +5,10 @@
 .lake-info-panel {
   position: fixed;
   top: 0;
-  right: -340px;
-  width: 340px;
+  /* Use a CSS variable so width and offsets stay in sync */
+  --lake-info-panel-width: 600px;
+  right: calc(-1 * var(--lake-info-panel-width));
+  width: var(--lake-info-panel-width);
   height: 100%;
   background: rgba(30, 60, 120, 0.65);
   backdrop-filter: blur(12px) saturate(180%);
@@ -22,7 +24,7 @@
   opacity: 0;
 }
 .lake-info-panel.open { right: 0; opacity: 1; }
-.lake-info-panel.closing { right: -340px; opacity: 0; }
+.lake-info-panel.closing { right: calc(-1 * var(--lake-info-panel-width)); opacity: 0; }
 .lake-info-header {
   display: flex;
   justify-content: space-between;
@@ -53,6 +55,7 @@
   font-size: 14px;
   color: #f0f0f0;
   overflow-y: auto;
+  overflow-x: hidden; /* avoid horizontal scroll */
 }
 .lake-info-tabs { display: flex; border-bottom: 1px solid rgba(255,255,255,0.3); }
 .lake-tab {

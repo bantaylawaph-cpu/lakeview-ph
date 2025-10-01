@@ -3,6 +3,21 @@ import { FiEye, FiMapPin } from 'react-icons/fi';
 import { apiPublic, buildQuery } from '../../lib/api';
 import { alertError } from '../../utils/alerts';
 
+// Lightweight inline spinner that doesn't rely on global CSS
+const LoadingSpinner = ({ label = "Loading…", size = 16, color = "#fff" }) => (
+  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '2px 0 8px 0' }}>
+    <svg width={size} height={size} viewBox="0 0 24 24" role="img" aria-label={label}>
+      <g>
+        <circle cx="12" cy="12" r="10" stroke={color} strokeWidth="3" fill="none" opacity="0.2" />
+        <path d="M22 12a10 10 0 0 1-10 10" stroke={color} strokeWidth="3" fill="none">
+          <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.8s" repeatCount="indefinite" />
+        </path>
+      </g>
+    </svg>
+    <span style={{ fontSize: 12, color: '#ddd' }}>{label}</span>
+  </div>
+);
+
 /**
  * Props
  * - lake: { id, name }
@@ -149,8 +164,6 @@ export default function TestsTab({ lake, onJumpToStation }) {
 
   return (
     <div>
-      {loading && <div className="insight-card"><em>Loading tests…</em></div>}
-      {!loading && tests.length === 0 && <div className="insight-card"><em>No published tests found for this lake.</em></div>}
       <div style={{ display: 'grid', gap: 8 }}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'end', marginBottom: 6 }}>
             <div className="form-group" style={{ flex: 1, minWidth: 0 }}>
@@ -161,6 +174,12 @@ export default function TestsTab({ lake, onJumpToStation }) {
               </select>
             </div>
           </div>
+          {loading && (
+            <div style={{ margin: '2px 0 8px 0' }}>
+              <LoadingSpinner label="Loading tests…" />
+            </div>
+          )}
+          {!loading && tests.length === 0 && <div className="insight-card"><em>No published tests found for this lake.</em></div>}
         {tests.map((t) => (
           <div className="insight-card" key={t.id}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
