@@ -327,11 +327,14 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
           selectedParam={selectedParam}
           onParamChange={setSelectedParam}
           thresholds={thresholds}
-          currentRecords={currentRecords}
+            currentRecords={currentRecords}
           selectedClass={selectedClass}
           bucket={bucket}
           chartOptions={chartOptions}
           chartRef={singleChartRef}
+            timeRange={timeRange}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
         />
       )}
 

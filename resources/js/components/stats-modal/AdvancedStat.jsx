@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { FiSettings, FiX } from 'react-icons/fi';
+import Popover from "../common/Popover";
 import { apiPublic } from "../../lib/api";
 import { fetchParameters, fetchSampleEvents, deriveOrgOptions } from "./data/fetchers";
 import { alertSuccess, alertError } from '../../utils/alerts';
@@ -77,9 +78,8 @@ export default function AdvancedStat({ lakes = [], params = [], paramOptions: pa
   // Gear popover state/refs for advanced (moved Year/CL inputs)
   const [showGearPopover, setShowGearPopover] = useState(false);
   const gearBtnRef = useRef(null);
-  const popoverRef = useRef(null);
   const containerRef = useRef(null);
-  const [popoverStyle, setPopoverStyle] = useState({});
+  
   // Manual threshold flow removed
   // Preview functionality removed — tests now run fully on demand
 
@@ -998,25 +998,23 @@ export default function AdvancedStat({ lakes = [], params = [], paramOptions: pa
     </div>
 
     {/* Gear popover: contains Year From / Year To / Confidence Level */}
-    {showGearPopover && (
-      <div ref={popoverRef} style={{ position:'absolute', zIndex:999, width:340, padding:12, background:'#164479', border:'1px solid rgba(255,255,255,0.06)', borderRadius:8, boxShadow:'0 8px 24px rgba(0,0,0,0.35)', right:12, top:48 }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
-          <div style={{ fontSize:13, fontWeight:600, color:'#f0f6fb' }}>Year Range & Confidence Level</div>
-          <button aria-label="Close advanced options" title="Close" onClick={() => setShowGearPopover(false)} className="pill-btn" style={{ padding:'4px 8px', height:30, display:'inline-flex', alignItems:'center', justifyContent:'center' }}>
-            <FiX size={14} />
-          </button>
-        </div>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-          <input className="pill-btn" type="number" placeholder="Year from" value={yearFrom} onChange={e=>setYearFrom(e.target.value)} style={{ width:'100%', boxSizing:'border-box', padding:'8px 10px', height:36 }} />
-          <input className="pill-btn" type="number" placeholder="Year to" value={yearTo} onChange={e=>setYearTo(e.target.value)} style={{ width:'100%', boxSizing:'border-box', padding:'8px 10px', height:36 }} />
-          <select className="pill-btn" value={cl} onChange={e=>{setCl(e.target.value); setResult(null);}} style={{ gridColumn: '1 / span 2', width:'100%', boxSizing:'border-box', padding:'8px 10px', height:36 }}>
-            <option value="0.9">90% CL</option>
-            <option value="0.95">95% CL</option>
-            <option value="0.99">99% CL</option>
-          </select>
-        </div>
+    <Popover anchorRef={gearBtnRef} open={showGearPopover} onClose={() => setShowGearPopover(false)} minWidth={320}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+        <div style={{ fontSize:13, fontWeight:600, color:'#f0f6fb' }}>Year Range & Confidence Level</div>
+        <button aria-label="Close advanced options" title="Close" onClick={() => setShowGearPopover(false)} className="pill-btn" style={{ padding:'4px 8px', height:30, display:'inline-flex', alignItems:'center', justifyContent:'center' }}>
+          <FiX size={14} />
+        </button>
       </div>
-    )}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+        <input className="pill-btn" type="number" placeholder="Year from" value={yearFrom} onChange={e=>setYearFrom(e.target.value)} style={{ width:'100%', boxSizing:'border-box', padding:'8px 10px', height:36 }} />
+        <input className="pill-btn" type="number" placeholder="Year to" value={yearTo} onChange={e=>setYearTo(e.target.value)} style={{ width:'100%', boxSizing:'border-box', padding:'8px 10px', height:36 }} />
+        <select className="pill-btn" value={cl} onChange={e=>{setCl(e.target.value); setResult(null);}} style={{ gridColumn: '1 / span 2', width:'100%', boxSizing:'border-box', padding:'8px 10px', height:36 }}>
+          <option value="0.9">90% CL</option>
+          <option value="0.95">95% CL</option>
+          <option value="0.99">99% CL</option>
+        </select>
+      </div>
+    </Popover>
 
     {/* Notices/errors */}
     <div style={{ marginTop:8 }}>
