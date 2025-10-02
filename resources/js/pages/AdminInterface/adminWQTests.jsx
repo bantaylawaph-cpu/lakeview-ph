@@ -226,9 +226,8 @@ export default function AdminWQTests({ initialLakes = [], initialTests = [], par
   const actions = [
     { label: 'View', title: 'View', icon: <FiEye />, onClick: async (row) => { try { const res = await api(`/admin/sample-events/${row.id}`); setSelected(res.data); setEditing(false); setOpen(true); } catch (e) { console.error('Failed to fetch event detail', e); await alertError('Failed', 'Could not load event details.'); } } },
     { label: 'Edit', title: 'Edit', icon: <FiEdit2 />, onClick: async (row) => {
-        // Superadmins cannot edit; org_admins may edit if they belong to the org
-        if (isSuper) { await alertError('Permission denied', 'Super administrators cannot edit tests.'); return; }
-        if (!(currentUserRole === 'org_admin' || (currentUserId && row.created_by_user_id === currentUserId))) {
+        // Allow superadmin or org_admin; fall back to creator ownership for other roles (if any)
+        if (!(isSuper || currentUserRole === 'org_admin' || (currentUserId && row.created_by_user_id === currentUserId))) {
           await alertError('Permission denied', 'You cannot edit this test.');
           return;
         }
