@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Modal from "./Modal";
 
-const TYPE_OPTIONS = [
+export const TYPE_OPTIONS = [
   "LGU","Government Agency","LLDA","School/Academe","Research","NGO",
   "Community","Private","Utility","Other"
 ];

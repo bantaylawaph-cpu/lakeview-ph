@@ -6,8 +6,6 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 import AboutData from  "./pages/PublicInterface/AboutData";
 import AboutPage from "./pages/PublicInterface/AboutPage";
 import MapPage from "./pages/PublicInterface/MapPage";
-import Settings from "./pages/PublicInterface/Settings.jsx";
-import SubmitFeedback from "./pages/PublicInterface/SubmitFeedback.jsx";
 import UserManual from "./pages/PublicInterface/UserManual";
 
 // 📊 Dashboards (Role-based)
@@ -18,6 +16,7 @@ import ContributorDashboard from "./pages/ContributorInterface/ContributorDashbo
 
 // 🎨 Global Styles
 import "../css/app.css";
+import "../css/components/modern-settings.css";
 
 //Component
 import RequireRole from "../js/components/RequireRole.jsx";
@@ -30,9 +29,7 @@ function App() {
         <Route path="/" element={<MapPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/manual" element={<UserManual />} />
-        <Route path="/feedback" element={<SubmitFeedback />} />
         <Route path="/data" element={<AboutData />} />
-        <Route path="/settings" element={<Settings />} />
         <Route path="/login" element={<MapPage />} />
         <Route path="/signin" element={<Navigate to="/login" replace />} />
         <Route path="/register" element={<MapPage />} />

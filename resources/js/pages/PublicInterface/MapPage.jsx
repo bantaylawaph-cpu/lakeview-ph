@@ -25,6 +25,9 @@ import LakeInfoPanel from "../../components/LakeInfoPanel";
 import AuthModal from "../../components/modals/AuthModal";
 import FilterTray from "../../components/FilterTray";
 import { buildQuery } from "../../lib/api";
+import Modal from "../../components/Modal"; // retained for other modals if needed
+import PublicSettingsModal from "../../components/settings/PublicSettingsModal";
+import FeedbackModal from "../../components/feedback/FeedbackModal";
 
 function MapWithContextMenu({ children }) {
   const map = useMap();
@@ -74,6 +77,9 @@ function MapPage() {
 
   const [userRole, setUserRole] = useState(null);
   const [authOpen, setAuthOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false); // settings modal for any logged-in user
+  const [feedbackOpen, setFeedbackOpen] = useState(false); // feedback modal
+  const [authUser, setAuthUser] = useState(() => getCurrentUser());
   const [authMode, setAuthMode] = useState("login");
 
   const [publicFC, setPublicFC] = useState(null);
@@ -133,11 +139,12 @@ function MapPage() {
     const onUserUpdate = (e) => {
       const u = e.detail || getCurrentUser();
       setUserRole(deriveRole(u));
+      setAuthUser(u);
     };
     const onAuthChange = () => {
       if (!getToken()) { setUserRole(null); return; }
       const u = getCurrentUser();
-      if (u) setUserRole(deriveRole(u)); else {
+      if (u) { setUserRole(deriveRole(u)); setAuthUser(u); } else {
         // fetch once if cache empty
         (async () => {
           try {
@@ -145,6 +152,7 @@ function MapPage() {
             const fetched = res?.data || res;
             setCurrentUser(fetched);
             setUserRole(deriveRole(fetched));
+            setAuthUser(fetched);
           } catch { setUserRole(null); }
         })();
       }
@@ -156,6 +164,22 @@ function MapPage() {
       window.removeEventListener('lv-auth-change', onAuthChange);
     };
   }, []);
+
+  // Listen for global open-settings events (from Sidebar or elsewhere)
+  useEffect(() => {
+    const onOpen = () => setSettingsOpen(true);
+    window.addEventListener('lv-open-settings', onOpen);
+    return () => window.removeEventListener('lv-open-settings', onOpen);
+  }, []);
+
+  // Support navigation with state { openSettings: true }
+  useEffect(() => {
+    if (location.pathname === '/' && location.state?.openSettings) {
+      setSettingsOpen(true);
+      // clear state so back button doesn't reopen repeatedly
+      navigate('.', { replace: true, state: {} });
+    }
+  }, [location, navigate]);
 
   useEffect(() => {
     const p = location.pathname;
@@ -745,6 +769,7 @@ function MapPage() {
           pinned={sidebarPinned}
           setPinned={setSidebarPinned}
           onOpenAuth={(m) => { setAuthMode(m || "login"); setAuthOpen(true); }}
+          onOpenFeedback={() => { setFeedbackOpen(true); if (!sidebarPinned) setSidebarOpen(false); }}
         />
 
         {/* Context Menu */}
@@ -852,6 +877,14 @@ function MapPage() {
           <FiArrowLeft />
         </button>
       )}
+
+      {/* Settings Modal (public context) */}
+      {authUser && (
+        <PublicSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      )}
+
+      {/* Feedback Modal */}
+      <FeedbackModal open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
 
       {/* Auth Modal */}
       <AuthModal

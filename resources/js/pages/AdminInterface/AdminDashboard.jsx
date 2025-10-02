@@ -22,6 +22,8 @@ import AdminWaterCat from "./adminWaterCat";
 import AdminLayers from "./adminLayers";
 import AdminParameters from "./adminParams";
 import AdminWQTests from "./adminWQTests";
+import AdminSettingsPage from "./adminSettings.jsx";
+import AdminFeedback from './AdminFeedback';
 
 const Page = ({ title }) => <h2>{title}</h2>;
 
@@ -74,13 +76,13 @@ export default function AdminDashboard() {
   <Route path="wq-tests" element={<AdminWQTests />} />
 
         {/* Feedback */}
-        <Route path="feedback" element={<Page title="System Feedback" />} />
+        <Route path="feedback" element={<AdminFeedback />} />
 
         {/* Audit Logs */}
         <Route path="audit" element={<Page title="Audit Logs" />} />
 
-        {/* System Settings */}
-        <Route path="settings" element={<Page title="System Settings" />} />
+  {/* System Settings */}
+  <Route path="settings" element={<AdminSettingsPage />} />
       </Routes>
     </DashboardLayout>
   );

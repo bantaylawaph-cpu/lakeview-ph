@@ -116,7 +116,13 @@ async function request(method, url, { params, body, headers, raw, auth } = {}) {
   }
   if (raw) return res;
   const data = await parseResponse(res);
-  if (!res.ok) throw makeError(res, data);
+  if (!res.ok) {
+    // If we had a token and got a 401, clear it to stop cascades of unauthorized calls
+    if (res.status === 401 && hadToken) {
+      try { clearToken(); } catch (_) {}
+    }
+    throw makeError(res, data);
+  }
   return data;
 }
 
@@ -190,7 +196,15 @@ export async function login({ email, password, remember }) {
   return res;
 }
 export async function me() {
-  return client.get("/auth/me");
+  // Avoid spamming the server with /auth/me when no token is present.
+  if (!getToken()) return null;
+  try {
+    return await client.get("/auth/me");
+  } catch (e) {
+    // Swallow unauthorized errors here so callers can treat null user gracefully
+    if (e?.response?.status === 401) return null;
+    throw e;
+  }
 }
 export async function logout() {
   try { await client.post("/auth/logout"); }

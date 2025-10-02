@@ -132,6 +132,10 @@
   text-align: left;
 }
 
+/* Ensure feedback trigger uses the same base text color (inherit from li) */
+.feedback-trigger { color: inherit; }
+.feedback-trigger span { color: inherit; }
+
 /* Role badge next to user name */
 .role-chip {
   margin-left: 8px;

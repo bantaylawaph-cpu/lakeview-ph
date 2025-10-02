@@ -98,6 +98,41 @@ php artisan migrate:fresh --seed
 * Expand JSON API docs (OpenAPI spec) for tenancy endpoints.
 * Add permission matrix to documentation.
 
+## User Feedback API
+
+Authenticated users can submit feedback (bugs, suggestions, general comments). Superadmins can triage, respond, and resolve.
+
+Endpoints (all JSON):
+
+User (auth:sanctum):
+* `POST /api/feedback` – body: `{ title, message, category?, metadata? }` -> 201 `{ data: Feedback }`
+* `GET /api/feedback/mine` – paginated list (own submissions)
+* `GET /api/feedback/mine/{id}` – show single (own) feedback
+
+Admin (auth:sanctum + role:superadmin):
+* `GET /api/admin/feedback?status=&category=&search=&unresolved=1&per_page=20` – filtered, paginated
+* `GET /api/admin/feedback/{id}` – show with user + tenant context
+* `PATCH /api/admin/feedback/{id}` – body: `{ status?, admin_response? }`
+
+Statuses:
+* `open` (default)
+* `in_progress`
+* `resolved` (auto sets `resolved_at`)
+* `wont_fix` (also sets `resolved_at`)
+
+Notes:
+* If the submitting user has a tenant-scoped role their `tenant_id` is stored for contextual analysis.
+* Simple text search (`search`) performs ILIKE on `title` and `message` (Postgres).
+* `unresolved=1` excludes `resolved` and `wont_fix`.
+* `metadata` is arbitrary JSON (optional) for client environment info (browser, app version, etc.).
+
+Future Enhancements (suggested):
+* File attachment / screenshot support (separate table + signed upload URLs).
+* Event broadcasting / notifications when status changes.
+* Rate limiting for feedback submission endpoint.
+* Tagging or priority field for triage.
+
+
 ## License
 Proprietary – internal project (update if licensing changes).
 
