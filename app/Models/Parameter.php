@@ -27,10 +27,7 @@ class Parameter extends Model
         'is_active' => 'boolean',
     ];
 
-    public function aliases()
-    {
-        return $this->hasMany(ParameterAlias::class);
-    }
+    // aliases feature removed (parameter_aliases table dropped)
 
     public function thresholds()
     {

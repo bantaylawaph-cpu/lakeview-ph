@@ -15,7 +15,6 @@ class ParameterThreshold extends Model
         'parameter_id',
         'class_code',
         'standard_id',
-        'unit',
         'min_value',
         'max_value',
         'notes',

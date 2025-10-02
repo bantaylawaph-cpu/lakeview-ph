@@ -376,7 +376,6 @@ export default function ManageWatershedsTab() {
       />
 
       <div className="dashboard-card-body" style={{ paddingTop: 8 }}>
-        {loading && <div className="no-data">Loading...</div>}
         {!loading && errorMsg && <div className="no-data">{errorMsg}</div>}
         <div className="table-wrapper">
           <TableLayout
@@ -386,6 +385,8 @@ export default function ManageWatershedsTab() {
             pageSize={5}
             actions={actions}
             resetSignal={resetSignal}
+            loading={loading}
+            loadingLabel={loading ? 'Loading watersheds…' : null}
           />
         </div>
       </div>

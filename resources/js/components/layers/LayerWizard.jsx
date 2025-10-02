@@ -17,6 +17,8 @@ import {
 import { createLayer, fetchLakeOptions, fetchWatershedOptions } from "../../lib/layers";
 import { alertSuccess, alertError } from "../../lib/alerts";
 import MapViewport from "../../components/MapViewport";
+import { kml as kmlToGeoJSON } from "@tmcw/togeojson";
+import shp from "shpjs";
 
 export default function LayerWizard({
   defaultBodyType = "lake",
@@ -146,7 +148,7 @@ export default function LayerWizard({
   ];
 
   // -------- file handlers ----------
-  const acceptedExt = /\.(geojson|json)$/i;
+  const acceptedExt = /\.(geojson|json|kml|zip)$/i;
 
   const handleParsedGeoJSON = (parsed, fileName = "") => {
     const { uploadGeom, previewGeom, sourceSrid } = normalizeForPreview(parsed);
@@ -166,16 +168,39 @@ export default function LayerWizard({
   const handleFile = async (file) => {
     if (!file) return;
     if (!acceptedExt.test(file.name)) {
-      setError("Only .geojson or .json files are supported.");
+      setError("Only .geojson, .json, .kml, or .zip (shapefile) are supported.");
       return;
     }
     try {
+      const lower = file.name.toLowerCase();
+      if (lower.endsWith('.kml')) {
+        const text = await file.text();
+        const dom = new DOMParser().parseFromString(text, 'text/xml');
+        const gj = kmlToGeoJSON(dom);
+        handleParsedGeoJSON(gj, file.name);
+        return;
+      }
+      if (lower.endsWith('.zip')) {
+        const buf = await file.arrayBuffer();
+        let gj = await shp(buf);
+        if (!gj || typeof gj !== 'object') throw new Error('Invalid shapefile contents');
+        if (!gj.type && !gj.features) {
+          const all = [];
+          for (const key of Object.keys(gj)) {
+            const layer = gj[key];
+            if (layer && Array.isArray(layer.features)) all.push(...layer.features);
+          }
+          gj = { type: 'FeatureCollection', features: all };
+        }
+        handleParsedGeoJSON(gj, file.name);
+        return;
+      }
       const text = await file.text();
       const parsed = JSON.parse(text);
       handleParsedGeoJSON(parsed, file.name);
     } catch (e) {
-      console.error('[LayerWizard] Failed to parse GeoJSON file', e);
-      setError(e?.message || "Failed to parse GeoJSON file.");
+      console.error('[LayerWizard] Failed to parse file', e);
+      setError(e?.message || "Failed to parse file.");
     }
   };
 
@@ -240,17 +265,17 @@ export default function LayerWizard({
   const previewColor = data.bodyType === "watershed" ? "#16a34a" : "#2563eb";
 
   const steps = [
-    // Step 1: Upload / Paste
+  // Step 1: Upload
     {
       key: "upload",
-      title: "Upload / Paste GeoJSON",
+  title: "Upload Spatial File",
       canNext: (d) => !!d.uploadGeom,
     render: ({ data: wdata, setData: wSetData }) => (
         <div className="dashboard-card">
           <div className="dashboard-card-header">
             <div className="dashboard-card-title">
               <FiUploadCloud />
-              <span>Upload or Paste</span>
+              <span>Upload</span>
             </div>
           </div>
 
@@ -260,36 +285,15 @@ export default function LayerWizard({
             onDrop={handleDrop}
             onClick={() => document.getElementById("layer-file-input")?.click()}
           >
-            <p>Drop a GeoJSON file here or click to select</p>
-            <small>Accepted: .geojson, .json (Polygon / MultiPolygon, or Feature/FeatureCollection of polygons)</small>
+            <p>Drop a spatial file here or click to select</p>
+            <small>Accepted: .geojson, .json, .kml, .zip (zipped Shapefile with .shp/.dbf/.prj; Polygon/MultiPolygon geometries)</small>
             <input
               id="layer-file-input"
               type="file"
-              accept=".geojson,.json"
+              accept=".geojson,.json,.kml,.zip"
               style={{ display: "none" }}
               onChange={(e) => handleFile(e.target.files?.[0])}
             />
-          </div>
-
-            <div className="org-form" style={{ marginTop: 12 }}>
-            <div className="form-group" style={{ flexBasis: "100%" }}>
-              <label>Or paste GeoJSON</label>
-              <textarea
-                rows={8}
-                value={wdata.geomText}
-                onChange={(e) => {
-                  const text = e.target.value;
-                  wSetData((d) => ({ ...d, geomText: text }));
-                  try {
-                    const parsed = JSON.parse(text);
-                    handleParsedGeoJSON(parsed, "");
-                  } catch {
-                    // keep as user types
-                  }
-                }}
-                placeholder='e.g. {"type":"Polygon","coordinates":[...]} or a Feature/FeatureCollection of polygons'
-              />
-            </div>
           </div>
 
           {error && (
@@ -462,7 +466,6 @@ export default function LayerWizard({
                   <option value="" disabled>Select category…</option>
                   <option value="Profile">Profile</option>
                   <option value="Boundary">Boundary</option>
-                  <option value="Bathymetry">Bathymetry</option>
                 </select>
               </div>
 

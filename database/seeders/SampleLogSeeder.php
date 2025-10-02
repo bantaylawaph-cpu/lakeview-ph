@@ -303,7 +303,7 @@ class SampleLogSeeder extends Seeder
                                 ->for($parameter)
                                 ->state([
                                     'value' => $value,
-                                    'unit' => $threshold->unit ?? $parameter->unit,
+                                    'unit' => $parameter->unit,
                                     'depth_m' => 2.0,
                                     'evaluated_class_code' => $evaluation['evaluated_class_code'],
                                     'threshold_id' => $evaluation['threshold_id'],

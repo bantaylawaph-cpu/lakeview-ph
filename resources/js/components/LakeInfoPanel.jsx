@@ -94,7 +94,7 @@ function LakeInfoPanel({
         </button>
       </div>
 
-      {/* Tabs */}
+  {/* Tabs */}
       <div className="lake-info-tabs">
         <button className={`lake-tab ${activeTab === "overview" ? "active" : ""}`} onClick={() => setActiveTab("overview")}>Overview</button>
   <button className={`lake-tab ${activeTab === "water" ? "active" : ""}`} onClick={() => setActiveTab("water")}>Water Quality</button>

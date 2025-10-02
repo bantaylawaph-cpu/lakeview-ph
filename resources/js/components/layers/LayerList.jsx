@@ -261,7 +261,7 @@ function LayerList({
   };
 
   const doDelete = async (target) => {
-    if (currentUserRole !== 'superadmin') return; // deletion restricted to superadmin by backend, reflect here
+    if (!['superadmin','org_admin'].includes(currentUserRole)) return; // reflect backend permissions
     const id = target && typeof target === 'object' ? target.id : target;
     const name = target && typeof target === 'object' ? target.name : null;
     if (!(await confirm({ title: 'Delete this layer?', text: 'This cannot be undone.', confirmButtonText: 'Delete' }))) return;
@@ -465,7 +465,7 @@ function LayerList({
                             )}
 
 
-                            {allowDelete && currentUserRole === 'superadmin' && (
+                            {allowDelete && ['superadmin','org_admin'].includes(currentUserRole) && (
                               <button
                                 className="icon-btn simple danger"
                                 title="Delete"

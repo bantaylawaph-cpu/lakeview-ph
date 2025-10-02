@@ -31,7 +31,16 @@ END$$;
 SQL);
         }
 
-        // 1b. (Deferred) We will pre-clean tenant assignments AFTER ensuring tenant_id column exists (added at step 5).
+        // 1b. Pre-clean data: ensure system-scope roles never carry a tenant (merged: kept main logic; original feature branch had deferred note)
+        $systemRoleIds = DB::table('roles')->whereIn('name', ['public','superadmin'])->pluck('id')->all();
+        if (!empty($systemRoleIds) && Schema::hasTable('users')) {
+            if (Schema::hasColumn('users', 'role_id') && Schema::hasColumn('users', 'tenant_id')) {
+                DB::table('users')->whereIn('role_id', $systemRoleIds)->whereNotNull('tenant_id')->update(['tenant_id' => null]);
+            }
+            if (Schema::hasColumn('users', 'role') && Schema::hasColumn('users', 'tenant_id')) {
+                DB::table('users')->whereIn('role', ['public','superadmin'])->whereNotNull('tenant_id')->update(['tenant_id' => null]);
+            }
+        }
 
         // 2. Add role_id if missing
         if (!Schema::hasColumn('users', 'role_id')) {
@@ -126,7 +135,7 @@ SQL);
 
         // Ensure any tenant-scoped role users have tenant_id; fallback -> set role to public if invalid
         $tenantScopedIds = DB::table('roles')->whereIn('name', ['contributor','org_admin'])->pluck('id')->all();
-        if (!empty($tenantScopedIds)) {
+        if (!empty($tenantScopedIds) && Schema::hasColumn('users', 'tenant_id') && Schema::hasColumn('users', 'role_id')) {
             $affected = DB::table('users')->whereIn('role_id', $tenantScopedIds)->whereNull('tenant_id')->get();
             foreach ($affected as $a) {
                 // Demote to public to avoid trigger violations

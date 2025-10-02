@@ -497,14 +497,6 @@ export default function WQTestWizard({
       },
       render: ({ data, setData }) => (
         <div className="wizard-pane">
-          {organization && (
-            <div className="info-row" style={{ marginBottom: 12 }}>
-              <Tag>
-                <FiFlag /> Org: {organization.name}
-              </Tag>
-            </div>
-          )}
-
           <FormRow>
             <FG label="Lake *" style={{ minWidth: 260 }}>
               <select
@@ -663,10 +655,6 @@ export default function WQTestWizard({
             </AppMap>
           </div>
 
-          <div className="alert-note" style={{ marginTop: 12 }}>
-            Click on the map to set coordinates. Create or edit stations via the modal.
-          </div>
-
           {/* Station Modal */}
           <StationModal
             open={stationModalOpen}
@@ -814,7 +802,7 @@ export default function WQTestWizard({
           </div>
 
           <div className="alert-note" style={{ marginTop: 12 }}>
-            Multiple DO values at different depths? Add several DO rows with different Depth (m).
+            Multiple parameter values at different depths? Add several parameter rows with different Depth (m) values.
           </div>
         </div>
       ),
@@ -854,15 +842,11 @@ export default function WQTestWizard({
                 value={data.status}
                 onChange={(e) => setData({ ...data, status: e.target.value })}
                 disabled={!canPublish}
+                title={roleToCheck === 'contributor' ? 'Only Organization Administrators can publish. Contributors can save as Draft.' : undefined}
               >
                 <option value="draft">Draft</option>
                 {canPublish && <option value="public">Published</option>}
               </select>
-              {!canPublish && (
-                <div style={{ fontSize: 12, color: "#6b7280", marginTop: 6 }}>
-                  Only org-admins can publish. Contributors can save as Draft.
-                </div>
-              )}
             </FG>
 
             <FG label="Notes" style={{ flexBasis: "100%" }}>
@@ -872,10 +856,6 @@ export default function WQTestWizard({
               />
             </FG>
           </FormRow>
-
-          <div className="alert-note" style={{ marginTop: 12 }}>
-            Threshold selection is informational here; wire the evaluation on the backend using parameter thresholds.
-          </div>
         </div>
       ),
     },
@@ -894,13 +874,12 @@ export default function WQTestWizard({
             <div className="dashboard-card" style={{ marginBottom: 12 }}>
               <div className="dashboard-card-title"><FiMapPin /> Context</div>
               <div className="dashboard-card-body" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                <div><strong>Organization:</strong> {organization?.name || data.organization_name || "—"}</div>
                 <div><strong>Lake:</strong> {data.lake_name || "—"}</div>
                 <div><strong>Lake Class:</strong> {data.lake_class_code || "—"}</div>
                 <div><strong>Location Mode:</strong> {data.loc_mode === "coord" ? "Coordinates" : "Station"}</div>
                 <div><strong>Point:</strong> {data.geom_point && Number.isFinite(Number(data.geom_point.lat)) ? `${Number(data.geom_point.lat).toFixed(6)}, ${Number(data.geom_point.lng).toFixed(6)}` : "—"}</div>
                 <div><strong>Station:</strong> {data.station_id ? data.station_name : "—"}</div>
-                <div><strong>Sampled At:</strong> {data.sampled_at || "—"}</div>
+                <div><strong>Sampled At:</strong> {data.sampled_at ? new Date(data.sampled_at).toLocaleString(undefined, { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : "—"}</div>
                 <div><strong>Period:</strong> {d ? `${yr} · Q${qt} · M${String(mo).padStart(2,"0")}` : "—"}</div>
                 <div><strong>Sampler:</strong> {data.sampler_name || "—"}</div>
                 <div><strong>Method:</strong> {data.method || "—"}</div>

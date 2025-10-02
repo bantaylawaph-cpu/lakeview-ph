@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect } from "react";
+import { FiDroplet } from "react-icons/fi";
 import WQTestWizard from "../../components/water-quality-test/WQTestWizard";
 import { api } from "../../lib/api";
 import { alertError, alertSuccess } from "../../utils/alerts";
@@ -37,12 +38,12 @@ export default function OrgAddWQTest() {
 
   return (
     <div className="dashboard-content">
-      <div className="dashboard-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-        <div>
-          <h2 className="page-title">Add Water Quality Test</h2>
-          <p className="page-subtitle">
-            Full-page wizard (LayerWizard style). Frontend-only for now; Submit emits a payload to wire later.
-          </p>
+      <div className="dashboard-card" style={{ marginBottom: 12 }}>
+        <div className="dashboard-card-header">
+          <div className="dashboard-card-title">
+            <FiDroplet />
+            <span>Add Water Quality Test</span>
+          </div>
         </div>
       </div>
 

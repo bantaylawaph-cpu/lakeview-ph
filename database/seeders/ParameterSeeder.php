@@ -3,7 +3,6 @@
 namespace Database\Seeders;
 
 use App\Models\Parameter;
-use App\Models\ParameterAlias;
 use App\Models\ParameterThreshold;
 use App\Models\WqStandard;
 use App\Models\WaterQualityClass;
@@ -116,22 +115,7 @@ class ParameterSeeder extends Seeder
                 ]
             );
 
-            $aliases = collect($def['aliases'])
-                ->filter(fn ($alias) => is_string($alias) && trim($alias) !== '')
-                ->map(fn ($alias) => trim($alias))
-                ->unique();
-
-            if ($aliases->isEmpty()) {
-                $parameter->aliases()->delete();
-            } else {
-                $parameter->aliases()->whereNotIn('alias', $aliases)->delete();
-                foreach ($aliases as $alias) {
-                    ParameterAlias::firstOrCreate([
-                        'parameter_id' => $parameter->id,
-                        'alias' => $alias,
-                    ]);
-                }
-            }
+            // aliases feature removed (parameter_aliases table dropped)
 
             $records[$code] = $parameter;
         }
@@ -161,7 +145,6 @@ class ParameterSeeder extends Seeder
                     'standard_id' => $standard->id,
                 ],
                 [
-                    'unit' => $rule['unit'],
                     'min_value' => $rule['min'],
                     'max_value' => $rule['max'],
                 ]

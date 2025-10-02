@@ -6,7 +6,10 @@ use Illuminate\Support\Facades\DB;
 return new class extends Migration {
     public function up(): void
     {
-        DB::unprepared(<<<'SQL'
+    if (DB::getDriverName() !== 'pgsql') {
+      return; // skip on non-Postgres (e.g., sqlite tests)
+    }
+    DB::unprepared(<<<'SQL'
 CREATE OR REPLACE FUNCTION public.pop_mvt_tile_by_year(
   p_z integer, p_x integer, p_y integer,
   p_lake_id bigint, p_radius_km numeric, p_year smallint, p_layer_id bigint DEFAULT NULL
@@ -60,6 +63,9 @@ SQL);
 
     public function down(): void
     {
-        DB::unprepared('DROP FUNCTION IF EXISTS public.pop_mvt_tile_by_year(integer, integer, integer, bigint, numeric, smallint, bigint)');
+    if (DB::getDriverName() !== 'pgsql') {
+      return;
+    }
+    DB::unprepared('DROP FUNCTION IF EXISTS public.pop_mvt_tile_by_year(integer, integer, integer, bigint, numeric, smallint, bigint)');
     }
 };

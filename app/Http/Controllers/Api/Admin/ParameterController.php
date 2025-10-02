@@ -22,7 +22,7 @@ class ParameterController extends Controller
     {
         $this->ensureSuperAdmin();
 
-        $query = Parameter::query()->with('aliases');
+    $query = Parameter::query();
 
         if ($search = trim((string) $request->input('search', ''))) {
             $query->where(function ($q) use ($search) {
@@ -50,16 +50,14 @@ class ParameterController extends Controller
         $this->ensureSuperAdmin();
 
         $data = $this->validatePayload($request);
-        $aliases = $data['aliases'] ?? [];
-        unset($data['aliases']);
+    // aliases feature removed (parameter_aliases table dropped)
 
-        $parameter = DB::transaction(function () use ($data, $aliases) {
+        $parameter = DB::transaction(function () use ($data) {
             $parameter = Parameter::create($data);
-            $this->syncAliases($parameter, $aliases);
             return $parameter;
         });
 
-        return response()->json($parameter->load('aliases'), 201);
+        return response()->json($parameter, 201);
     }
 
     public function show(Request $request, Parameter $parameter)
@@ -67,7 +65,7 @@ class ParameterController extends Controller
         $this->ensureSuperAdmin();
 
         return response()->json([
-            'data' => $parameter->load(['aliases', 'thresholds' => function ($q) {
+            'data' => $parameter->load(['thresholds' => function ($q) {
                 $q->with(['standard', 'waterQualityClass']);
             }]),
         ]);
@@ -78,17 +76,13 @@ class ParameterController extends Controller
         $this->ensureSuperAdmin();
 
         $data = $this->validatePayload($request, $parameter->id);
-        $aliases = $data['aliases'] ?? null;
-        unset($data['aliases']);
+    // aliases feature removed
 
-        DB::transaction(function () use ($parameter, $data, $aliases) {
+        DB::transaction(function () use ($parameter, $data) {
             $parameter->update($data);
-            if ($aliases !== null) {
-                $this->syncAliases($parameter, $aliases);
-            }
         });
 
-        return response()->json($parameter->fresh(['aliases']));
+        return response()->json($parameter->fresh());
     }
 
     public function destroy(Request $request, Parameter $parameter)
@@ -116,31 +110,7 @@ class ParameterController extends Controller
             'evaluation_type' => ['nullable', Rule::in(['Max (≤)', 'Min (≥)', 'Range'])],
             'is_active' => ['sometimes', 'boolean'],
             'notes' => ['nullable', 'string'],
-            'aliases' => ['sometimes', 'array'],
-            'aliases.*' => ['string', 'max:255'],
+            // aliases removed
         ]);
-    }
-
-    protected function syncAliases(Parameter $parameter, array $aliases): void
-    {
-        $unique = collect($aliases)
-            ->filter(fn ($alias) => is_string($alias) && trim($alias) !== '')
-            ->map(fn ($alias) => trim($alias))
-            ->unique()
-            ->values();
-
-        if ($unique->isEmpty()) {
-            $parameter->aliases()->delete();
-            return;
-        }
-
-        $parameter->aliases()->whereNotIn('alias', $unique)->delete();
-
-        foreach ($unique as $alias) {
-            $parameter->aliases()->firstOrCreate([
-                'parameter_id' => $parameter->id,
-                'alias' => $alias,
-            ]);
-        }
     }
 }

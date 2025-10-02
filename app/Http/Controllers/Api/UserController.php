@@ -102,8 +102,19 @@ class UserController extends Controller
     /**
      * GET /api/admin/users/{user}
      */
-    public function show(User $user)
+    public function show(Request $request, User $user)
     {
+        $auth = $request->user();
+        if (!$auth) {
+            abort(401);
+        }
+        $roleName = $auth->role?->name;
+        // Superadmin may view any user; others must be in the same tenant
+        if ($roleName !== \App\Models\Role::SUPERADMIN) {
+            if (($auth->tenant_id ?? null) === null || (int)$auth->tenant_id !== (int)($user->tenant_id ?? 0)) {
+                abort(403, 'Forbidden');
+            }
+        }
         $user->load(['role','tenant']);
         return response()->json(['data' => $this->resource($user)]);
     }

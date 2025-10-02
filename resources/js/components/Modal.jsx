@@ -14,11 +14,13 @@ export default function Modal({
   cardClassName = "",
   bodyClassName = "",
   style = {},
+  footerStyle = {},
   animationDuration = 200,
   trapFocus = true,
   closeOnEsc = true,
   closeOnOverlay = true,
   initialFocusRef,
+  overlayZIndex = 10000,
 }) {
   // Keep the modal mounted while playing the fade-out animation
   const [shouldRender, setShouldRender] = useState(open);
@@ -119,6 +121,7 @@ export default function Modal({
       }}
       style={{
         ["--lv-modal-anim"]: `${animationDuration}ms`,
+        zIndex: overlayZIndex,
       }}
     >
       <div
@@ -134,9 +137,9 @@ export default function Modal({
             </button>
           </div>
         )}
-        <div className={`lv-modal-body ${bodyClassName}`} style={{ overflowY: 'auto', maxHeight: 'calc(100vh - 180px)' }}>{children}</div>
+  <div className={`lv-modal-body ${bodyClassName}`} style={{ overflowY: 'auto', flex: '1 1 auto', maxHeight: 'calc(100vh - 180px)' }}>{children}</div>
 
-        {footer && <div className="lv-modal-footer">{footer}</div>}
+        {footer && <div className="lv-modal-footer" style={footerStyle}>{footer}</div>}
       </div>
     </div>,
     document.body

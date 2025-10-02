@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import { FiMap } from 'react-icons/fi';
 
 const fmtNum = (v, suffix = "", digits = 2) => {
   if (v === null || v === undefined || v === "") return "–";
@@ -6,7 +7,7 @@ const fmtNum = (v, suffix = "", digits = 2) => {
   if (!Number.isFinite(n)) return "–";
   return `${n.toFixed(digits)}${suffix}`;
 };
-const fmtDate = (v) => (v ? new Date(v).toLocaleString() : "–");
+
 
 function OverviewTab({ lake, showWatershed = false, canToggleWatershed = false, onToggleWatershed }) {
   const watershedName = useMemo(() => {
@@ -35,22 +36,34 @@ function OverviewTab({ lake, showWatershed = false, canToggleWatershed = false, 
         </div>
       )}
 
-      {showToggle && (
-        <div style={{ marginBottom: 12 }}>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
-            <input
-              type="checkbox"
-              checked={showWatershed}
-              onChange={(e) => onToggleWatershed?.(e.target.checked)}
-            />
-            <span>Show watershed outline</span>
-          </label>
-        </div>
-      )}
+      {/* checkbox toggle removed; control is the icon button beside the watershed name */}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 16px" }}>
         <div><strong>Watershed:</strong></div>
-        <div>{watershedName}</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{watershedName}</span>
+          {showToggle && (
+            <button
+              type="button"
+              aria-pressed={showWatershed}
+              title={showWatershed ? 'Hide watershed outline' : 'Show watershed outline'}
+              onClick={() => onToggleWatershed?.(!showWatershed)}
+              style={{
+                border: 'none',
+                background: 'transparent',
+                color: '#fff',
+                padding: 6,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                borderRadius: 6,
+              }}
+            >
+              <FiMap size={16} />
+            </button>
+          )}
+        </div>
 
         <div><strong>Region:</strong></div>
         <div>{lake?.region || "–"}</div>

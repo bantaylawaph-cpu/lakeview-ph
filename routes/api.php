@@ -82,20 +82,16 @@ Route::middleware(['auth:sanctum','role:superadmin'])->prefix('admin')->group(fu
     // Users (site-wide)
     Route::get('/users',            [UserController::class, 'index']);
     Route::post('/users',           [UserController::class, 'store']);
-    Route::get('/users/{user}',     [UserController::class, 'show'])->whereNumber('user');
+    // show route moved below to allow org_admin read access as well
     Route::put('/users/{user}',     [UserController::class, 'update'])->whereNumber('user');
     Route::delete('/users/{user}',  [UserController::class, 'destroy'])->whereNumber('user');
 
-    // Water Quality & related admin resources
+    // Water Quality & related admin resources (except stations and sample-events which have broader access)
     Route::get('water-quality-classes', [AdminWaterQualityClassController::class, 'index']);
     Route::apiResource('parameters', AdminParameterController::class);
     Route::apiResource('parameter-thresholds', AdminParameterThresholdController::class)->except(['create', 'edit']);
     Route::apiResource('wq-standards', AdminWqStandardController::class)->except(['create', 'edit']);
-    Route::apiResource('stations', AdminStationController::class)->except(['create', 'edit']);
-    Route::apiResource('sample-events', AdminSamplingEventController::class)
-        ->parameters(['sample-events' => 'samplingEvent'])
-        ->except(['create', 'edit']);
-    Route::post('sample-events/{samplingEvent}/toggle-publish', [AdminSamplingEventController::class, 'togglePublish']);
+    // sample-events routes are declared below with role:superadmin,org_admin,contributor
 
     // Lightweight tenant list for dropdowns
     Route::get('/tenants-list', function () {
@@ -106,6 +102,32 @@ Route::middleware(['auth:sanctum','role:superadmin'])->prefix('admin')->group(fu
     // Audit logs (superadmin only here; org_admin has implicit scoping below if added later)
     Route::get('/audit-logs', [\App\Http\Controllers\Api\Admin\AuditLogController::class, 'index']);
     Route::get('/audit-logs/{id}', [\App\Http\Controllers\Api\Admin\AuditLogController::class, 'show'])->whereNumber('id');
+});
+
+// Allow org_admin to read user details via admin path too (tenant-scoped by controller)
+Route::middleware(['auth:sanctum','role:superadmin,org_admin'])->prefix('admin')->group(function () {
+    Route::get('/users/{user}',     [UserController::class, 'show'])->whereNumber('user');
+});
+
+// Stations: allow org_admin and contributor (read), org_admin (write), superadmin (all)
+Route::prefix('admin')->middleware(['auth:sanctum','role:superadmin,org_admin,contributor'])->group(function () {
+    Route::get('stations',             [AdminStationController::class, 'index']);
+    Route::get('stations/{station}',   [AdminStationController::class, 'show'])->whereNumber('station');
+});
+Route::prefix('admin')->middleware(['auth:sanctum','role:superadmin,org_admin'])->group(function () {
+    Route::post   ('stations',           [AdminStationController::class, 'store']);
+    Route::put    ('stations/{station}', [AdminStationController::class, 'update'])->whereNumber('station');
+    Route::delete ('stations/{station}', [AdminStationController::class, 'destroy'])->whereNumber('station');
+});
+
+// Sample Events: allow org_admin and contributor (read/write), superadmin (all). Controller enforces fine-grained rules.
+Route::prefix('admin')->middleware(['auth:sanctum','role:superadmin,org_admin,contributor'])->group(function () {
+    Route::get   ('sample-events',                              [AdminSamplingEventController::class, 'index']);
+    Route::get   ('sample-events/{samplingEvent}',              [AdminSamplingEventController::class, 'show'])->whereNumber('samplingEvent');
+    Route::post  ('sample-events',                              [AdminSamplingEventController::class, 'store']);
+    Route::put   ('sample-events/{samplingEvent}',              [AdminSamplingEventController::class, 'update'])->whereNumber('samplingEvent');
+    Route::delete('sample-events/{samplingEvent}',              [AdminSamplingEventController::class, 'destroy'])->whereNumber('samplingEvent');
+    Route::post  ('sample-events/{samplingEvent}/toggle-publish',[AdminSamplingEventController::class, 'togglePublish'])->whereNumber('samplingEvent');
 });
 
 /*
@@ -131,12 +153,12 @@ Route::middleware(['auth:sanctum','tenant.scoped','role:org_admin,superadmin'])
         Route::delete('/users/{user}',       [OrgUserController::class, 'destroy'])->whereNumber('user');
 
         // Sampling Events (tenant scoped) accessible to org_admin + contributor + superadmin (superadmin passes role middleware automatically)
-        Route::get   ('/sample-events',                              [AdminSamplingEventController::class, 'index']);
-        Route::get   ('/sample-events/{samplingEvent}',              [AdminSamplingEventController::class, 'show'])->whereNumber('samplingEvent');
-        Route::post  ('/sample-events',                              [AdminSamplingEventController::class, 'store']);
-        Route::put   ('/sample-events/{samplingEvent}',              [AdminSamplingEventController::class, 'update'])->whereNumber('samplingEvent');
-        Route::delete('/sample-events/{samplingEvent}',              [AdminSamplingEventController::class, 'destroy'])->whereNumber('samplingEvent');
-        Route::post  ('/sample-events/{samplingEvent}/toggle-publish',[AdminSamplingEventController::class, 'togglePublish'])->whereNumber('samplingEvent');
+    Route::get   ('/sample-events',                              [AdminSamplingEventController::class, 'index']);
+    Route::get   ('/sample-events/{samplingEvent}',              [AdminSamplingEventController::class, 'showOrg'])->whereNumber('samplingEvent');
+    Route::post  ('/sample-events',                              [AdminSamplingEventController::class, 'store']);
+    Route::put   ('/sample-events/{samplingEvent}',              [AdminSamplingEventController::class, 'updateOrg'])->whereNumber('samplingEvent');
+    Route::delete('/sample-events/{samplingEvent}',              [AdminSamplingEventController::class, 'destroyOrg'])->whereNumber('samplingEvent');
+    Route::post  ('/sample-events/{samplingEvent}/toggle-publish',[AdminSamplingEventController::class, 'togglePublishOrg'])->whereNumber('samplingEvent');
     });
 
 /*
@@ -151,12 +173,12 @@ Route::middleware(['auth:sanctum','tenant.scoped','role:contributor'])
         Route::get('/whoami', fn() => ['ok' => true]);
         // tenant-scoped contribution endpoints here
         // Sampling Events (limited contributor access). Reuse same controller; controller enforces fine-grained rules.
-        Route::get   ('/sample-events',                              [AdminSamplingEventController::class, 'index']);
-        Route::get   ('/sample-events/{samplingEvent}',              [AdminSamplingEventController::class, 'show'])->whereNumber('samplingEvent');
-        Route::post  ('/sample-events',                              [AdminSamplingEventController::class, 'store']);
-        Route::put   ('/sample-events/{samplingEvent}',              [AdminSamplingEventController::class, 'update'])->whereNumber('samplingEvent');
-        Route::delete('/sample-events/{samplingEvent}',              [AdminSamplingEventController::class, 'destroy'])->whereNumber('samplingEvent');
-        Route::post  ('/sample-events/{samplingEvent}/toggle-publish',[AdminSamplingEventController::class, 'togglePublish'])->whereNumber('samplingEvent');
+    Route::get   ('/sample-events',                              [AdminSamplingEventController::class, 'index']);
+    Route::get   ('/sample-events/{samplingEvent}',              [AdminSamplingEventController::class, 'showOrg'])->whereNumber('samplingEvent');
+    Route::post  ('/sample-events',                              [AdminSamplingEventController::class, 'store']);
+    Route::put   ('/sample-events/{samplingEvent}',              [AdminSamplingEventController::class, 'updateOrg'])->whereNumber('samplingEvent');
+    Route::delete('/sample-events/{samplingEvent}',              [AdminSamplingEventController::class, 'destroyOrg'])->whereNumber('samplingEvent');
+    Route::post  ('/sample-events/{samplingEvent}/toggle-publish',[AdminSamplingEventController::class, 'togglePublishOrg'])->whereNumber('samplingEvent');
     });
 
 /*
@@ -205,9 +227,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/user/settings', [UserSettingsController::class, 'update']);
 
     // Creation & modifications restricted to superadmin (controller also validates)
-    Route::post('/layers',          [ApiLayerController::class, 'store'])->middleware('role:superadmin');
-    Route::patch('/layers/{id}',    [ApiLayerController::class, 'update'])->middleware('role:superadmin')->whereNumber('id');
-    Route::delete('/layers/{id}',   [ApiLayerController::class, 'destroy'])->middleware('role:superadmin')->whereNumber('id');
+    Route::post('/layers',            [ApiLayerController::class, 'store'])->middleware('role:superadmin,org_admin');
+    Route::patch('/layers/{layer}',   [ApiLayerController::class, 'update'])->middleware('role:superadmin,org_admin')->whereNumber('layer');
+    Route::delete('/layers/{layer}',  [ApiLayerController::class, 'destroy'])->middleware('role:superadmin,org_admin')->whereNumber('layer');
+
+    // Tenant-scoped user lookup (org/contrib may view users in their own tenant); superadmin may view any
+    Route::get('/users/{user}', [UserController::class, 'show'])->whereNumber('user');
 });
 
 /*

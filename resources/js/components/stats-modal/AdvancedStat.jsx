@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useImperativeHandle } from "react";
 import { FiSettings, FiX } from 'react-icons/fi';
+import Popover from "../common/Popover";
 import { apiPublic } from "../../lib/api";
 import { fetchParameters, fetchSampleEvents, deriveOrgOptions } from "./data/fetchers";
 import { alertSuccess, alertError } from '../../utils/alerts';
 import { tOneSampleAsync, tTwoSampleWelchAsync, tTwoSampleStudentAsync, mannWhitney, signTestAsync, tostEquivalenceAsync, wilcoxonSignedRankAsync, moodMedianAsync } from '../../stats/statsUtils';
 
-export default function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOptions = [], staticThresholds = {} }) {
+function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOptions = [], staticThresholds = {} }, ref) {
   // test mode is now inferred from the user's compare selection (class vs lake)
   const [lakeId, setLakeId] = useState(''); // primary lake selection (first dropdown)
   // Comparison target encoded as "class:CODE" or "lake:ID"
@@ -77,9 +78,8 @@ export default function AdvancedStat({ lakes = [], params = [], paramOptions: pa
   // Gear popover state/refs for advanced (moved Year/CL inputs)
   const [showGearPopover, setShowGearPopover] = useState(false);
   const gearBtnRef = useRef(null);
-  const popoverRef = useRef(null);
   const containerRef = useRef(null);
-  const [popoverStyle, setPopoverStyle] = useState({});
+  
   // Manual threshold flow removed
   // Preview functionality removed — tests now run fully on demand
 
@@ -727,6 +727,68 @@ export default function AdvancedStat({ lakes = [], params = [], paramOptions: pa
     );
   };
 
+  // Exposed actions: clear selections and export to PDF
+  const clearAll = () => {
+  console.debug('[AdvancedStat] clearAll invoked');
+    setLakeId('');
+    setClassCode('');
+    setCompareValue('');
+    setYearFrom('');
+    setYearTo('');
+    setOrganizationId('');
+    setSecondaryOrganizationId('');
+    setAppliedStandardId('');
+    setParamCode('');
+    setSelectedTest('');
+    setResult(null);
+    setError(null);
+    setShowAllValues(false);
+    // no user-facing alert for clear (kept silent)
+  };
+
+  const exportPdf = async () => {
+    try {
+      console.debug('[AdvancedStat] exportPdf invoked', { paramCode, result });
+      if (!result) {
+        console.debug('[AdvancedStat] exportPdf aborted - no result to export');
+        return;
+      }
+      const title = `Advanced statistics - ${paramCode || ''}`;
+      const style = `body { font-family: Arial, Helvetica, sans-serif; color: #111; padding: 18px; } h1 { font-size: 18px; } table { border-collapse: collapse; width: 100%; } th, td { border: 1px solid #ddd; padding: 6px; }`;
+      const summaryRows = [];
+      if (result) {
+        summaryRows.push(`<tr><th>Test</th><td>${result.test_used || result.type || ''}</td></tr>`);
+        if (result.p_value != null) summaryRows.push(`<tr><th>p-value</th><td>${result.p_value}</td></tr>`);
+        if (result.mean != null) summaryRows.push(`<tr><th>Mean</th><td>${result.mean}</td></tr>`);
+        if (result.n != null) summaryRows.push(`<tr><th>N</th><td>${result.n}</td></tr>`);
+      }
+
+      let valuesSection = '';
+      if (Array.isArray(result?.events) && result.events.length) {
+        const rowsHtml = result.events.slice(0, 1000).map(ev => `<tr><td>${ev.sampled_at || ''}</td><td>${ev.lake_id || ''}</td><td>${ev.station_id ?? ''}</td><td>${ev.value ?? ''}</td></tr>`).join('');
+        valuesSection = `<h3>Events (first ${Math.min(result.events.length, 1000)})</h3><table><thead><tr><th>Sampled at</th><th>Lake</th><th>Station</th><th>Value</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
+      } else if (Array.isArray(result?.sample_values) && result.sample_values.length) {
+        valuesSection = `<h3>Values</h3><div>${(result.sample_values || []).slice(0,1000).join(', ')}</div>`;
+      } else if (Array.isArray(result?.sample1_values) || Array.isArray(result?.sample2_values)) {
+        const a = (result.sample1_values || []).slice(0,1000).join(', ');
+        const b = (result.sample2_values || []).slice(0,1000).join(', ');
+        valuesSection = `<h3>Group values</h3><div>Group 1: ${a}</div><div style="margin-top:8px">Group 2: ${b}</div>`;
+      }
+
+      const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>${style}</style></head><body><h1>${title}</h1><table>${summaryRows.join('')}</table>${valuesSection}</body></html>`;
+      const w = window.open('', '_blank');
+      if (!w) throw new Error('Popup blocked');
+      w.document.write(html);
+      w.document.close();
+      setTimeout(() => { try { w.focus(); w.print(); } catch(e){ /* ignore */ } }, 250);
+    } catch (e) {
+      console.error('Export failed', e);
+      // no user-facing alert here; keep console error for debugging
+    }
+  };
+
+  useImperativeHandle(ref, () => ({ clearAll, exportPdf }));
+
   const renderValuesUsed = (r) => {
     // Prefer events array (contains sampled_at, station_id, lake_id, value) if available
     const events = Array.isArray(r.events) ? r.events : null;
@@ -737,7 +799,7 @@ export default function AdvancedStat({ lakes = [], params = [], paramOptions: pa
     const two2 = Array.isArray(r.sample2_values) ? r.sample2_values : null;
     if (!events && !one && !(two1 && two2)) return null;
 
-    const limit = 200;
+  const limit = 20;
     const showAll = showAllValues;
     const slice = (arr) => (showAll ? arr : arr.slice(0, limit));
 
@@ -824,10 +886,12 @@ export default function AdvancedStat({ lakes = [], params = [], paramOptions: pa
       return 'Group 2';
     };
 
+    // (no-op) clearing/export handled by outer AdvancedStat.clearAll/exportPdf
+
     return (
       <div style={{ marginTop:10, padding:10, background:'rgba(255,255,255,0.02)', borderRadius:6 }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <strong>Values used</strong>
+          <strong>Data used</strong>
           <div style={{ display:'flex', gap:8 }}>
             <button className="pill-btn" onClick={()=>setShowAllValues(s=>!s)}>{showAll ? `Show first ${limit}` : 'Show all'}</button>
             <button className="pill-btn" onClick={copyValues}>Copy</button>
@@ -837,7 +901,7 @@ export default function AdvancedStat({ lakes = [], params = [], paramOptions: pa
 
         {events ? (
           <div style={{ marginTop:8 }}>
-            <div style={{ maxHeight: 240, overflowY: 'auto', overflowX: 'auto', border: '1px solid rgba(255,255,255,0.02)', borderRadius:6, minWidth:0 }}>
+            <div style={{ overflowX: 'auto', border: '1px solid rgba(255,255,255,0.02)', borderRadius:6, minWidth:0 }}>
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13, tableLayout: 'fixed', minWidth:0 }}>
               <thead>
                 <tr style={{ textAlign:'left', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
@@ -897,7 +961,7 @@ export default function AdvancedStat({ lakes = [], params = [], paramOptions: pa
   };
 
   return (
-  <div ref={containerRef} className="insight-card" style={{ position:'relative', minWidth: 0, maxWidth: '100%', maxHeight: '90vh', overflowY: 'auto', padding: 8 }}>
+  <div ref={containerRef} className="insight-card" style={{ position:'relative', minWidth: 0, maxWidth: '100%', padding: 8 }}>
     <h4 style={{ margin: '2px 0 8px' }}>Advanced Statistics</h4>
     {/* gear was moved back to the actions area */}
   <div>
@@ -905,7 +969,7 @@ export default function AdvancedStat({ lakes = [], params = [], paramOptions: pa
       {/* Row 1: Applied Standard, Parameter, Confidence Level (compact) */}
       <div style={{ gridColumn: '1 / span 1', minWidth:0 }}>
         <select className="pill-btn" value={appliedStandardId} onChange={e=>{setAppliedStandardId(e.target.value); setResult(null);}} style={{ width:'100%', minWidth:0, boxSizing:'border-box', padding:'10px 12px', height:40, lineHeight:'20px' }}>
-          <option value="">Applied Standard</option>
+          <option value="">Select Applied Standard</option>
           {standards.map(s => <option key={s.id} value={s.id}>{s.code || s.name || s.id}</option>)}
         </select>
       </div>
@@ -965,7 +1029,7 @@ export default function AdvancedStat({ lakes = [], params = [], paramOptions: pa
       </div>
       <div style={{ gridColumn: '3 / span 1', minWidth:0 }}>
         <select className="pill-btn" value={organizationId} onChange={e=>{ setOrganizationId(e.target.value); setResult(null); }} style={{ width:'100%', minWidth:0, boxSizing:'border-box', padding:'10px 12px', height:40, lineHeight:'20px' }}>
-          <option value="">Organization (optional)</option>
+          <option value="">Organization</option>
           {orgOptions.map(o => <option key={`org-${o.id}`} value={o.id}>{o.name || o.id}</option>)}
         </select>
       </div>
@@ -998,25 +1062,23 @@ export default function AdvancedStat({ lakes = [], params = [], paramOptions: pa
     </div>
 
     {/* Gear popover: contains Year From / Year To / Confidence Level */}
-    {showGearPopover && (
-      <div ref={popoverRef} style={{ position:'absolute', zIndex:999, width:340, padding:12, background:'#164479', border:'1px solid rgba(255,255,255,0.06)', borderRadius:8, boxShadow:'0 8px 24px rgba(0,0,0,0.35)', right:12, top:48 }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
-          <div style={{ fontSize:13, fontWeight:600, color:'#f0f6fb' }}>Year Range & Confidence Level</div>
-          <button aria-label="Close advanced options" title="Close" onClick={() => setShowGearPopover(false)} className="pill-btn" style={{ padding:'4px 8px', height:30, display:'inline-flex', alignItems:'center', justifyContent:'center' }}>
-            <FiX size={14} />
-          </button>
-        </div>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-          <input className="pill-btn" type="number" placeholder="Year from" value={yearFrom} onChange={e=>setYearFrom(e.target.value)} style={{ width:'100%', boxSizing:'border-box', padding:'8px 10px', height:36 }} />
-          <input className="pill-btn" type="number" placeholder="Year to" value={yearTo} onChange={e=>setYearTo(e.target.value)} style={{ width:'100%', boxSizing:'border-box', padding:'8px 10px', height:36 }} />
-          <select className="pill-btn" value={cl} onChange={e=>{setCl(e.target.value); setResult(null);}} style={{ gridColumn: '1 / span 2', width:'100%', boxSizing:'border-box', padding:'8px 10px', height:36 }}>
-            <option value="0.9">90% CL</option>
-            <option value="0.95">95% CL</option>
-            <option value="0.99">99% CL</option>
-          </select>
-        </div>
+    <Popover anchorRef={gearBtnRef} open={showGearPopover} onClose={() => setShowGearPopover(false)} minWidth={320}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+        <div style={{ fontSize:13, fontWeight:600, color:'#f0f6fb' }}>Year Range & Confidence Level</div>
+        <button aria-label="Close advanced options" title="Close" onClick={() => setShowGearPopover(false)} className="pill-btn" style={{ padding:'4px 8px', height:30, display:'inline-flex', alignItems:'center', justifyContent:'center' }}>
+          <FiX size={14} />
+        </button>
       </div>
-    )}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+        <input className="pill-btn" type="number" placeholder="Year from" value={yearFrom} onChange={e=>setYearFrom(e.target.value)} style={{ width:'100%', boxSizing:'border-box', padding:'8px 10px', height:36 }} />
+        <input className="pill-btn" type="number" placeholder="Year to" value={yearTo} onChange={e=>setYearTo(e.target.value)} style={{ width:'100%', boxSizing:'border-box', padding:'8px 10px', height:36 }} />
+        <select className="pill-btn" value={cl} onChange={e=>{setCl(e.target.value); setResult(null);}} style={{ gridColumn: '1 / span 2', width:'100%', boxSizing:'border-box', padding:'8px 10px', height:36 }}>
+          <option value="0.9">90% CL</option>
+          <option value="0.95">95% CL</option>
+          <option value="0.99">99% CL</option>
+        </select>
+      </div>
+    </Popover>
 
     {/* Notices/errors */}
     <div style={{ marginTop:8 }}>
@@ -1046,3 +1108,6 @@ function suggestThreshold(paramCode, classCode, staticThresholds) {
   const num = Number(val);
   return Number.isFinite(num) ? num : null;
 }
+
+// Export wrapped with forwardRef so parent components can call imperative methods via ref
+export default React.forwardRef(AdvancedStat);

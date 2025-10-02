@@ -12,6 +12,11 @@
   animation: lv-fade-in var(--lv-modal-anim, 200ms) ease-out forwards;
 }
 
+/* SweetAlert2 container override: keep above modal overlays */
+.swal-container, .swal2-container {
+  z-index: 35000 !important;
+}
+
 .lv-modal-card {
   background: #ffffff;
   color: #111827;               /* neutral dark */

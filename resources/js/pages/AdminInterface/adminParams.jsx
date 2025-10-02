@@ -32,7 +32,7 @@ export default function AdminParameters() {
         <div className="dashboard-card-header">
           <div className="dashboard-card-title">
             <FiSliders />
-            <span>Water Quality Catalogue</span>
+            <span>Parameters, Standards, and Thresholds Catalogue</span>
           </div>
           <div className="org-actions-right">
             {TABS.map((tab) => (

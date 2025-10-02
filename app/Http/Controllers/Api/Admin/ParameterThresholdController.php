@@ -83,7 +83,6 @@ class ParameterThresholdController extends Controller
             'parameter_id' => ['required', 'integer', Rule::exists('parameters', 'id')],
             'class_code' => ['required', 'string', Rule::exists('water_quality_classes', 'code')],
             'standard_id' => ['nullable', 'integer', Rule::exists('wq_standards', 'id')],
-            'unit' => ['nullable', 'string', 'max:255'],
             'min_value' => ['nullable', 'numeric'],
             'max_value' => ['nullable', 'numeric'],
             'notes' => ['nullable', 'string'],

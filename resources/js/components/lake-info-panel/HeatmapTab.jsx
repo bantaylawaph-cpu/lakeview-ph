@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import axios from "axios";
+import LoadingSpinner from "../LoadingSpinner";
 
 /**
  * Props
@@ -91,79 +92,81 @@ function HeatmapTab({ lake, onToggleHeatmap, currentLayerId = null }) {
   };
 
   return (
-    <>
-  <h3>Population Density Heatmap</h3>
-      <p>Heatmap of population living around <strong>{lake?.name}</strong>.</p>
-
-      <div
-        className="slider-container"
-        onMouseDown={(e) => e.stopPropagation()}
-        onTouchStart={(e) => e.stopPropagation()}
-        onPointerDown={(e) => e.stopPropagation()}
-        onContextMenu={(e) => e.stopPropagation()}
-      >
-        <label htmlFor="distanceRange">Distance from shoreline: {distance} km</label>
-        <input
-          id="distanceRange"
-          type="range"
-          min="0"
-          max="3"
-          step="0.5"
-          value={distance}
-          onChange={(e) => setDistance(parseFloat(e.target.value))}
-        />
+  <div style={{ display: 'grid', gap: 8 }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div>
+        <h3 style={{ margin: 0, fontSize: 16, color: '#fff' }}>Population Density Heatmap</h3>
+        <div style={{ fontSize: 13, color: '#ddd' }}>Heatmap of population living around <strong style={{ color: '#fff' }}>{lake?.name}</strong>.</div>
       </div>
+    </div>
 
-      <div
-        className="select-container"
-        onMouseDown={(e) => e.stopPropagation()}
-        onTouchStart={(e) => e.stopPropagation()}
-        onPointerDown={(e) => e.stopPropagation()}
-        onContextMenu={(e) => e.stopPropagation()}
-        style={{ marginTop: 8 }}
-      >
-        <label htmlFor="yearSelect">Dataset Year</label>
-        <select id="yearSelect" value={year} onChange={(e) => setYear(parseInt(e.target.value, 10))}>
-          <option value={2025}>2025 (default)</option>
-          <option value={2020}>2020</option>
-        </select>
+    <div
+      className="slider-container"
+      onMouseDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
+      onContextMenu={(e) => e.stopPropagation()}
+      style={{ display: 'flex', flexDirection: 'column', gap: 6 }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <label htmlFor="distanceRange" style={{ color: '#fff', fontSize: 13 }}>Distance from shoreline</label>
+        <div style={{ color: '#fff', fontSize: 13 }}>{distance} km</div>
       </div>
+      <input
+        id="distanceRange"
+        type="range"
+        min="0"
+        max="3"
+        step="1"
+        value={distance}
+        onChange={(e) => setDistance(parseInt(e.target.value, 10))}
+        style={{ width: '100%', appearance: 'none', height: 8, borderRadius: 8, background: 'linear-gradient(90deg,#3b82f6,#60a5fa)', outline: 'none' }}
+      />
+    </div>
 
-      <div style={{ marginTop: 12 }}>
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      <label htmlFor="yearSelect" style={{ color: '#fff' }}>Dataset Year</label>
+      <select id="yearSelect" value={year} onChange={(e) => setYear(parseInt(e.target.value, 10))} style={{ padding: '6px 8px', background: '#fff', color: '#111', borderRadius: 6 }}>
+        <option value={2025}>2025</option>
+        <option value={2020}>2020</option>
+      </select>
+    </div>
+
+    <div className="insight-card" style={{ padding: 12 }}>
+      <h4 style={{ margin: 0, color: '#fff' }}>Estimated Population</h4>
+      <div style={{ marginTop: 8 }}>
+        {loading ? (
+          <div style={{ margin: '2px 0 8px 0' }}>
+            <LoadingSpinner label="Estimating population…" color="#fff" />
+          </div>
+        ) : (
+          <p style={{ margin: 0, color: '#fff' }}>
+            ~ <strong>{estimatedPop.toLocaleString()}</strong> people within {distance} km of the shoreline
+          </p>
+        )}
+      </div>
+      <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center' }}>
         <button
           type="button"
           onClick={handleToggleHeat}
           style={{
             padding: '8px 12px',
-            borderRadius: 6,
-            border: '1px solid #2563eb',
-            background: heatOn ? '#2563eb' : 'transparent',
-            color: heatOn ? '#ffffff' : '#2563eb',
+            borderRadius: 12,
+            border: '1px solid rgba(255,255,255,0.12)',
+            background: heatOn ? 'rgba(255,255,255,0.06)' : 'transparent',
+            color: '#fff',
             fontWeight: 600,
-            cursor: 'pointer'
+            cursor: 'pointer',
+            width: 160,
+            backdropFilter: 'blur(6px)'
           }}
           aria-pressed={heatOn}
         >
           {heatOn ? 'Hide Heatmap' : 'Show Heatmap'}
         </button>
       </div>
-
-      <div className="insight-card">
-        <h4>Estimated Population</h4>
-        {loading ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div className="lv-progress" role="progressbar" aria-busy="true" aria-label="Estimating population">
-              <div className="lv-progress-bar" />
-            </div>
-            <span style={{ fontSize: 12, opacity: 0.7 }}>Estimating…</span>
-          </div>
-        ) : (
-          <p>
-            ~ <strong>{estimatedPop.toLocaleString()}</strong> people within {distance} km of the shoreline
-          </p>
-        )}
-      </div>
-    </>
+    </div>
+  </div>
   );
 }
 

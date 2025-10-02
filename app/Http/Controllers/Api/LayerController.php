@@ -165,7 +165,7 @@ class LayerController extends Controller
         if (!in_array($role, [Role::SUPERADMIN, Role::ORG_ADMIN], true)) {
             abort(403, 'Only Super Administrators or Organization Administrators may create layers.');
         }
-        $data = $request->validated();
+    $data = $request->validated();
         $visibility = $data['visibility'] ?? 'public';
         if (in_array($visibility, ['organization','organization_admin'], true)) $visibility = 'admin';
         if (!in_array($visibility, ['public','admin'], true)) {
@@ -181,14 +181,36 @@ class LayerController extends Controller
 
     public function update(UpdateLayerRequest $request, Layer $layer)
     {
-        $this->requireSuperAdmin($request);
+        $user = $request->user();
+        $role = $this->resolveRole($user);
         $data = $request->validated();
-        $visibility = $data['visibility'] ?? $layer->visibility;
-        if (in_array($visibility, ['organization','organization_admin'], true)) $visibility = 'admin';
-        if (!in_array($visibility, ['public','admin'], true)) {
-            throw ValidationException::withMessages(['visibility' => ['Visibility must be Public or Admin.']]);
+
+        // Enforce field-level permissions
+        $super = ($role === Role::SUPERADMIN);
+        if (!$super) {
+            // Org admin can only modify a subset of fields
+            $allowed = collect($data)->only(['name','type','category','srid','notes','source_type'])->toArray();
+            $data = $allowed;
+
+            // Also restrict scope: org_admin can only edit layers uploaded by their tenant or themselves
+            $tenantId = $user->tenant_id ?? null;
+            if (!$tenantId || !$layer->uploaded_by) {
+                abort(403, 'Forbidden');
+            }
+            $uploader = \App\Models\User::query()->select(['tenant_id'])->where('id', $layer->uploaded_by)->first();
+            if (!$uploader || (int)$uploader->tenant_id !== (int)$tenantId) {
+                abort(403, 'Forbidden');
+            }
+        } else {
+            // Superadmin normalization for visibility
+            $visibility = $data['visibility'] ?? $layer->visibility;
+            if (in_array($visibility, ['organization','organization_admin'], true)) $visibility = 'admin';
+            if (!in_array($visibility, ['public','admin'], true)) {
+                throw ValidationException::withMessages(['visibility' => ['Visibility must be Public or Admin.']]);
+            }
+            $data['visibility'] = $visibility;
         }
-        $data['visibility'] = $visibility;
+
         $layer->fill($data);
         $layer->save();
         return response()->json(['data' => $layer]);
@@ -196,8 +218,20 @@ class LayerController extends Controller
 
     public function destroy(Request $request, Layer $layer)
     {
-        $this->requireSuperAdmin($request);
-        $layer->delete();
-        return response()->json([], 204);
+        $user = $request->user();
+        $role = $this->resolveRole($user);
+        if ($role === Role::SUPERADMIN) {
+            $layer->delete();
+            return response()->json([], 204);
+        }
+        if ($role === Role::ORG_ADMIN) {
+            $tenantId = $user->tenant_id ?? null;
+            if (!$tenantId || !$layer->uploaded_by) abort(403);
+            $uploader = \App\Models\User::query()->select(['tenant_id'])->where('id', $layer->uploaded_by)->first();
+            if (!$uploader || (int)$uploader->tenant_id !== (int)$tenantId) abort(403);
+            $layer->delete();
+            return response()->json([], 204);
+        }
+        abort(403);
     }
 }

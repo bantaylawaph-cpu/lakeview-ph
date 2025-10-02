@@ -1,6 +1,6 @@
 // resources/js/components/modals/StatsModal.jsx
 import React, { useMemo, useState, useEffect, useRef } from "react";
-import { api, apiPublic, buildQuery } from "../../lib/api";
+import { apiPublic, buildQuery } from "../../lib/api";
 import { fetchParameters, fetchSampleEvents, fetchStationsForLake, deriveOrgOptions, deriveParamOptions } from "./data/fetchers";
 import Modal from "../Modal";
 import SingleLake from "./SingleLake";
@@ -44,6 +44,8 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
   const singleChartRef = useRef(null);
   const compareChartRef = useRef(null);
   const [compareSelectedParam, setCompareSelectedParam] = useState("");
+  const advancedRef = useRef(null);
+  const compareRef = useRef(null);
   // Compare tab now fetches on-demand inside CompareLake to avoid rate limits
 
   const fmtIso = (d) => {
@@ -86,6 +88,9 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
     setSelectedParam("");
     setEffectiveAllRecords([]);
   // CompareLake manages its own records; nothing to clear here
+    if (activeTab === 'compare' && compareRef.current && typeof compareRef.current.clearAll === 'function') {
+      compareRef.current.clearAll();
+    }
     setDateFrom("");
     setDateTo("");
     setTimeRange("all");
@@ -260,19 +265,71 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
   // Removed auto-selection: user must manually choose parameter
 
   return (
-    <Modal open={open} onClose={onClose} title={title} ariaLabel="Lake statistics modal" width={1100} style={modalStyle}>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={<span style={{ color: '#fff' }}>{title}</span>}
+      ariaLabel="Lake statistics modal"
+      width={1100}
+      style={modalStyle}
+      footerStyle={{
+        background: 'transparent',
+        borderTop: '1px solid rgba(255,255,255,0.18)',
+        color: '#fff',
+      }}
+      footer={
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: 'center', gap: 8 }}>
+          <div>
+            <button className="pill-btn" onClick={async () => {
+              console.debug('[StatsModal] Clear clicked, activeTab=', activeTab);
+              if (activeTab === 'advanced' && advancedRef.current && typeof advancedRef.current.clearAll === 'function') {
+                advancedRef.current.clearAll();
+              } else {
+                handleClear();
+              }
+            }}>Clear</button>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="pill-btn" onClick={async () => {
+              console.debug('[StatsModal] Export clicked, activeTab=', activeTab);
+              if (activeTab === 'advanced' && advancedRef.current && typeof advancedRef.current.exportPdf === 'function') {
+                advancedRef.current.exportPdf();
+              } else {
+                handleExport();
+              }
+            }}>Export</button>
+          </div>
+        </div>
+      }
+    >
       {/* Header controls: Bucket & Range + Tabs */}
       <div style={{ display: "flex", gap: 8, alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'nowrap' }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <span style={{ fontSize: 12, opacity: 0.9 }}>Bucket</span>
-          <select className="pill-btn" value={bucket} onChange={(e) => setBucket(e.target.value)}>
+          <select
+            className="pill-btn"
+            value={bucket}
+            onChange={(e) => setBucket(e.target.value)}
+            disabled={activeTab === 'advanced'}
+            aria-disabled={activeTab === 'advanced'}
+            title={activeTab === 'advanced' ? 'Disabled while Advanced tab is active' : undefined}
+            style={activeTab === 'advanced' ? { opacity: 0.55, cursor: 'not-allowed', pointerEvents: 'none' } : undefined}
+          >
             <option value="year">Year</option>
             <option value="quarter">Quarter</option>
             <option value="month">Month</option>
           </select>
 
           <span style={{ fontSize: 12, opacity: 0.9, marginLeft: 8 }}>Range</span>
-          <select className="pill-btn" value={timeRange} onChange={(e) => applyRange(e.target.value)}>
+          <select
+            className="pill-btn"
+            value={timeRange}
+            onChange={(e) => applyRange(e.target.value)}
+            disabled={activeTab === 'advanced'}
+            aria-disabled={activeTab === 'advanced'}
+            title={activeTab === 'advanced' ? 'Disabled while Advanced tab is active' : undefined}
+            style={activeTab === 'advanced' ? { opacity: 0.55, cursor: 'not-allowed', pointerEvents: 'none' } : undefined}
+          >
             <option value="all">All Time</option>
             <option value="5y">5 Yr</option>
             <option value="3y">3 Yr</option>
@@ -282,10 +339,28 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
           </select>
 
           {timeRange === 'custom' && (
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <input type="date" className="pill-btn" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setTimeRange('custom'); }} />
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', opacity: activeTab === 'advanced' ? 0.65 : 1 }}>
+              <input
+                type="date"
+                className="pill-btn"
+                value={dateFrom}
+                onChange={(e) => { setDateFrom(e.target.value); setTimeRange('custom'); }}
+                disabled={activeTab === 'advanced'}
+                aria-disabled={activeTab === 'advanced'}
+                title={activeTab === 'advanced' ? 'Disabled while Advanced tab is active' : undefined}
+                style={activeTab === 'advanced' ? { cursor: 'not-allowed', pointerEvents: 'none' } : undefined}
+              />
               <span>to</span>
-              <input type="date" className="pill-btn" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setTimeRange('custom'); }} />
+              <input
+                type="date"
+                className="pill-btn"
+                value={dateTo}
+                onChange={(e) => { setDateTo(e.target.value); setTimeRange('custom'); }}
+                disabled={activeTab === 'advanced'}
+                aria-disabled={activeTab === 'advanced'}
+                title={activeTab === 'advanced' ? 'Disabled while Advanced tab is active' : undefined}
+                style={activeTab === 'advanced' ? { cursor: 'not-allowed', pointerEvents: 'none' } : undefined}
+              />
             </div>
           )}
         </div>
@@ -327,16 +402,20 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
           selectedParam={selectedParam}
           onParamChange={setSelectedParam}
           thresholds={thresholds}
-          currentRecords={currentRecords}
+            currentRecords={currentRecords}
           selectedClass={selectedClass}
           bucket={bucket}
           chartOptions={chartOptions}
           chartRef={singleChartRef}
+            timeRange={timeRange}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
         />
       )}
 
       {activeTab === 'compare' && (
         <CompareLake
+          ref={compareRef}
           lakeOptions={lakeOptions}
           params={paramOptions}
           thresholds={thresholds}
@@ -350,18 +429,8 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
         />
       )}
 
-  {activeTab === 'advanced' && <AdvancedStat lakes={lakeOptions} params={paramOptions} staticThresholds={thresholds} />}
+  {activeTab === 'advanced' && <AdvancedStat ref={advancedRef} lakes={lakeOptions} params={paramOptions} staticThresholds={thresholds} />}
 
-      {/* Footer actions */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: 'center', gap: 8, marginTop: 12 }}>
-        <div>
-          <button className="pill-btn" onClick={handleClear}>Clear</button>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="pill-btn" onClick={handleExport}>Export</button>
-          <button className="pill-btn liquid" onClick={onClose}>Close</button>
-        </div>
-      </div>
     </Modal>
   );
 }
