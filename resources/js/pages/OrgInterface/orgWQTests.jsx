@@ -469,6 +469,8 @@ export default function OrgWQTests({
             actions={actions}
             resetSignal={resetSignal}
             columnPicker={false}
+            loading={loading}
+            loadingLabel={loading ? 'Loading tests…' : null}
           />
         </div>
       </div>

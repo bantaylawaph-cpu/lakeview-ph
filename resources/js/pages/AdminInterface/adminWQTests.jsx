@@ -297,7 +297,7 @@ export default function AdminWQTests({ initialLakes = [], initialTests = [], par
               { id: 'to', label: 'To', type: 'date', value: dateTo, onChange: setDateTo, placeholder: 'To mm/dd/yyyy' },
             ]}
           />
-          <TableLayout tableId="admin-wqtests" columns={displayColumns} data={filtered} pageSize={10} actions={actions} resetSignal={resetSignal} columnPicker={false} />
+          <TableLayout tableId="admin-wqtests" columns={displayColumns} data={filtered} pageSize={10} actions={actions} resetSignal={resetSignal} columnPicker={false} loading={loading} loadingLabel={loading ? 'Loading tests…' : null} />
         </div>
       </div>
 
