@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { FiRefreshCw, FiEye, FiXCircle } from 'react-icons/fi';
+import { FiRefreshCw, FiEye, FiXCircle, FiMessageSquare } from 'react-icons/fi';
+import LoadingSpinner from '../../components/LoadingSpinner';
 import Modal from '../../components/Modal';
 import api from '../../lib/api';
 
@@ -263,8 +264,18 @@ export default function AdminFeedback() {
 
   return (
     <div className="content-page">
-  <h1 style={{ marginTop:0, fontSize:'1.4rem', lineHeight:1.15, fontWeight:600 }}>System Feedback</h1>
-      <p className="muted" style={{ marginTop:4 }}>Review, search, categorize, and resolve user-submitted feedback.</p>
+      <div className="dashboard-card" style={{ marginBottom: 16 }}>
+        <div className="dashboard-card-header">
+          <div className="dashboard-card-title">
+            <FiMessageSquare />
+            <span>System Feedback</span>
+          </div>
+          <div className="org-actions-right">
+            <button className="pill-btn ghost sm" onClick={() => fetchData({ page: 1 })} disabled={loading}><FiRefreshCw size={14}/> Refresh</button>
+          </div>
+        </div>
+        <p className="muted" style={{ marginTop:4 }}>Review, search, categorize, and resolve user-submitted feedback.</p>
+      </div>
 
       <div className="advanced-filters" style={{ marginTop:16 }}>
         <div className="advanced-filters-header" style={{ marginBottom:10 }}>
@@ -379,7 +390,7 @@ export default function AdminFeedback() {
                 <tr><td className="lv-td" colSpan={8} style={{ textAlign:'center' }}>No feedback found.</td></tr>
               )}
               {loading && (
-                <tr><td className="lv-td" colSpan={8} style={{ textAlign:'center' }}>Loading…</td></tr>
+                <tr><td className="lv-td" colSpan={8} style={{ textAlign:'center' }}><LoadingSpinner label="Loading feedback…" /></td></tr>
               )}
               {sortedRows.map(r => (
                 <tr key={r.id} className="lv-tr">

@@ -1,8 +1,10 @@
 
 import React, { useEffect, useState } from "react";
+import { FiEdit2, FiTrash2 } from 'react-icons/fi';
 import api from "../lib/api";
 import Modal from "./Modal";
 import Swal from "sweetalert2";
+import LoadingSpinner from "./LoadingSpinner";
 
 export default function OrganizationManageModal({ org, open, onClose }) {
 	const [activeTab, setActiveTab] = useState("admins");
@@ -97,7 +99,7 @@ export default function OrganizationManageModal({ org, open, onClose }) {
 			<div style={{ fontWeight: 600, fontSize: 18, marginBottom: 18 }}>Organization Admins</div>
 			<div className="lv-modal-section" style={{ minHeight: 320, background: '#f8fafc', borderRadius: 12, padding: 16, boxShadow: '0 2px 8px #0001', marginBottom: 0 }}>
 				{loading ? (
-					<div style={{ textAlign: 'center', color: '#888', fontSize: 18, padding: 40 }}>Loading…</div>
+					<div style={{ padding: 24 }}><LoadingSpinner label="Loading organization admins…" /></div>
 				) : (
 					<>
 						<div>
@@ -114,8 +116,12 @@ export default function OrganizationManageModal({ org, open, onClose }) {
 												<td>{a.name}</td>
 												<td>{a.email}</td>
 												<td style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-													<button className="pill-btn ghost sm" onClick={() => openEdit(a)}>Edit</button>
-													<button className="pill-btn ghost sm red-text" onClick={() => handleRemove(a)}>Remove</button>
+													<button title="Edit" aria-label={`Edit ${a.email}`} type="button" className="pill-btn ghost sm" onClick={() => openEdit(a)}>
+														<FiEdit2 />
+													</button>
+													<button title="Remove" aria-label={`Remove ${a.email}`} type="button" className="pill-btn ghost sm red-text" onClick={() => handleRemove(a)}>
+														<FiTrash2 />
+													</button>
 												</td>
 											</tr>
 										))}

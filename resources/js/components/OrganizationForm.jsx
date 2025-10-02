@@ -11,11 +11,9 @@ export const TYPE_OPTIONS = [
 const empty = {
   name: "",
   type: "",
-  domain: "",
   contact_email: "",
   phone: "",
   address: "",
-  metadata: "",
   active: true,
 };
 
@@ -24,14 +22,9 @@ export default function OrganizationForm({ initialData = {}, onSubmit, open, onC
   const isEdit = !!initialData?.id;
 
   useEffect(() => {
-    const metaString =
-      typeof initialData?.metadata === "object" && initialData?.metadata !== null
-        ? JSON.stringify(initialData.metadata, null, 2)
-        : (initialData?.metadata || "");
     setForm({
       ...empty,
       ...initialData,
-      metadata: metaString,
       active: initialData?.active ?? true,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -48,19 +41,12 @@ export default function OrganizationForm({ initialData = {}, onSubmit, open, onC
 
   const handleSubmit = (e) => {
     e?.preventDefault?.();
-    let metadata = undefined;
-    if (form.metadata && String(form.metadata).trim() !== "") {
-      try { metadata = JSON.parse(form.metadata); }
-      catch { alert("Metadata must be valid JSON."); return; }
-    }
     const payload = {
       name: form.name?.trim(),
       type: form.type || null,
-      domain: form.domain || null,
       contact_email: form.contact_email || null,
       phone: form.phone || null,
       address: form.address || null,
-      metadata,
       active: !!form.active,
     };
     onSubmit?.(payload);
@@ -76,7 +62,7 @@ export default function OrganizationForm({ initialData = {}, onSubmit, open, onC
         margin: '0 auto',
       }}>
         <label className="lv-field" style={{ gridColumn: '1/2' }}>
-          <span>Name *</span>
+          <span>Name*</span>
           <input type="text" value={form.name} onChange={handleChange("name")}
             required placeholder="Organization name" />
         </label>
@@ -90,37 +76,30 @@ export default function OrganizationForm({ initialData = {}, onSubmit, open, onC
         </label>
 
         <label className="lv-field" style={{ gridColumn: '1/2' }}>
-          <span>Domain</span>
-          <input type="text" value={form.domain || ""} onChange={handleChange("domain")}
-            placeholder="e.g., lgu-sanpablo" />
-        </label>
-
-        <label className="lv-field" style={{ gridColumn: '2/3' }}>
           <span>Contact Email</span>
           <input type="email" value={form.contact_email || ""} onChange={handleChange("contact_email")}
             placeholder="contact@email.com" />
         </label>
 
-        <label className="lv-field" style={{ gridColumn: '1/2' }}>
+        <label className="lv-field" style={{ gridColumn: '2/3' }}>
           <span>Phone</span>
           <input type="text" value={form.phone || ""} onChange={handleChange("phone")}
             placeholder="" />
         </label>
 
-        <label className="lv-field" style={{ gridColumn: '2/3' }}>
+        <label className="lv-field" style={{ gridColumn: '1/3' }}>
           <span>Address</span>
           <input type="text" value={form.address || ""} onChange={handleChange("address")}
             placeholder="" />
         </label>
 
         <label className="lv-field" style={{ gridColumn: '1/3' }}>
-          <span>Metadata (JSON)</span>
-          <textarea rows={3} value={form.metadata} onChange={handleChange("metadata")} />
-        </label>
-
-        <label className="lv-field" style={{ gridColumn: '1/3' }}>
-          <input type="checkbox" checked={!!form.active} onChange={handleChange("active")} />
-          <span style={{ marginLeft: 8 }}>Active</span>
+          <input type="checkbox" checked={!!form.active} onChange={handleChange("active")} style={{ display: 'none' }} />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" className={`pill-btn ${form.active ? 'primary' : 'ghost'}`} onClick={() => setForm(s => ({ ...s, active: !s.active }))} aria-pressed={!!form.active}>
+              {form.active ? 'Active' : 'Inactive'}
+            </button>
+          </div>
         </label>
 
         <div style={{ gridColumn: '1/3', display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>

@@ -2,6 +2,13 @@
 import React, { useEffect, useState } from "react";
 import api from "../lib/api";
 
+const ROLE_LABELS = {
+  superadmin: 'Super Administrator',
+  org_admin: 'Organization Administrator',
+  contributor: 'Contributor',
+  public: 'Public',
+};
+
 
 export default function AdminUsersForm({
   formId = "lv-admin-user-form",
@@ -13,7 +20,7 @@ export default function AdminUsersForm({
 }) {
   const [form, setForm] = useState({ ...initialValues, tenant_id: initialValues.tenant_id || "" });
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
-  const [roleOptions, setRoleOptions] = useState([""]);
+  const [roleOptions, setRoleOptions] = useState([]);
   const [tenants, setTenants] = useState([]);
   // Fetch tenants for org-scoped roles (use /api/admin/tenants, handle pagination)
   useEffect(() => {
@@ -28,10 +35,11 @@ export default function AdminUsersForm({
     // Fetch roles from backend
     api.get("/options/roles")
       .then((roles) => {
-        setRoleOptions(["", ...roles]);
+        // roles expected as array of role keys, e.g. ['superadmin','org_admin']
+        setRoleOptions(Array.isArray(roles) ? roles : []);
       })
       .catch(() => {
-        setRoleOptions(["", "superadmin", "org_admin", "contributor", "public"]); // fallback
+        setRoleOptions(["superadmin", "org_admin", "contributor", "public"]); // fallback
       });
   }, []);
 
@@ -74,7 +82,7 @@ export default function AdminUsersForm({
       margin: '0 auto',
     }}>
       <label className="lv-field" style={{ gridColumn: '1/2' }}>
-        <span>Name *</span>
+        <span>Name*</span>
         <input
           required
           value={form.name}
@@ -84,7 +92,7 @@ export default function AdminUsersForm({
       </label>
 
       <label className="lv-field" style={{ gridColumn: '2/3' }}>
-        <span>Email *</span>
+        <span>Email*</span>
         <input
           required
           type="email"
@@ -126,8 +134,9 @@ export default function AdminUsersForm({
           }}
           required
         >
+          <option value="" disabled>Select role</option>
           {roleOptions.map((opt) => (
-            <option key={opt} value={opt}>{opt || "— none —"}</option>
+            <option key={opt} value={opt}>{ROLE_LABELS[opt] || opt}</option>
           ))}
         </select>
         <small className="grey-text">
@@ -144,12 +153,12 @@ export default function AdminUsersForm({
             onChange={e => setForm(f => ({ ...f, tenant_id: e.target.value }))}
             required
           >
-            <option value="">— Select organization —</option>
+            <option value="" disabled>Select Organization</option>
             {tenants.map(t => (
               <option key={t.id} value={t.id}>{t.name}</option>
             ))}
           </select>
-          <small className="grey-text">Required for org_admin and contributor roles.</small>
+          <small className="grey-text">Select Organization (required for Organization Administrator and Contributor roles).</small>
         </label>
       )}
     </form>

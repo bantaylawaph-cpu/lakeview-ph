@@ -5,6 +5,7 @@ import TableLayout from '../../layouts/TableLayout';
 import TableToolbar from '../../components/table/TableToolbar';
 import FilterPanel from '../../components/table/FilterPanel';
 import { FiRefreshCw, FiEye } from 'react-icons/fi';
+import LoadingSpinner from '../../components/LoadingSpinner';
 
 // Local storage keys
 const TABLE_ID = 'admin-audit-logs';
@@ -264,16 +265,19 @@ export default function AdminAuditLogsPage() {
 
 	return (
 		<div className="container" style={{ padding: 16, position:'relative' }}>
-			<div className="flex-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-				<h2 style={{ margin: 0 }}>Audit Logs</h2>
-				<div style={{ display: 'flex', gap: 8 }}>
-					<button className="pill-btn ghost" onClick={() => fetchLogs(buildParams())} title="Refresh"><FiRefreshCw /></button>
+			<div className="dashboard-card" style={{ marginBottom: 12 }}>
+				<div className="dashboard-card-header">
+					<div className="dashboard-card-title">
+						<FiEye />
+						<span>Audit Logs</span>
+					</div>
 				</div>
+				<p className="muted" style={{ marginTop: 4 }}>View system audit logs and activity history.</p>
 			</div>
 			<div className="card" style={{ padding: 12, borderRadius: 12, marginBottom: 12 }}>
 				<TableToolbar
 					tableId={TABLE_ID}
-					search={{ value: q, onChange: (val) => setQ(val), placeholder: 'Search (local highlight only)…' }}
+					search={{ value: q, onChange: (val) => setQ(val), placeholder: 'Search...' }}
 					filters={[]}
 					columnPicker={columnPickerAdapter}
 					onRefresh={() => fetchLogs(buildParams())}
@@ -284,7 +288,7 @@ export default function AdminAuditLogsPage() {
 				{error && <div className="lv-error" style={{ padding: 8, color: 'var(--danger)' }}>{error}</div>}
 			</div>
 			<div className="card" style={{ padding: 12, borderRadius: 12 }}>
-				{loading && <div className="lv-empty" style={{ padding: 16 }}>Loading…</div>}
+				{loading && <div style={{ padding: 16 }}><LoadingSpinner label="Loading audit logs…" /></div>}
 				{!loading && normalized.length === 0 && <div className="lv-empty" style={{ padding: 16 }}>No audit logs.</div>}
 				{!loading && normalized.length > 0 && (
 					<TableLayout

@@ -1,6 +1,5 @@
-// resources/js/pages/AdminInterface/adminUsers.jsx
 import React, { useEffect, useState, useMemo, useRef } from "react";
-import { FiEdit, FiTrash } from 'react-icons/fi';
+import { FiEdit2, FiTrash2, FiUsers } from 'react-icons/fi';
 import TableToolbar from "../../components/table/TableToolbar";
 import FilterPanel from "../../components/table/FilterPanel";
 import api from "../../lib/api";
@@ -39,43 +38,38 @@ export default function AdminUsersPage() {
   // Persist advanced filter state
   const ADV_KEY = `${TABLE_ID}::filters_advanced`;
 
-  // New state for name and email filters
-  const [fName, setFName] = useState(() => {
-    try { const s = JSON.parse(localStorage.getItem(ADV_KEY) || '{}'); return s.name || ""; } catch { return ""; }
-  });
-  const [fEmail, setFEmail] = useState(() => {
-    try { const s = JSON.parse(localStorage.getItem(ADV_KEY) || '{}'); return s.email || ""; } catch { return ""; }
-  });
+  // Other advanced filter inputs removed; only role is persisted/used.
+  const [fName, setFName] = useState("");
+  const [fEmail, setFEmail] = useState("");
 
   // Existing filters
   const [fRole, setFRole] = useState(() => {
     try { const s = JSON.parse(localStorage.getItem(ADV_KEY) || '{}'); return s.role || ""; } catch { return ""; }
   });
-  const [fCreatedRange, setFCreatedRange] = useState(() => {
-    try { const s = JSON.parse(localStorage.getItem(ADV_KEY) || '{}'); return Array.isArray(s.created_range) ? s.created_range : [null, null]; } catch { return [null, null]; }
-  });
-  const [fUpdatedRange, setFUpdatedRange] = useState(() => {
-    try { const s = JSON.parse(localStorage.getItem(ADV_KEY) || '{}'); return Array.isArray(s.updated_range) ? s.updated_range : [null, null]; } catch { return [null, null]; }
-  });
+  const [fCreatedRange, setFCreatedRange] = useState([null, null]);
+  const [fUpdatedRange, setFUpdatedRange] = useState([null, null]);
 
-  // Persist advanced filters when they change
+  // Persist only the role filter for users
   useEffect(() => {
-    try {
-      const payload = {
-        name: fName || "",
-        email: fEmail || "",
-        role: fRole || "",
-        created_range: fCreatedRange,
-        updated_range: fUpdatedRange,
-      };
-      localStorage.setItem(ADV_KEY, JSON.stringify(payload));
-    } catch {}
-  }, [fName, fEmail, fRole, fCreatedRange, fUpdatedRange]);
+    try { localStorage.setItem(ADV_KEY, JSON.stringify({ role: fRole || "" })); } catch {}
+  }, [fRole]);
 
   // Column visibility persistence (like watercat)
-  const defaultsVisible = useMemo(() => ({ name: true, email: true, role: true, created_at: true, updated_at: true }), []);
+  // Default visible columns: show name, email, role. Created/Updated are hidden by default
+  // and can be toggled via the column picker.
+  const defaultsVisible = useMemo(() => ({ name: true, email: true, role: true, created_at: false, updated_at: false }), []);
   const [visibleMap, setVisibleMap] = useState(() => {
-    try { const raw = localStorage.getItem(VIS_KEY); return raw ? JSON.parse(raw) : defaultsVisible; } catch { return defaultsVisible; }
+    try {
+      const raw = localStorage.getItem(VIS_KEY);
+      const parsed = raw ? JSON.parse(raw) : {};
+      const final = {};
+      for (const key of Object.keys(defaultsVisible)) {
+        if (defaultsVisible[key] === false) final[key] = false;
+        else if (Object.prototype.hasOwnProperty.call(parsed, key)) final[key] = parsed[key];
+        else final[key] = defaultsVisible[key];
+      }
+      return final;
+    } catch { return defaultsVisible; }
   });
   useEffect(() => { try { localStorage.setItem(VIS_KEY, JSON.stringify(visibleMap)); } catch {} }, [visibleMap]);
 
@@ -103,18 +97,10 @@ export default function AdminUsersPage() {
   const unwrap = (res) => (res?.data ?? res);
   const toast = (title, icon = "success") => Swal.fire({ toast: true, position: "top-end", timer: 1600, showConfirmButton: false, icon, title });
 
-  // buildParams now includes name & email
+  // buildParams uses only role as advanced filter
   const buildParams = (overrides = {}) => {
     const params = { q, page, per_page: perPage, ...overrides };
-    if (fName) params.name = fName;
-    if (fEmail) params.email = fEmail;
     if (fRole) params.role = fRole;
-    const [cFrom, cTo] = fCreatedRange;
-    if (cFrom) params.created_from = cFrom;
-    if (cTo) params.created_to = cTo;
-    const [uFrom, uTo] = fUpdatedRange;
-    if (uFrom) params.updated_from = uFrom;
-    if (uTo) params.updated_to = uTo;
     return params;
   };
 
@@ -194,17 +180,15 @@ export default function AdminUsersPage() {
 
   // Actions for TableLayout
   const actions = useMemo(() => [
-    { label: 'Edit', title: 'Edit', type: 'edit', icon: <FiEdit />, onClick: (raw) => openEdit(raw) },
-    { label: 'Delete', title: 'Delete', type: 'delete', icon: <FiTrash />, onClick: (raw) => deleteUser(raw) },
+    { label: 'Edit', title: 'Edit', type: 'edit', icon: <FiEdit2 />, onClick: (raw) => openEdit(raw) },
+    { label: 'Delete', title: 'Delete', type: 'delete', icon: <FiTrash2 />, onClick: (raw) => deleteUser(raw) },
   ], []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Normalized & paged manually (server pagination) -> we let TableLayout paginate client-side too, but we show server pages separately.
   const normalized = useMemo(() => normalizeUsers(rows), [rows]);
 
-  // Advanced filter fields
+  // Only show Role in advanced filters for users
   const advancedFields = [
-    { id: 'name', label: 'Name', type: 'text', value: fName, onChange: v => setFName(v) },
-    { id: 'email', label: 'Email', type: 'text', value: fEmail, onChange: v => setFEmail(v) },
     {
       id: 'role',
       label: 'Role',
@@ -212,41 +196,11 @@ export default function AdminUsersPage() {
       value: fRole,
       onChange: (v) => setFRole(v),
       options: [{ value: '', label: 'All Roles' }, ...Object.entries(ROLE_LABEL).map(([value, label]) => ({ value, label }))]
-    },
-    {
-      id: 'created-range',
-      label: 'Created Date Range',
-      type: 'date-range',
-      value: fCreatedRange,
-      onChange: (rng) => setFCreatedRange(rng)
-    },
-    {
-      id: 'updated-range',
-      label: 'Updated Date Range',
-      type: 'date-range',
-      value: fUpdatedRange,
-      onChange: (rng) => setFUpdatedRange(rng)
     }
   ];
 
-  const clearAdvanced = () => {
-    setFName("");
-    setFEmail("");
-    setFRole("");
-    setFCreatedRange([null, null]);
-    setFUpdatedRange([null, null]);
-    fetchUsers(buildParams({ page: 1 }));
-  };
-
-  const activeAdvCount = [
-    fName ? 1 : 0,
-    fEmail ? 1 : 0,
-    fRole ? 1 : 0,
-    fCreatedRange[0] ? 1 : 0,
-    fCreatedRange[1] ? 1 : 0,
-    fUpdatedRange[0] ? 1 : 0,
-    fUpdatedRange[1] ? 1 : 0,
-  ].reduce((a,b)=>a+b,0);
+  const clearAdvanced = () => { setFRole(""); fetchUsers(buildParams({ page: 1 })); };
+  const activeAdvCount = [fRole].filter(Boolean).length;
 
   // ColumnPicker adapter for TableToolbar (independent from TableLayout internal picker) - we keep existing TableToolbar pattern.
   const columnPickerAdapter = {
@@ -255,23 +209,29 @@ export default function AdminUsersPage() {
     onVisibleChange: (map) => setVisibleMap(map),
   };
 
-  // Debounce logic for auto-applying filters
+  // Debounce logic for auto-applying filters (only role remains)
   const debounceRef = useRef(null);
   useEffect(() => {
-    // Auto-apply on advanced filter changes with debounce (always active, even when hidden)
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      fetchUsers(buildParams({ page: 1 }));
-    }, 400);
+    debounceRef.current = setTimeout(() => { fetchUsers(buildParams({ page: 1 })); }, 400);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fName, fEmail, fRole, fCreatedRange, fUpdatedRange]);
+  }, [fRole]);
 
   return (
     <div className="container" style={{ padding: 16 }}>
-      <div className="flex-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-        <h2 style={{ margin: 0 }}>Admin · Users</h2>
-        <button className="pill-btn" onClick={openCreate}>+ New User</button>
+      <div className="dashboard-card" style={{ marginBottom: 16 }}>
+        <div className="dashboard-card-header">
+          <div className="dashboard-card-title">
+            <FiUsers />
+            <span>Users</span>
+          </div>
+          <div className="org-actions-right">
+            <button className="pill-btn" onClick={openCreate}>+ New User</button>
+          </div>
+        </div>
+        <p style={{ marginTop: 8, fontSize: 13, color: "#6b7280" }}>
+          Manage user accounts, roles, and access for the system.
+        </p>
       </div>
 
       <div className="card" style={{ padding: 12, borderRadius: 12, marginBottom: 12 }}>
@@ -288,19 +248,17 @@ export default function AdminUsersPage() {
       </div>
 
       <div className="card" style={{ padding: 12, borderRadius: 12 }}>
-        {loading && <div className="lv-empty" style={{ padding: 16 }}>Loading…</div>}
-        {!loading && (
-          <TableLayout
-            tableId={TABLE_ID}
-            columns={visibleColumns}
-            data={normalized}
-            pageSize={perPage}
-            actions={actions}
-            resetSignal={0}
-            columnPicker={false} // using external column picker (toolbar)
-            hidePager={true} // hide internal pager; we use server pager below
-          />
-        )}
+        <TableLayout
+          tableId={TABLE_ID}
+          columns={visibleColumns}
+          data={normalized}
+          pageSize={perPage}
+          loading={loading}
+          actions={actions}
+          resetSignal={0}
+          columnPicker={false} // using external column picker (toolbar)
+          hidePager={true} // hide internal pager; we use server pager below
+        />
         {/* Server pagination controls (independent of TableLayout internal pagination) */}
         <div className="lv-table-pager" style={{ marginTop: 10, display: "flex", gap: 8, alignItems: "center" }}>
           <button className="pill-btn ghost sm" disabled={page <= 1} onClick={() => goPage(page - 1)}>&lt; Prev</button>

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
-import { FiEdit, FiTrash, FiBriefcase } from 'react-icons/fi';
+import { FiEdit2, FiTrash2, FiBriefcase } from 'react-icons/fi';
 import TableToolbar from "../../components/table/TableToolbar";
 import FilterPanel from "../../components/table/FilterPanel";
 import api from "../../lib/api";
@@ -26,20 +26,28 @@ export default function AdminOrganizationsPage() {
   const [manageOrg, setManageOrg] = useState(null);
 
   const persisted = (() => { try { return JSON.parse(localStorage.getItem(ADV_KEY) || '{}'); } catch { return {}; } })();
-  const [fName, setFName] = useState(persisted.name || "");
+  // Only persist the 'type' filter for organizations.
   const [fType, setFType] = useState(persisted.type || "");
-  const [fPhone, setFPhone] = useState(persisted.phone || "");
-  const [fAddress, setFAddress] = useState(persisted.address || "");
-  const [fContact, setFContact] = useState(persisted.contact_email || "");
-  const [fCreatedRange, setFCreatedRange] = useState(Array.isArray(persisted.created_range) ? persisted.created_range : [null, null]);
-  const [fUpdatedRange, setFUpdatedRange] = useState(Array.isArray(persisted.updated_range) ? persisted.updated_range : [null, null]);
+  useEffect(() => { try { localStorage.setItem(ADV_KEY, JSON.stringify({ type: fType })); } catch {} }, [fType]);
 
-  useEffect(() => {
-    try { localStorage.setItem(ADV_KEY, JSON.stringify({ name: fName, type: fType, phone: fPhone, address: fAddress, contact_email: fContact, created_range: fCreatedRange, updated_range: fUpdatedRange })); } catch {}
-  }, [fName, fType, fPhone, fAddress, fContact, fCreatedRange, fUpdatedRange]);
-
-  const defaultVisible = useMemo(() => ({ name:true, type:true, phone:true, address:true, contact_email:true, created_at:true, updated_at:true, active:true }), []);
-  const [visibleMap, setVisibleMap] = useState(() => { try { const raw = localStorage.getItem(VIS_KEY); return raw ? { ...defaultVisible, ...JSON.parse(raw) } : defaultVisible; } catch { return defaultVisible; } });
+  // Default visible columns: primary contact fields. Created/Updated/Active are hidden by default.
+  const defaultVisible = useMemo(() => ({ name: true, type: true, phone: true, address: true, contact_email: true, created_at: false, updated_at: false, active: false }), []);
+  const [visibleMap, setVisibleMap] = useState(() => {
+    try {
+      const raw = localStorage.getItem(VIS_KEY);
+      const parsed = raw ? JSON.parse(raw) : {};
+      // Enforce hidden defaults: if a column is false in defaultVisible, keep it false
+      const final = {};
+      for (const key of Object.keys(defaultVisible)) {
+        if (defaultVisible[key] === false) final[key] = false;
+        else if (Object.prototype.hasOwnProperty.call(parsed, key)) final[key] = parsed[key];
+        else final[key] = defaultVisible[key];
+      }
+      return final;
+    } catch {
+      return defaultVisible;
+    }
+  });
   useEffect(() => { try { localStorage.setItem(VIS_KEY, JSON.stringify(visibleMap)); } catch {} }, [visibleMap]);
 
   const normalize = (rows=[]) => rows.map(t => ({
@@ -59,13 +67,7 @@ export default function AdminOrganizationsPage() {
     const page = overrides.page ?? meta.current_page;
     const per_page = overrides.per_page ?? meta.per_page;
     const params = { q, page, per_page, ...overrides };
-    if (fName) params.name = fName;
     if (fType) params.type = fType;
-    if (fPhone) params.phone = fPhone;
-    if (fAddress) params.address = fAddress;
-    if (fContact) params.contact_email = fContact;
-    const [cFrom,cTo] = fCreatedRange; if (cFrom) params.created_from = cFrom; if (cTo) params.created_to = cTo;
-    const [uFrom,uTo] = fUpdatedRange; if (uFrom) params.updated_from = uFrom; if (uTo) params.updated_to = uTo;
     return params;
   };
 
@@ -84,8 +86,11 @@ export default function AdminOrganizationsPage() {
   useEffect(() => { fetchOrgs(buildParams()); /* initial load */ }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const debounceRef = useRef(null);
-  useEffect(() => { if (debounceRef.current) clearTimeout(debounceRef.current); debounceRef.current = setTimeout(()=>{ fetchOrgs(buildParams({ page:1 })); },400); return ()=>{ if (debounceRef.current) clearTimeout(debounceRef.current); }; // eslint-disable-next-line
-  }, [fName,fType,fPhone,fAddress,fContact,fCreatedRange,fUpdatedRange]);
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(()=>{ fetchOrgs(buildParams({ page:1 })); },400);
+    return ()=>{ if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [fType]);
 
   const page = meta.current_page;
   const perPage = meta.per_page;
@@ -107,25 +112,14 @@ export default function AdminOrganizationsPage() {
   const normalized = useMemo(() => normalize(rows).map(r => ({ ...r, created_at: r.created_at ? new Date(r.created_at).toLocaleString() : '—', updated_at: r.updated_at ? new Date(r.updated_at).toLocaleString() : '—' })), [rows]);
 
   const actions = useMemo(() => [
-    { label:'Edit', title:'Edit', type:'edit', icon:<FiEdit />, onClick: (row) => openEdit(row) },
-    { label:'Delete', title:'Delete', type:'delete', icon:<FiTrash />, onClick: (row) => handleDelete(row) },
+    { label:'Edit', title:'Edit', type:'edit', icon:<FiEdit2 />, onClick: (row) => openEdit(row) },
     { label:'Manage', title:'Manage', icon:<FiBriefcase />, onClick: (row) => openOrgManage(row) },
+    { label:'Delete', title:'Delete', type:'delete', icon:<FiTrash2 />, onClick: (row) => handleDelete(row) },
   ], []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const advancedFields = [
-    { id:'name', label:'Name', type:'text', value:fName, onChange:v=>setFName(v) },
-    { id:'type', label:'Type', type:'select', value:fType, onChange:v=>setFType(v), options:[{ value:'', label:'All Types' }, ...TYPE_OPTIONS.map(t=>({ value:t, label:t }))] },
-    { id:'phone', label:'Phone', type:'text', value:fPhone, onChange:v=>setFPhone(v) },
-    { id:'address', label:'Address', type:'text', value:fAddress, onChange:v=>setFAddress(v) },
-    { id:'contact_email', label:'Contact Email', type:'text', value:fContact, onChange:v=>setFContact(v) },
-    { id:'created-range', label:'Created Date Range', type:'date-range', value:fCreatedRange, onChange:r=>setFCreatedRange(r) },
-    { id:'updated-range', label:'Updated Date Range', type:'date-range', value:fUpdatedRange, onChange:r=>setFUpdatedRange(r) },
-  ];
-
-  const clearAdvanced = () => {
-    setFName(''); setFType(''); setFPhone(''); setFAddress(''); setFContact(''); setFCreatedRange([null,null]); setFUpdatedRange([null,null]); fetchOrgs(buildParams({ page:1 }));
-  };
-  const activeAdvCount = [fName,fType,fPhone,fAddress,fContact,fCreatedRange[0],fCreatedRange[1],fUpdatedRange[0],fUpdatedRange[1]].filter(Boolean).length;
+  const advancedFields = [ { id:'type', label:'Type', type:'select', value:fType, onChange:v=>setFType(v), options:[{ value:'', label:'All Types' }, ...TYPE_OPTIONS.map(t=>({ value:t, label:t }))] } ];
+  const clearAdvanced = () => { setFType(''); fetchOrgs(buildParams({ page:1 })); };
+  const activeAdvCount = [fType].filter(Boolean).length;
 
   const columnPickerAdapter = { columns: [
     { id:'name', header:'Name' },
@@ -154,9 +148,19 @@ export default function AdminOrganizationsPage() {
 
   return (
     <div className="container" style={{ padding: 16 }}>
-      <div className="flex-row" style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
-        <h2 style={{ margin:0 }}>Admin · Organizations</h2>
-        <button className="pill-btn" onClick={openCreate}>+ New Organization</button>
+      <div className="dashboard-card" style={{ marginBottom: 16 }}>
+        <div className="dashboard-card-header">
+          <div className="dashboard-card-title">
+            <FiBriefcase />
+            <span>Organizations</span>
+          </div>
+          <div className="org-actions-right">
+            <button className="pill-btn" onClick={openCreate}>+ New Organization</button>
+          </div>
+        </div>
+        <p style={{ marginTop: 8, fontSize: 13, color: "#6b7280" }}>
+          Manage registered organizations and their contact details.
+        </p>
       </div>
 
       <div className="card" style={{ padding:12, borderRadius:12, marginBottom:12 }}>
@@ -173,8 +177,8 @@ export default function AdminOrganizationsPage() {
       </div>
 
       <div className="card" style={{ padding:12, borderRadius:12 }}>
-        {loading && <div className="lv-empty" style={{ padding:16 }}>Loading…</div>}
-        {!loading && <TableLayout tableId={TABLE_ID} columns={columns} data={normalized} pageSize={perPage} actions={actions} columnPicker={false} hidePager={true} />}
+        <TableLayout tableId={TABLE_ID} columns={columns} data={normalized} pageSize={perPage} actions={actions} columnPicker={false} hidePager={true} loading={loading} />
+
         <div className="lv-table-pager" style={{ marginTop:10, display:'flex', gap:8, alignItems:'center' }}>
           <button className="pill-btn ghost sm" disabled={page <= 1} onClick={() => goPage(page - 1)}>&lt; Prev</button>
           <span className="pager-text">Page {page} of {meta.last_page} · {meta.total} total</span>
@@ -183,7 +187,7 @@ export default function AdminOrganizationsPage() {
       </div>
 
       <OrganizationForm
-        initialData={editingOrg || { name:'', type:'', domain:'', contact_email:'', phone:'', address:'', metadata:'', active:true }}
+        initialData={editingOrg || { name:'', type:'', contact_email:'', phone:'', address:'', active:true }}
         onSubmit={handleFormSubmit}
         open={openForm}
         onClose={() => setOpenForm(false)}
