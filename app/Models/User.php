@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable;
+    use \App\Support\Audit\Auditable;
 
     protected $fillable = [
         'name',

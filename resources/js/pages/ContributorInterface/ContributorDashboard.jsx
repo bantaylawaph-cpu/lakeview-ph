@@ -12,6 +12,7 @@ import {
 import DashboardLayout from "../../layouts/DashboardLayout";
 import ContribAddWQTest from "./ContribAddWQTest";
 import ContribWQTests from "./contribWQTests";
+import ContribSettingsPage from "./contribSettings.jsx";
 
 const Page = ({ title }) => <h2>{title}</h2>;
 
@@ -43,8 +44,8 @@ export default function ContributorDashboard() {
         <Route path="wq-tests" element={<ContribWQTests />} />
         {/* Profile */}
         <Route path="profile" element={<Page title="Profile" />} />
-        {/* Settings */}
-        <Route path="settings" element={<Page title="Settings" />} />
+  {/* Settings */}
+  <Route path="settings" element={<ContribSettingsPage />} />
       </Routes>
     </DashboardLayout>
   );

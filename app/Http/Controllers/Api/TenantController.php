@@ -21,12 +21,24 @@ class TenantController extends Controller
      */
     public function index(Request $request)
     {
-        $q           = trim((string) $request->query('q', ''));
-        $perPage     = max(1, min((int) $request->query('per_page', 15), 200));
-        $withDeleted = (bool) $request->query('with_deleted', false);
+        $q            = trim((string) $request->query('q', ''));
+        $perPage      = max(1, min((int) $request->query('per_page', 15), 200));
+        $withDeleted  = (bool) $request->query('with_deleted', false);
+
+        // Advanced filter params (mirroring adminUsers pattern)
+        $fName        = trim((string) $request->query('name', ''));
+        $fType        = trim((string) $request->query('type', ''));
+        $fPhone       = trim((string) $request->query('phone', ''));
+        $fAddress     = trim((string) $request->query('address', ''));
+        $fContact     = trim((string) $request->query('contact_email', ''));
+        $createdFrom  = $request->query('created_from');
+        $createdTo    = $request->query('created_to');
+        $updatedFrom  = $request->query('updated_from');
+        $updatedTo    = $request->query('updated_to');
 
         $qb = Tenant::query()
             ->when($withDeleted, fn($w) => $w->withTrashed())
+            // Global free-text q across name/slug/domain
             ->when($q !== '', function ($w) use ($q) {
                 $p = "%{$q}%";
                 $w->where(function ($x) use ($p) {
@@ -35,6 +47,17 @@ class TenantController extends Controller
                       ->orWhere('domain', 'ILIKE', $p);
                 });
             })
+            // Field-specific filters (AND conditions)
+            ->when($fName !== '', fn($w) => $w->where('name', 'ILIKE', "%{$fName}%"))
+            ->when($fType !== '', fn($w) => $w->where('type', 'ILIKE', "%{$fType}%"))
+            ->when($fPhone !== '', fn($w) => $w->where('phone', 'ILIKE', "%{$fPhone}%"))
+            ->when($fAddress !== '', fn($w) => $w->where('address', 'ILIKE', "%{$fAddress}%"))
+            ->when($fContact !== '', fn($w) => $w->where('contact_email', 'ILIKE', "%{$fContact}%"))
+            // Date range filters (inclusive)
+            ->when($createdFrom, function ($w) use ($createdFrom) { if (is_string($createdFrom) && strlen($createdFrom) === 10) { $w->whereDate('created_at', '>=', $createdFrom); } })
+            ->when($createdTo, function ($w) use ($createdTo) { if (is_string($createdTo) && strlen($createdTo) === 10) { $w->whereDate('created_at', '<=', $createdTo); } })
+            ->when($updatedFrom, function ($w) use ($updatedFrom) { if (is_string($updatedFrom) && strlen($updatedFrom) === 10) { $w->whereDate('updated_at', '>=', $updatedFrom); } })
+            ->when($updatedTo, function ($w) use ($updatedTo) { if (is_string($updatedTo) && strlen($updatedTo) === 10) { $w->whereDate('updated_at', '<=', $updatedTo); } })
             ->orderBy('name');
 
         $paginator = $qb->paginate($perPage);
@@ -61,9 +84,18 @@ class TenantController extends Controller
     public function store(Request $request)
     {
         $this->requireSuperAdmin($request);
-        $data = $request->validate(['name' => 'required|string|max:255', 'description' => 'nullable|string']);
+        $data = $request->validate([
+            'name'          => 'required|string|max:255|unique:tenants,name',
+            'type'          => 'nullable|string|max:255',
+            'domain'        => 'nullable|string|max:255|unique:tenants,domain',
+            'contact_email' => 'nullable|email|max:255',
+            'phone'         => 'nullable|string|max:255',
+            'address'       => 'nullable|string|max:500',
+            'active'        => 'sometimes|boolean',
+            'metadata'      => 'nullable|array',
+        ]);
         $tenant = Tenant::create($data);
-        return response()->json(['data' => $tenant], 201);
+        return response()->json(['data' => $this->tenantResource($tenant)], 201);
     }
 
     /**
@@ -72,10 +104,19 @@ class TenantController extends Controller
     public function update(Request $request, Tenant $tenant)
     {
         $this->requireSuperAdmin($request);
-        $data = $request->validate(['name' => 'sometimes|string|max:255', 'description' => 'nullable|string']);
+        $data = $request->validate([
+            'name'          => 'sometimes|string|max:255|unique:tenants,name,' . $tenant->id,
+            'type'          => 'sometimes|nullable|string|max:255',
+            'domain'        => 'sometimes|nullable|string|max:255|unique:tenants,domain,' . $tenant->id,
+            'contact_email' => 'sometimes|nullable|email|max:255',
+            'phone'         => 'sometimes|nullable|string|max:255',
+            'address'       => 'sometimes|nullable|string|max:500',
+            'active'        => 'sometimes|boolean',
+            'metadata'      => 'sometimes|nullable|array',
+        ]);
         $tenant->fill($data);
         $tenant->save();
-        return response()->json(['data' => $tenant]);
+        return response()->json(['data' => $this->tenantResource($tenant)]);
     }
 
     /**

@@ -31,14 +31,12 @@ END$$;
 SQL);
         }
 
-        // 1b. Pre-clean data: any existing users that already have a system role (by role_id or legacy string column) must have tenant_id = NULL
+        // 1b. Pre-clean data: ensure system-scope roles never carry a tenant (merged: kept main logic; original feature branch had deferred note)
         $systemRoleIds = DB::table('roles')->whereIn('name', ['public','superadmin'])->pluck('id')->all();
         if (!empty($systemRoleIds) && Schema::hasTable('users')) {
-            // If role_id already exists in schema from earlier deployments
             if (Schema::hasColumn('users', 'role_id') && Schema::hasColumn('users', 'tenant_id')) {
                 DB::table('users')->whereIn('role_id', $systemRoleIds)->whereNotNull('tenant_id')->update(['tenant_id' => null]);
             }
-            // If legacy string column present, null tenant where legacy role is system
             if (Schema::hasColumn('users', 'role') && Schema::hasColumn('users', 'tenant_id')) {
                 DB::table('users')->whereIn('role', ['public','superadmin'])->whereNotNull('tenant_id')->update(['tenant_id' => null]);
             }
@@ -51,27 +49,39 @@ SQL);
             });
         }
 
-        // 3. Backfill role_id from legacy string column `role` if it exists
+        // 3. Backfill role_id from legacy string column `role` if it exists (after adding role_id)
         if (Schema::hasColumn('users', 'role')) {
             $map = DB::table('roles')->pluck('id', 'name');
-            $users = DB::table('users')->select('id', 'role')->get();
-            foreach ($users as $u) {
-                $rid = $map[$u->role] ?? $map['public'] ?? null;
-                if ($rid) {
-                    DB::table('users')->where('id', $u->id)->update(['role_id' => $rid]);
+            DB::table('users')->select('id', 'role')->orderBy('id')->chunk(500, function ($chunk) use ($map) {
+                foreach ($chunk as $u) {
+                    $rid = $map[$u->role] ?? $map['public'] ?? null;
+                    if ($rid) {
+                        DB::table('users')->where('id', $u->id)->update(['role_id' => $rid]);
+                    }
                 }
-            }
+            });
         }
 
         // 4. Any users without role_id -> public
         $publicId = DB::table('roles')->where('name', 'public')->value('id');
         DB::table('users')->whereNull('role_id')->update(['role_id' => $publicId]);
 
-        // 5. Add tenant_id if missing (defensive; live DB already has it)
+        // 5. Add tenant_id if missing (defensive; live DB already has it) - ensure BEFORE we attempt any tenant_id update logic
         if (!Schema::hasColumn('users', 'tenant_id')) {
             Schema::table('users', function (Blueprint $table) {
                 $table->foreignId('tenant_id')->nullable()->after('role_id')->constrained('tenants')->nullOnDelete();
             });
+        }
+
+        // 5a. Now that tenant_id exists, pre-clean data: null tenant for system-scope roles
+        $systemRoleIds = DB::table('roles')->whereIn('name', ['public','superadmin'])->pluck('id')->all();
+        if (!empty($systemRoleIds) && Schema::hasTable('users') && Schema::hasColumn('users', 'tenant_id')) {
+            if (Schema::hasColumn('users', 'role_id')) {
+                DB::table('users')->whereIn('role_id', $systemRoleIds)->whereNotNull('tenant_id')->update(['tenant_id' => null]);
+            }
+            if (Schema::hasColumn('users', 'role')) {
+                DB::table('users')->whereIn('role', ['public','superadmin'])->whereNotNull('tenant_id')->update(['tenant_id' => null]);
+            }
         }
 
         // 6. Add is_active if missing

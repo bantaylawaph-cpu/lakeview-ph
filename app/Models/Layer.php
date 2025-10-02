@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\DB;
 
 class Layer extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Support\Audit\Auditable;
     protected $table = 'layers';
 
     public const VIS_PUBLIC = 'public';

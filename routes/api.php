@@ -12,6 +12,9 @@ use App\Http\Controllers\EmailOtpController;
 use App\Http\Controllers\Api\TenantController;
 use App\Http\Controllers\Api\UserController;       // superadmin, site-wide
 use App\Http\Controllers\Api\OrgUserController;     // org_admin, tenant-scoped
+use App\Http\Controllers\Api\UserSettingsController;
+use App\Http\Controllers\FeedbackController; // user feedback
+use App\Http\Controllers\Api\Admin\FeedbackController as AdminFeedbackController; // admin feedback mgmt
 
 /*
 |--------------------------------------------------------------------------
@@ -57,6 +60,12 @@ Route::prefix('auth')->group(function () {
 Route::middleware(['auth:sanctum','role:superadmin'])->prefix('admin')->group(function () {
     Route::get('/whoami', fn() => ['ok' => true]);
 
+    // Feedback management
+    Route::get('/feedback',         [AdminFeedbackController::class, 'index']);
+    Route::get('/feedback/{feedback}', [AdminFeedbackController::class, 'show'])->whereNumber('feedback');
+    Route::patch('/feedback/{feedback}', [AdminFeedbackController::class, 'update'])->whereNumber('feedback');
+    Route::post('/feedback/bulk-update', [AdminFeedbackController::class, 'bulkUpdate']);
+
     // Tenants
     Route::get('/tenants',               [TenantController::class, 'index']);
     Route::post('/tenants',              [TenantController::class, 'store']);
@@ -89,6 +98,10 @@ Route::middleware(['auth:sanctum','role:superadmin'])->prefix('admin')->group(fu
         $rows = \App\Models\Tenant::query()->select(['id', 'name'])->orderBy('name')->get();
         return response()->json(['data' => $rows]);
     });
+
+    // Audit logs (superadmin only here; org_admin has implicit scoping below if added later)
+    Route::get('/audit-logs', [\App\Http\Controllers\Api\Admin\AuditLogController::class, 'index']);
+    Route::get('/audit-logs/{id}', [\App\Http\Controllers\Api\Admin\AuditLogController::class, 'show'])->whereNumber('id');
 });
 
 // Allow org_admin to read user details via admin path too (tenant-scoped by controller)
@@ -127,6 +140,10 @@ Route::middleware(['auth:sanctum','tenant.scoped','role:org_admin,superadmin'])
     ->whereNumber('tenant')
     ->group(function () {
         Route::get('/whoami', fn() => ['ok' => true]);
+
+        // Audit logs scoped to this tenant (org_admin visibility)
+        Route::get('/audit-logs', [\App\Http\Controllers\Api\Admin\AuditLogController::class, 'index']);
+        Route::get('/audit-logs/{id}', [\App\Http\Controllers\Api\Admin\AuditLogController::class, 'show'])->whereNumber('id');
 
         // Manage users inside this org
         Route::get('/users',                 [OrgUserController::class, 'index']);
@@ -190,10 +207,24 @@ Route::get('/options/roles',      [OptionsController::class, 'roles']);
 Route::get('/public/layers', [ApiLayerController::class, 'publicIndex']);
 Route::get('/public/layers/{id}', [ApiLayerController::class, 'publicShow']);
 
+// Public guest feedback submission (unauthenticated)
+Route::post('/public/feedback', [FeedbackController::class, 'publicStore'])->middleware('throttle:8,1');
+
 // Authenticated layer operations
 Route::middleware('auth:sanctum')->group(function () {
+    // Audit logs (superadmin global, org_admin scoped)
+    Route::get('/admin/audit-logs', [\App\Http\Controllers\Api\Admin\AuditLogController::class, 'index']);
+    Route::get('/admin/audit-logs/{id}', [\App\Http\Controllers\Api\Admin\AuditLogController::class, 'show']);
     Route::get('/layers',           [ApiLayerController::class, 'index'])->name('layers.index');
     Route::get('/layers/active',    [ApiLayerController::class, 'active']);
+
+    // User feedback submission & listing (own only)
+    Route::post('/feedback',        [FeedbackController::class, 'store']);
+    Route::get('/feedback/mine',    [FeedbackController::class, 'mine']);
+    Route::get('/feedback/mine/{feedback}', [FeedbackController::class, 'show'])->whereNumber('feedback');
+
+    // User self settings (name/password)
+    Route::patch('/user/settings', [UserSettingsController::class, 'update']);
 
     // Creation & modifications restricted to superadmin (controller also validates)
     Route::post('/layers',            [ApiLayerController::class, 'store'])->middleware('role:superadmin,org_admin');

@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class SamplingEvent extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Support\Audit\Auditable;
 
     /**
      * The model should not manage created_at / updated_at timestamps

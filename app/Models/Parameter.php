@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Parameter extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Support\Audit\Auditable;
 
     public $timestamps = false;
 

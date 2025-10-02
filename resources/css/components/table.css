@@ -295,6 +295,41 @@
   .advanced-filters-grid { grid-template-columns: 1fr; }
 }
 
+/* ---------------------------------------------------------------------- */
+/* 🎯 Advanced Filters – Responsive Enhancements                          */
+/* Goal: keep first row fields (e.g. name / email / role) side‑by‑side on  */
+/* wider screens while forcing range/date blocks to span full width.      */
+/* This is generic enough to not break other panels; it keys off position */
+/* (4th/5th items) which in Users page are the date ranges.               */
+/* ---------------------------------------------------------------------- */
+/* Full‑row for 4th+ date range style fields (Users page ordering) */
+.advanced-filters-grid .af-field:nth-child(4),
+.advanced-filters-grid .af-field:nth-child(5) {
+  grid-column: 1 / -1;
+}
+
+/* Avoid squishing internal inputs on tight widths */
+.advanced-filters-grid .af-range input { min-width: 0; }
+
+/* Ensure consistent auto row sizing (prevents overlap in some browsers) */
+.advanced-filters-grid { grid-auto-rows: minmax(0, auto); }
+
+/* Medium+ screens: allow multi-column layout with comfortable min width */
+@media (min-width: 680px) {
+  .advanced-filters-grid {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  }
+}
+
+/* Large screens: lock to exactly three columns for cleaner alignment */
+@media (min-width: 1000px) {
+  .advanced-filters-grid {
+    grid-template-columns: repeat(3, minmax(220px, 1fr));
+  }
+  .advanced-filters-grid .af-field:nth-child(4),
+  .advanced-filters-grid .af-field:nth-child(5) { grid-column: 1 / -1; }
+}
+
 /* ====================================================================== */
 /* 🗂 ORG FORM                                                            */
 /* ====================================================================== */

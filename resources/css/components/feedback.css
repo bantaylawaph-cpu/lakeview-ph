@@ -1,0 +1,46 @@
+/* Feedback module styles: align with existing dashboard & settings aesthetic */
+.feedback-status {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: 999px;
+  letter-spacing: .25px;
+  text-transform: none;
+  gap: 4px;
+  background: #f1f5f9; /* default neutral */
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+.feedback-status.open { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+.feedback-status.in_progress { background: #fefce8; color: #a16207; border-color: #fde68a; }
+.feedback-status.resolved { background: #ecfdf5; color: #166534; border-color: #bbf7d0; }
+.feedback-status.wont_fix { background: #f3f4f6; color: #6b7280; border-color: #e5e7eb; }
+
+.feedback-category-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: #475569;
+  border: 1px solid #e5e7eb;
+  text-transform: lowercase;
+}
+
+.admin-reply-box {
+  font-size: 12px;
+  background: #f8fafc;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  line-height: 1.35;
+}
+.meta-row { font-size: 11px; color: #64748b; display: flex; gap: 12px; flex-wrap: wrap; }
+.char-counter { font-size: 11px; color: #64748b; text-align: right; }
+
+.feedback-list .lv-settings-panel { gap: 6px; }

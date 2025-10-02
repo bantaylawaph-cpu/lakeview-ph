@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Tenant extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, \App\Support\Audit\Auditable;
 
     protected $fillable = ['name', 'type', 'phone', 'address', 'active', 'domain', 'contact_email', 'metadata', 'slug'];
     protected $casts = ['active' => 'boolean', 'metadata' => 'array'];

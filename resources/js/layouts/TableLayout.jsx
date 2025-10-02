@@ -25,6 +25,7 @@ export default function TableLayout({
   resetSignal = 0,
   columnPicker = false,
   toolbar = null,
+  hidePager = false,
   loading = false,
   loadingLabel = null,
 }) {
@@ -498,15 +499,17 @@ export default function TableLayout({
         </table>
       </div>
 
-      <div className="lv-table-pager">
-        <button className="pill-btn ghost sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-          {"< Prev"}
-        </button>
-        <span className="pager-text">Page {page} of {totalPages}</span>
-        <button className="pill-btn ghost sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
-          {"Next >"}
-        </button>
-      </div>
+      {!hidePager && (
+        <div className="lv-table-pager">
+          <button className="pill-btn ghost sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+            {"< Prev"}
+          </button>
+            <span className="pager-text">Page {page} of {totalPages}</span>
+          <button className="pill-btn ghost sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+            {"Next >"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Station extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Support\Audit\Auditable;
 
     /**
      * Stations table is managed without Laravel's automatic timestamps.

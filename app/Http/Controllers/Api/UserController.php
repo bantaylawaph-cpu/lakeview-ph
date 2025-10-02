@@ -18,16 +18,59 @@ class UserController extends Controller
      */
     public function index(Request $request)
     {
-        $q  = trim((string) $request->query('q', ''));
-        $pp = max(1, min((int) $request->query('per_page', 15), 200));
+        $q            = trim((string) $request->query('q', ''));
+        $pp           = max(1, min((int) $request->query('per_page', 15), 200));
+        // Advanced filters coming from adminUsers.jsx
+        $fName        = trim((string) $request->query('name', ''));
+        $fEmail       = trim((string) $request->query('email', ''));
+        $fRole        = trim((string) $request->query('role', ''));
+        $createdFrom  = $request->query('created_from'); // expect YYYY-MM-DD
+        $createdTo    = $request->query('created_to');   // expect YYYY-MM-DD
+        $updatedFrom  = $request->query('updated_from');
+        $updatedTo    = $request->query('updated_to');
 
         $qb = User::query()
+            // Global free-text (name OR email)
             ->when($q !== '', function ($w) use ($q) {
                 $pattern = "%{$q}%";
                 $w->where(function ($x) use ($pattern) {
                     $x->where('name', 'ILIKE', $pattern)
                       ->orWhere('email', 'ILIKE', $pattern);
                 });
+            })
+            // Dedicated field filters (ANDed together)
+            ->when($fName !== '', function ($w) use ($fName) {
+                $w->where('name', 'ILIKE', "%{$fName}%");
+            })
+            ->when($fEmail !== '', function ($w) use ($fEmail) {
+                $w->where('email', 'ILIKE', "%{$fEmail}%");
+            })
+            ->when($fRole !== '', function ($w) use ($fRole) {
+                $w->whereHas('role', function ($r) use ($fRole) {
+                    $r->where('name', $fRole);
+                });
+            })
+            // Date range filters (inclusive). Using whereDate for simplicity.
+            ->when($createdFrom, function ($w) use ($createdFrom) {
+                // Basic YYYY-MM-DD validation (length 10) before applying
+                if (is_string($createdFrom) && strlen($createdFrom) === 10) {
+                    $w->whereDate('created_at', '>=', $createdFrom);
+                }
+            })
+            ->when($createdTo, function ($w) use ($createdTo) {
+                if (is_string($createdTo) && strlen($createdTo) === 10) {
+                    $w->whereDate('created_at', '<=', $createdTo);
+                }
+            })
+            ->when($updatedFrom, function ($w) use ($updatedFrom) {
+                if (is_string($updatedFrom) && strlen($updatedFrom) === 10) {
+                    $w->whereDate('updated_at', '>=', $updatedFrom);
+                }
+            })
+            ->when($updatedTo, function ($w) use ($updatedTo) {
+                if (is_string($updatedTo) && strlen($updatedTo) === 10) {
+                    $w->whereDate('updated_at', '<=', $updatedTo);
+                }
             })
             ->with(['role','tenant'])
             ->orderBy('name');

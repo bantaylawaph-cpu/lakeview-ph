@@ -12,11 +12,18 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
+        // Global middleware
+        $middleware->append([\App\Http\Middleware\InitAuditContext::class]);
+
         // Route middleware aliases (Kernel.php replacement in Laravel 12)
         $middleware->alias([
             'tenant.scoped' => \App\Http\Middleware\TenantScope::class,
-            'role'          => \App\Http\Middleware\EnsureRole::class, // you already have EnsureRole
+            'role'          => \App\Http\Middleware\EnsureRole::class,
         ]);
+    })
+    ->withSchedule(function (\Illuminate\Console\Scheduling\Schedule $schedule) {
+        // Daily prune at 02:10
+        $schedule->command('audit:prune --force')->dailyAt('02:10');
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //

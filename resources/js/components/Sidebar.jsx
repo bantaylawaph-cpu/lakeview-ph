@@ -14,7 +14,7 @@ import {
   FiMapPin,
 } from "react-icons/fi";
 import { MapContainer, TileLayer, Rectangle, useMap } from "react-leaflet";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { api, clearToken, getToken } from "../lib/api";
 import { getCurrentUser, setCurrentUser, ensureUser, isStale } from "../lib/authState";
 import "leaflet/dist/leaflet.css";
@@ -72,7 +72,7 @@ function MiniMapWrapper() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth }) {
+function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth, onOpenFeedback }) {
   const [me, setMe] = useState(() => getCurrentUser()); // start with cached user if available
   const navigate = useNavigate();
 
@@ -135,6 +135,20 @@ function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth }) {
 
   const isLoggedIn = !!me?.id;
   const isPublic = isLoggedIn && (me.role === "public" || !me.role);
+  const location = useLocation();
+
+  const onSettingsClick = (e) => {
+    if (!isLoggedIn) return; // guard
+    e.preventDefault();
+    if (location.pathname === '/') {
+      try { window.dispatchEvent(new Event('lv-open-settings')); } catch {}
+      if (!pinned) onClose?.();
+    } else {
+      // Navigate to map with state requesting modal open
+      navigate('/', { state: { openSettings: true } });
+      if (!pinned) onClose?.();
+    }
+  };
 
   return (
     <div className={`sidebar ${isOpen ? "open" : ""} ${pinned ? "pinned" : ""}`}>
@@ -190,10 +204,14 @@ function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth }) {
           </Link>
         </li>
         <li>
-          <Link className="sidebar-row" to="/feedback" onClick={!pinned ? onClose : undefined}>
+          <a
+            href="#feedback"
+            className="sidebar-row feedback-trigger"
+            onClick={(e) => { e.preventDefault(); onOpenFeedback?.(); if (!pinned) onClose?.(); }}
+          >
             <FiSend className="sidebar-icon" />
             <span>Submit Feedback</span>
-          </Link>
+          </a>
         </li>
         <li>
           <a
@@ -217,12 +235,14 @@ function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth }) {
 
       {/* Bottom Menu */}
       <ul className="sidebar-bottom">
-        <li>
-          <Link className="sidebar-row" to="/settings" onClick={!pinned ? onClose : undefined}>
-            <FiSettings className="sidebar-icon" />
-            <span>Settings</span>
-          </Link>
-        </li>
+        {isLoggedIn && (
+          <li>
+            <a className="sidebar-row" href="#settings" onClick={onSettingsClick}>
+              <FiSettings className="sidebar-icon" />
+              <span>Settings</span>
+            </a>
+          </li>
+        )}
 
         {isLoggedIn ? (
           <>

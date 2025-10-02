@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Lake extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Support\Audit\Auditable;
 
     protected $fillable = [
         'watershed_id','name','alt_name','region','province','municipality',

@@ -5,6 +5,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Watershed extends Model
 {
+    use \App\Support\Audit\Auditable;
     protected $fillable = ['name','description'];
 
     // A watershed has many lakes
