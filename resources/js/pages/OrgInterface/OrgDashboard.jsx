@@ -18,6 +18,7 @@ import OrgLayers from "./orgLayers";
 import OrgAddWQTest from "./orgAddWQTest";
 import OrgWQTests from "./orgWQTests";
 import OrgSettingsPage from "./orgSettings.jsx";
+import OrgAuditLogsPage from "./orgLogs"; // Added: route component for audit logs
 
 const Page = ({ title }) => <h2>{title}</h2>;
 
@@ -47,6 +48,8 @@ export default function OrgDashboard() {
         <Route path="add-wq-tests" element={<OrgAddWQTest  />} />
         <Route path="wq-tests" element={<OrgWQTests  />} />
         <Route path="layers" element={<OrgLayers />} />
+        {/* Organization Audit Logs (was missing causing blank page) */}
+        <Route path="org-audit" element={<OrgAuditLogsPage />} />
   <Route path="settings" element={<OrgSettingsPage />} />
       </Routes>
     </DashboardLayout>
