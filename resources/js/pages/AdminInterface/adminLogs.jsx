@@ -265,17 +265,19 @@ export default function AdminAuditLogsPage() {
 
 	return (
 		<div className="container" style={{ padding: 16, position:'relative' }}>
-			<div className="flex-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-				<h2 style={{ margin: 0 }}>Audit Logs</h2>
-				<div style={{ display: 'flex', gap: 8 }}>
-					<button className="pill-btn ghost" onClick={() => fetchLogs(buildParams())} title="Refresh"><FiRefreshCw /></button>
+			<div className="dashboard-card" style={{ marginBottom: 12 }}>
+				<div className="dashboard-card-header">
+					<div className="dashboard-card-title">
+						<FiEye />
+						<span>Audit Logs</span>
+					</div>
 				</div>
-				<p style={{ marginTop: 8, fontSize: 13, color: '#6b7280' }}>View system audit logs and activity history.</p>
+				<p className="muted" style={{ marginTop: 4 }}>View system audit logs and activity history.</p>
 			</div>
 			<div className="card" style={{ padding: 12, borderRadius: 12, marginBottom: 12 }}>
 				<TableToolbar
 					tableId={TABLE_ID}
-					search={{ value: q, onChange: (val) => setQ(val), placeholder: 'Search (local highlight only)…' }}
+					search={{ value: q, onChange: (val) => setQ(val), placeholder: 'Search...' }}
 					filters={[]}
 					columnPicker={columnPickerAdapter}
 					onRefresh={() => fetchLogs(buildParams())}
