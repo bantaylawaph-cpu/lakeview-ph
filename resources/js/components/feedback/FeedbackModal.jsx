@@ -29,7 +29,18 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
   const formRef = useRef(null);
   const triggerRef = useRef(null);
 
-  const isValid = title.trim().length >= 3 && message.trim().length >= 10;
+  // Field interaction (touched) tracking for validation messages
+  const [tTitle, setTTitle] = useState(false);
+  const [tMessage, setTMessage] = useState(false);
+  const [tCategory, setTCategory] = useState(false);
+  const MIN_TITLE = 3;
+  const MIN_MESSAGE = 10;
+  const rawTitleLen = title.trim().length;
+  const rawMsgLen = message.trim().length;
+  const titleError = rawTitleLen === 0 && tTitle ? 'Title is required.' : (rawTitleLen > 0 && rawTitleLen < MIN_TITLE && tTitle ? `Title must be at least ${MIN_TITLE} characters.` : '');
+  const messageError = rawMsgLen === 0 && tMessage ? 'Message is required.' : (rawMsgLen > 0 && rawMsgLen < MIN_MESSAGE && tMessage ? `Message must be at least ${MIN_MESSAGE} characters.` : '');
+  const categoryError = (!category || category.trim()==='') && tCategory ? 'Category is required.' : '';
+  const isValid = rawTitleLen >= MIN_TITLE && rawMsgLen >= MIN_MESSAGE && !!category;
 
   const fetchMine = useCallback(async (opts = {}) => {
     if (!user) return;
@@ -83,8 +94,20 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    // Public/guest allowed. Validate separately.
-    if (!isValid) { setError('Provide a longer title/message.'); return; }
+    // Mark fields as touched so their errors show
+    setTTitle(true); setTMessage(true); setTCategory(true);
+    if (!isValid) {
+      setError('Please fix the highlighted fields.');
+      // Focus first invalid field
+      setTimeout(() => {
+        try {
+          if (rawTitleLen < MIN_TITLE) formRef.current?.querySelector('input[name="feedback-title"]')?.focus();
+          else if (!category) formRef.current?.querySelector('select[name="feedback-category"]')?.focus();
+          else if (rawMsgLen < MIN_MESSAGE) formRef.current?.querySelector('textarea[name="feedback-message"]')?.focus();
+        } catch {}
+      }, 10);
+      return;
+    }
     setSubmitting(true); setError(''); setSuccess('');
     try {
       const payload = { title: title.trim(), message: message.trim(), category: category || null };
@@ -99,19 +122,25 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
         payload.metadata = { ua: navigator.userAgent, lang: navigator.language, tz: Intl.DateTimeFormat().resolvedOptions().timeZone };
       }
       const endpoint = user ? '/feedback' : '/public/feedback';
+      console.debug('[Feedback] submitting', endpoint, payload);
       const res = await api.post(endpoint, payload);
-      if (res?.data) {
+      // Accept several possible shapes: {data: {...}}, {...}, or empty object
+      const created = (res && (res.data || res.item || (res.id && res))) || null;
+      if (created) {
         setSuccess('Feedback submitted. Thank you!');
         resetForm();
         if (user) {
-          setList(prev => [res.data, ...(prev||[])]);
+          setList(prev => [created, ...(prev||[])]);
         }
-      } else { setSuccess('Submitted.'); }
+      } else {
+        setSuccess('Feedback submitted.');
+      }
     } catch (e2) {
-      try {
-        const parsed = JSON.parse(e2.message || '{}');
-        setError(parsed?.message || Object.values(parsed?.errors || {})?.flat()?.[0] || 'Submission failed.');
-      } catch { setError('Submission failed.'); }
+      let parsed = null;
+      try { parsed = JSON.parse(e2.message || '{}'); } catch {}
+      console.warn('[Feedback] submit failed', e2, parsed);
+      const firstFieldError = parsed && parsed.errors && Object.values(parsed.errors).flat()[0];
+      setError(parsed?.message || firstFieldError || 'Submission failed.');
     } finally { if (mountedRef.current) setSubmitting(false); }
   };
 
@@ -145,14 +174,36 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
                     </div>
                   </>
                 )}
-                <div className="lv-field-row">
-                  <label>Title <span className="req">*</span></label>
-                  <input type="text" value={title} onChange={e=>setTitle(e.target.value)} maxLength={160} required placeholder="Concise summary (e.g. Layer legend overlaps)" />
-                  <div className="char-counter">{title.length}/160</div>
+                <div className={`lv-field-row ${titleError ? 'has-error' : ''}`}>
+                  <label htmlFor="fb-title">Title <span className="req">*</span></label>
+                  <input
+                    id="fb-title"
+                    name="feedback-title"
+                    type="text"
+                    value={title}
+                    onChange={e=>{ setTitle(e.target.value); }}
+                    onBlur={()=> setTTitle(true)}
+                    maxLength={160}
+                    required
+                    aria-invalid={!!titleError}
+                    aria-describedby={titleError ? 'fb-title-err' : undefined}
+                    placeholder="Concise summary (e.g. Layer legend overlaps)"
+                  />
+                  <div className="char-counter" style={rawTitleLen < MIN_TITLE && tTitle ? { color:'var(--danger, #dc2626)' } : {}}>{title.length}/160</div>
+                  {titleError && <div id="fb-title-err" className="field-error" style={{ color:'var(--danger, #dc2626)', fontSize:12, marginTop:4 }}>{titleError}</div>}
                 </div>
-                <div className="lv-field-row">
-                  <label>Category</label>
-                  <select value={category} onChange={e=>setCategory(e.target.value)}>
+                <div className={`lv-field-row ${categoryError ? 'has-error' : ''}`}>
+                  <label htmlFor="fb-category">Category <span className="req">*</span></label>
+                  <select
+                    id="fb-category"
+                    name="feedback-category"
+                    value={category}
+                    onChange={e=>setCategory(e.target.value)}
+                    onBlur={()=> setTCategory(true)}
+                    required
+                    aria-invalid={!!categoryError}
+                    aria-describedby={categoryError ? 'fb-category-err' : undefined}
+                  >
                     <option value="">— Select —</option>
                     <option value="bug">Bug</option>
                     <option value="suggestion">Suggestion</option>
@@ -160,11 +211,26 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
                     <option value="ui">UI/UX</option>
                     <option value="other">Other</option>
                   </select>
+                  {categoryError && <div id="fb-category-err" className="field-error" style={{ color:'var(--danger, #dc2626)', fontSize:12, marginTop:4 }}>{categoryError}</div>}
                 </div>
-                <div className="lv-field-row">
-                  <label>Message <span className="req">*</span></label>
-                  <textarea value={message} onChange={e=>setMessage(e.target.value)} maxLength={2000} required rows={5} placeholder="Describe the issue or idea." style={{ resize:'vertical' }} />
-                  <div className="char-counter">{message.length}/2000</div>
+                <div className={`lv-field-row ${messageError ? 'has-error' : ''}`}>
+                  <label htmlFor="fb-message">Message <span className="req">*</span></label>
+                  <textarea
+                    id="fb-message"
+                    name="feedback-message"
+                    value={message}
+                    onChange={e=>{ setMessage(e.target.value); }}
+                    onBlur={()=> setTMessage(true)}
+                    maxLength={2000}
+                    required
+                    rows={5}
+                    aria-invalid={!!messageError}
+                    aria-describedby={messageError ? 'fb-message-err' : undefined}
+                    placeholder="Describe the issue or idea."
+                    style={{ resize:'vertical' }}
+                  />
+                  <div className="char-counter" style={rawMsgLen < MIN_MESSAGE && tMessage ? { color:'var(--danger, #dc2626)' } : {}}>{message.length}/2000</div>
+                  {messageError && <div id="fb-message-err" className="field-error" style={{ color:'var(--danger, #dc2626)', fontSize:12, marginTop:4 }}>{messageError}</div>}
                 </div>
                 {error && <div className="lv-status-error" role="alert">{error}</div>}
                 {success && <div className="lv-status-success" role="status">{success}</div>}
