@@ -200,7 +200,7 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
                   </>
                 )}
                 <div className={`lv-field-row ${titleError ? 'has-error' : ''}`}>
-                  <label htmlFor="fb-title">Title <span className="req">*</span></label>
+                  <label htmlFor="fb-title" style={{ color: '#fff' }}>Title <span className="req">*</span></label>
                   <input
                     id="fb-title"
                     name="feedback-title"
@@ -213,12 +213,13 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
                     aria-invalid={!!titleError}
                     aria-describedby={titleError ? 'fb-title-err' : undefined}
                     placeholder="Concise summary (e.g. Layer legend overlaps)"
+                    style={{ color: '#fff', background: 'transparent', border: '1px solid rgba(255,255,255,0.18)' }}
                   />
                   <div className="char-counter" style={rawTitleLen < MIN_TITLE && tTitle ? { color:'var(--danger, #dc2626)' } : {}}>{title.length}/160</div>
                   {titleError && <div id="fb-title-err" className="field-error" style={{ color:'var(--danger, #dc2626)', fontSize:12, marginTop:4 }}>{titleError}</div>}
                 </div>
                 <div className={`lv-field-row ${categoryError ? 'has-error' : ''}`}>
-                  <label htmlFor="fb-category">Category <span className="req">*</span></label>
+                  <label htmlFor="fb-category" style={{ color: '#fff' }}>Category <span className="req">*</span></label>
                   <select
                     id="fb-category"
                     name="feedback-category"
@@ -228,18 +229,19 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
                     required
                     aria-invalid={!!categoryError}
                     aria-describedby={categoryError ? 'fb-category-err' : undefined}
+                    style={{ color: '#fff', background: 'transparent', border: '1px solid rgba(255,255,255,0.18)' }}
                   >
-                    <option value="">— Select —</option>
-                    <option value="bug">Bug</option>
-                    <option value="suggestion">Suggestion</option>
-                    <option value="data">Data</option>
-                    <option value="ui">UI/UX</option>
-                    <option value="other">Other</option>
+                    <option value="" style={{ color: '#111' }}>— Select —</option>
+                    <option value="bug" style={{ color: '#111' }}>Bug</option>
+                    <option value="suggestion" style={{ color: '#111' }}>Suggestion</option>
+                    <option value="data" style={{ color: '#111' }}>Data</option>
+                    <option value="ui" style={{ color: '#111' }}>UI/UX</option>
+                    <option value="other" style={{ color: '#111' }}>Other</option>
                   </select>
                   {categoryError && <div id="fb-category-err" className="field-error" style={{ color:'var(--danger, #dc2626)', fontSize:12, marginTop:4 }}>{categoryError}</div>}
                 </div>
                 <div className={`lv-field-row ${messageError ? 'has-error' : ''}`}>
-                  <label htmlFor="fb-message">Message <span className="req">*</span></label>
+                  <label htmlFor="fb-message" style={{ color: '#fff' }}>Message <span className="req">*</span></label>
                   <textarea
                     id="fb-message"
                     name="feedback-message"
@@ -252,7 +254,7 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
                     aria-invalid={!!messageError}
                     aria-describedby={messageError ? 'fb-message-err' : undefined}
                     placeholder="Describe the issue or idea."
-                    style={{ resize:'vertical' }}
+                    style={{ resize:'vertical', color: '#fff', background: 'transparent', border: '1px solid rgba(255,255,255,0.18)' }}
                   />
                   <div className="char-counter" style={rawMsgLen < MIN_MESSAGE && tMessage ? { color:'var(--danger, #dc2626)' } : {}}>{message.length}/2000</div>
                   {messageError && <div id="fb-message-err" className="field-error" style={{ color:'var(--danger, #dc2626)', fontSize:12, marginTop:4 }}>{messageError}</div>}
