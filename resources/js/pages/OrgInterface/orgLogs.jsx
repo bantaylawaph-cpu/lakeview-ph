@@ -6,6 +6,7 @@ import TableToolbar from '../../components/table/TableToolbar';
 import FilterPanel from '../../components/table/FilterPanel';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { FiEye } from 'react-icons/fi';
+import Modal from '../../components/Modal';
 
 // Org UI mirrors adminLogs but with a reduced filter set (no tenant/role filters)
 const TABLE_ID = 'org-audit-logs';
@@ -258,54 +259,62 @@ export default function OrgAuditLogsPage() {
       )}
 
       {detailRow && (
-        <div className="lv-modal-backdrop" style={{ position:'absolute', inset:0, background:'transparent', display:'flex', alignItems:'center', justifyContent:'center', padding:'40px 20px', zIndex:20, overflowY:'auto' }} onClick={closeDetail}>
-          <div className="lv-modal" style={{ background:'#fff', borderRadius:14, padding:24, maxWidth:720, width:'100%', position:'relative', boxShadow:'0 10px 24px -4px rgba(0,0,0,0.25)', animation:'fadeInScale .18s ease' }} onClick={e=>e.stopPropagation()}>
-            <button onClick={closeDetail} style={{ position:'absolute', top:10, right:10 }} className="pill-btn ghost sm">✕</button>
-            <h3 style={{ marginTop:0, marginBottom:16, fontSize:20 }}>Audit Log Details</h3>
-            <div style={{ fontSize:14, lineHeight:1.55, display:'grid', rowGap:6, paddingBottom:12, borderBottom:'1px solid #e5e7eb' }}>
-              <div style={{ padding:'4px 0' }}><strong style={{ width:90, display:'inline-block' }}>User:</strong> {detailRow.actor_name || 'User'}</div>
-              <div style={{ padding:'4px 0' }}><strong style={{ width:90, display:'inline-block' }}>Action:</strong> {(() => {
-                const model = detailRow.model_type ? detailRow.model_type.split('\\').pop() : 'Record';
-                return `${(detailRow.action || 'updated').replace(/_/g,' ')} ${model} #${detailRow.model_id || ''}`.trim();
-              })()}</div>
-              <div style={{ padding:'4px 0' }}><strong style={{ width:90, display:'inline-block' }}>Timestamp:</strong> {fmt(detailRow.event_at)}</div>
+        <Modal
+          open={!!detailRow}
+          onClose={closeDetail}
+          title={`Audit Log #${detailRow.id || ''}`}
+          width={720}
+          ariaLabel="Organization audit log detail dialog"
+          bodyClassName="audit-log-detail-body"
+          footer={(
+            <div style={{ display:'flex', justifyContent:'flex-end', gap:8 }}>
+              <button className="pill-btn ghost" onClick={closeDetail}>Close</button>
             </div>
-            {detailRow.action === 'updated' && detailRow.before && detailRow.after && (
-              <div style={{ marginTop:18 }}>
-                <strong style={{ fontSize:13, letterSpacing:0.5, textTransform:'uppercase', color:'#374151' }}>Changes</strong>
-                <div style={{ marginTop:10, border:'1px solid #e5e7eb', borderRadius:8, overflow:'hidden' }}>
-                  <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13.5 }}>
-                    <thead style={{ background:'#f3f4f6' }}>
-                      <tr>
-                        <th style={{ textAlign:'left', padding:'8px 10px', fontWeight:600, fontSize:12, textTransform:'uppercase', letterSpacing:0.5 }}>What</th>
-                        <th style={{ textAlign:'left', padding:'8px 10px', fontWeight:600, fontSize:12, textTransform:'uppercase', letterSpacing:0.5 }}>From</th>
-                        <th style={{ textAlign:'left', padding:'8px 10px', fontWeight:600, fontSize:12, textTransform:'uppercase', letterSpacing:0.5 }}>To</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(() => {
-                        const changes = buildChanges(detailRow);
-                        if (changes.length === 0) return (
-                          <tr><td colSpan={3} style={{ padding:'10px 12px', fontStyle:'italic', color:'#6b7280' }}>No field differences detected.</td></tr>
-                        );
-                        return changes.map((ch,i)=>(
+          )}
+        >
+          <div className="lv-settings-panel" style={{ gap:14 }}>
+            <h3 style={{ margin:0, fontSize:'1rem' }}>Event</h3>
+            <div style={{ display:'grid', rowGap:6, fontSize:13.5 }}>
+              <div><strong style={{ width:110, display:'inline-block' }}>User:</strong> {detailRow.actor_name || 'User'}</div>
+              <div><strong style={{ width:110, display:'inline-block' }}>Action:</strong> {detailRow.action}</div>
+              <div><strong style={{ width:110, display:'inline-block' }}>Entity:</strong> {(detailRow.entity_name) ? detailRow.entity_name : (detailRow.model_type ? detailRow.model_type.split('\\').pop() : 'Record')}{detailRow.model_id ? ` #${detailRow.model_id}` : ''}</div>
+              <div><strong style={{ width:110, display:'inline-block' }}>Timestamp:</strong> {fmt(detailRow.event_at)}</div>
+            </div>
+          </div>
+          <div className="lv-settings-panel" style={{ gap:12 }}>
+            <h3 style={{ margin:0, fontSize:'1rem' }}>Changes</h3>
+            {detailRow.before && detailRow.after ? (
+              (() => {
+                const changes = buildChanges(detailRow).map(ch => ({ fieldLabel: ch.field, fromVal: ch.from, toVal: ch.to }));
+                if (changes.length === 0) return <div style={{ fontStyle:'italic', fontSize:13, color:'#64748b' }}>No field differences detected.</div>;
+                return (
+                  <div style={{ border:'1px solid #e5e7eb', borderRadius:8, overflow:'hidden' }}>
+                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13.5 }}>
+                      <thead style={{ background:'#f3f4f6' }}>
+                        <tr>
+                          <th style={{ textAlign:'left', padding:'8px 10px', fontSize:12, textTransform:'uppercase', letterSpacing:0.5 }}>Field</th>
+                          <th style={{ textAlign:'left', padding:'8px 10px', fontSize:12, textTransform:'uppercase', letterSpacing:0.5 }}>From</th>
+                          <th style={{ textAlign:'left', padding:'8px 10px', fontSize:12, textTransform:'uppercase', letterSpacing:0.5 }}>To</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {changes.map((ch,i)=>(
                           <tr key={i} style={{ background: i % 2 ? '#f9fafb' : 'white' }}>
-                            <td style={{ padding:'6px 10px', fontWeight:500 }}>{ch.field}</td>
-                            <td style={{ padding:'6px 10px', color:'#b91c1c', whiteSpace:'pre-wrap', wordBreak:'break-word' }}>{ch.from}</td>
-                            <td style={{ padding:'6px 10px', color:'#065f46', whiteSpace:'pre-wrap', wordBreak:'break-word' }}>{ch.to}</td>
+                            <td style={{ padding:'6px 10px', fontWeight:500 }}>{ch.fieldLabel}</td>
+                            <td style={{ padding:'6px 10px', color:'#b91c1c', whiteSpace:'pre-wrap', wordBreak:'break-word' }}>{ch.fromVal}</td>
+                            <td style={{ padding:'6px 10px', color:'#065f46', whiteSpace:'pre-wrap', wordBreak:'break-word' }}>{ch.toVal}</td>
                           </tr>
-                        ));
-                      })()}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-            {detailRow.action !== 'updated' && (
-              <div style={{ marginTop:18, fontSize:13.5, fontStyle:'italic', color:'#4b5563' }}>No granular change list for this action.</div>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()
+            ) : (
+              <div style={{ fontStyle:'italic', fontSize:13, color:'#64748b' }}>No before/after payload to diff.</div>
             )}
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );
