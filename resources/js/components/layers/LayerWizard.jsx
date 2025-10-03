@@ -233,6 +233,14 @@ export default function LayerWizard({
       if (!form.uploadGeom) throw new Error("Please upload or paste a valid Polygon/MultiPolygon GeoJSON first.");
       if (!form.bodyType || !form.bodyId) throw new Error("Select a target (lake or watershed) and its ID.");
       if (!form.name) throw new Error("Layer name is required.");
+      // Determine source_type from uploaded filename when available
+      let sourceType = 'geojson';
+      if (form.fileName) {
+        const lf = String(form.fileName).toLowerCase();
+        if (lf.endsWith('.kml')) sourceType = 'kml';
+        else if (lf.endsWith('.zip')) sourceType = 'shp';
+        else if (lf.endsWith('.geojson') || lf.endsWith('.json')) sourceType = 'geojson';
+      }
 
       const payload = {
         body_type: form.bodyType,
@@ -245,7 +253,7 @@ export default function LayerWizard({
         is_active: allowSetActive ? !!form.isActive : false,
         status: "ready",
         notes: form.notes || null,
-        source_type: "geojson",
+        source_type: sourceType,
         geom_geojson: JSON.stringify(form.uploadGeom),
       };
 

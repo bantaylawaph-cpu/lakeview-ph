@@ -165,18 +165,89 @@ class LayerController extends Controller
         if (!in_array($role, [Role::SUPERADMIN, Role::ORG_ADMIN], true)) {
             abort(403, 'Only Super Administrators or Organization Administrators may create layers.');
         }
-    $data = $request->validated();
-        $visibility = $data['visibility'] ?? 'public';
-        if (in_array($visibility, ['organization','organization_admin'], true)) $visibility = 'admin';
-        if (!in_array($visibility, ['public','admin'], true)) {
-            throw ValidationException::withMessages(['visibility' => ['Visibility must be Public or Admin.']]);
-        }
-        $data['visibility'] = $visibility;
-        if ($role !== Role::SUPERADMIN) $data['is_active'] = false;
-        $layer = new Layer($data);
-        $layer->uploaded_by = $user->id;
-        $layer->save();
-        return response()->json(['data' => $layer], 201);
+                $data = $request->validated();
+                $visibility = $data['visibility'] ?? 'public';
+                if (in_array($visibility, ['organization','organization_admin'], true)) $visibility = 'admin';
+                if (!in_array($visibility, ['public','admin'], true)) {
+                        throw ValidationException::withMessages(['visibility' => ['Visibility must be Public or Admin.']]);
+                }
+                $data['visibility'] = $visibility;
+                if ($role !== Role::SUPERADMIN) $data['is_active'] = false;
+
+                // Use transaction: create row first (without geom), then set geometry via PostGIS SQL
+                return DB::transaction(function () use ($data, $user) {
+                        $layer = new Layer();
+                        $layer->fill([
+                                'body_type'   => $data['body_type'],
+                                'body_id'     => (int)$data['body_id'],
+                                'name'        => $data['name'],
+                                'type'        => $data['type']        ?? 'base',
+                                'category'    => $data['category']    ?? null,
+                                'srid'        => (int)($data['srid']  ?? 4326),
+                                'visibility'  => $data['visibility']  ?? 'public',
+                                'is_active'   => (bool)($data['is_active'] ?? false),
+                                'notes'       => $data['notes']       ?? null,
+                                'source_type' => $data['source_type'] ?? 'geojson',
+                        ]);
+                        $layer->uploaded_by = $user->id ?? null;
+                        $layer->save();
+
+                        // Persist geometry: accept GeoJSON geometry or Feature
+                        if (!empty($data['geom_geojson'])) {
+                                $geomJson = $this->extractGeometryJson($data['geom_geojson']);
+                                $srid = (int)($data['srid'] ?? 4326);
+
+                                DB::update(
+                                        // Set SRID first, then transform when needed. Extract polygons (type=3) and force Multi.
+                                        "UPDATE layers
+                                             SET geom =
+                                                        CASE
+                                                            WHEN ? = 4326 THEN
+                                                                ST_Multi(
+                                                                    ST_CollectionExtract(
+                                                                        ST_ForceCollection(
+                                                                            ST_MakeValid(
+                                                                                ST_SetSRID(ST_GeomFromGeoJSON(?), 4326)
+                                                                            )
+                                                                        ), 3
+                                                                    )
+                                                                )
+                                                            ELSE
+                                                                ST_Transform(
+                                                                    ST_Multi(
+                                                                        ST_CollectionExtract(
+                                                                            ST_ForceCollection(
+                                                                                ST_MakeValid(
+                                                                                    ST_SetSRID(ST_GeomFromGeoJSON(?), ?)
+                                                                                )
+                                                                            ), 3
+                                                                        )
+                                                                    ),
+                                                                    4326
+                                                                )
+                                                        END,
+                                                     srid = 4326,
+                                                     updated_at = now()
+                                         WHERE id = ?",
+                                        [$srid, $geomJson, $geomJson, $srid, $layer->id]
+                                );
+                        }
+
+                        // If requested active, deactivate siblings (no DB trigger dependency)
+                        if ($layer->is_active) {
+                                Layer::where('body_type', $layer->body_type)
+                                        ->where('body_id', $layer->body_id)
+                                        ->where('id', '!=', $layer->id)
+                                        ->update(['is_active' => false]);
+                        }
+
+                        $fresh = Layer::whereKey($layer->id)
+                                ->select('*')
+                                ->selectRaw('ST_AsGeoJSON(geom) AS geom_geojson')
+                                ->first();
+
+                        return response()->json(['data' => $fresh], 201);
+                });
     }
 
     public function update(UpdateLayerRequest $request, Layer $layer)
@@ -211,9 +282,67 @@ class LayerController extends Controller
             $data['visibility'] = $visibility;
         }
 
-        $layer->fill($data);
-        $layer->save();
-        return response()->json(['data' => $layer]);
+                // Save basic fields first
+                $layer->fill($data);
+
+                return DB::transaction(function () use ($layer, $data, $role) {
+                        $activating = array_key_exists('is_active', $data) && (bool)$data['is_active'] === true;
+                        $layer->save();
+
+                        // Optional geometry replacement: only superadmins may replace geometry via this endpoint
+                        if ($role === Role::SUPERADMIN && !empty($data['geom_geojson'])) {
+                                $geomJson = $this->extractGeometryJson($data['geom_geojson']);
+                                $srid     = (int)($data['srid'] ?? $layer->srid ?? 4326);
+
+                                DB::update(
+                                        "UPDATE layers
+                                                SET geom =
+                                                        CASE
+                                                            WHEN ? = 4326 THEN
+                                                                ST_Multi(
+                                                                    ST_CollectionExtract(
+                                                                        ST_ForceCollection(
+                                                                            ST_MakeValid(
+                                                                                ST_SetSRID(ST_GeomFromGeoJSON(?), 4326)
+                                                                            )
+                                                                        ), 3
+                                                                    )
+                                                                )
+                                                            ELSE
+                                                                ST_Transform(
+                                                                    ST_Multi(
+                                                                        ST_CollectionExtract(
+                                                                            ST_ForceCollection(
+                                                                                ST_MakeValid(
+                                                                                    ST_SetSRID(ST_GeomFromGeoJSON(?), ?)
+                                                                                )
+                                                                            ), 3
+                                                                        )
+                                                                    ),
+                                                                    4326
+                                                                )
+                                                        END,
+                                                        srid = 4326,
+                                                        updated_at = now()
+                                            WHERE id = ?",
+                                        [$srid, $geomJson, $geomJson, $srid, $layer->id]
+                                );
+                        }
+
+                        if ($activating) {
+                                Layer::where('body_type', $layer->body_type)
+                                        ->where('body_id', $layer->body_id)
+                                        ->where('id', '!=', $layer->id)
+                                        ->update(['is_active' => false]);
+                        }
+
+                        $fresh = Layer::whereKey($layer->id)
+                                ->select('*')
+                                ->selectRaw('ST_AsGeoJSON(geom) AS geom_geojson')
+                                ->first();
+
+                        return response()->json(['data' => $fresh]);
+                });
     }
 
     public function destroy(Request $request, Layer $layer)
