@@ -13,6 +13,7 @@ export default function ResultPanel({ result, paramCode, paramOptions, classCode
   const labelMap = {
     'one-sample':'One-sample t-test',
     'one-sample-nonparam':'Wilcoxon signed-rank',
+    'levene':'Levene (Brown–Forsythe) variance test',
     'two-sample-welch':'Two-sample Welch t-test',
     'two-sample-nonparam':'Mann-Whitney U test',
     'tost':'Equivalence TOST',
@@ -60,6 +61,15 @@ export default function ResultPanel({ result, paramCode, paramOptions, classCode
   if ('W' in result) push('W', fmt(result.W));
   if ('sd1' in result) push('SD (Lake 1)', fmt(result.sd1)); else if (stats1) push('SD (Lake 1)', fmt(stats1.sd));
   if ('sd2' in result) push('SD (Lake 2)', fmt(result.sd2)); else if (stats2) push('SD (Lake 2)', fmt(stats2.sd));
+  if ('var1' in result) push('Variance (Lake 1)', fmt(result.var1));
+  if ('var2' in result) push('Variance (Lake 2)', fmt(result.var2));
+  if (!('var1' in result) && Array.isArray(result.group_variances) && result.group_variances.length===2) {
+    push('Variance (Lake 1)', fmt(result.group_variances[0]));
+    push('Variance (Lake 2)', fmt(result.group_variances[1]));
+  }
+  if (Array.isArray(result.group_variances) && result.group_variances.length>2) {
+    push('Group variances', result.group_variances.map(v=>fmt(v)).join(', '));
+  }
   if ('t' in result) push('t statistic', fmt(result.t));
   if ('U' in result) push('U', fmt(result.U));
   if ('z' in result) push('z', fmt(result.z));

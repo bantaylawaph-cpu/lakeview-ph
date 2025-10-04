@@ -1,5 +1,5 @@
 // Adapter to map a selected test key to statsUtils functions and return normalized results
-import { tOneSampleAsync, tTwoSampleWelchAsync, tTwoSampleStudentAsync, mannWhitneyAsync, signTestAsync, tostEquivalenceAsync, wilcoxonSignedRankAsync, moodMedianAsync, shapiroWilkAsync } from '../../stats/statsUtils';
+import { tOneSampleAsync, tTwoSampleWelchAsync, tTwoSampleStudentAsync, mannWhitneyAsync, signTestAsync, tostEquivalenceAsync, wilcoxonSignedRankAsync, moodMedianAsync, shapiroWilkAsync, leveneTwoSampleAsync } from '../../stats/statsUtils';
 
 // Normalize a result object to ensure consistent keys for UI consumption
 function normalize(base, extra={}) {
@@ -35,6 +35,10 @@ export async function runOneSample({ selectedTest, values, mu0, alpha, evalType,
 }
 
 export async function runTwoSample({ selectedTest, sample1, sample2, alpha, evalType }) {
+  if (selectedTest === 'levene') {
+    const r = await leveneTwoSampleAsync(sample1, sample2, alpha, 'median');
+    return normalize(r, { type:'two-sample-variance', test_used:'levene', sample1_values: sample1, sample2_values: sample2, evaluation_type: evalType || null });
+  }
   if (selectedTest === 'mann_whitney') {
     const r = await mannWhitneyAsync(sample1, sample2, alpha, 'two-sided');
     return normalize(r, { type:'two-sample-nonparam', test_used:'mann_whitney', sample1_values: sample1, sample2_values: sample2, evaluation_type: evalType || null });

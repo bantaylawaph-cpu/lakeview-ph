@@ -1,6 +1,6 @@
 // stats utilities (helpers and tests)
 let _wilcoxon;
-let _tcdf, _chisqCdf, _binomCdf, _normalCdf;
+let _tcdf, _chisqCdf, _binomCdf, _normalCdf, _fCdf;
 async function loadWilcoxon() {
   if (_wilcoxon) return _wilcoxon;
   try {
@@ -34,6 +34,12 @@ async function loadNormalCdf(){
   if (_normalCdf) return _normalCdf;
   try { const mod = await import('@stdlib/stats-base-dists-normal-cdf'); _normalCdf = mod?.default || mod; } catch { _normalCdf = null; }
   return _normalCdf;
+}
+
+async function loadFCdf(){
+  if (_fCdf) return _fCdf;
+  try { const mod = await import('@stdlib/stats-base-dists-f-cdf'); _fCdf = mod?.default || mod; } catch { _fCdf = null; }
+  return _fCdf;
 }
 
 function mean(a){ if(!a||!a.length) return NaN; return a.reduce((s,v)=>s+v,0)/a.length; }
@@ -450,4 +456,79 @@ export function shapiroWilk(x, alpha=0.05){
 
 export async function shapiroWilkAsync(x, alpha=0.05){
   return shapiroWilk(x, alpha);
+}
+
+// ---------------------------------------------------------------------------
+// Levene / Brown-Forsythe variance equality test
+// For k groups: compute absolute (or squared) deviations from group center (median by default)
+// and perform a one-way ANOVA on these transformed values.
+// Returns F statistic, df1=k-1, df2=N-k, p-value using F distribution CDF.
+// equal_variances = p_value >= alpha (fail to reject homogeneity).
+// ---------------------------------------------------------------------------
+
+function _asNumericArray(a){
+  return (Array.isArray(a)? a: []).map(Number).filter(Number.isFinite);
+}
+
+export async function leveneTestAsync(groups, alpha=0.05, center='median'){
+  if (!Array.isArray(groups) || groups.length < 2) throw new Error('Levene test requires at least two groups');
+  const cleanGroups = groups.map(g=>_asNumericArray(g));
+  const k = cleanGroups.length;
+  const sizes = cleanGroups.map(g=>g.length);
+  const N = sizes.reduce((s,v)=>s+v,0);
+  if (N === 0 || sizes.some(n=>n===0)) throw new Error('Each group must contain at least one numeric value');
+  // choose center function
+  const centerFn = (arr)=>{
+    if (center === 'mean') return mean(arr);
+    // default median (Brown-Forsythe)
+    return median(arr);
+  };
+  const centers = cleanGroups.map(g=>centerFn(g));
+  // Construct absolute deviations (robust) like Brown-Forsythe
+  const zGroups = cleanGroups.map((g,i)=> g.map(v=> Math.abs(v - centers[i])));
+  // Group means of z
+  const zMeans = zGroups.map(g=> mean(g));
+  const overallMean = mean(zGroups.flat());
+  // Between-group and within-group sums of squares
+  let ssBetween = 0, ssWithin = 0;
+  for(let i=0;i<k;i++){
+    ssBetween += sizes[i] * (zMeans[i]-overallMean)*(zMeans[i]-overallMean);
+    for(const z of zGroups[i]) ssWithin += (z - zMeans[i])*(z - zMeans[i]);
+  }
+  const df1 = k - 1;
+  const df2 = N - k;
+  const msBetween = ssBetween / df1;
+  const msWithin = ssWithin / df2;
+  const F = msBetween / msWithin;
+  const FCdf = await loadFCdf();
+  if (!FCdf){
+    const msg = 'Stats: @stdlib/stats-base-dists-f-cdf is not available. Levene test cannot run.';
+    if (typeof window !== 'undefined' && typeof window.alert === 'function') window.alert(msg);
+    throw new Error(msg);
+  }
+  // p-value = 1 - Fcdf(F, df1, df2)
+  let p_value = 1 - FCdf(F, df1, df2);
+  if (!Number.isFinite(p_value) || p_value < 0) p_value = 0; else if (p_value > 1) p_value = 1;
+  const groupVariances = cleanGroups.map(g=>variance(g));
+  return {
+    test_used: 'levene',
+    method: center === 'mean' ? 'Levene (mean-centered)' : 'Levene (Brown-Forsythe median-centered)',
+    center: center === 'mean' ? 'mean' : 'median',
+    k,
+    n_total: N,
+    sizes,
+    centers,
+    group_variances: groupVariances,
+    ...(k===2 ? { var1: groupVariances[0], var2: groupVariances[1] } : {}),
+    F,
+    df1,
+    df2,
+    p_value,
+    alpha,
+    equal_variances: !(p_value < alpha)
+  };
+}
+
+export async function leveneTwoSampleAsync(x, y, alpha=0.05, center='median'){
+  return leveneTestAsync([x,y], alpha, center);
 }

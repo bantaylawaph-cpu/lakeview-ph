@@ -342,6 +342,9 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
         if (result.median != null) summaryRows.push(`<tr><th>Median</th><td>${fmt(result.median)}</td></tr>`);
         if (result.sd != null) summaryRows.push(`<tr><th>SD</th><td>${fmt(result.sd)}</td></tr>`);
         if (result.W != null) summaryRows.push(`<tr><th>W</th><td>${fmt(result.W)}</td></tr>`);
+        if (result.var1 != null) summaryRows.push(`<tr><th>Variance (Group 1)</th><td>${fmt(result.var1)}</td></tr>`);
+        if (result.var2 != null) summaryRows.push(`<tr><th>Variance (Group 2)</th><td>${fmt(result.var2)}</td></tr>`);
+        if (!result.var1 && Array.isArray(result.group_variances)) summaryRows.push(`<tr><th>Group variances</th><td>${result.group_variances.map(v=>fmt(v)).join(', ')}</td></tr>`);
       }
 
       let valuesSection = '';
@@ -427,6 +430,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
             {/* Two-sample options */}
             <option value="t_student" disabled={inferredTest!=='two-sample'}>Student t-test (equal var)</option>
             <option value="t_welch" disabled={inferredTest!=='two-sample'}>Welch t-test (unequal var)</option>
+            <option value="levene" disabled={inferredTest!=='two-sample'}>Levene variance test</option>
             <option value="mann_whitney" disabled={inferredTest!=='two-sample'}>Mann–Whitney U</option>
             <option value="mood_median_test" disabled={inferredTest!=='two-sample'}>Mood’s median test</option>
           </select>

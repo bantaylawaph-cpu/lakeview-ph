@@ -179,6 +179,42 @@ export function buildInterpretation({
     return joinSentences([interpretationBase, msg]);
   }
 
+  // Levene variance homogeneity path ------------------------------------
+  if (result.test_used === 'levene') {
+    const p = Number(result.p_value);
+    const alphaUsed = Number(result.alpha ?? alphaVal);
+    const equalVar = normBool(result.equal_variances);
+    const base = interpretationBase;
+    let msgCore = '';
+    if (Number.isFinite(p) && Number.isFinite(alphaUsed)) {
+      if (p < alphaUsed) {
+        msgCore = 'Variances appear heterogeneous across groups';
+      } else {
+        msgCore = 'No strong evidence of variance differences across groups';
+      }
+    }
+    // Provide variance info (if available) and updated guidance.
+    const var1 = Number(result.var1 ?? (result.group_variances && result.group_variances[0]));
+    const var2 = Number(result.var2 ?? (result.group_variances && result.group_variances[1]));
+    const varianceRatio = (Number.isFinite(var1) && Number.isFinite(var2) && var1 > 0) ? (var2 / var1) : null;
+    const varRatioStr = varianceRatio != null ? ` Variance ratio (var2/var1) ≈ ${varianceRatio.toFixed(2)}.` : '';
+
+    // Guidance: prefer Welch by default (robust to unequal variances).
+    let guidance = '';
+    if (p < alphaUsed) {
+      guidance = 'Recommendation: variances appear unequal — prefer Welch two-sample t-test for mean comparison; if normality is also violated, prefer Mann–Whitney.';
+    } else {
+      guidance = 'Recommendation: Welch two-sample t-test is a safe default (robust to unequal variances).';
+      guidance += ' If you prefer the pooled Student t-test, ensure normality and justify approximately equal variances';
+      if (varianceRatio != null) guidance += ` (variance ratio ≈ ${varianceRatio.toFixed(2)}).`;
+      else guidance += '.';
+      guidance += ' Note: a non-significant Levene test does not prove variances are equal, especially with small samples.';
+    }
+
+    const detail = `F(${result.df1}, ${result.df2})=${isFinite(result.F)? result.F.toFixed(3): '—'}, p=${Number.isFinite(p)? p.toExponential(2): '—'}` + (varRatioStr ? ` ${varRatioStr.trim()}` : '');
+    return [base, msgCore + '.', detail + '.', guidance].filter(Boolean).join(' ');
+  }
+
   // Shapiro–Wilk dedicated messaging
   if (result.test_used === 'shapiro_wilk' || result.type === 'one-sample-normality') {
     const p = Number(result.p_value);
