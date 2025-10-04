@@ -23,6 +23,11 @@ class AuditLogController extends Controller
         $pp = max(1, min((int)$request->query('per_page', 25), 100));
     $qb = AuditLog::query()->with(['actor:id,name,role_id','actor.role:id,name','tenant:id,name']);
 
+        // Exclude SampleResult rows (database-only details) from listing totals and pages
+        if (class_exists(\App\Models\SampleResult::class)) {
+            $qb->where('model_type', '!=', \App\Models\SampleResult::class);
+        }
+
         if ($user->isOrgAdmin()) {
             $qb->where('tenant_id', $user->tenant_id);
         }
@@ -31,6 +36,17 @@ class AuditLogController extends Controller
         if ($mid = $request->query('model_id')) { $qb->where('model_id', $mid); }
         if ($act = $request->query('action')) { $qb->where('action', $act); }
         if ($aid = $request->query('actor_id')) { $qb->where('actor_id', $aid); }
+        // server-side name/role filters to match frontend inputs
+        if ($an = $request->query('actor_name')) {
+            $qb->whereHas('actor', function ($q) use ($an) {
+                $q->where('name', 'like', '%' . $an . '%');
+            });
+        }
+        if ($role = $request->query('role')) {
+            $qb->whereHas('actor.role', function ($q) use ($role) {
+                $q->where('name', $role);
+            });
+        }
         if ($user->isSuperAdmin() && ($tid = $request->query('tenant_id'))) { $qb->where('tenant_id', $tid); }
         if ($from = $request->query('date_from')) { $qb->whereDate('event_at', '>=', $from); }
         if ($to = $request->query('date_to')) { $qb->whereDate('event_at', '<=', $to); }

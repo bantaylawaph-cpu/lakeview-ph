@@ -92,8 +92,9 @@ export default function OrgAuditLogsPage() {
     if (!effectiveTenantId) return; // need a tenant for org route
     setLoading(true); setError(null);
     try {
-      const res = await api.get(`/org/${effectiveTenantId}/audit-logs`, { params });
-      let items = Array.isArray(res?.data) ? res.data : (res?.data?.data || res.data || res);
+  const res = await api.get(`/org/${effectiveTenantId}/audit-logs`, { params });
+  const body = res?.data;
+  let items = Array.isArray(body) ? body : (Array.isArray(body?.data) ? body.data : []);
       if (Array.isArray(items)) {
         items = items.filter(it => {
           const mt = it.model_type || '';
@@ -102,12 +103,12 @@ export default function OrgAuditLogsPage() {
         });
       }
       setRows(Array.isArray(items) ? items : []);
-      const m = res?.meta || res || {};
+      const pg = Array.isArray(body) ? null : (body || null);
       setMeta({
-        current_page: m.current_page || params.page || 1,
-        last_page: m.last_page || 1,
-        per_page: m.per_page || params.per_page || perPage,
-        total: m.total || (Array.isArray(items) ? items.length : 0),
+        current_page: (pg && typeof pg.current_page === 'number') ? pg.current_page : (params.page || 1),
+        last_page: (pg && typeof pg.last_page === 'number') ? pg.last_page : 1,
+        per_page: (pg && typeof pg.per_page === 'number') ? pg.per_page : (params.per_page || perPage),
+        total: (pg && typeof pg.total === 'number') ? pg.total : (Array.isArray(items) ? items.length : 0),
       });
     } catch (e) {
       setError(e?.response?.data?.message || 'Failed to load');
@@ -193,6 +194,13 @@ export default function OrgAuditLogsPage() {
     }
     return Array.from(map.entries()).map(([full, base])=>({ value: full, label: base })).sort((a,b)=>a.label.localeCompare(b.label));
   }, [rows]);
+
+  // Clear stale fEntity if it's not in current options
+  useEffect(() => {
+    const allowed = new Set(entityOptions.map(o => o.value));
+    if (fEntity && !allowed.has(fEntity)) setFEntity('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entityOptions]);
 
   const columnPickerAdapter = {
     columns: columns.map(c => ({ id: c.id, header: c.header })),

@@ -159,7 +159,8 @@ export default function AdminAuditLogsPage() {
 		setLoading(true); setError(null);
 		try {
 			const res = await api.get(effectiveBase, { params });
-			let items = Array.isArray(res?.data) ? res.data : (res?.data?.data || res.data || res); // adapt paginator
+			const body = res?.data;
+			let items = Array.isArray(body) ? body : (Array.isArray(body?.data) ? body.data : []); // adapt paginator
 			// Remove SampleResult rows (database-only artifacts)
 			if (Array.isArray(items)) {
 				items = items.filter(it => {
@@ -213,12 +214,12 @@ export default function AdminAuditLogsPage() {
 					return Array.from(map.entries()).map(([full, base]) => ({ base, full })).sort((a,b)=>a.base.localeCompare(b.base));
 				});
 			}
-			const m = res?.meta || {};
+			const pg = Array.isArray(body) ? null : (body || null);
 			setMeta({
-				current_page: m.current_page || params.page || 1,
-				last_page: m.last_page || 1,
-				per_page: m.per_page || params.per_page || perPage,
-				total: m.total || normalizedItems.length,
+				current_page: (pg && typeof pg.current_page === 'number') ? pg.current_page : (params.page || 1),
+				last_page: (pg && typeof pg.last_page === 'number') ? pg.last_page : 1,
+				per_page: (pg && typeof pg.per_page === 'number') ? pg.per_page : (params.per_page || perPage),
+				total: (pg && typeof pg.total === 'number') ? pg.total : normalizedItems.length,
 			});
 		} catch (e) {
 			console.error('Failed to load audit logs', e);
@@ -359,6 +360,15 @@ export default function AdminAuditLogsPage() {
 		}
 		return Array.from(map.entries()).map(([full, base])=>({ base, full })).sort((a,b)=>a.base.localeCompare(b.base));
 	})();
+
+	// If a stale persisted entity filter (e.g., SampleResult) exists that's not in options, clear it
+	useEffect(() => {
+		const allowed = new Set(derivedEntities.map(e => e.full));
+		if (fEntity && !allowed.has(fEntity)) {
+			setFEntity('');
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [derivedEntities]);
 
 	const actions = [];
 
