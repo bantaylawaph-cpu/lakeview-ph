@@ -53,7 +53,7 @@ class AuditLogController extends Controller
 
         $qb->orderByDesc('event_at');
 
-        $paginator = $qb->paginate($pp);
+    $paginator = $qb->paginate($pp);
 
         // First pass: build collection & gather unresolved entity names
         $collection = $paginator->getCollection();
@@ -92,11 +92,66 @@ class AuditLogController extends Controller
             }
         }
 
+        // Pre-scan: for SamplingEvent logs on this page, capture lake_id from before/after snapshots (helps for deleted events)
+        $samplingEventLakeIdFromPayload = [];
+        foreach ($collection as $log) {
+            if ($log instanceof AuditLog && $log->model_type === \App\Models\SamplingEvent::class) {
+                $before = $log->before ?? [];
+                $after = $log->after ?? [];
+                $lid = $after['lake_id'] ?? $before['lake_id'] ?? null;
+                if ($lid) {
+                    $samplingEventLakeIdFromPayload[(string)$log->model_id] = (int)$lid;
+                }
+            }
+        }
+
         // Batch lookup per model_type (avoid N+1). We select only likely name columns.
         $nameMap = []; // key: "FQCN::id" => name
         foreach ($needLookup as $fqcn => $ids) {
             try {
                 $ids = array_values(array_unique($ids));
+                // Special handling for SamplingEvent: resolve to Lake name
+                if ($fqcn === \App\Models\SamplingEvent::class) {
+                    // 1) Inline lake_id from payload (covers deleted events)
+                    $inlineLakeIds = [];
+                    foreach ($ids as $eid) {
+                        if (isset($samplingEventLakeIdFromPayload[(string)$eid])) {
+                            $inlineLakeIds[(string)$eid] = $samplingEventLakeIdFromPayload[(string)$eid];
+                        }
+                    }
+                    // 2) For remaining IDs, fetch events -> lake_id from DB (covers existing events)
+                    $remainingIds = array_values(array_diff($ids, array_keys($inlineLakeIds)));
+                    $evRows = [];
+                    if (!empty($remainingIds)) {
+                        $evRows = \App\Models\SamplingEvent::query()->select(['id','lake_id'])->whereIn('id', $remainingIds)->get();
+                    } else {
+                        $evRows = collect();
+                    }
+                    // Collect all lake IDs
+                    $lakeIds = [];
+                    foreach ($inlineLakeIds as $eidStr => $lid) { $lakeIds[] = (int)$lid; }
+                    $lakeIds = array_merge($lakeIds, $evRows->pluck('lake_id')->filter()->all());
+                    $lakeIds = array_values(array_unique(array_map('intval', $lakeIds)));
+                    $lakeNames = [];
+                    if (!empty($lakeIds)) {
+                        $ls = \App\Models\Lake::query()->select(['id','name','alt_name'])->whereIn('id', $lakeIds)->get();
+                        foreach ($ls as $l) {
+                            $lakeNames[$l->id] = (is_string($l->alt_name) && trim($l->alt_name)!=='' ? trim($l->alt_name) : (is_string($l->name) ? trim($l->name) : null));
+                        }
+                    }
+                    // Map names for inline-derived lake_ids
+                    foreach ($inlineLakeIds as $eidStr => $lid) {
+                        $nm = $lakeNames[$lid] ?? null;
+                        if ($nm) { $nameMap[$fqcn.'::'.$eidStr] = $nm; }
+                    }
+                    // Map names for DB-fetched events
+                    foreach ($evRows as $ev) {
+                        $nm = $lakeNames[$ev->lake_id] ?? null;
+                        if ($nm) { $nameMap[$fqcn.'::'.$ev->id] = $nm; }
+                    }
+                    continue; // handled
+                }
+
                 /** @var \Illuminate\Database\Eloquent\Model $model */
                 $model = new $fqcn();
                 $table = $model->getTable();
@@ -111,7 +166,7 @@ class AuditLogController extends Controller
                     foreach (['alt_name','name','title','label','lake_name','code','slug'] as $pref) {
                         if (isset($row->$pref) && is_string($row->$pref) && trim($row->$pref) !== '') { $nm = trim($row->$pref); break; }
                     }
-                    if (!$nm && isset($row->first_name) || isset($row->last_name)) {
+                    if (!$nm && (isset($row->first_name) || isset($row->last_name))) {
                         $nm = trim(($row->first_name ?? '').' '.($row->last_name ?? '')) ?: null;
                     }
                     if ($nm) { $nameMap[$fqcn.'::'.$row->id] = $nm; }

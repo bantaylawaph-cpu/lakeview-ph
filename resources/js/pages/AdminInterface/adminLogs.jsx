@@ -310,8 +310,8 @@ export default function AdminAuditLogsPage() {
 					// Special formatting for SamplingEvent (show Lake name/id)
 					const base = modelBase;
 					if (base === 'SamplingEvent') {
-						const lakeName = extractLakeName(r);
-						const lakeLabel = lakeName ? `Lake ${truncate(lakeName)}` : (r.model_id ? `Lake #${r.model_id}` : 'Lake');
+						const nm = r.entity_name || extractLakeName(r);
+						const lakeLabel = nm ? truncate(nm) : (r.model_id ? `Lake #${r.model_id}` : 'Lake');
 						return `${actor} ${verb} ${lakeLabel} at ${fmt(r.event_at)}`;
 					}
 					const entityName = extractEntityName(r);

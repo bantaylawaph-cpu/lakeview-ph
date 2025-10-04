@@ -24,7 +24,10 @@ return [
         ],
         App\Models\Layer::class => [],
         App\Models\Station::class => [],
-        App\Models\SamplingEvent::class => [],
+        App\Models\SamplingEvent::class => [
+            // include lake_id in update snapshots so UI/backend can resolve lake name even if lake_id wasn't dirty
+            'identity' => ['lake_id']
+        ],
         App\Models\SampleResult::class => [],
         App\Models\Parameter::class => [],
         App\Models\ParameterThreshold::class => [],
