@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef, useImperativeHandle } from "react";
-import { FiSettings, FiX } from 'react-icons/fi';
+import { FiSettings, FiX, FiEye, FiEyeOff } from 'react-icons/fi';
 import Popover from "../common/Popover";
 import { apiPublic } from "../../lib/api";
 import { fetchParameters, fetchSampleEvents, deriveOrgOptions } from "./data/fetchers";
 import { alertSuccess, alertError } from '../../utils/alerts';
-import { tOneSampleAsync, tTwoSampleWelchAsync, tTwoSampleStudentAsync, mannWhitney, signTestAsync, tostEquivalenceAsync, wilcoxonSignedRankAsync, moodMedianAsync } from '../../stats/statsUtils';
+import { tOneSampleAsync, tTwoSampleWelchAsync, tTwoSampleStudentAsync, mannWhitneyAsync, signTestAsync, tostEquivalenceAsync, wilcoxonSignedRankAsync, moodMedianAsync, shapiroWilkAsync } from '../../stats/statsUtils';
 
 function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOptions = [], staticThresholds = {} }, ref) {
   // test mode is now inferred from the user's compare selection (class vs lake)
@@ -75,6 +75,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [showAllValues, setShowAllValues] = useState(false);
+  const [showExactP, setShowExactP] = useState(false);
   // Gear popover state/refs for advanced (moved Year/CL inputs)
   const [showGearPopover, setShowGearPopover] = useState(false);
   const gearBtnRef = useRef(null);
@@ -228,7 +229,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
   }, [selectedTest, paramCode, staticThresholds, inferredTest]);
 
   const run = async () => {
-    setLoading(true); setError(null); setResult(null);
+    setLoading(true); setError(null); setResult(null); setShowExactP(false);
     try {
       // Step 1: fetch series from server (minimal exposure)
       const seriesBody = {
@@ -292,7 +293,24 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
           } else {
             mu0 = suggestThreshold(paramCode, classCode, staticThresholds);
           }
-          if (selectedTest === 'wilcoxon_signed_rank') {
+          if (selectedTest === 'shapiro_wilk') {
+            // Normality test does not use mu0; it's a test on distribution of the sample
+            const sp = await shapiroWilkAsync(values, alpha);
+            computed = {
+              type: 'one-sample-normality',
+              test_used: 'shapiro_wilk',
+              n: sp.n,
+              mean: sp.mean,
+              median: sp.median,
+              sd: sp.sd,
+              W: sp.W,
+              p_value: sp.p_value,
+              alpha: sp.alpha ?? alpha,
+              normal: sp.normal,
+              sample_values: values,
+              evaluation_type: evalType || null
+            };
+          } else if (selectedTest === 'wilcoxon_signed_rank') {
             const qp = await wilcoxonSignedRankAsync(values, Number(mu0), alpha, 'two-sided');
             computed = {
               type: 'one-sample-nonparam',
@@ -332,7 +350,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
           return;
         }
         if (selectedTest === 'mann_whitney') {
-          const mp = mannWhitney(x, y, alpha, 'two-sided');
+          const mp = await mannWhitneyAsync(x, y, alpha, 'two-sided');
           computed = { type: 'two-sample-nonparam', test_used: 'mann_whitney', ...mp, sample1_values: x, sample2_values: y, evaluation_type: evalType || null };
         } else if (selectedTest === 't_student') {
           const tp = await tTwoSampleStudentAsync(x, y, alpha, 'two-sided');
@@ -378,8 +396,28 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
 
   // Preview removal: no preview fetcher
 
-  const fmt = (v) => (v == null ? '' : Number(v).toFixed(2));
-  const sci = (v) => (v == null ? '' : (v < 0.001 ? Number(v).toExponential(2) : v.toFixed(4)));
+  const trimFixed = (s) => {
+    if (typeof s !== 'string') s = String(s ?? '');
+    if (!s.includes('.')) return s;
+    let out = s.replace(/0+$/,'');
+    if (out.endsWith('.')) out = out.slice(0, -1);
+    return out;
+  };
+  const fmt = (v) => {
+    if (v == null) return '';
+    const x = Number(v);
+    if (!Number.isFinite(x)) return String(v);
+    if (x === 0) return '0';
+    const ax = Math.abs(x);
+    // use scientific notation for very small or very large values
+    if (ax >= 1e6 || ax < 1e-4) {
+      const s = x.toExponential(3); // mantissa with 3 decimals
+      const [mant, exp] = s.split('e');
+      return `${trimFixed(mant)}e${exp}`;
+    }
+    return trimFixed(x.toFixed(3));
+  };
+  const sci = fmt; // use the same 3-decimal trimmed formatting everywhere
   const ciLine = (r) => (r.ci_lower != null && r.ci_upper != null ? <div>CI ({Math.round((r.ci_level||0)*100)}%): [{fmt(r.ci_lower)}, {fmt(r.ci_upper)}]</div> : null);
 
   // basic stats helpers for fallbacks
@@ -415,6 +453,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
       't_welch':'Welch t-test (unequal var)',
       'mann_whitney':'Mann–Whitney U',
       'mood_median_test':'Mood’s median test',
+      'shapiro_wilk':'Shapiro–Wilk normality test',
     };
     const testLabel = labelMap[result.test_used] || labelMap[result.type] || result.test_used || result.type;
     push('Test Selected', testLabel);
@@ -434,14 +473,14 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
   const stats1 = two1 ? basicStats(two1) : null;
   const stats2 = two2 ? basicStats(two2) : null;
 
-  if ('n' in result) push('N', result.n || result.sample_n);
-  else if (oneStats) push('N', oneStats.n);
+  if ('n' in result) push('N', fmt(result.n || result.sample_n));
+  else if (oneStats) push('N', fmt(oneStats.n));
 
-  if ('n1' in result) push('N1', result.n1 || result.sample1_n);
-  else if (stats1) push('N1', stats1.n);
+  if ('n1' in result) push('N1', fmt(result.n1 || result.sample1_n));
+  else if (stats1) push('N1', fmt(stats1.n));
 
-  if ('n2' in result) push('N2', result.n2 || result.sample2_n);
-  else if (stats2) push('N2', stats2.n);
+  if ('n2' in result) push('N2', fmt(result.n2 || result.sample2_n));
+  else if (stats2) push('N2', fmt(stats2.n));
 
   if ('mean' in result) push('Mean', fmt(result.mean));
   else if (oneStats) push('Mean', fmt(oneStats.mean));
@@ -463,6 +502,8 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
 
   if ('sd' in result) push('SD', fmt(result.sd));
   else if (oneStats) push('SD', fmt(oneStats.sd));
+  // Shapiro–Wilk W statistic
+  if ('W' in result) push('W', fmt(result.W));
 
   if ('sd1' in result) push('SD (Lake 1)', fmt(result.sd1));
   else if (stats1) push('SD (Lake 1)', fmt(stats1.sd));
@@ -476,25 +517,41 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
     if ('statistic' in result) push('Statistic', fmt(result.statistic));
     if ('chi2' in result) push('Chi-square', fmt(result.chi2));
     // Sign test details
-    if ('k_positive' in result) push('Positives', result.k_positive);
-    if ('k_negative' in result) push('Negatives', result.k_negative);
+  if ('k_positive' in result) push('Positives', fmt(result.k_positive));
+  if ('k_negative' in result) push('Negatives', fmt(result.k_negative));
     // Wilcoxon fallback details
     if (!('statistic' in result)) {
       if ('Wplus' in result) push('W+', fmt(result.Wplus));
       if ('Wminus' in result) push('W-', fmt(result.Wminus));
     }
     // TOST details
-    if (result.test_used === 'tost' || result.type === 'tost') {
+  if (result.test_used === 'tost' || result.type === 'tost') {
       if ('t1' in result) push('t1 (lower)', fmt(result.t1));
       if ('p1' in result) push('p1 (H0: mean ≤ lower)', sci(result.p1));
       if ('t2' in result) push('t2 (upper)', fmt(result.t2));
       if ('p2' in result) push('p2 (H0: mean ≥ upper)', sci(result.p2));
       if ('equivalent' in result) push('Equivalent?', result.equivalent ? 'Yes' : 'No');
     }
-    if ('p_value' in result) push('p-value', sci(result.p_value));
-    if ('mu0' in result) push('Threshold (μ0)', fmt(result.mu0));
-    if (result.threshold_min != null) push('Threshold Min', result.threshold_min);
-    if (result.threshold_max != null) push('Threshold Max', result.threshold_max);
+  if ('p_value' in result) {
+      const pvNum = Number(result.p_value);
+      if (Number.isFinite(pvNum) && pvNum < 0.001) {
+        const btnStyle = { marginLeft:6, padding:'2px 6px', fontSize:12, lineHeight:'14px', border:'none', background:'transparent', color:'inherit', cursor:'pointer', display:'inline-flex', alignItems:'center' };
+        const label = showExactP ? 'Hide exact p-value' : 'Show exact p-value';
+        push('p-value', (
+          <span>
+            {showExactP ? sci(pvNum) : '<0.001'}
+            <button type="button" onClick={()=>setShowExactP(s=>!s)} title={label} aria-label={label} style={btnStyle}>
+              {showExactP ? <FiEyeOff size={14} /> : <FiEye size={14} />}
+            </button>
+          </span>
+        ));
+      } else {
+        push('p-value', sci(result.p_value));
+      }
+    }
+  if ('mu0' in result) push('Threshold (μ0)', fmt(result.mu0));
+  if (result.threshold_min != null) push('Threshold Min', fmt(result.threshold_min));
+  if (result.threshold_max != null) push('Threshold Max', fmt(result.threshold_max));
     if (result.standard_code) push('Standard', result.standard_code);
     if (result.class_code_used) push('Class Used', result.class_code_used);
     if (result.standard_fallback) push('Std Fallback', 'Yes');
@@ -707,7 +764,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
           {gridItems.map((it, i) => (
             <React.Fragment key={i}>
               <div style={{ fontSize:12, opacity:0.85, padding:6, borderBottom:'1px solid rgba(255,255,255,0.03)' }}>{it.k}</div>
-              <div style={{ fontSize:13, padding:6, borderBottom:'1px solid rgba(255,255,255,0.03)' }}>{String(it.v)}</div>
+              <div style={{ fontSize:13, padding:6, borderBottom:'1px solid rgba(255,255,255,0.03)' }}>{(typeof it.v === 'string' || typeof it.v === 'number') ? String(it.v) : it.v}</div>
             </React.Fragment>
           ))}
         </div>
@@ -743,6 +800,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
     setResult(null);
     setError(null);
     setShowAllValues(false);
+  setShowExactP(false);
     // no user-facing alert for clear (kept silent)
   };
 
@@ -758,9 +816,12 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
       const summaryRows = [];
       if (result) {
         summaryRows.push(`<tr><th>Test</th><td>${result.test_used || result.type || ''}</td></tr>`);
-        if (result.p_value != null) summaryRows.push(`<tr><th>p-value</th><td>${result.p_value}</td></tr>`);
-        if (result.mean != null) summaryRows.push(`<tr><th>Mean</th><td>${result.mean}</td></tr>`);
-        if (result.n != null) summaryRows.push(`<tr><th>N</th><td>${result.n}</td></tr>`);
+        if (result.p_value != null) summaryRows.push(`<tr><th>p-value</th><td>${sci(result.p_value)}</td></tr>`);
+        if (result.mean != null) summaryRows.push(`<tr><th>Mean</th><td>${fmt(result.mean)}</td></tr>`);
+        if (result.n != null) summaryRows.push(`<tr><th>N</th><td>${fmt(result.n)}</td></tr>`);
+        if (result.median != null) summaryRows.push(`<tr><th>Median</th><td>${fmt(result.median)}</td></tr>`);
+        if (result.sd != null) summaryRows.push(`<tr><th>SD</th><td>${fmt(result.sd)}</td></tr>`);
+        if (result.W != null) summaryRows.push(`<tr><th>W</th><td>${fmt(result.W)}</td></tr>`);
       }
 
       let valuesSection = '';
@@ -917,7 +978,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
                     <td style={{ padding:'6px 8px', fontSize:12, overflowWrap: 'anywhere', wordBreak: 'break-word', minWidth:0 }}>{ev.sampled_at || ''}</td>
                     <td style={{ padding:'6px 8px', fontSize:12, overflowWrap: 'anywhere', wordBreak: 'break-word', minWidth:0 }}>{lakeName(ev.lake_id)}</td>
                     <td style={{ padding:'6px 8px', fontSize:12, overflowWrap: 'anywhere', wordBreak: 'break-word', minWidth:0 }}>{ev.station_name ?? (ev.station_id ?? '')}</td>
-                    <td style={{ padding:'6px 8px', fontSize:12, overflowWrap: 'anywhere', wordBreak: 'break-word', minWidth:0 }}>{ev.value != null ? Number(ev.value).toFixed(2) : ''}</td>
+                    <td style={{ padding:'6px 8px', fontSize:12, overflowWrap: 'anywhere', wordBreak: 'break-word', minWidth:0 }}>{ev.value != null ? fmt(ev.value) : ''}</td>
                   </tr>
                 ))}
               </tbody>
