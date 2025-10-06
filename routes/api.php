@@ -271,6 +271,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/org-applications/mine', [OrgApplicationController::class, 'mine']);
     Route::get('/org-applications/mine/all', [OrgApplicationController::class, 'mineAll']);
     Route::get('/org-applications/mine/count', [OrgApplicationController::class, 'mineCount']);
+    Route::post('/org-applications/{id}/accept', [OrgApplicationController::class, 'accept'])->whereNumber('id');
     // Audit logs (superadmin global, org_admin scoped)
     Route::get('/admin/audit-logs', [\App\Http\Controllers\Api\Admin\AuditLogController::class, 'index']);
     Route::get('/admin/audit-logs/{id}', [\App\Http\Controllers\Api\Admin\AuditLogController::class, 'show']);

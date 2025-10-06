@@ -4,6 +4,7 @@ import TableToolbar from "../../components/table/TableToolbar";
 import TableLayout from "../../layouts/TableLayout";
 import { FiCheck, FiX, FiAlertCircle, FiFileText } from 'react-icons/fi';
 import KycDocsModal from '../../components/KycDocsModal';
+import Modal from "../../components/Modal";
 
 const STATUS_OPTIONS = [
   { value: "", label: "All" },
@@ -28,6 +29,7 @@ export default function OrgApplications() {
     status: true,
     actions: true,
   });
+  const [decisionModal, setDecisionModal] = useState({ open: false, id: null, action: null, notes: '', submitting: false, error: '' });
 
   const COLUMNS = useMemo(() => ([
     { id: "user", header: "User" },
@@ -54,19 +56,36 @@ export default function OrgApplications() {
 
   useEffect(() => { load(); }, [status]);
 
-  const decide = async (id, action) => {
+  // Submit a decision; notes required will be handled by caller for certain actions
+  const decide = async (id, action, notes = '') => {
     try {
       const me = await api.get('/auth/me');
       const tenantId = me?.tenant_id;
       if (!tenantId) throw new Error('No tenant in session');
-      let notes = '';
-      if (action === 'needs_changes' || action === 'reject') {
-        notes = window.prompt('Reviewer notes (optional):', '') || '';
-      }
       await api.post(`/org/${tenantId}/applications/${id}/decision`, { action, notes });
       load();
     } catch (e) {
       // noop; could show toast
+    }
+  };
+
+  // Open modal for needs_changes or reject to collect notes
+  const openDecisionModal = (row, action) => {
+    setDecisionModal({ open: true, id: row.id, action, notes: '', submitting: false, error: '' });
+  };
+
+  const submitDecisionModal = async () => {
+    const { id, action, notes } = decisionModal;
+    if ((action === 'needs_changes' || action === 'reject') && !String(notes || '').trim()) {
+      setDecisionModal(dm => ({ ...dm, error: 'Please provide a brief reason.' }));
+      return;
+    }
+    setDecisionModal(dm => ({ ...dm, submitting: true, error: '' }));
+    try {
+      await decide(id, action, notes);
+      setDecisionModal({ open: false, id: null, action: null, notes: '', submitting: false, error: '' });
+    } catch (e) {
+      setDecisionModal(dm => ({ ...dm, submitting: false, error: 'Failed to submit decision. Please try again.' }));
     }
   };
 
@@ -161,8 +180,8 @@ export default function OrgApplications() {
 
   const actions = useMemo(() => ([
     { label: 'Approve', title: 'Approve', type: 'edit', icon: <FiCheck />, onClick: (raw) => decide(raw.id, 'approve') },
-    { label: 'Needs changes', title: 'Needs changes', icon: <FiAlertCircle />, onClick: (raw) => decide(raw.id, 'needs_changes') },
-    { label: 'Reject', title: 'Reject', type: 'delete', icon: <FiX />, onClick: (raw) => decide(raw.id, 'reject') },
+    { label: 'Needs changes', title: 'Needs changes', icon: <FiAlertCircle />, onClick: (raw) => openDecisionModal(raw, 'needs_changes') },
+    { label: 'Reject', title: 'Reject', type: 'delete', icon: <FiX />, onClick: (raw) => openDecisionModal(raw, 'reject') },
   ]), []);
 
   return (
@@ -199,6 +218,41 @@ export default function OrgApplications() {
             pageSize={15}
           />
           <KycDocsModal open={!!docUser.id} onClose={() => setDocUser({ id: null, tenantId: null })} userId={docUser.id} orgTenantId={docUser.tenantId} />
+          <Modal
+            open={decisionModal.open}
+            onClose={() => setDecisionModal({ open: false, id: null, action: null, notes: '', submitting: false, error: '' })}
+            title={decisionModal.action === 'reject' ? 'Reject application' : 'Request changes'}
+            width={520}
+          >
+            <div style={{ display: 'grid', gap: 10 }}>
+              <div className="muted" style={{ fontSize: 14 }}>
+                {decisionModal.action === 'reject'
+                  ? 'Please share a brief reason for rejection so the applicant understands what to do next.'
+                  : 'Describe what changes are needed so the applicant can update their submission.'}
+              </div>
+              <label>
+                <div style={{ fontWeight: 600, marginBottom: 6 }}>Reviewer notes</div>
+                <textarea
+                  rows={5}
+                  value={decisionModal.notes}
+                  onChange={(e) => setDecisionModal(dm => ({ ...dm, notes: e.target.value }))}
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 8 }}
+                  placeholder={decisionModal.action === 'reject' ? 'E.g., ID is blurry and cannot be verified.' : 'E.g., Please upload the back side of your ID.'}
+                />
+              </label>
+              {decisionModal.error && (
+                <div style={{ color: '#b42318', background: '#fee4e2', border: '1px solid #fda29b', padding: 8, borderRadius: 8 }}>
+                  {decisionModal.error}
+                </div>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 6 }}>
+                <button type="button" onClick={() => setDecisionModal({ open: false, id: null, action: null, notes: '', submitting: false, error: '' })} className="pill-btn ghost">Cancel</button>
+                <button type="button" onClick={submitDecisionModal} className="pill-btn" disabled={decisionModal.submitting}>
+                  {decisionModal.submitting ? 'Submitting…' : (decisionModal.action === 'reject' ? 'Reject' : 'Send request')}
+                </button>
+              </div>
+            </div>
+          </Modal>
         </div>
       </div>
     </div>

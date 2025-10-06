@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getCurrentUser } from "../../lib/authState";
+import { getCurrentUser, setCurrentUser } from "../../lib/authState";
 import { listTenantsOptions, createOrgApplication } from "../../lib/api";
 import api from "../../lib/api";
 import { toastSuccess, toastError } from "../../utils/alerts";
@@ -47,6 +47,7 @@ export default function KycPage({ embedded = true, open = true, onClose }) {
   const [myApplication, setMyApplication] = useState(null);
   const [myApplications, setMyApplications] = useState([]);
   const [myAppCount, setMyAppCount] = useState(0);
+  const [acceptingId, setAcceptingId] = useState(null);
   const [showNewApp, setShowNewApp] = useState(false);
   // Wizard state
   const [step, setStep] = useState(1); // 1: Choose Org, 2: Profile, 3: Documents
@@ -299,6 +300,38 @@ export default function KycPage({ embedded = true, open = true, onClose }) {
                     <div style={{ fontSize: 14, color: '#374151', marginTop: 2 }}>
                       Role: <strong>{myApplication?.desired_role}</strong>
                     </div>
+                    {myApplication?.status === 'approved' && !myApplication?.accepted_at && (
+                      <div style={{ marginTop: 10, display: 'flex', justifyContent: 'flex-end' }}>
+                        <button
+                          type="button"
+                          className="auth-btn"
+                          onClick={async () => {
+                            setAcceptingId(myApplication.id);
+                            try {
+                              await api.post(`/org-applications/${myApplication.id}/accept`);
+                              // Refresh auth and local lists
+                              try { const me = await api.get('/auth/me'); if (me?.data) setCurrentUser(me.data); } catch {}
+                              try { const mine = await api.get('/org-applications/mine'); setMyApplication(mine?.data || null); } catch {}
+                              try { const cnt = await api.get('/org-applications/mine/count'); setMyAppCount(cnt?.data?.count || 0); } catch {}
+                              setMyApplications([]);
+                              toastSuccess('Membership accepted');
+                              if (onClose) onClose();
+                            } catch (e) {
+                              const code = e?.response?.status;
+                              if (code === 409) toastError('Cannot accept', 'You may already belong to an organization.');
+                              else if (code === 422) toastError('Cannot accept', 'This application is not eligible for acceptance.');
+                              else toastError('Accept failed', 'Please try again.');
+                            } finally {
+                              setAcceptingId(null);
+                            }
+                          }}
+                          disabled={acceptingId === myApplication.id}
+                          style={{ height: 36, padding: '0 12px', borderRadius: 8 }}
+                        >
+                          {acceptingId === myApplication.id ? 'Accepting…' : 'Accept'}
+                        </button>
+                      </div>
+                    )}
                     <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>
                       You may edit your profile or documents while your application is pending.
                     </div>
@@ -324,6 +357,39 @@ export default function KycPage({ embedded = true, open = true, onClose }) {
                                   );
                                 })()}
                               </div>
+                              {app.status === 'approved' && !app.accepted_at && (
+                                <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end' }}>
+                                  <button
+                                    type="button"
+                                    className="auth-btn"
+                                    onClick={async () => {
+                                      setAcceptingId(app.id);
+                                      try {
+                                        await api.post(`/org-applications/${app.id}/accept`);
+                                        // Refresh lists and user
+                                        try { const me = await api.get('/auth/me'); if (me?.data) setCurrentUser(me.data); } catch {}
+                                        try { const mine = await api.get('/org-applications/mine'); setMyApplication(mine?.data || null); } catch {}
+                                        try { const cnt = await api.get('/org-applications/mine/count'); setMyAppCount(cnt?.data?.count || 0); } catch {}
+                                        setMyApplications([]); // force lazy reload if still needed
+                                        // Optional: close modal after acceptance
+                                        toastSuccess('Membership accepted');
+                                        if (onClose) onClose();
+                                      } catch (e) {
+                                        const code = e?.response?.status;
+                                        if (code === 409) toastError('Cannot accept', 'You may already belong to an organization.');
+                                        else if (code === 422) toastError('Cannot accept', 'This application is not eligible for acceptance.');
+                                        else toastError('Accept failed', 'Please try again.');
+                                      } finally {
+                                        setAcceptingId(null);
+                                      }
+                                    }}
+                                    disabled={acceptingId === app.id}
+                                    style={{ height: 36, padding: '0 12px', borderRadius: 8 }}
+                                  >
+                                    {acceptingId === app.id ? 'Accepting…' : 'Accept'}
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>

@@ -142,19 +142,7 @@ class OrgApplicationController extends Controller
         $app->reviewer_notes = $data['notes'] ?? null;
         $app->save();
 
-        // If approved, apply role/scope/tenant to the user idempotently
-        if ($app->status === 'approved') {
-            $user = User::find($app->user_id);
-            if ($user) {
-                $targetRoleName = $app->desired_role; // 'contributor' | 'org_admin'
-                $targetRole = Role::where('name', $targetRoleName)->first();
-                if ($targetRole) {
-                    $user->tenant_id = $app->tenant_id;
-                    $user->role_id = $targetRole->id;
-                    try { $user->save(); } catch (\Throwable $e) { /* log if needed */ }
-                }
-            }
-        }
+        // Note: membership is no longer applied on approve. It will be applied when user accepts the offer.
 
         // Notify applicant of decision
         try {
@@ -165,5 +153,39 @@ class OrgApplicationController extends Controller
         } catch (\Throwable $e) { /* ignore mail failures */ }
 
         return response()->json(['data' => $app]);
+    }
+
+    // User acceptance: finalize membership and void other applications
+    public function accept(int $id, Request $request)
+    {
+        $u = $request->user();
+        $app = OrgApplication::with('tenant')->findOrFail($id);
+        if ($app->user_id !== $u->id) return response()->json(['message' => 'Forbidden'], 403);
+        if ($app->status !== 'approved') return response()->json(['message' => 'Application is not approved.'], 422);
+        if ($app->accepted_at) return response()->json(['data' => $app, 'message' => 'Already accepted.']);
+
+        // Optional guard: prevent switching if already member elsewhere
+        if (!empty($u->tenant_id) && $u->tenant_id !== $app->tenant_id) {
+            return response()->json(['message' => 'You are already a member of another organization.'], 409);
+        }
+
+        // Apply membership
+        $targetRole = Role::where('name', $app->desired_role)->first();
+        if (!$targetRole) return response()->json(['message' => 'Target role not found'], 500);
+        $u->tenant_id = $app->tenant_id;
+        $u->role_id = $targetRole->id;
+        try { $u->save(); } catch (\Throwable $e) { return response()->json(['message' => 'Failed to update user.'], 500); }
+
+        // Mark accepted
+        $app->accepted_at = now();
+        $app->save();
+
+        // Void other active applications for this user
+        OrgApplication::where('user_id', $u->id)
+            ->where('id', '<>', $app->id)
+            ->whereIn('status', ['pending_kyc','pending_org_review','approved','needs_changes'])
+            ->update(['status' => 'rejected']);
+
+        return response()->json(['data' => $app, 'message' => 'Membership confirmed.']);
     }
 }

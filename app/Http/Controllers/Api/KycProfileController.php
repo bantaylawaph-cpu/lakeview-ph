@@ -59,10 +59,7 @@ class KycProfileController extends Controller
         $profile->status = 'submitted';
         $profile->submitted_at = now();
         $profile->save();
-        // Notify user
-        try {
-            \Illuminate\Support\Facades\Mail::to($u->email)->queue(new \App\Mail\KycSubmitted($u));
-        } catch (\Throwable $e) { /* swallow mail errors */ }
+        // Email notification removed per product decision: no KYC emails
         return response()->json(['data' => $profile, 'message' => 'KYC submitted for review.']);
     }
 
@@ -147,10 +144,7 @@ class KycProfileController extends Controller
         $profile->reviewer_id = $request->user()->id;
         $profile->reviewer_notes = $data['notes'] ?? null;
         $profile->save();
-        // Notify user of decision
-        try {
-            \Illuminate\Support\Facades\Mail::to($profile->user?->email)->queue(new \App\Mail\KycDecision($profile->user, $profile->status, $profile->reviewer_notes));
-        } catch (\Throwable $e) { /* swallow mail errors */ }
+        // Email notification removed per product decision: no KYC emails
         return response()->json(['data' => $profile]);
     }
 
