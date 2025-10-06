@@ -49,7 +49,7 @@ export async function runTwoSample({ selectedTest, sample1, sample2, alpha, eval
   }
   if (selectedTest === 'mood_median_test') {
     const r = await moodMedianAsync(sample1, sample2, alpha);
-    return normalize(r, { type:'two-sample-nonparam', test_used:'mood_median_test', sample1_values: sample1, sample2_values: sample2, evaluation_type: evalType || null });
+    return normalize(r, { type:'two-sample-nonparam', test_used:'mood_median_test', sample1_values: sample1, sample2_values: sample2, n1: sample1?.length || r.n1 || null, n2: sample2?.length || r.n2 || null, evaluation_type: evalType || null });
   }
   // default Welch
   const r = await tTwoSampleWelchAsync(sample1, sample2, alpha, 'two-sided');

@@ -15,7 +15,8 @@ export default function ResultPanel({ result, paramCode, paramOptions, classCode
     'one-sample-nonparam':'Wilcoxon signed-rank',
     'levene':'Levene (Brown–Forsythe) variance test',
     'two-sample-welch':'Two-sample Welch t-test',
-    'two-sample-nonparam':'Mann-Whitney U test',
+  // Generic two-sample nonparametric placeholder (will be overridden by specific test_used when available)
+  'two-sample-nonparam':'Two-sample nonparametric test',
     'tost':'Equivalence TOST',
     't_one_sample':'One-sample t-test',
     'wilcoxon_signed_rank':'Wilcoxon signed-rank',

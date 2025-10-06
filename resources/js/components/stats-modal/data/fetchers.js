@@ -28,7 +28,8 @@ export async function fetchParameters() {
       key: pr.code || pr.key || String(pr.id),
       code: pr.code || pr.key || String(pr.id),
       label: pr.name || pr.code || String(pr.id),
-      unit: pr.unit || pr.parameter?.unit || ''
+      unit: pr.unit || pr.parameter?.unit || '',
+      evaluation_type: pr.evaluation_type || null // include for direction logic
     }));
     _setCache(key, normalized);
     return normalized.slice();
