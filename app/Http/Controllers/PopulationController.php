@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 use Symfony\Component\HttpFoundation\Response;
 
 class PopulationController extends Controller
@@ -247,9 +248,16 @@ class PopulationController extends Controller
         try {
             $t = $this->resolveDatasetTable($year);
             if (!$t) return response()->json(['points' => [], 'warning' => 'no_dataset']);
-            $ringRow = null;
-            try { $ringRow = DB::selectOne('SELECT public.fn_lake_ring_resolved(?, ?, ?) AS g', [$lakeId, $radiusKm, $layerId]); } catch (\Throwable $ringE) {}
-            if (!$ringRow || !$ringRow->g) return response()->json(['points' => [], 'warning' => 'no_ring']);
+
+            // Cache ring geometry (EWKT) to avoid repeated function calls
+            $ringCacheKey = sprintf('ring:v1:%d:%.3f:%s', $lakeId, $radiusKm, $layerId ? (int)$layerId : 0);
+            $ringEWKT = Cache::remember($ringCacheKey, 3600, function () use ($lakeId, $radiusKm, $layerId) {
+                try {
+                    $row = DB::selectOne('SELECT ST_AsEWKT(public.fn_lake_ring_resolved(?, ?, ?)) AS g', [$lakeId, $radiusKm, $layerId]);
+                    return $row?->g ?: null;
+                } catch (\Throwable $e) { return null; }
+            });
+            if (!$ringEWKT) return response()->json(['points' => [], 'warning' => 'no_ring']);
 
             // Parse bbox if present
             $bboxGeomSQL = null;
@@ -263,11 +271,18 @@ class PopulationController extends Controller
                 }
             }
 
-            // Compose SQL dynamic with fully-qualified table name if needed
             $qname = $this->qname($t);
 
+            // Short TTL points cache (60s) keyed by bbox + params + limit
+            $bboxKey = $bbox ? substr(sha1($bbox), 0, 16) : 'nobbox';
+            $ptsCacheKey = sprintf('poppts:v1:%d:%d:%.3f:%s:%d:%s', $lakeId, $year, $radiusKm, $layerId ? (int)$layerId : 0, $maxPts, $bboxKey);
+            $cached = Cache::get($ptsCacheKey);
+            if ($cached) {
+                return response()->json(array_merge($cached, ['cached' => true]));
+            }
+
             $sql = "WITH ring AS (
-                SELECT ?::geometry AS g
+                SELECT ST_GeomFromEWKT(?::text) AS g
             ), env AS (
                 SELECT " . ($bboxGeomSQL ?: 'NULL::geometry') . " AS g
             ), tiles AS (
@@ -282,15 +297,38 @@ class PopulationController extends Controller
               WHERE (pp).val IS NOT NULL
             ), clipped AS (
               SELECT g, pop FROM pts WHERE pop IS NOT NULL AND ST_Intersects(g, (SELECT g FROM ring))
+            ), cnt AS (
+              SELECT COUNT(*) AS n FROM clipped
             ), sampled AS (
-              SELECT g, pop FROM clipped
-              ORDER BY random()
+              SELECT g, pop FROM clipped, cnt
+              WHERE random() < LEAST(1.0, (?::float / NULLIF(cnt.n,1)))
               LIMIT ?
             )
             SELECT ST_Y(g) AS lat, ST_X(g) AS lon, pop FROM sampled";
-            $rows = DB::select($sql, array_merge([$ringRow->g], $bindings, [$maxPts]));
+            $rows = DB::select($sql, array_merge([$ringEWKT], $bindings, [$maxPts, $maxPts]));
             $points = array_map(fn($r) => [ (float)$r->lat, (float)$r->lon, (float)$r->pop ], $rows);
-            return response()->json(['points' => $points]);
+
+            // Basic stats based on sample for optional client normalization skip
+            $vals = array_map(fn($p) => $p[2], $points);
+            $count = count($vals);
+            $p95 = null; $maxVal = null;
+            if ($count > 0) {
+                sort($vals);
+                $idx = (int) floor(0.95 * ($count - 1));
+                $p95 = $vals[$idx] ?? $vals[$count - 1];
+                $maxVal = $vals[$count - 1];
+            }
+            $payload = [
+                'points' => $points,
+                'stats' => [
+                    'count' => $count,
+                    'p95_raw' => $p95,
+                    'max_raw' => $maxVal,
+                    'approx' => true,
+                ],
+            ];
+            Cache::put($ptsCacheKey, $payload, 60); // 60s TTL
+            return response()->json(array_merge($payload, ['cached' => false]));
         } catch (\Throwable $e) {
             Log::warning('Population points failed', [
                 'lake_id' => $lakeId,

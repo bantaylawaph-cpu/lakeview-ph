@@ -10,7 +10,7 @@ import { fetchPublicLayers, fetchLakeOptions, fetchPublicLayerGeo } from "../../
 import { useMap, GeoJSON } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import { createHeatLayer, fetchPopPoints } from "../../map/leafletHeat";
+import { createHeatLayer, fetchPopPoints, fetchPopPointsProgressive } from "../../map/leafletHeat";
 
 import AppMap from "../../components/AppMap";
 import MapControls from "../../components/MapControls";
@@ -89,10 +89,14 @@ function MapPage() {
   const [heatProgress, setHeatProgress] = useState(null); // null=indeterminate, 0..1 determinate
   const [heatEnabled, setHeatEnabled] = useState(false);
   const [heatError, setHeatError] = useState(null);
+  const [heatResolution, setHeatResolution] = useState(null); // 'preview' | 'final'
+  const lastHeatRef = useRef(null); // cache last heat dataset (points + bbox + meta)
   const heatParamsRef = useRef(null); // { year, km, layerId }
   const heatDebounceRef = useRef(null);
   const heatAbortRef = useRef(null);
   const heatInFlightRef = useRef(false);
+  const estimateInFlightRef = useRef(false); // track population estimate priority
+  const pendingHeatFetchRef = useRef(null); // queued heat fetch while estimate running
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -420,15 +424,25 @@ function MapPage() {
 
     if (opts?.loading) setHeatLoading(true);
 
-    const fetchAndRender = async () => {
+    const fetchAndRender = () => {
       const p = heatParamsRef.current;
       if (!p) return;
       if (heatInFlightRef.current) {
-        // cancel the previous request and proceed
         try { heatAbortRef.current && heatAbortRef.current.abort(); } catch {}
       }
+        // If estimate is in flight, queue this heat fetch until estimate completes
+        if (estimateInFlightRef.current) {
+          pendingHeatFetchRef.current = fetchAndRender;
+          setHeatLoading(true);
+          setHeatResolution(null);
+          return;
+        }
       const controller = new AbortController();
       heatAbortRef.current = controller;
+      const zoom = map.getZoom?.() || 8;
+      // Adaptive max points by zoom (coarse zoom fewer points)
+      const maxPoints = zoom >= 13 ? 8000 : zoom >= 11 ? 6000 : zoom >= 9 ? 4000 : 2500;
+      const smallPoints = Math.min(1200, Math.floor(maxPoints / 4));
       const params = {
         lakeId: selectedLake.id,
         year: p.year,
@@ -442,61 +456,85 @@ function MapPage() {
             return `${sw.lng},${sw.lat},${ne.lng},${ne.lat}`;
           } catch { return null; }
         })(),
+        maxPoints,
+        smallPoints,
       };
-      try {
-        heatInFlightRef.current = true;
-        const pts = await fetchPopPoints(params, {
-          signal: controller.signal,
-          onProgress: (p) => {
-            if (p === null) setHeatProgress(null); else setHeatProgress(p);
+      heatInFlightRef.current = true;
+      setHeatProgress(null);
+      const runner = fetchPopPointsProgressive(params, {
+        onIntermediate: (pts) => {
+          if (!popHeatLayerRef.current) {
+            const layer = createHeatLayer(pts);
+            popHeatLayerRef.current = layer;
+            layer.addTo(map);
+          } else {
+            popHeatLayerRef.current.__setData?.(pts);
           }
-        });
-        if (!popHeatLayerRef.current) {
-          const layer = createHeatLayer(pts);
-          popHeatLayerRef.current = layer;
-          layer.addTo(map);
-        } else {
-          popHeatLayerRef.current.__setData?.(pts);
-        }
-        setHeatError(null);
-      } catch (e) {
-        const status = e?.status ?? e?.response?.status;
-        if (e?.name === 'CanceledError' || e?.name === 'AbortError' || e?.code === 'ERR_CANCELED') {
-          // silently ignore cancellations
-        } else if (status === 429) {
-          // gentle backoff: re-try once after a short delay
-          try {
-            const retryAfter = Number(e?.response?.headers?.['retry-after']) || 0;
-            const delayMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 700;
-            await new Promise((r) => setTimeout(r, delayMs));
-            const pts = await fetchPopPoints(params, { signal: controller.signal });
-            if (!popHeatLayerRef.current) {
-              const layer = createHeatLayer(pts);
-              popHeatLayerRef.current = layer;
-              layer.addTo(map);
-            } else {
-              popHeatLayerRef.current.__setData?.(pts);
-            }
-            setHeatError(null);
-          } catch (err2) {
-            if (!(err2?.name === 'CanceledError' || err2?.name === 'AbortError' || err2?.code === 'ERR_CANCELED')) {
-              console.warn('[Heatmap] failed after 429/backoff', err2);
-              setHeatError('Retry after rate limit failed.');
-            }
+          setHeatError(null);
+          setHeatLoading(true); // still loading final
+          setHeatResolution('preview');
+        },
+        onFinal: (pts) => {
+          if (popHeatLayerRef.current) {
+            popHeatLayerRef.current.__setData?.(pts);
+          } else {
+            const layer = createHeatLayer(pts);
+            popHeatLayerRef.current = layer;
+            layer.addTo(map);
           }
-        } else {
-          console.warn('[Heatmap] failed to fetch points', e);
+          setHeatLoading(false);
+          setHeatError(null);
+          setHeatResolution('final');
+        },
+        onError: (e) => {
+          if (e?.name === 'CanceledError' || e?.name === 'AbortError' || e?.code === 'ERR_CANCELED') return;
+          console.warn('[Heatmap] progressive fetch failed', e);
           setHeatError('Failed to load population points');
+          setHeatLoading(false);
+          setHeatResolution(null);
         }
-      } finally {
+      }, { signal: controller.signal });
+      controller.signal.addEventListener('abort', () => {
+        setHeatLoading(false);
+      });
+      // We could use onDownloadProgress from underlying calls; intermediate already quick
+      runner.promise.finally(() => {
         heatInFlightRef.current = false;
         setHeatProgress(null);
-        setHeatLoading(false);
-      }
+      });
     };
 
     fetchAndRender();
   }, [selectedLake?.id]);
+
+  // Listen for population estimate lifecycle to prioritize its network over heat requests
+  useEffect(() => {
+    const handler = (e) => {
+      const st = e?.detail?.state;
+      if (st === 'start') {
+        estimateInFlightRef.current = true;
+        // Abort any in-flight heat fetch to free network/CPU
+        if (heatAbortRef.current) { try { heatAbortRef.current.abort(); } catch {} }
+        // Keep heat layer displayed (stale) but show loading indicator if enabled
+        if (heatEnabled) { setHeatLoading(true); setHeatResolution(null); }
+      } else if (st === 'done') {
+        estimateInFlightRef.current = false;
+        // If a heat fetch was queued, run it now
+        const queued = pendingHeatFetchRef.current;
+        if (queued) {
+          pendingHeatFetchRef.current = null;
+          // slight microtask delay to ensure estimate UI updates flush
+          setTimeout(() => { try { queued(); } catch (err) { console.warn('[Heatmap] queued fetch failed', err); } }, 0);
+        } else if (heatEnabled) {
+          // If no queued fetch but heat is enabled & we aborted earlier, re-trigger refresh
+          const p = heatParamsRef.current;
+            if (p) togglePopulationHeatmap(true, { km: p.km, year: p.year, layerId: p.layerId });
+        }
+      }
+    };
+    window.addEventListener('lv-pop-estimate', handler);
+    return () => window.removeEventListener('lv-pop-estimate', handler);
+  }, [heatEnabled, togglePopulationHeatmap]);
 
   // Auto-refresh heat points when the map moves/zooms and heat is enabled
   useEffect(() => {
@@ -899,6 +937,12 @@ function MapPage() {
           <div style={{ marginTop: 6, lineHeight: 1.3, opacity: 0.85 }}>
             Relative intensity scaled to local distribution (95th percentile cap & sqrt compression).
           </div>
+          {heatResolution === 'preview' && (
+            <div style={{ marginTop: 4, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, opacity: 0.7 }}>Preview sample… refining</div>
+          )}
+          {heatResolution === 'final' && (
+            <div style={{ marginTop: 4, fontSize: 10, opacity: 0.55 }}>Final resolution</div>
+          )}
         </div>
       )}
       {/* Back to Dashboard */}

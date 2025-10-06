@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import axios from "axios";
 import LoadingSpinner from "../LoadingSpinner";
+import useDebounce from "../../hooks/useDebounce";
 
 /**
  * Props
@@ -9,7 +10,10 @@ import LoadingSpinner from "../LoadingSpinner";
  */
 function HeatmapTab({ lake, onToggleHeatmap, currentLayerId = null }) {
   // Start at 0 so nothing is fetched until user explicitly sets a distance
+  // Immediate UI distance while sliding
   const [distance, setDistance] = useState(0);
+  // Debounced distance for network effects (avoid spamming requests while dragging)
+  const debouncedDistance = useDebounce(distance, 300);
   const [estimatedPop, setEstimatedPop] = useState(0);
   const [year, setYear] = useState(null);
   const [availableYears, setAvailableYears] = useState([]);
@@ -50,7 +54,7 @@ function HeatmapTab({ lake, onToggleHeatmap, currentLayerId = null }) {
     const run = async () => {
       if (!lake?.id) return;
       // Skip estimate when distance is 0 (no ring selected yet)
-      if (distance <= 0 || !year) {
+      if (debouncedDistance <= 0 || !year) {
         setEstimatedPop(0);
         setEstimateError(null);
         setLoading(false);
@@ -64,9 +68,11 @@ function HeatmapTab({ lake, onToggleHeatmap, currentLayerId = null }) {
         const controller = new AbortController();
         estimateAbortRef.current = controller;
         setLoading(true);
+        // Signal estimate start (for global coordination / prioritization)
+        try { window.dispatchEvent(new CustomEvent('lv-pop-estimate', { detail: { state: 'start', lakeId: lake.id } })); } catch {}
         const params = {
           lake_id: lake.id,
-          radius_km: distance,
+          radius_km: debouncedDistance,
           year,
         };
         if (currentLayerId) params.layer_id = currentLayerId;
@@ -88,11 +94,13 @@ function HeatmapTab({ lake, onToggleHeatmap, currentLayerId = null }) {
         }
       } finally {
         if (!cancel) setLoading(false);
+        // Signal estimate completion
+        try { window.dispatchEvent(new CustomEvent('lv-pop-estimate', { detail: { state: 'done', lakeId: lake?.id } })); } catch {}
       }
     };
     run();
     return () => { cancel = true; };
-  }, [distance, year, currentLayerId, lake?.id]);
+  }, [debouncedDistance, year, currentLayerId, lake?.id]);
 
   // Fetch available dataset years once (or when lake changes, though global so only once needed)
   useEffect(() => {
@@ -129,19 +137,19 @@ function HeatmapTab({ lake, onToggleHeatmap, currentLayerId = null }) {
     if (!heatOn) return;
     if (!didInitRef.current) { didInitRef.current = true; return; }
     // If distance is 0, ensure any existing heatmap is turned off and wait for user input
-    if (distance <= 0 || !year) {
+    if (debouncedDistance <= 0 || !year) {
       onToggleHeatmap?.(false);
       return;
     }
-    onToggleHeatmap?.(true, { km: distance, year, layerId: currentLayerId, loading: true });
+    onToggleHeatmap?.(true, { km: debouncedDistance, year, layerId: currentLayerId, loading: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [heatOn, distance, year, currentLayerId, lake?.id]);
+  }, [heatOn, debouncedDistance, year, currentLayerId, lake?.id]);
 
   const handleToggleHeat = () => {
     if (!heatOn) {
       setHeatOn(true);
-      if (distance > 0 && year) {
-        onToggleHeatmap?.(true, { km: distance, year, layerId: currentLayerId, loading: true });
+      if (debouncedDistance > 0 && year) {
+        onToggleHeatmap?.(true, { km: debouncedDistance, year, layerId: currentLayerId, loading: true });
       }
     } else {
       setHeatOn(false);

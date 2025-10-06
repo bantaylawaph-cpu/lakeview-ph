@@ -50,8 +50,31 @@ export function createHeatLayer(points = []) {
 
 // Normalize raw population values to [0,1] intensities for Leaflet.heat.
 // Uses a robust cap at the 95th percentile and sqrt compression to reduce outlier dominance.
+// Internal: approximate 95th percentile using sampling for large arrays (>1500)
+function approxP95(values) {
+  const n = values.length;
+  if (n === 0) return 1;
+  if (n < 1500) {
+    const sorted = values.slice().sort((a,b)=>a-b);
+    return sorted[Math.floor(0.95 * (sorted.length - 1))] || sorted[sorted.length-1] || 1;
+  }
+  // Reservoir sample up to 1024 values
+  const k = 1024;
+  const sample = [];
+  for (let i=0;i<n;i++) {
+    const v = values[i];
+    if (!Number.isFinite(v) || v <= 0) continue;
+    if (sample.length < k) sample.push(v); else {
+      const j = Math.floor(Math.random() * (i+1));
+      if (j < k) sample[j] = v;
+    }
+  }
+  if (sample.length === 0) return 1;
+  sample.sort((a,b)=>a-b);
+  return sample[Math.floor(0.95 * (sample.length - 1))] || sample[sample.length-1] || 1;
+}
+
 function normalizeHeat(points) {
-  // points: [ [lat, lon, value], ... ]
   if (!Array.isArray(points) || points.length === 0) return [];
   const vals = [];
   for (const p of points) {
@@ -59,22 +82,15 @@ function normalizeHeat(points) {
     if (Number.isFinite(v) && v > 0) vals.push(v);
   }
   if (vals.length === 0) return points.map(([lat, lon]) => [lat, lon, 0]);
-
-  vals.sort((a, b) => a - b);
-  const idx = Math.max(0, Math.min(vals.length - 1, Math.floor(0.95 * (vals.length - 1))));
-  const p95 = vals[idx] || vals[vals.length - 1] || 1;
+  const p95 = approxP95(vals);
   const cap = p95 > 0 ? p95 : 1;
-
-  // sqrt compression improves visual contrast for mid-range values
   const compress = (x) => Math.sqrt(Math.max(0, Math.min(1, x)));
-
   return points.map((p) => {
     const lat = Number(p?.[0]);
     const lon = Number(p?.[1]);
     const val = Number(p?.[2]);
     if (!Number.isFinite(lat) || !Number.isFinite(lon) || !Number.isFinite(val)) return null;
-    const norm = compress(val / cap);
-    return [lat, lon, norm];
+    return [lat, lon, compress(val / cap)];
   }).filter(Boolean);
 }
 
@@ -100,4 +116,37 @@ export async function fetchPopPoints({ lakeId, year = 2025, radiusKm = 2, layerI
   const { data } = await axios.get('/api/population/points', { params, ...axiosOpts });
   const raw = Array.isArray(data?.points) ? data.points : [];
   return normalizeHeat(raw);
+}
+
+// Progressive fetching: first a small quick sample, then full dataset.
+// options: same as fetchPopPoints plus smallPoints (default 1200)
+// callbacks: { onIntermediate(intensityPoints), onFinal(intensityPoints) }
+export function fetchPopPointsProgressive(params, callbacks = {}, opts = {}) {
+  const { smallPoints = 1200 } = params;
+  const controller = new AbortController();
+  const outerSignal = opts.signal;
+  function linkSignal(abortable) {
+    if (outerSignal) {
+      if (outerSignal.aborted) abortable.abort();
+      else outerSignal.addEventListener('abort', () => abortable.abort(), { once: true });
+    }
+  }
+  linkSignal(controller);
+
+  const run = (async () => {
+    try {
+      const small = await fetchPopPoints({ ...params, maxPoints: smallPoints }, { signal: controller.signal });
+      callbacks.onIntermediate?.(small);
+      if (controller.signal.aborted) return;
+      if (smallPoints >= (params.maxPoints || 6000)) {
+        callbacks.onFinal?.(small);
+        return;
+      }
+      const full = await fetchPopPoints({ ...params }, { signal: controller.signal });
+      if (!controller.signal.aborted) callbacks.onFinal?.(full);
+    } catch (e) {
+      if (!controller.signal.aborted) callbacks.onError?.(e);
+    }
+  })();
+  return { abort: () => controller.abort(), promise: run };
 }
