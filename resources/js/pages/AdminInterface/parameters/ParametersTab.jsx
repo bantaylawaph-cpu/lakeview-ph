@@ -56,6 +56,30 @@ const ensureOption = (options, value) => {
 
 function ParametersTab() {
 
+  // Helper: normalize API errors into a readable message. The api client
+  // often throws an Error whose message is a JSON-stringified object coming
+  // from the backend (Laravel). Attempt to pull a useful message and
+  // translate FK constraint errors into a friendly prompt.
+  const extractApiErrorMessage = (err) => {
+    if (!err) return 'Unknown error';
+    // If the client attached a response object, prefer that
+    const respData = err?.response?.data;
+    if (respData) {
+      if (typeof respData === 'string') return respData;
+      if (respData.message) return respData.message;
+      try { return JSON.stringify(respData); } catch (_) { /* fallthrough */ }
+    }
+    // err.message may itself be a JSON string produced by makeError()
+    const msg = err.message || String(err);
+    try {
+      const parsed = JSON.parse(msg);
+      if (parsed && parsed.message) return parsed.message;
+      return typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
+    } catch (_) {
+      return msg;
+    }
+  };
+
   // TableLayout now supports an in-table loading spinner via its loading prop
 
   const [form, setForm] = useState(emptyForm);
@@ -171,7 +195,13 @@ function ParametersTab() {
       await alertSuccess('Deleted', `"${row.code}" was deleted.`);
     } catch (err) {
       console.error("Failed to delete parameter", err);
-      await alertError('Delete failed', err?.message || 'Failed to delete parameter');
+      const raw = extractApiErrorMessage(err);
+      // Detect common FK constraint message fragment from Postgres/Laravel
+      if (/(foreign key violation|violates foreign key constraint|still referenced)/i.test(raw)) {
+        await alertError('Delete failed', `Cannot delete "${row.code}" because there are sample results that reference it. Remove or reassign those sample results first.`);
+      } else {
+        await alertError('Delete failed', raw || 'Failed to delete parameter');
+      }
     }
   };
 
@@ -363,7 +393,12 @@ function ParametersTab() {
             await alertSuccess('Deleted', `"${row.code}" was deleted.`);
           } catch (err) {
             console.error("Failed to delete parameter", err);
-            await alertError('Delete failed', err?.message || 'Failed to delete parameter');
+            const raw = extractApiErrorMessage(err);
+            if (/(foreign key violation|violates foreign key constraint|still referenced)/i.test(raw)) {
+              await alertError('Delete failed', `Cannot delete "${row.code}" because there are sample results that reference it. Remove or reassign those sample results first.`);
+            } else {
+              await alertError('Delete failed', raw || 'Failed to delete parameter');
+            }
           }
         },
       },
