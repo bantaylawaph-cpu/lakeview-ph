@@ -1,18 +1,12 @@
 // resources/js/pages/OrgInterface/OrgOverview.jsx
-import React, { useMemo } from "react";
+import React, { useEffect, useState, useCallback } from "react";
+import { useParams } from 'react-router-dom';
 import {
   FiUsers,          // Active Members
   FiDatabase,       // Tests Logged
   FiClipboard,      // Pending Approvals
-  FiFlag,           // Alerts/Flagged
   FiActivity,       // Recent Activity header icon
-  FiPlus,           // Log Test
-  FiUserPlus,       // Invite Member
-  FiList,           // View Test Results
-  FiUploadCloud,    // Uploads
 } from "react-icons/fi";
-
-import { Link } from "react-router-dom";
 import AppMap from "../../components/AppMap";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -28,72 +22,34 @@ L.Icon.Default.mergeOptions({
   shadowUrl: markerShadow,
 });
 
-/* ============================================================
-   KPI Grid (4 stats; empty values for now)
-   ============================================================ */
-function KPIGrid() {
+import api from "../../lib/api";
+
+function KpiCard({ title, value, loading, error, onRefresh, icon }) {
+  const display = loading ? '…' : (error ? '—' : (value ?? '0'));
   return (
-    <div className="kpi-grid">
-      <div className="kpi-card">
-        <div className="kpi-icon"><FiUsers /></div>
-        <div className="kpi-info">
-          <span className="kpi-title">Active Members</span>
-          <span className="kpi-value"></span>
-        </div>
-      </div>
-      <div className="kpi-card">
-        <div className="kpi-icon"><FiDatabase /></div>
-        <div className="kpi-info">
-          <span className="kpi-title">Tests Logged</span>
-          <span className="kpi-value"></span>
-        </div>
-      </div>
-      <div className="kpi-card">
-        <div className="kpi-icon"><FiClipboard /></div>
-        <div className="kpi-info">
-          <span className="kpi-title">Pending Approvals</span>
-          <span className="kpi-value"></span>
-        </div>
-      </div>
-      <div className="kpi-card">
-        <div className="kpi-icon"><FiFlag /></div>
-        <div className="kpi-info">
-          <span className="kpi-title">Alerts / Flagged</span>
-          <span className="kpi-value"></span>
-        </div>
+    <div className="kpi-card">
+      <div className="kpi-icon">{icon}</div>
+      <div className="kpi-info">
+        <button className="kpi-title btn-link" onClick={onRefresh} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>{title}</button>
+        <span className="kpi-value">{display}</span>
       </div>
     </div>
   );
 }
 
 /* ============================================================
-   Quick Actions (shortcuts)
+   KPI Grid (4 stats; empty values for now)
    ============================================================ */
-function QuickActions() {
+function KPIGrid({ stats, refresh }) {
   return (
-    <div className="dashboard-card" style={{ marginBottom: 16 }}>
-      <div className="dashboard-card-header">
-        <div className="dashboard-card-title">
-          {/* No icon here to keep it minimal */}
-          <span>Quick Actions</span>
-        </div>
-      </div>
-      <div className="dashboard-card-body">
-        <div className="dashboard-toolbar" style={{ gap: 10 }}>
-          <Link to="/org-dashboard/test-results" className="pill-btn primary" title="Log Test">
-            <FiPlus /><span className="hide-sm">Log Test</span>
-          </Link>
-          <Link to="/org-dashboard/test-results" className="pill-btn" title="View Test Results">
-            <FiList /><span className="hide-sm">View Tests</span>
-          </Link>
-          <Link to="/org-dashboard/members" className="pill-btn" title="Invite Member">
-            <FiUserPlus /><span className="hide-sm">View Members</span>
-          </Link>
-        </div>
-      </div>
+    <div className="kpi-grid">
+      <KpiCard title="Active Members" icon={<FiUsers />} {...stats.members} onRefresh={refresh} />
+      <KpiCard title="Tests Logged" icon={<FiDatabase />} {...stats.tests} onRefresh={refresh} />
+      <KpiCard title="Pending Approvals" icon={<FiClipboard />} {...stats.pending} onRefresh={refresh} />
     </div>
   );
 }
+
 
 /* ============================================================
    Tests Map
@@ -135,14 +91,76 @@ function RecentLogs() {
 
 /* ============================================================
    Page: OrgOverview
-   - Mirrors AdminOverview’s structure (KPIs → Map → Logs)
-   - Adds a Quick Actions card at top
+  - Mirrors AdminOverview’s structure (KPIs → Map → Logs)
+  - Quick Actions toolbar removed per request
    ============================================================ */
-export default function OrgOverview() {
+export default function OrgOverview({ tenantId: propTenantId }) {
+  const params = useParams?.() || {};
+  // Determine tenant id: prefer explicit prop, then URL param (tenant or tenantId), then global placeholder.
+  const initialTenantId = propTenantId || params.tenant || params.tenantId || window.__LV_TENANT_ID || null;
+  const [tenantId, setTenantId] = useState(initialTenantId ? Number(initialTenantId) : null);
+
+  const [stats, setStats] = useState({
+    members: { value: null, loading: true, error: null },
+    tests:   { value: null, loading: true, error: null },
+    pending: { value: null, loading: true, error: null },
+  });
+
+  const publish = useCallback((key, payload) => {
+    setStats(prev => ({ ...prev, [key]: { ...prev[key], ...payload } }));
+  }, []);
+
+  const fetchAll = useCallback(async () => {
+    if (!tenantId) return; // still resolving tenant id
+    publish('members', { loading: true });
+    publish('tests', { loading: true });
+    publish('pending', { loading: true });
+    try {
+      const r = await api.get(`/org/${tenantId}/kpis/members`);
+      publish('members', { value: r?.data?.count ?? r?.count ?? null, loading: false });
+    } catch (e) { publish('members', { value: null, loading: false, error: true }); }
+    try {
+      const r = await api.get(`/org/${tenantId}/kpis/tests`);
+      publish('tests', { value: r?.data?.count ?? r?.count ?? null, loading: false });
+    } catch (e) { publish('tests', { value: null, loading: false, error: true }); }
+    try {
+      const r = await api.get(`/org/${tenantId}/kpis/tests/draft`);
+      publish('pending', { value: r?.data?.count ?? r?.count ?? null, loading: false });
+    } catch (e) { publish('pending', { value: null, loading: false, error: true }); }
+  }, [tenantId, publish]);
+
+  // Resolve tenant id if not provided by prop/url/global via /auth/me
+  useEffect(() => {
+    let cancelled = false;
+    if (tenantId === null) {
+      (async () => {
+        try {
+          const meRes = await api.get('/auth/me');
+          const tId = meRes?.data?.tenant_id ?? meRes?.tenant_id ?? null;
+          if (!cancelled && tId) setTenantId(Number(tId));
+        } catch (e) {
+          // If cannot resolve tenant, mark KPIs as error once
+          if (!cancelled) {
+            publish('members', { loading: false, error: true });
+            publish('tests', { loading: false, error: true });
+            publish('pending', { loading: false, error: true });
+          }
+        }
+      })();
+    }
+    return () => { cancelled = true; };
+  }, [tenantId, publish]);
+
+  useEffect(() => {
+    if (!tenantId) return; // wait for tenant id
+    fetchAll();
+    const interval = setInterval(fetchAll, 60 * 1000);
+    return () => clearInterval(interval);
+  }, [tenantId, fetchAll]);
+
   return (
     <>
-      <QuickActions />
-      <KPIGrid />
+      <KPIGrid stats={stats} refresh={fetchAll} />
       <TestsMap />
       <RecentLogs />
     </>

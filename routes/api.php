@@ -99,6 +99,10 @@ Route::middleware(['auth:sanctum','role:superadmin'])->prefix('admin')->group(fu
         return response()->json(['data' => $rows]);
     });
 
+    // Admin KPIs (small, fast counts used by dashboard)
+    Route::get('/kpis/orgs', [\App\Http\Controllers\Api\Admin\KpiController::class, 'orgs']);
+    Route::get('/kpis/users', [\App\Http\Controllers\Api\Admin\KpiController::class, 'users']);
+
     // Audit logs (superadmin only here; org_admin has implicit scoping below if added later)
     Route::get('/audit-logs', [\App\Http\Controllers\Api\Admin\AuditLogController::class, 'index']);
     Route::get('/audit-logs/{id}', [\App\Http\Controllers\Api\Admin\AuditLogController::class, 'show'])->whereNumber('id');
@@ -152,6 +156,11 @@ Route::middleware(['auth:sanctum','tenant.scoped','role:org_admin,superadmin'])
         Route::put('/users/{user}',          [OrgUserController::class, 'update'])->whereNumber('user');
         Route::delete('/users/{user}',       [OrgUserController::class, 'destroy'])->whereNumber('user');
 
+    // Org KPIs (active members, tests logged, draft tests)
+    Route::get('/kpis/members', [\App\Http\Controllers\Api\Org\KpiController::class, 'members']);
+    Route::get('/kpis/tests', [\App\Http\Controllers\Api\Org\KpiController::class, 'tests']);
+    Route::get('/kpis/tests/draft', [\App\Http\Controllers\Api\Org\KpiController::class, 'testsDraft']);
+
     // Tenant rename (org_admin scope)
     Route::patch('/tenant', [TenantController::class, 'orgScopedRename']);
 
@@ -182,6 +191,10 @@ Route::middleware(['auth:sanctum','tenant.scoped','role:contributor'])
     Route::put   ('/sample-events/{samplingEvent}',              [AdminSamplingEventController::class, 'updateOrg'])->whereNumber('samplingEvent');
     Route::delete('/sample-events/{samplingEvent}',              [AdminSamplingEventController::class, 'destroyOrg'])->whereNumber('samplingEvent');
     Route::post  ('/sample-events/{samplingEvent}/toggle-publish',[AdminSamplingEventController::class, 'togglePublishOrg'])->whereNumber('samplingEvent');
+
+    // Contributor KPIs (duplicated under contrib prefix for frontend dashboard)
+    Route::get('/kpis/my-tests', [\App\Http\Controllers\Api\Contrib\KpiController::class, 'myTests']);
+    Route::get('/kpis/org-tests', [\App\Http\Controllers\Api\Contrib\KpiController::class, 'orgTests']);
     });
 
 /*

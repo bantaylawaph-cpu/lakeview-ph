@@ -1,5 +1,5 @@
 // resources/js/pages/AdminInterface/AdminOverview.jsx
-import React, { useMemo } from "react";
+import React, { useMemo, useEffect, useState, useCallback } from "react";
 import {
   FiBriefcase,    // Organizations
   FiUsers,        // Registered Users
@@ -18,37 +18,44 @@ import markerShadow from "leaflet/dist/images/marker-shadow.png";
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({ iconRetinaUrl: markerIcon2x, iconUrl: markerIcon, shadowUrl: markerShadow });
 
+import api from "../../lib/api";
+
 /* KPI Grid */
 function KPIGrid() {
+  // Local state lifted into parent via hooks in AdminOverview; here we just render placeholders
   return (
     <div className="kpi-grid">
-      <div className="kpi-card">
-        <div className="kpi-icon"><FiBriefcase /></div>
-        <div className="kpi-info">
-          <span className="kpi-title">Organizations</span>
-          <span className="kpi-value"></span>
-        </div>
-      </div>
-      <div className="kpi-card">
-        <div className="kpi-icon"><FiUsers /></div>
-        <div className="kpi-info">
-          <span className="kpi-title">Registered Users</span>
-          <span className="kpi-value"></span>
-        </div>
-      </div>
-      <div className="kpi-card">
-        <div className="kpi-icon"><FiMap /></div>
-        <div className="kpi-info">
-          <span className="kpi-title">Lakes in Database</span>
-          <span className="kpi-value"></span>
-        </div>
-      </div>
-      <div className="kpi-card">
-        <div className="kpi-icon"><FiDroplet /></div>
-        <div className="kpi-info">
-          <span className="kpi-title">Water Quality Reports in Database</span>
-          <span className="kpi-value"></span>
-        </div>
+      <KpiCard id="orgs" icon={<FiBriefcase />} title="Organizations" />
+      <KpiCard id="users" icon={<FiUsers />} title="Registered Users" />
+      <KpiCard id="lakes" icon={<FiMap />} title="Lakes in Database" />
+      <KpiCard id="events" icon={<FiDroplet />} title="Water Quality Reports in Database" />
+    </div>
+  );
+}
+
+function KpiCard({ id, icon, title }) {
+  // We'll read values from the DOM-level shared store via a simple event-based approach
+  // The AdminOverview component will dispatch a custom event with payload { id, value, loading, error }
+  const [state, setState] = useState({ value: null, loading: true, error: null });
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (!e?.detail) return;
+      if (e.detail.id !== id) return;
+      setState({ value: e.detail.value, loading: !!e.detail.loading, error: e.detail.error || null });
+    };
+    window.addEventListener('lv:kpi:update', handler);
+    return () => window.removeEventListener('lv:kpi:update', handler);
+  }, [id]);
+
+  const display = state.loading ? '…' : (state.error ? '—' : (state.value ?? '0'));
+
+  return (
+    <div className="kpi-card">
+      <div className="kpi-icon">{icon}</div>
+      <div className="kpi-info">
+        <button className="kpi-title btn-link" onClick={() => window.dispatchEvent(new CustomEvent('lv:kpi:refresh'))} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>{title}</button>
+        <span className="kpi-value">{display}</span>
       </div>
     </div>
   );
@@ -92,6 +99,72 @@ function RecentLogs() {
    Page: AdminOverview
    ============================================================ */
 export default function AdminOverview() {
+  const [kpis, setKpis] = useState({
+    orgs: { value: null, loading: true, error: null },
+    users: { value: null, loading: true, error: null },
+    lakes: { value: null, loading: true, error: null },
+    events: { value: null, loading: true, error: null },
+  });
+
+  const publish = useCallback((id, payload) => {
+    setKpis((prev) => ({ ...prev, [id]: payload }));
+    window.dispatchEvent(new CustomEvent('lv:kpi:update', { detail: { id, ...payload } }));
+  }, []);
+
+  const fetchAll = useCallback(async () => {
+    // Organizations (admin endpoint - requires auth)
+    publish('orgs', { loading: true });
+    publish('users', { loading: true });
+    publish('lakes', { loading: true });
+    publish('events', { loading: true });
+
+    try {
+      // orgs: use a lightweight KPI endpoint that returns { count }
+      const orgRes = await api.get('/admin/kpis/orgs');
+      const orgTotal = orgRes?.data?.count ?? (orgRes?.count ?? null);
+      publish('orgs', { value: orgTotal, loading: false });
+    } catch (e) {
+      publish('orgs', { value: null, loading: false, error: true });
+    }
+
+    try {
+      // users: use KPI endpoint returning aggregated registered user count
+      const userRes = await api.get('/admin/kpis/users');
+      const userTotal = userRes?.data?.count ?? (userRes?.count ?? null);
+      publish('users', { value: userTotal, loading: false });
+    } catch (e) {
+      publish('users', { value: null, loading: false, error: true });
+    }
+
+    try {
+      // lakes: /lakes returns an array (public) so just get length
+      const lakeRes = await api.get('/lakes');
+      const lakesList = Array.isArray(lakeRes) ? lakeRes : lakeRes?.data ?? [];
+      const lakeTotal = Array.isArray(lakesList) ? lakesList.length : 0;
+      publish('lakes', { value: lakeTotal, loading: false });
+    } catch (e) {
+      publish('lakes', { value: null, loading: false, error: true });
+    }
+
+    try {
+      // sampling events: use admin sample-events endpoint; per_page not supported but index returns data array
+      const evRes = await api.get('/admin/sample-events');
+      const evList = evRes?.data ?? [];
+      const evTotal = Array.isArray(evList) ? evList.length : (evRes?.data?.length ?? 0);
+      publish('events', { value: evTotal, loading: false });
+    } catch (e) {
+      publish('events', { value: null, loading: false, error: true });
+    }
+  }, [publish]);
+
+  useEffect(() => {
+    fetchAll();
+    const onRefresh = () => fetchAll();
+    window.addEventListener('lv:kpi:refresh', onRefresh);
+    const interval = setInterval(fetchAll, 60 * 1000); // refresh every minute
+    return () => { window.removeEventListener('lv:kpi:refresh', onRefresh); clearInterval(interval); };
+  }, [fetchAll]);
+
   return (
     <>
       <KPIGrid />
