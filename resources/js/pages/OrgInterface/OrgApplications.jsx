@@ -59,7 +59,11 @@ export default function OrgApplications() {
       const me = await api.get('/auth/me');
       const tenantId = me?.tenant_id;
       if (!tenantId) throw new Error('No tenant in session');
-      await api.post(`/org/${tenantId}/applications/${id}/decision`, { action });
+      let notes = '';
+      if (action === 'needs_changes' || action === 'reject') {
+        notes = window.prompt('Reviewer notes (optional):', '') || '';
+      }
+      await api.post(`/org/${tenantId}/applications/${id}/decision`, { action, notes });
       load();
     } catch (e) {
       // noop; could show toast
@@ -105,6 +109,17 @@ export default function OrgApplications() {
   // Build TableLayout columns, normalized data, and actions (mirror admin table UX)
   const [docUser, setDocUser] = useState({ id: null, tenantId: null });
 
+  const Badge = (props) => {
+    const color = {
+      pending_kyc: '#f59e0b',
+      pending_org_review: '#3b82f6',
+      approved: '#22c55e',
+      needs_changes: '#eab308',
+      rejected: '#ef4444',
+    }[props.value] || '#64748b';
+    return <span style={{ background: `${color}22`, color, padding: '2px 8px', borderRadius: 999, fontSize: 12 }}>{props.value}</span>;
+  };
+
   const baseColumns = useMemo(() => ([
     { id: 'user', header: 'User', render: (raw) => (
       <div>
@@ -128,7 +143,9 @@ export default function OrgApplications() {
       </button>
     ), width: 120 },
     { id: 'desired_role', header: 'Desired Role', accessor: 'desired_role', width: 160 },
-    { id: 'status', header: 'Status', accessor: 'status', width: 140 },
+    { id: 'status', header: 'Status', render: (raw) => (
+      <Badge value={raw.status} />
+    ), width: 160 },
   ]), []);
 
   const visibleColumns = useMemo(

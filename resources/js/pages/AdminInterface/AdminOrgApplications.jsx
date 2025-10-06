@@ -106,7 +106,16 @@ export default function AdminOrgApplications() {
     ), width: 120 },
     { id: 'tenant', header: 'Organization', accessor: 'tenant_name', width: 200 },
     { id: 'desired_role', header: 'Desired Role', accessor: 'desired_role', width: 160 },
-    { id: 'status', header: 'Status', accessor: 'status', width: 140 },
+    { id: 'status', header: 'Status', render: (raw) => {
+      const color = {
+        pending_kyc: '#f59e0b',
+        pending_org_review: '#3b82f6',
+        approved: '#22c55e',
+        needs_changes: '#eab308',
+        rejected: '#ef4444',
+      }[raw.status] || '#64748b';
+      return <span style={{ background: `${color}22`, color, padding: '2px 8px', borderRadius: 999, fontSize: 12 }}>{raw.status}</span>;
+    }, width: 160 },
   ]), []);
 
   const visibleColumns = useMemo(
