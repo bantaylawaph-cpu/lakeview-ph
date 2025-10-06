@@ -268,6 +268,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Org Applications (user submission) - only public users can submit
     Route::post('/org-applications', [OrgApplicationController::class, 'store'])->middleware('role:public');
+    Route::get('/org-applications/mine', [OrgApplicationController::class, 'mine']);
+    Route::get('/org-applications/mine/all', [OrgApplicationController::class, 'mineAll']);
+    Route::get('/org-applications/mine/count', [OrgApplicationController::class, 'mineCount']);
     // Audit logs (superadmin global, org_admin scoped)
     Route::get('/admin/audit-logs', [\App\Http\Controllers\Api\Admin\AuditLogController::class, 'index']);
     Route::get('/admin/audit-logs/{id}', [\App\Http\Controllers\Api\Admin\AuditLogController::class, 'show']);

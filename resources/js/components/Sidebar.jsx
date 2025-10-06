@@ -72,7 +72,7 @@ function MiniMapWrapper() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth, onOpenFeedback }) {
+function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth, onOpenFeedback, onOpenKyc }) {
   const [me, setMe] = useState(() => getCurrentUser()); // start with cached user if available
   const navigate = useNavigate();
 
@@ -193,10 +193,21 @@ function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth, onOpenFeedbac
 
         {isLoggedIn && (isPublic) && (
           <li>
-            <Link className="sidebar-row" to="/kyc" onClick={!pinned ? onClose : undefined}>
-              <FiUser className="sidebar-icon" />
-              <span>Contribute / Join an Org</span>
-            </Link>
+            {onOpenKyc ? (
+              <a
+                href="#join"
+                className="sidebar-row"
+                onClick={(e) => { e.preventDefault(); onOpenKyc(); if (!pinned) onClose?.(); }}
+              >
+                <FiUser className="sidebar-icon" />
+                <span>Contribute / Join an Org</span>
+              </a>
+            ) : (
+              <Link className="sidebar-row" to="/kyc" onClick={!pinned ? onClose : undefined}>
+                <FiUser className="sidebar-icon" />
+                <span>Contribute / Join an Org</span>
+              </Link>
+            )}
           </li>
         )}
 

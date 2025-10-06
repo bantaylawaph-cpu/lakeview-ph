@@ -12,6 +12,36 @@ use App\Models\Role;
 
 class OrgApplicationController extends Controller
 {
+    // Current user's latest application (if any)
+    public function mine(Request $request)
+    {
+        $u = $request->user();
+        $app = OrgApplication::with(['tenant:id,name'])
+            ->where('user_id', $u->id)
+            ->orderByDesc('id')
+            ->first();
+        return response()->json(['data' => $app]);
+    }
+
+    // Current user's all applications (if any)
+    public function mineAll(Request $request)
+    {
+        $u = $request->user();
+        $apps = OrgApplication::with(['tenant:id,name'])
+            ->where('user_id', $u->id)
+            ->orderByDesc('id')
+            ->get();
+        return response()->json(['data' => $apps]);
+    }
+
+    // Current user's application count (fast check)
+    public function mineCount(Request $request)
+    {
+        $u = $request->user();
+        $count = OrgApplication::where('user_id', $u->id)->count();
+        return response()->json(['data' => ['count' => $count]]);
+    }
+
     public function store(Request $request)
     {
         $u = $request->user();

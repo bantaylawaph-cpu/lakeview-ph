@@ -14,6 +14,7 @@ import LayerControl from "../../components/LayerControl";
 import ScreenshotButton from "../../components/ScreenshotButton";
 import CoordinatesScale from "../../components/CoordinatesScale"
 import Sidebar from "../../components/Sidebar";
+import KycPage from "./KycPage";
 import ContextMenu from "../../components/ContextMenu";
 import MeasureTool from "../../components/MeasureTool";
 import LakeInfoPanel from "../../components/LakeInfoPanel";
@@ -21,6 +22,7 @@ import AuthModal from "../../components/modals/AuthModal";
 import FilterTray from "../../components/FilterTray";
 import PublicSettingsModal from "../../components/settings/PublicSettingsModal";
 import FeedbackModal from "../../components/feedback/FeedbackModal";
+// ...existing code...
 import HeatmapLoadingIndicator from "../../components/HeatmapLoadingIndicator";
 import HeatmapLegend from "../../components/HeatmapLegend";
 import BackToDashboardButton from "../../components/BackToDashboardButton";
@@ -32,11 +34,15 @@ import { usePopulationHeatmap } from "./hooks/usePopulationHeatmap";
 import { useWaterQualityMarkers } from "./hooks/useWaterQualityMarkers";
 import { useHotkeys } from "./hooks/useHotkeys";
 import KycPage from "./KycPage";
+// ...existing code...
+// KYC wizard removed from MapPage; documents are reviewed via admin/org pages
+// ...existing code...
+import KycPage from "./KycPage";
 
 function MapWithContextMenu({ children }) {
   const map = useMap();
   return children(map);
-}
+// ...existing code...
 
 // Bridge component to ensure we capture the Leaflet map instance reliably
 function MapRefBridge({ onReady }) {
@@ -57,8 +63,19 @@ function MapPage() {
   const [lakePanelOpen, setLakePanelOpen] = useState(false);
   const [measureActive, setMeasureActive] = useState(false);
   const [measureMode, setMeasureMode] = useState("distance");
+// ...existing code...
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+// ...existing code...
+
+  const [userRole, setUserRole] = useState(null);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false); // settings modal for any logged-in user
+  const [feedbackOpen, setFeedbackOpen] = useState(false); // feedback modal
+  const [authUser, setAuthUser] = useState(() => getCurrentUser());
+  const [authMode, setAuthMode] = useState("login");
+  // KYC wizard removed; keep admin/org review flows only
+// ...existing code...
   const [kycOpen, setKycOpen] = useState(false);
   const [filterTrayOpen, setFilterTrayOpen] = useState(false);
 
@@ -74,25 +91,11 @@ function MapPage() {
     window.addEventListener('lv-open-settings', onOpen);
     return () => window.removeEventListener('lv-open-settings', onOpen);
   }, []);
-
-  // Support navigation with state { openSettings: true }
-  useEffect(() => {
-    if (location.pathname === '/' && location.state?.openSettings) {
-      setSettingsOpen(true);
-      // clear state so back button doesn't reopen repeatedly
       navigate('.', { replace: true, state: {} });
     }
   }, [location, navigate]);
 
-  // Open KYC overlay when navigating to /kyc or when query contains ?kyc=true
-  useEffect(() => {
-    if (location.pathname === "/kyc") {
-      setKycOpen(true);
-      return;
-    }
-    const usp = new URLSearchParams(location.search || "");
-    if (usp.get("kyc") === "true") setKycOpen(true);
-  }, [location.pathname, location.search]);
+  // KYC overlay routing removed
 
   useEffect(() => {
     const p = location.pathname;
@@ -222,6 +225,7 @@ function MapPage() {
           pinned={sidebarPinned}
           setPinned={setSidebarPinned}
           onOpenAuth={(m) => { openAuth(m || 'login'); }}
+          onOpenKyc={() => setKycOpen(true)}
           onOpenFeedback={() => { setFeedbackOpen(true); if (!sidebarPinned) setSidebarOpen(false); }}
         />
 
@@ -313,10 +317,11 @@ function MapPage() {
         }}
       />
 
-      {/* KYC embedded modal (stays on map page) */}
-      {kycOpen && (
-        <KycPage />
+      {/* KYC modal (embedded) for public users */}
+      {kycOpen && authUser && (!authUser.role || authUser.role === 'public') && (
+        <KycPage embedded={true} open={kycOpen} onClose={() => setKycOpen(false)} />
       )}
+      {/* Control KYC modal visibility via Modal within KycPage using open/close from state if needed */}
     </div>
   );
 }

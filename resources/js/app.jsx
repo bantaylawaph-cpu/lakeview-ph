@@ -6,8 +6,9 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 import AboutData from  "./pages/PublicInterface/AboutData";
 import AboutPage from "./pages/PublicInterface/AboutPage";
 import MapPage from "./pages/PublicInterface/MapPage";
+import KycPage from "./pages/PublicInterface/KycPage";
 import UserManual from "./pages/PublicInterface/UserManual";
-// import KycPage from "./pages/PublicInterface/KycPage"; // now embedded in MapPage
+// KYC page is available as a dedicated route as well
 
 // 📊 Dashboards (Role-based)
 import AdminDashboard from "./pages/AdminInterface/AdminDashboard";
@@ -19,6 +20,7 @@ import AdminOrgApplications from "./pages/AdminInterface/AdminOrgApplications.js
 // 🎨 Global Styles
 import "../css/app.css";
 import "../css/components/modern-settings.css";
+import "../css/util/scrollbars.css";
 
 //Component
 import RequireRole from "../js/components/RequireRole.jsx";
@@ -35,8 +37,8 @@ function App() {
     <Route path="/login" element={<MapPage />} />
         <Route path="/signin" element={<Navigate to="/login" replace />} />
         <Route path="/register" element={<MapPage />} />
-    {/* KYC stays in public interface: keep MapPage and open KYC modal from it */}
-    <Route path="/kyc" element={<MapPage />} />
+  {/* Dedicated KYC page */}
+  <Route path="/kyc" element={<KycPage embedded={false} />} />
 
         {/* 📊 Dashboards */}
         <Route path="/admin-dashboard/*" element={

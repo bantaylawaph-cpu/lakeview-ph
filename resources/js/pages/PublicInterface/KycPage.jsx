@@ -1,15 +1,42 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getCurrentUser } from "../../lib/authState";
-import { getKycStatus, listTenantsOptions, createOrgApplication } from "../../lib/api";
+import { listTenantsOptions, createOrgApplication } from "../../lib/api";
 import api from "../../lib/api";
 import { toastSuccess, toastError } from "../../utils/alerts";
 import Modal from "../../components/Modal";
 
-export default function KycPage({ embedded = true }) {
+// Hoisted styles to avoid re-creating objects on each render
+const inputStyle = {
+  width: '100%',
+  height: 44,
+  padding: '10px 12px',
+  border: '1px solid #e5e7eb',
+  borderRadius: 10,
+  background: '#fff',
+  color: '#111827',
+  outline: 'none'
+};
+const helpTextStyle = { fontSize: 12, color: '#6b7280', marginTop: 6 };
+const grid2 = { display: 'grid', gap: 16, gridTemplateColumns: '1fr 1fr' };
+const grid3 = { display: 'grid', gap: 16, gridTemplateColumns: '1fr 1fr 1fr' };
+const buttonOutline = {
+  height: 44,
+  padding: '0 16px',
+  background: '#ffffff',
+  color: '#111827',
+  border: '1px solid #111827',
+  borderRadius: 10,
+  fontWeight: 600,
+  margin: 0,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center'
+};
+
+export default function KycPage({ embedded = true, open = true, onClose }) {
   const user = getCurrentUser();
   const role = useMemo(() => (user?.role || null), [user]);
-  const [kyc, setKyc] = useState({ status: null });
   const [tenants, setTenants] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
@@ -17,7 +44,10 @@ export default function KycPage({ embedded = true }) {
   const [kycProfile, setKycProfile] = useState(null);
   const [kycDocs, setKycDocs] = useState([]);
   const [kycSaving, setKycSaving] = useState(false);
-  const [kycSubmitting, setKycSubmitting] = useState(false);
+  const [myApplication, setMyApplication] = useState(null);
+  const [myApplications, setMyApplications] = useState([]);
+  const [myAppCount, setMyAppCount] = useState(0);
+  const [showNewApp, setShowNewApp] = useState(false);
   // Wizard state
   const [step, setStep] = useState(1); // 1: Choose Org, 2: Profile, 3: Documents
   const [chosenTenantId, setChosenTenantId] = useState("");
@@ -29,23 +59,61 @@ export default function KycPage({ embedded = true }) {
   const [idTypeOther, setIdTypeOther] = useState("");
 
   const [loading, setLoading] = useState(false);
+  const [tenantsLoading, setTenantsLoading] = useState(false);
   useEffect(() => {
     let mounted = true;
     (async () => {
       setLoading(true);
       try {
         if (user) {
-          try {
-            const s = await getKycStatus(); if (mounted) setKyc(s?.data || {});
-            const p = await api.get('/kyc/profile'); if (mounted) { setKycProfile(p?.data || null); setKycDocs(p?.documents || []); }
-          } catch {}
-          try { const t = await listTenantsOptions(); if (mounted) setTenants(t?.data || []); } catch {}
+          // Load only the current user's latest application first; defer other data until needed
+          try { const mine = await api.get('/org-applications/mine'); if (mounted) setMyApplication(mine?.data || null); } catch {}
+          try { const cnt = await api.get('/org-applications/mine/count'); if (mounted) setMyAppCount(cnt?.data?.count || 0); } catch {}
         }
       } catch {}
       finally { if (mounted) setLoading(false); }
     })();
     return () => { mounted = false; };
   }, [user]);
+  
+    // When summary is visible and we know there are multiple apps, fetch them lazily
+    useEffect(() => {
+      let mounted = true;
+      (async () => {
+        if (!user) return;
+        if (!(step === 1 && myApplication && !showNewApp)) return;
+        if (!myAppCount || myAppCount <= 1) return;
+        if ((myApplications || []).length) return;
+        try { const all = await api.get('/org-applications/mine/all'); if (mounted) setMyApplications(all?.data || []); } catch {}
+      })();
+      return () => { mounted = false; };
+    }, [user, step, myApplication, showNewApp, myAppCount]);
+
+  // Lazy-load tenants when on Step 1 and user needs to choose org (no existing app or choosing new)
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      if (!user) return;
+      if (!(step === 1 && (!myApplication || showNewApp))) return;
+      if ((tenants || []).length > 0) return;
+      setTenantsLoading(true);
+      try { const t = await listTenantsOptions(); if (mounted) setTenants(t?.data || []); } catch {}
+      finally { if (mounted) setTenantsLoading(false); }
+    })();
+    return () => { mounted = false; };
+  }, [user, step, myApplication, showNewApp]);
+
+  // Lazy-load KYC profile and documents when entering Steps 2 or 3
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      if (!user) return;
+      if (!(step === 2 || step === 3)) return;
+      if (kycProfile !== null || (kycDocs && kycDocs.length)) return;
+      try { const p = await api.get('/kyc/profile'); if (mounted) { setKycProfile(p?.data || null); setKycDocs(p?.documents || []); } } catch {}
+    })();
+    return () => { mounted = false; };
+  }, [user, step]);
 
   // Derive ID type select state from loaded profile
   useEffect(() => {
@@ -128,19 +196,7 @@ export default function KycPage({ embedded = true }) {
     catch { toastError('Delete failed'); }
   };
 
-  const submitKyc = async () => {
-    setKycSubmitting(true);
-    try {
-      const res = await api.post('/kyc/submit');
-      // refresh status/profile
-      try { const s = await getKycStatus(); setKyc(s?.data || {}); } catch {}
-      try { const p = await api.get('/kyc/profile'); setKycProfile(p?.data || null); setKycDocs(p?.documents || []); } catch {}
-      toastSuccess(res?.message || 'KYC submitted for review');
-    } catch (e) {
-      const msg = (() => { try { const j = JSON.parse(e?.message||''); return j?.message || 'Please try again.'; } catch { return 'Please try again.'; } })();
-      toastError('Submit failed', msg);
-    } finally { setKycSubmitting(false); }
-  };
+  // submitKyc removed; submission handled within finalizeApplication
 
   const finalizeApplication = async () => {
     // Require at least one document before final submission
@@ -155,7 +211,16 @@ export default function KycPage({ embedded = true }) {
       const res = await createOrgApplication({ tenant_id: Number(chosenTenantId), desired_role: desiredRole });
       setSubmitOk(true);
       if (res?.message) toastSuccess(res.message);
+      try { const mine = await api.get('/org-applications/mine'); setMyApplication(mine?.data || null); } catch {}
+      if (onClose) onClose();
     } catch (e) {
+      if (e?.response?.status === 409) {
+        // Inform the user they already have an application for this organization
+        toastError('Application already exists', 'You’ve already applied to this organization. Keeping your existing application.');
+        try { const mine = await api.get('/org-applications/mine'); setMyApplication(mine?.data || null); } catch {}
+        if (onClose) onClose();
+        return;
+      }
       const msg = (() => { try { const j = JSON.parse(e?.message||''); return j?.message || 'Please try again.'; } catch { return 'Please try again.'; } })();
       setSubmitError(msg);
       toastError('Application failed', msg);
@@ -166,10 +231,19 @@ export default function KycPage({ embedded = true }) {
     <div className="page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
       <div>
         <h1 className="page-title" style={{ margin: 0, fontWeight: 700 }}>Join an Organization</h1>
-        <div className="page-subtitle" style={{ marginTop: 6 }}>Step-by-step: choose organization → complete profile → upload documents.</div>
+  <div className="page-subtitle" style={{ marginTop: 6 }}>Provide basic details and upload your ID so org admins can review your request.</div>
       </div>
     </div>
   );
+
+  // Modern input and layout styles are hoisted above
+  const formatBytes = (bytes) => {
+    const b = Number(bytes || 0);
+    if (!b) return '—';
+    const k = 1024; const sizes = ['B','KB','MB','GB'];
+    const i = Math.floor(Math.log(b) / Math.log(k));
+    return `${(b / Math.pow(k, i)).toFixed(i === 0 ? 0 : 1)} ${sizes[i]}`;
+  };
 
   const content = (
     <>
@@ -182,104 +256,234 @@ export default function KycPage({ embedded = true }) {
         </div>
       )}
 
-      {user && role === 'public' && (
-        <Modal open={true} onClose={() => navigate(-1)} title="Join an Organization" width={860}>
-          <div style={{ color: '#6b7280', marginBottom: 12 }}>Step {step} of 3</div>
-            {/* Step 1: Choose Organization */}
+      {embedded && user && (!role || role === 'public') && (
+        <Modal
+          open={!!open}
+          onClose={() => { if (onClose) onClose(); else navigate('/', { replace: false }); }}
+          title="Join an Organization"
+          width={860}
+          bodyClassName="modern-scrollbar"
+        >
+          {!(step === 1 && myApplication && !showNewApp) && (
+            <div style={{ color: '#6b7280', marginBottom: 12 }}>
+              Step {step} of 3
+            </div>
+          )}
+            {/* Step 1: Choose Organization or show existing application */}
             {step === 1 && (
               <div style={{ display: 'grid', gap: 12 }}>
-                <label>
-                  <div style={{ fontWeight: 600, marginBottom: 6 }}>Select Organization</div>
-                  <select
-                    value={chosenTenantId}
-                    onChange={(e) => setChosenTenantId(e.target.value)}
-                    required
-                    style={{ width: '100%', padding: '8px 10px' }}
-                  >
-                    <option value="" disabled>{loading ? 'Loading organizations…' : 'Choose an organization…'}</option>
-                    {(tenants || []).map(t => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </select>
-                  <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Pick the organization you want to join.</div>
-                </label>
-                {errors.tenant && <div style={{ color: '#b42318' }}>{errors.tenant}</div>}
+                {myApplication && !showNewApp ? (
+                  <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 12, background: '#f8fafc' }}>
+                    <div style={{ fontWeight: 600, marginBottom: 6 }}>Application submitted</div>
+                    {(() => {
+                      const s = myApplication?.status || '';
+                      const labels = {
+                        pending_kyc: 'Pending',
+                        pending_org_review: 'Pending',
+                        approved: 'Approved',
+                        needs_changes: 'Needs changes',
+                        rejected: 'Rejected',
+                      };
+                      const label = labels[s] || s;
+                      return s ? (
+                        <div style={{ marginBottom: 8 }}>
+                          <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 999, background: '#eef2ff', color: '#1f2937', fontSize: 12, fontWeight: 600 }}>
+                            {label}
+                          </span>
+                        </div>
+                      ) : null;
+                    })()}
+                    <div style={{ fontSize: 14, color: '#374151' }}>
+                      Organization: <strong>{myApplication?.tenant?.name || `#${myApplication?.tenant_id}`}</strong>
+                    </div>
+                    <div style={{ fontSize: 14, color: '#374151', marginTop: 2 }}>
+                      Role: <strong>{myApplication?.desired_role}</strong>
+                    </div>
+                    <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>
+                      You may edit your profile or documents while your application is pending.
+                    </div>
+                    {(myAppCount || 0) > 1 && (
+                      <div style={{ marginTop: 12 }}>
+                        <div style={{ fontWeight: 600, marginBottom: 6 }}>Your applications</div>
+                        <div style={{ display: 'grid', gap: 8 }}>
+                          {myApplications.map((app) => (
+                            <div key={app.id} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 8, background: '#fff' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div>
+                                  <div style={{ fontWeight: 600 }}>{app?.tenant?.name || `#${app.tenant_id}`}</div>
+                                  <div style={{ fontSize: 12, color: '#6b7280' }}>Role: {app.desired_role}</div>
+                                </div>
+                                {(() => {
+                                  const s = app?.status || '';
+                                  const labels = { pending_kyc: 'Pending', pending_org_review: 'Pending', approved: 'Approved', needs_changes: 'Needs changes', rejected: 'Rejected' };
+                                  const label = labels[s] || s;
+                                  return (
+                                    <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 999, background: '#eef2ff', color: '#1f2937', fontSize: 12, fontWeight: 600 }}>
+                                      {label}
+                                    </span>
+                                  );
+                                })()}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
+                      <button
+                        type="button"
+                        className="auth-btn"
+                        onClick={() => setStep(2)}
+                        style={{ height: 44, padding: '0 16px', borderRadius: 10, width: '100%' }}
+                      >
+                        Edit details
+                      </button>
+                      <div style={{ textAlign: 'center', color: '#6b7280' }}>-- or --</div>
+                      <button
+                        type="button"
+                        style={{ ...buttonOutline, height: 44, padding: '0 16px', borderRadius: 10, width: '100%' }}
+                        onClick={() => { setShowNewApp(true); setChosenTenantId(''); }}
+                      >
+                        Apply to a different organization
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <label>
+                      <div style={{ fontWeight: 600, marginBottom: 6 }}>Select Organization</div>
+                      <select
+                        value={chosenTenantId}
+                        onChange={(e) => setChosenTenantId(e.target.value)}
+                        required
+                        style={{ width: '100%', padding: '8px 10px' }}
+                      >
+                        <option value="" disabled>{(tenantsLoading || loading) ? 'Loading organizations…' : 'Choose an organization…'}</option>
+                        {(tenants || []).map(t => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                      </select>
+                      <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Pick the organization you want to join.</div>
+                    </label>
+                    {errors.tenant && <div style={{ color: '#b42318' }}>{errors.tenant}</div>}
 
-                <fieldset style={{ border: '1px solid #e6eaf0', borderRadius: 8, padding: 12 }}>
-                  <legend style={{ padding: '0 6px' }}>Desired Role</legend>
-                  <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
-                    <input type="radio" name="desired_role" value="contributor" checked={desiredRole === 'contributor'} onChange={() => setDesiredRole('contributor')} />
-                    <span>Contributor</span>
-                  </label>
-                  <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <input type="radio" name="desired_role" value="org_admin" checked={desiredRole === 'org_admin'} onChange={() => setDesiredRole('org_admin')} />
-                    <span>Org Admin (longer review)</span>
-                  </label>
-                  <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>Choose the role you prefer. Org Admin may take longer to review.</div>
-                </fieldset>
-                {errors.role && <div style={{ color: '#b42318' }}>{errors.role}</div>}
+                    <fieldset style={{ border: '1px solid #e6eaf0', borderRadius: 8, padding: 12 }}>
+                      <legend style={{ padding: '0 6px' }}>Desired Role</legend>
+                      <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                        <input type="radio" name="desired_role" value="contributor" checked={desiredRole === 'contributor'} onChange={() => setDesiredRole('contributor')} />
+                        <span>Contributor</span>
+                      </label>
+                      <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <input type="radio" name="desired_role" value="org_admin" checked={desiredRole === 'org_admin'} onChange={() => setDesiredRole('org_admin')} />
+                        <span>Org Admin (longer review)</span>
+                      </label>
+                      <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>Choose the role you prefer. Org Admin may take longer to review.</div>
+                    </fieldset>
+                    {errors.role && <div style={{ color: '#b42318' }}>{errors.role}</div>}
 
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
-                  <button className="auth-btn" type="button" onClick={() => { if (validateStep1()) next(); }} disabled={!tenants?.length}>Next</button>
-                </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginTop: 8 }}>
+                      {myApplication && (
+                        <button type="button" onClick={() => setShowNewApp(false)} style={{ ...buttonOutline, height: 44, padding: '0 16px', borderRadius: 10 }}>Back</button>
+                      )}
+                      <div style={{ flex: 1 }} />
+                      <button
+                        className="auth-btn"
+                        type="button"
+                        onClick={() => { if (validateStep1()) next(); }}
+                        disabled={!tenants?.length}
+                        style={{ height: 44, padding: '0 16px', borderRadius: 10, margin: 0 }}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
             {/* Step 2: Profile */}
             {step === 2 && (
-              <form className="kyc-form" onSubmit={(e) => { if (!validateStep2(e.target)) { e.preventDefault(); return; } saveKyc(e).then(() => next()); }} style={{ display: 'grid', gap: 12 }}>
-                  <div style={{ display: 'grid', gap: 12, gridTemplateColumns: '1fr 1fr' }}>
-                    <label>Full Name
-                      <input name="full_name" type="text" defaultValue={kycProfile?.full_name || ''} className="input" />
-                      <div style={{ fontSize: 12, color: errors.full_name ? '#b42318' : '#6b7280', marginTop: 4 }}>{errors.full_name || 'Your full legal name as shown on ID.'}</div>
-                    </label>
-                    <label>Date of Birth
-                      <input name="dob" type="date" defaultValue={kycProfile?.dob || ''} className="input" />
-                      <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>YYYY-MM-DD</div>
-                    </label>
-                  </div>
-                  <div style={{ display: 'grid', gap: 12, gridTemplateColumns: '1fr 1fr' }}>
-                    <label>ID Type
-                      <select name="id_type_select" value={idTypeSel} onChange={(e) => setIdTypeSel(e.target.value)} className="input">
-                        <option value="">Select type…</option>
-                        <option value="passport">Passport</option>
-                        <option value="national_id">National ID</option>
-                        <option value="drivers_license">Driver’s License</option>
-                        <option value="other">Other</option>
-                      </select>
-                      {idTypeSel === 'other' && (
-                        <input name="id_type_other" type="text" value={idTypeOther} onChange={(e) => setIdTypeOther(e.target.value)} placeholder="Specify ID type" className="input" style={{ marginTop: 8 }} />
-                      )}
-                      <div style={{ fontSize: 12, color: errors.id_type ? '#b42318' : '#6b7280', marginTop: 4 }}>{errors.id_type || 'e.g., Passport, National ID, Driver’s License, or specify other.'}</div>
-                    </label>
-                    <label>ID Number
-                      <input name="id_number" type="text" defaultValue={kycProfile?.id_number || ''} className="input" />
-                      <div style={{ fontSize: 12, color: errors.id_number ? '#b42318' : '#6b7280', marginTop: 4 }}>{errors.id_number || 'Enter exactly as shown on the ID.'}</div>
-                    </label>
-                  </div>
-                  <div style={{ display: 'grid', gap: 12, gridTemplateColumns: '1fr' }}>
-                    <label>Address
-                      <input name="address_line1" type="text" defaultValue={kycProfile?.address_line1 || ''} className="input" />
-                      <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Street address, Purok/Barangay if applicable.</div>
-                    </label>
-                  </div>
-                  <div style={{ display: 'grid', gap: 12, gridTemplateColumns: '1fr 1fr 1fr' }}>
-                    <label>City
-                      <input name="city" type="text" defaultValue={kycProfile?.city || ''} className="input" />
-                      <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>City or Municipality.</div>
-                    </label>
-                    <label>Province
-                      <input name="province" type="text" defaultValue={kycProfile?.province || ''} className="input" />
-                      <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Province/Region.</div>
-                    </label>
-                    <label>Postal Code
-                      <input name="postal_code" type="text" defaultValue={kycProfile?.postal_code || ''} className="input" />
-                      <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>ZIP/Postal code.</div>
-                    </label>
-                  </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                  <button className="btn" type="button" onClick={prev}>Back</button>
-                  <button className="auth-btn" type="submit" disabled={kycSaving}>
+              <form
+                className="kyc-form"
+                onSubmit={(e) => { if (!validateStep2(e.target)) { e.preventDefault(); return; } saveKyc(e).then(() => next()); }}
+                style={{ display: 'grid', gap: 18 }}
+              >
+                <div style={grid2}>
+                  <label style={{ display: 'block' }}>Full Name
+                    <input name="full_name" type="text" defaultValue={kycProfile?.full_name || ''} style={inputStyle} />
+                    <div style={{ ...helpTextStyle, color: errors.full_name ? '#b42318' : helpTextStyle.color }}>{errors.full_name || 'Your full legal name as shown on ID.'}</div>
+                  </label>
+                  <label style={{ display: 'block' }}>Date of Birth
+                    <input name="dob" type="date" defaultValue={kycProfile?.dob || ''} style={inputStyle} />
+                    <div style={helpTextStyle}>YYYY-MM-DD</div>
+                  </label>
+                </div>
+
+                <div style={grid2}>
+                  <label style={{ display: 'block' }}>ID Type
+                    <select name="id_type_select" value={idTypeSel} onChange={(e) => setIdTypeSel(e.target.value)} style={inputStyle}>
+                      <option value="">Select type…</option>
+                      <option value="passport">Passport</option>
+                      <option value="national_id">National ID</option>
+                      <option value="drivers_license">Driver’s License</option>
+                      <option value="other">Other</option>
+                    </select>
+                    {idTypeSel === 'other' && (
+                      <input name="id_type_other" type="text" value={idTypeOther} onChange={(e) => setIdTypeOther(e.target.value)} placeholder="Specify ID type" style={{ ...inputStyle, marginTop: 8 }} />
+                    )}
+                    <div style={{ ...helpTextStyle, color: errors.id_type ? '#b42318' : helpTextStyle.color }}>{errors.id_type || 'e.g., Passport, National ID, Driver’s License, or specify other.'}</div>
+                  </label>
+                  <label style={{ display: 'block' }}>ID Number
+                    <input name="id_number" type="text" defaultValue={kycProfile?.id_number || ''} style={inputStyle} />
+                    <div style={{ ...helpTextStyle, color: errors.id_number ? '#b42318' : helpTextStyle.color }}>{errors.id_number || 'Enter exactly as shown on the ID.'}</div>
+                  </label>
+                </div>
+
+                <div style={{ display: 'grid', gap: 16, gridTemplateColumns: '1fr' }}>
+                  <label style={{ display: 'block' }}>Address
+                    <input name="address_line1" type="text" defaultValue={kycProfile?.address_line1 || ''} style={inputStyle} />
+                    <div style={helpTextStyle}>Street address, Purok/Barangay if applicable.</div>
+                  </label>
+                </div>
+
+                <div style={grid3}>
+                  <label style={{ display: 'block' }}>City
+                    <input name="city" type="text" defaultValue={kycProfile?.city || ''} style={inputStyle} />
+                    <div style={helpTextStyle}>City or Municipality.</div>
+                  </label>
+                  <label style={{ display: 'block' }}>Province
+                    <input name="province" type="text" defaultValue={kycProfile?.province || ''} style={inputStyle} />
+                    <div style={helpTextStyle}>Province/Region.</div>
+                  </label>
+                  <label style={{ display: 'block' }}>Postal Code
+                    <input name="postal_code" type="text" defaultValue={kycProfile?.postal_code || ''} style={inputStyle} />
+                    <div style={helpTextStyle}>ZIP/Postal code.</div>
+                  </label>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10 }}>
+                  <button
+                    type="button"
+                    onClick={prev}
+                    style={{
+                      height: 44,
+                      padding: '0 16px',
+                      background: '#ffffff',
+                      color: '#111827',
+                      border: '1px solid #111827',
+                      borderRadius: 10,
+                      fontWeight: 600,
+                      margin: 0
+                    }}
+                  >
+                    Back
+                  </button>
+                  <button
+                    className="auth-btn"
+                    type="submit"
+                    disabled={kycSaving}
+                    style={{ height: 44, padding: '0 16px', borderRadius: 10, margin: 0 }}
+                  >
                     {kycSaving ? 'Saving…' : 'Save & Continue'}
                   </button>
                 </div>
@@ -289,42 +493,92 @@ export default function KycPage({ embedded = true }) {
             {/* Step 3: Documents */}
             {step === 3 && (
               <div>
-                {loading ? (
-                  <div>Loading KYC status…</div>
-                ) : (
-                  kyc?.status && <div style={{ marginBottom: 8 }}>KYC Status: <strong>{kyc.status}</strong></div>
-                )}
+                {/* KYC status removed per request */}
                 <div style={{ fontWeight: 600, marginBottom: 6 }}>Documents</div>
-                <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>Accepted: JPG, PNG, or PDF up to 5 MB. Upload front and back if applicable.</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  <label className="btn" style={{ cursor: 'pointer' }}>
+                <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>Upload clear JPG, PNG, or PDF up to 5 MB. If your ID has front and back, upload both. Make sure text and photos are readable.</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center', marginBottom: 6 }}>
+                  <label style={{ ...buttonOutline, cursor: 'pointer' }}>
                     Upload ID Front
                     <input type="file" data-type="id_front" onChange={uploadDoc} accept=".jpg,.jpeg,.png,.pdf" style={{ display: 'none' }} />
                   </label>
-                  <label className="btn" style={{ cursor: 'pointer' }}>
+                  <label style={{ ...buttonOutline, cursor: 'pointer' }}>
                     Upload ID Back
                     <input type="file" data-type="id_back" onChange={uploadDoc} accept=".jpg,.jpeg,.png,.pdf" style={{ display: 'none' }} />
                   </label>
-                  <label className="btn" style={{ cursor: 'pointer' }}>
+                  <label style={{ ...buttonOutline, cursor: 'pointer' }}>
                     Upload Supporting
                     <input type="file" data-type="supporting" onChange={uploadDoc} accept=".jpg,.jpeg,.png,.pdf" style={{ display: 'none' }} />
                   </label>
                 </div>
                 {kycDocs?.length > 0 && (
-                  <ul style={{ marginTop: 10 }}>
-                    {kycDocs.map(doc => (
-                      <li key={doc.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px dashed #e5e7eb' }}>
-                        <span>{doc.type} — <span style={{ color: '#6b7280' }}>{doc.path}</span></span>
-                        <button className="btn" onClick={() => deleteDoc(doc.id)}>Delete</button>
-                      </li>
-                    ))}
-                  </ul>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+                    gap: 12,
+                    marginTop: 10
+                  }}>
+                    {kycDocs.map((doc) => {
+                      const lowerPath = String(doc.path || '').toLowerCase();
+                      const isImage = (doc.mime || '').startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp)$/i.test(lowerPath);
+                      const isPdf = (doc.mime || '') === 'application/pdf' || /\.pdf$/i.test(lowerPath);
+                      const url = doc.url || (doc.path ? (String(doc.path).startsWith('/storage') ? doc.path : `/storage/${doc.path}`) : '#');
+                      return (
+                        <div key={doc.id} style={{ border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+                          <div style={{ height: 160, background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            {isImage ? (
+                              // eslint-disable-next-line jsx-a11y/alt-text
+                              <img src={url} alt={doc.type} loading="lazy" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                            ) : isPdf ? (
+                              <span style={{ color: '#64748b' }}>PDF Preview</span>
+                            ) : (
+                              <span style={{ color: '#64748b' }}>File</span>
+                            )}
+                          </div>
+                          <div style={{ padding: 10, fontSize: 13 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                              <div style={{ fontWeight: 600, textTransform: 'capitalize' }}>{String(doc.type || '').replace('_',' ')}</div>
+                              <div className="muted" style={{ fontSize: 12 }}>{formatBytes(doc.size_bytes)}</div>
+                            </div>
+                            <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>{doc.created_at ? new Date(doc.created_at).toLocaleString() : ''}</div>
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                              <a href={url} target="_blank" rel="noreferrer" style={{ ...buttonOutline, height: 36, padding: '0 12px', borderRadius: 8 }}>Open</a>
+                              <a href={url} download style={{ ...buttonOutline, height: 36, padding: '0 12px', borderRadius: 8 }}>Download</a>
+                              <button type="button" onClick={() => deleteDoc(doc.id)} style={{ ...buttonOutline, height: 36, padding: '0 12px', borderRadius: 8 }}>Delete</button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginTop: 16 }}>
-                  <button className="btn" type="button" onClick={prev}>Back</button>
-                  <button className="auth-btn" type="button" onClick={finalizeApplication} disabled={submitting || !chosenTenantId}>
-                    {submitting ? 'Submitting…' : 'Submit Application'}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, marginTop: 16 }}>
+                  <button
+                    type="button"
+                    onClick={prev}
+                    style={buttonOutline}
+                  >
+                    Back
                   </button>
+                  {(!myApplication || showNewApp) && (
+                    <button
+                      className="auth-btn"
+                      type="button"
+                      onClick={finalizeApplication}
+                      disabled={submitting || !chosenTenantId}
+                      style={{ height: 44, padding: '0 16px', borderRadius: 10, margin: 0 }}
+                    >
+                      {submitting ? 'Submitting…' : 'Submit Application'}
+                    </button>
+                  )}
+                  {myApplication && !showNewApp && (
+                    <button
+                      type="button"
+                      onClick={() => onClose && onClose()}
+                      style={{ height: 44, padding: '0 16px', borderRadius: 10, margin: 0, background: '#111827', color: '#fff' }}
+                    >
+                      Close
+                    </button>
+                  )}
                 </div>
                 {submitError && (
                   <div style={{ color: '#b42318', background: '#fee4e2', border: '1px solid #fda29b', padding: 10, borderRadius: 8, marginTop: 10 }}>{String(submitError)}</div>

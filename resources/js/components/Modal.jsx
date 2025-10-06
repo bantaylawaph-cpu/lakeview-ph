@@ -114,9 +114,18 @@ export default function Modal({
       role="dialog"
       aria-modal="true"
       aria-label={ariaLabel}
-      onMouseDown={(e) => {
+      // Close on overlay click (mouseup -> click) to avoid click-through to background.
+      onClick={(e) => {
         if (closeOnOverlay && e.target === e.currentTarget) {
+          e.stopPropagation();
+          e.preventDefault();
           onClose?.();
+        }
+      }}
+      // Prevent mousedown from propagating so underlying elements don't receive pointer events
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) {
+          e.stopPropagation();
         }
       }}
       style={{
@@ -127,12 +136,13 @@ export default function Modal({
       <div
         ref={cardRef}
         className={`lv-modal-card ${cardClassName} ${isClosing ? "fade-out" : "fade-in"}`}
+        onClick={(e) => e.stopPropagation()}
         style={{ width, maxWidth: "95vw", maxHeight: '95vh', display: 'flex', flexDirection: 'column', ...style }}
       >
         {header && (
           <div className="lv-modal-header">
             <h3 className="lv-modal-title">{title}</h3>
-            <button className="lv-icon-btn" onClick={onClose} aria-label="Close dialog">
+            <button className="lv-icon-btn" type="button" onClick={(e) => { e.stopPropagation(); e.preventDefault(); onClose?.(); }} aria-label="Close dialog">
               <FiX />
             </button>
           </div>

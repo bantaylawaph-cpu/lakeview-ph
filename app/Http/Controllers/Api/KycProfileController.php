@@ -97,7 +97,17 @@ class KycProfileController extends Controller
             'mime' => $file->getClientMimeType(),
             'size_bytes' => $file->getSize(),
         ]);
-        return response()->json(['data' => ['id' => $doc->id, 'type' => $doc->doc_type, 'path' => $doc->storage_path]]);
+        return response()->json([
+            'data' => [
+                'id' => $doc->id,
+                'type' => $doc->doc_type,
+                'path' => $doc->storage_path,
+                'mime' => $doc->mime,
+                'size_bytes' => $doc->size_bytes,
+                'created_at' => $doc->created_at,
+                'url' => asset('storage/'.$doc->storage_path),
+            ],
+        ]);
     }
 
     public function destroyDoc($id, Request $request)
@@ -105,7 +115,7 @@ class KycProfileController extends Controller
         $u = $request->user();
         $doc = KycDocument::findOrFail($id);
         if ($doc->user_id !== $u->id) return response()->json(['message' => 'Forbidden'], 403);
-    Storage::disk('public')->delete($doc->storage_path);
+        Storage::disk('public')->delete($doc->storage_path);
         $doc->delete();
         return response()->json(['ok' => true]);
     }

@@ -1,0 +1,34 @@
+/* Modern, subtle scrollbars used across the app when opted-in via .modern-scrollbar */
+:root {
+  --lv-scroll-track: rgba(17, 24, 39, 0.06); /* slate-900 @ 6% */
+  --lv-scroll-thumb: rgba(100, 116, 139, 0.55); /* slate-500 @ 55% */
+  --lv-scroll-thumb-hover: rgba(100, 116, 139, 0.75); /* hover a bit darker */
+}
+
+/* Firefox */
+.modern-scrollbar {
+  scrollbar-width: thin; /* auto | thin | none */
+  scrollbar-color: var(--lv-scroll-thumb) var(--lv-scroll-track);
+  scrollbar-gutter: stable both-edges; /* reserve space to avoid layout shift */
+}
+
+/* WebKit (Chrome, Edge, Safari) */
+.modern-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.modern-scrollbar::-webkit-scrollbar-track {
+  background: var(--lv-scroll-track);
+  border-radius: 8px;
+}
+.modern-scrollbar::-webkit-scrollbar-thumb {
+  background-color: var(--lv-scroll-thumb);
+  border-radius: 8px;
+  border: 2px solid var(--lv-scroll-track); /* creates padding effect */
+}
+.modern-scrollbar:hover::-webkit-scrollbar-thumb {
+  background-color: var(--lv-scroll-thumb-hover);
+}
+.modern-scrollbar::-webkit-scrollbar-corner {
+  background: transparent;
+}
