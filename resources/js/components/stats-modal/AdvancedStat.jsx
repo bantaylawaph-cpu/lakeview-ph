@@ -9,11 +9,7 @@ import { fmt, sci } from './formatters';
 import ResultPanel from './ResultPanel';
 
 function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOptions = [], staticThresholds = {} }, ref) {
-  // test mode is now inferred from the user's compare selection (class vs lake)
-  // State (reintroduced after refactor extraction)
   const [paramCode, setParamCode] = useState('');
-  // Derived flag: does current parameter have an authoritative range threshold?
-  // (Previously state + effect; converted to pure derivation to avoid render loops)
   const [selectedTest, setSelectedTest] = useState('');
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
@@ -28,28 +24,25 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
   const [organizationId, setOrganizationId] = useState('');
   const [secondaryOrganizationId, setSecondaryOrganizationId] = useState('');
   const [appliedStandardId, setAppliedStandardId] = useState('');
-  const [depthMode, setDepthMode] = useState('all'); // 'all' or 'single'
-  const [depthValue, setDepthValue] = useState(''); // numeric string when single
-  const [availableDepths, setAvailableDepths] = useState([]); // fetched list
+  const [depthMode, setDepthMode] = useState('all');
+  const [depthValue, setDepthValue] = useState('');
+  const [availableDepths, setAvailableDepths] = useState([]);
   const [cl, setCl] = useState('0.95');
   const [showGearPopover, setShowGearPopover] = useState(false);
-  // transient test-reset notification removed per UX decision
   const [yearError, setYearError] = useState('');
   const [debouncedYearFrom, setDebouncedYearFrom] = useState('');
   const [debouncedYearTo, setDebouncedYearTo] = useState('');
   const [advisories, setAdvisories] = useState([]);
-  const [flagProblems, setFlagProblems] = useState(false); // framing toggle: compliance vs exceedance focus
-  // Parameter options: accept either explicit paramOptions prop or fallback to legacy 'params'
+  const [flagProblems, setFlagProblems] = useState(false);
   const paramOptions = (parentParamOptions && parentParamOptions.length ? parentParamOptions : (params || []));
-  const [standards, setStandards] = useState([]); // placeholder until wired to backend
-  const [classes, setClasses] = useState([]); // placeholder list of classes
+  const [standards, setStandards] = useState([]);
+  const [classes, setClasses] = useState([]);
   const [orgOptions, setOrgOptions] = useState([]);
   const [secondaryOrgOptions, setSecondaryOrgOptions] = useState([]);
 
   const containerRef = useRef(null);
   const gearBtnRef = useRef(null);
 
-  // Fetch applied standards list (superadmin-only endpoint). Silently ignore on 403.
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -188,13 +181,18 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
   const runDisabled = React.useMemo(() => {
     if (loading) return true;
     if (!paramCode || !lakeId || !selectedTest) return true;
+    // require applied standard and primary organization to avoid mixing datasets
+    if (!appliedStandardId) return true;
+    if (!organizationId) return true;
     if (!allowedTests.includes(selectedTest)) return true;
     if (inferredTest === 'two-sample') {
       if (!compareValue || !String(compareValue).startsWith('lake:')) return true; // require a second lake for two-sample
+      // when comparing two lakes, require secondary organization selection to avoid implicit mixing
+      if (!secondaryOrganizationId) return true;
     }
     if (yearError) return true;
     return false;
-  }, [loading, paramCode, lakeId, selectedTest, inferredTest, compareValue, allowedTests, yearError]);
+  }, [loading, paramCode, lakeId, selectedTest, inferredTest, compareValue, allowedTests, yearError, appliedStandardId, organizationId, secondaryOrganizationId]);
   
 
   // Fetch depths when parameter, lake(s), debounced date range or organization changes (one-sample or lake-vs-lake two-sample)
@@ -321,7 +319,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
               else if (evalType === 'max') alt = 'less';
             }
           } else {
-            mu0 = suggestThreshold(paramCode, classCode, staticThresholds);
+            mu0 = null;
           }
           if (flagProblems && (alt === 'greater' || alt === 'less')) {
             // invert direction for problem framing
@@ -408,7 +406,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
         computed = { ...computed, events: series.events };
       }
       setResult(computed);
-      alertSuccess('Test Result', 'Computed locally.');
+      alertSuccess('Test Result', 'Computed statistical test successfully.');
     } catch (e) {
       console.error('[Stats] run error', e);
       const msg = e?.message || 'Failed';
@@ -416,18 +414,12 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
       if (msg === 'threshold_missing_range') {
         alertError('Threshold missing', 'Range evaluation requires both lower and upper thresholds.');
       } else if (/not enough data/i.test(msg)) {
-        // Already alerted above; no-op.
       } else {
         alertError('Test Error', msg);
       }
     } finally { setLoading(false); }
   };
 
-  // Preview removal: no preview fetcher
-
-  // Result rendering moved to ResultPanel component
-
-  // Exposed actions: clear selections and export to PDF
   const clearAll = () => {
   console.debug('[AdvancedStat] clearAll invoked');
     setLakeId('');
@@ -445,7 +437,6 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
     setShowAllValues(false);
   setShowExactP(false);
     setAdvisories([]);
-    // no user-facing alert for clear (kept silent)
   };
 
   const exportPdf = async () => {
@@ -457,19 +448,18 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
       }
       const title = `Advanced statistics - ${paramCode || ''}`;
       const style = `body { font-family: Arial, Helvetica, sans-serif; color: #111; padding: 18px; } h1 { font-size: 18px; } table { border-collapse: collapse; width: 100%; } th, td { border: 1px solid #ddd; padding: 6px; }`;
-        // Helper: nice test names
         const testNames = {
-          shapiro_wilk: 'Shapiro–Wilk normality test',
+          shapiro_wilk: 'Shapiro–Wilk',
           t_one_sample: 'One-sample t-test',
-          wilcoxon_signed_rank: 'Wilcoxon signed-rank test',
+          wilcoxon_signed_rank: 'Wilcoxon signed-rank',
           sign_test: 'Sign test',
-          tost: 'Equivalence TOST (t)',
-          tost_wilcoxon: 'Equivalence TOST (Wilcoxon)',
-          t_student: 'Student t-test (equal var)',
-          t_welch: 'Welch t-test (unequal var)',
+          tost: 'Equivalence TOST t',
+          tost_wilcoxon: 'Equivalence TOST Wilcoxon',
+          t_student: 'Student t-test',
+          t_welch: 'Welch t-test',
           levene: 'Levene variance test',
           mann_whitney: 'Mann–Whitney U',
-          mood_median_test: "Mood's median test"
+          mood_median_test: "Mood median test"
         };
 
         const findTestLabel = (r) => {
@@ -553,23 +543,19 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
       setTimeout(() => { try { w.focus(); w.print(); } catch(e){ /* ignore */ } }, 250);
     } catch (e) {
       console.error('Export failed', e);
-      // no user-facing alert here; keep console error for debugging
     }
   };
 
   useImperativeHandle(ref, () => ({ clearAll, exportPdf }));
 
-  // Removed legacy renderValuesUsed; handled by ResultPanel/ValuesTable now
-
   return (
   <div ref={containerRef} className="insight-card" style={{ position:'relative', minWidth: 0, maxWidth: '100%', padding: 8 }}>
     <h4 style={{ margin: '2px 0 8px' }}>Advanced Statistics</h4>
-    {/* gear was moved back to the actions area */}
   <div>
   <div style={{ display:'grid', gridTemplateColumns:'1fr 2fr 1fr 1fr', gridTemplateRows:'repeat(2, auto)', gap:10, alignItems:'start', fontSize:13, minWidth:0 }}>
       {/* Row 1: Applied Standard, Parameter, Confidence Level (compact) */}
       <div style={{ gridColumn: '1 / span 1', minWidth:0 }}>
-        <select className="pill-btn" value={appliedStandardId} onChange={e=>{setAppliedStandardId(e.target.value); setResult(null);}} style={{ width:'100%', minWidth:0, boxSizing:'border-box', padding:'10px 12px', height:40, lineHeight:'20px' }}>
+        <select required className="pill-btn" value={appliedStandardId} onChange={e=>{setAppliedStandardId(e.target.value); setResult(null);}} style={{ width:'100%', minWidth:0, boxSizing:'border-box', padding:'10px 12px', height:40, lineHeight:'20px' }}>
           <option value="">Select Applied Standard</option>
           {standards.map(s => <option key={s.id} value={s.id}>{s.code || s.name || s.id}</option>)}
         </select>
@@ -605,21 +591,19 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
       <div style={{ gridColumn: '3 / span 2', display:'flex', justifyContent:'flex-end', minWidth:0 }}>
         <div style={{ display:'flex', gap:8, width:'100%' }}>
             <select className="pill-btn" value={selectedTest} onChange={e=>{setSelectedTest(e.target.value); setResult(null);}} style={{ flex:1, minWidth:0, boxSizing:'border-box', padding:'8px 10px', fontSize:12, height:36, lineHeight:'18px' }}>
-            <option value="" disabled>Select test</option>
-            <option value="shapiro_wilk" disabled={inferredTest!=='one-sample'}>Shapiro–Wilk normality test</option>
-            {/* One-sample options. When parameter has an authoritative range threshold, only TOST is allowed (Shapiro remains available). */}
-            <option value="t_one_sample" disabled={inferredTest!=='one-sample' || paramHasRange}>One-sample t-test</option>
-            <option value="wilcoxon_signed_rank" disabled={inferredTest!=='one-sample' || paramHasRange}>Wilcoxon signed-rank</option>
-            <option value="sign_test" disabled={inferredTest!=='one-sample' || paramHasRange}>Sign test</option>
-            <option value="tost" disabled={inferredTest!=='one-sample' || !paramHasRange}>Equivalence TOST (t)</option>
-            <option value="tost_wilcoxon" disabled={inferredTest!=='one-sample' || !paramHasRange}>Equivalence TOST (Wilcoxon)</option>
-            {/* Two-sample options */}
-            <option value="t_student" disabled={inferredTest!=='two-sample'}>Student t-test (equal var)</option>
-            <option value="t_welch" disabled={inferredTest!=='two-sample'}>Welch t-test (unequal var)</option>
-            <option value="levene" disabled={inferredTest!=='two-sample'}>Levene variance test</option>
-            <option value="mann_whitney" disabled={inferredTest!=='two-sample'}>Mann–Whitney U</option>
-            <option value="mood_median_test" disabled={inferredTest!=='two-sample'}>Mood’s median test</option>
-          </select>
+                <option value="" disabled>Select test</option>
+                <option value="shapiro_wilk" disabled={inferredTest!=='one-sample'}>Shapiro–Wilk</option>
+                <option value="levene" disabled={inferredTest!=='two-sample'}>Levene variance test</option>
+                <option value="t_one_sample" disabled={inferredTest!=='one-sample' || paramHasRange}>One-sample t-test</option>
+                <option value="wilcoxon_signed_rank" disabled={inferredTest!=='one-sample' || paramHasRange}>Wilcoxon signed-rank</option>
+                <option value="sign_test" disabled={inferredTest!=='one-sample' || paramHasRange}>Sign test</option>
+                <option value="tost" disabled={inferredTest!=='one-sample' || !paramHasRange}>Equivalence TOST t</option>
+                <option value="tost_wilcoxon" disabled={inferredTest!=='one-sample' || !paramHasRange}>Equivalence TOST Wilcoxon</option>
+                <option value="t_student" disabled={inferredTest!=='two-sample'}>Student t-test</option>
+                <option value="t_welch" disabled={inferredTest!=='two-sample'}>Welch t-test</option>
+                <option value="mann_whitney" disabled={inferredTest!=='two-sample'}>Mann–Whitney U</option>
+                <option value="mood_median_test" disabled={inferredTest!=='two-sample'}>Mood median test</option>
+              </select>
         </div>
       </div>
 
@@ -648,33 +632,30 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
         </select>
       </div>
       <div style={{ gridColumn: '3 / span 1', minWidth:0 }}>
-        <select className="pill-btn" value={organizationId} onChange={e=>{ setOrganizationId(e.target.value); setResult(null); }} style={{ width:'100%', minWidth:0, boxSizing:'border-box', padding:'10px 12px', height:40, lineHeight:'20px' }}>
+        <select required className="pill-btn" value={organizationId} onChange={e=>{ setOrganizationId(e.target.value); setResult(null); }} style={{ width:'100%', minWidth:0, boxSizing:'border-box', padding:'10px 12px', height:40, lineHeight:'20px' }}>
           <option value="">Organization</option>
           {orgOptions.map(o => <option key={`org-${o.id}`} value={o.id}>{o.name || o.id}</option>)}
         </select>
       </div>
-      {/* Secondary organization only when comparing to another lake */}
       {compareValue && String(compareValue).startsWith('lake:') ? (
         <div style={{ gridColumn: '4 / span 1', minWidth:0 }}>
-          <select className="pill-btn" value={secondaryOrganizationId} onChange={e=>{ setSecondaryOrganizationId(e.target.value); setResult(null); }} style={{ width:'100%', minWidth:0, boxSizing:'border-box', padding:'10px 12px', height:40, lineHeight:'20px' }}>
-            <option value="">Organization (secondary lake, optional)</option>
+          <select required={true} className="pill-btn" value={secondaryOrganizationId} onChange={e=>{ setSecondaryOrganizationId(e.target.value); setResult(null); }} style={{ width:'100%', minWidth:0, boxSizing:'border-box', padding:'10px 12px', height:40, lineHeight:'20px' }}>
+            <option value="">Secondary Organization</option>
             {secondaryOrgOptions.map(o => <option key={`org2-${o.id}`} value={o.id}>{o.name || o.id}</option>)}
           </select>
         </div>
       ) : null}
-      {/* Year inputs moved into gear popover */}
       <div style={{ gridColumn: '4 / span 1', display:'flex', gap:8, minWidth:0 }}>
         <div style={{ width: '100%' }} />
       </div>
     </div>
 
-    {/* Actions and notices */}
       <div style={{ marginTop:10, display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}>
       <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-        <div style={{ fontSize:12, opacity:0.8 }}>Lake-to-lake comparisons aggregate station measurements per lake (mean).</div>
+        <div style={{ fontSize:12, opacity:0.8 }}>Lake-to-lake comparisons request per-lake aggregates (server-side means); client does not aggregate station measurements.</div>
       </div>
       <div style={{ display:'flex', gap:8 }}>
-        <button className={flagProblems ? 'pill-btn danger' : 'pill-btn'} onClick={() => setFlagProblems(f => !f)} style={{ padding:'6px 10px', fontSize:12 }} title={flagProblems ? 'Problem framing active: alternatives target exceedances' : 'Compliance framing: alternatives target meeting standards'}>
+        <button className={flagProblems ? 'pill-btn danger' : 'pill-btn'} onClick={() => setFlagProblems(f => !f)} style={{ padding:'6px 10px', fontSize:12 }} title={flagProblems ? 'Problem framing active: alternatives target exceedances' : 'Compliance framing: alternatives target meeting standards'} disabled={inferredTest==='two-sample'}>
           {flagProblems ? 'Flag Problems' : 'Compliance'}
         </button>
         <button ref={gearBtnRef} aria-label="Advanced options" title="Advanced options" className="pill-btn" onClick={() => setShowGearPopover(s => !s)} style={{ padding:'6px 10px', display:'inline-flex', alignItems:'center', justifyContent:'center' }}>
@@ -684,7 +665,6 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
       </div>
     </div>
 
-    {/* Note about range thresholds when present */}
     {paramHasRange && inferredTest === 'one-sample' ? (
       <div style={{ marginTop:8, fontSize:12, color:'#eee' }}>
         <strong>Note:</strong> Authoritative range: choose an equivalence test (t or Wilcoxon). Other one-sample tests are disabled.
@@ -692,7 +672,6 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
       </div>
     ) : null}
 
-    {/* Gear popover: contains Year From / Year To / Confidence Level */}
     <Popover anchorRef={gearBtnRef} open={showGearPopover} onClose={() => setShowGearPopover(false)} minWidth={320}>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
         <div style={{ fontSize:13, fontWeight:600, color:'#f0f6fb' }}>Year Range & Confidence Level</div>
@@ -712,17 +691,14 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
       </div>
     </Popover>
 
-    {/* Notices/errors */}
     <div style={{ marginTop:8 }}>
   {error && <div style={{ color:'#ff8080', fontSize:12 }}>{error}</div>}
   {!error && yearError && <div style={{ color:'#ffb3b3', fontSize:12 }}>{yearError}</div>}
-  {/* transient previous-test-cleared message removed */}
       {error && (error.includes('threshold_missing') || error.includes('threshold')) && (
         <div style={{ fontSize:11, marginTop:6, color:'#ffd9d9' }}>
           Server debug: <pre style={{ whiteSpace:'pre-wrap', fontSize:11 }}>{JSON.stringify((error && (typeof error === 'string') ? null : null) || '' )}</pre>
         </div>
       )}
-      {/* Manual threshold flow removed in backend; no prompt needed here */}
       {advisories.length ? (
         <div style={{ marginTop:6, fontSize:12, color:'#f0f0f0' }}>
           <strong>Advisories:</strong>
@@ -733,7 +709,6 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
       ) : null}
     </div>
 
-    {/* Result */}
     {result && (
       <div style={{ marginTop:8 }}>
         <ResultPanel
@@ -758,16 +733,4 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
   );
 }
 
-function suggestThreshold(paramCode, classCode, staticThresholds) {
-  if (!paramCode || !classCode) return null;
-  const entry = staticThresholds[paramCode];
-  if (!entry) return null;
-  if (entry.type === 'range') return null; // need both bounds; skip auto-fill
-  const val = entry[classCode];
-  if (val == null) return null;
-  const num = Number(val);
-  return Number.isFinite(num) ? num : null;
-}
-
-// Export wrapped with forwardRef so parent components can call imperative methods via ref
 export default React.forwardRef(AdvancedStat);
