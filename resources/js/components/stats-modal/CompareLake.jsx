@@ -341,7 +341,7 @@ function CompareLake({
   }, [eventsA, eventsB, selectedParam, JSON.stringify(selectedStationsA), JSON.stringify(selectedStationsB), bucket, lakeOptions, lakeA, lakeB]);
 
   return (
-    <div className="insight-card">
+    <div className="insight-card" style={{ backgroundColor: '#0f172a' }}>
       <h4>Compare Lakes</h4>
       <div style={{ marginBottom: 8 }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', overflowX: 'auto', paddingBottom: 4, WebkitOverflowScrolling: 'touch', minWidth: 0 }}>
@@ -442,7 +442,7 @@ function CompareLake({
         </div>
       </div>
 
-      <div className="wq-chart" style={{ height: 300, borderRadius: 8, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)', padding: 8 }}>
+  <div className="wq-chart" style={{ height: 300, borderRadius: 8, background: 'transparent', border: '1px solid rgba(255,255,255,0.06)', padding: 8 }}>
         {applied ? (
           viewMode === 'depth' ? (
             depthProfile && depthProfile.datasets && depthProfile.datasets.length ? (

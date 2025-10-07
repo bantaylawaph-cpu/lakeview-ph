@@ -662,7 +662,7 @@ function WaterQualityTab({ lake }) {
               },
             } : null;
             return (
-              <div key={p.id} className="insight-card" style={{ display: 'grid', gap: 8 }}>
+              <div className="insight-card" style={{ backgroundColor: '#0f172a' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                   <h4 style={{ margin: 0 }}>{title}</h4>
                   {hasProfile && (
