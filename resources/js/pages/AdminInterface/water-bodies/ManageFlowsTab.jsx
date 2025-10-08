@@ -1,6 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { FiEdit2, FiTrash2 } from 'react-icons/fi';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FiEdit2, FiTrash2, FiEye } from 'react-icons/fi';
 import LakeFlowForm from '../../../components/LakeFlowForm';
+import Modal from '../../../components/Modal';
+import AppMap from '../../../components/AppMap';
+import MapViewport from '../../../components/MapViewport';
+import { GeoJSON, CircleMarker } from 'react-leaflet';
+import L from 'leaflet';
 import { api } from '../../../lib/api';
 import TableToolbar from '../../../components/table/TableToolbar';
 import TableLayout from '../../../layouts/TableLayout';
@@ -37,7 +42,20 @@ export default function ManageFlowsTab() {
   const [formInitial, setFormInitial] = useState(null);
 
   const [visibleMap, setVisibleMap] = useState(() => {
-    try { const raw = localStorage.getItem(VIS_KEY); return raw ? JSON.parse(raw) : { lake:true, flow_type:true, name:true, source:true, is_primary:true, latitude:true, longitude:true, updated_at:true }; } catch { return { lake:true, flow_type:true, name:true, source:true, is_primary:true, latitude:true, longitude:true, updated_at:true }; }
+    try {
+      const raw = localStorage.getItem(VIS_KEY);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          parsed.updated_at = false;
+          return parsed;
+        } catch (e) {
+        }
+      }
+      return { lake:true, flow_type:true, name:true, source:true, is_primary:true, latitude:true, longitude:true, updated_at:false };
+    } catch {
+      return { lake:true, flow_type:true, name:true, source:true, is_primary:true, latitude:true, longitude:true, updated_at:false };
+    }
   });
   useEffect(()=>{ try { localStorage.setItem(VIS_KEY, JSON.stringify(visibleMap)); } catch {} }, [visibleMap]);
   const [resetSignal, setResetSignal] = useState(0);
@@ -78,6 +96,35 @@ export default function ManageFlowsTab() {
     const src = row?._raw ?? row; if (!src) return; if (!window.confirm('Delete flow point?')) return;
     try { await api(`/lake-flows/${src.id}`, { method: 'DELETE' }); fetchRows(); } catch (e) { alert(e.message || 'Delete failed'); }
   };
+
+  // View flow: show lake geometry and the flow point on a modal map
+  const [viewOpen, setViewOpen] = useState(false);
+  const [viewFeature, setViewFeature] = useState(null);
+  const [viewFlowPoint, setViewFlowPoint] = useState(null);
+  const viewMapRef = useRef(null);
+
+  const viewFlow = useCallback(async (row) => {
+    const src = row?._raw ?? row;
+    if (!src) return;
+    setViewFeature(null); setViewFlowPoint(null);
+    try {
+      // fetch lake detail to get geometry
+      const lakeId = src.lake_id ?? src._raw?.lake_id ?? src.lake_id;
+      const lakeResp = await api(`/lakes/${lakeId}`);
+      const geom = lakeResp?.geom_geojson ? (typeof lakeResp.geom_geojson === 'string' ? JSON.parse(lakeResp.geom_geojson) : lakeResp.geom_geojson) : null;
+      if (geom) {
+        const feature = { type: 'Feature', properties: { id: lakeResp.id, name: lakeResp.name || '' }, geometry: geom };
+        setViewFeature(feature);
+      }
+    } catch (e) {
+      // ignore geometry errors; we'll still show point
+    }
+    // point
+    const lat = src.latitude ?? src.lat ?? (src._raw && (src._raw.latitude ?? src._raw.lat));
+    const lon = src.longitude ?? src.lon ?? (src._raw && (src._raw.longitude ?? src._raw.lon));
+    if (lat && lon) setViewFlowPoint({ lat: Number(lat), lon: Number(lon), ...src });
+    setViewOpen(true);
+  }, []);
 
   const submit = async (payload) => {
     const body = { ...payload };
@@ -133,6 +180,7 @@ export default function ManageFlowsTab() {
   };
 
   const actions = useMemo(()=>[
+    { label:'View', title:'View', icon:<FiEye />, onClick: (row) => viewFlow(row), type:'view' },
     { label:'Edit', title:'Edit', icon:<FiEdit2 />, onClick: openEdit, type:'edit' },
     { label:'Delete', title:'Delete', icon:<FiTrash2 />, onClick: openDelete, type:'delete' },
   ], [openEdit]);
@@ -160,13 +208,6 @@ export default function ManageFlowsTab() {
 
       <div className="dashboard-card-body" style={{ paddingTop: 8 }}>
         <div className="table-wrapper" style={{ position:'relative' }}>
-          {loading && (
-            <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(255,255,255,0.6)', zIndex:2 }}>
-              <LoadingSpinner label="Loading flows…" />
-            </div>
-          )}
-
-          {/* Render error inside the table area so it's visually associated with the table */}
           {!loading && errorMsg ? (
             <div className="no-data" style={{ padding: 24 }}>{errorMsg}</div>
           ) : (
@@ -193,6 +234,23 @@ export default function ManageFlowsTab() {
         onCancel={()=>setFormOpen(false)}
         onSubmit={submit}
       />
+      <Modal open={viewOpen} onClose={()=>setViewOpen(false)} title="View Flow Point" width={900} ariaLabel="View Flow">
+        <div style={{ height: 480, borderRadius: 8, overflow: 'hidden' }}>
+          <AppMap view="osm" whenCreated={(m)=>{ viewMapRef.current = m; }}>
+            {viewFeature && (
+              <GeoJSON data={viewFeature} style={{ color:'#2563eb', weight:2, fillOpacity:0.08 }} />
+            )}
+            {viewFlowPoint && (
+              <CircleMarker center={[viewFlowPoint.lat, viewFlowPoint.lon]} radius={8} pathOptions={{ color:'#ef4444', fillColor:'#ef4444', fillOpacity:0.9 }}>
+                {/* Popup handled by map's default behavior */}
+              </CircleMarker>
+            )}
+            {/* If geometry exists, fit bounds after creation */}
+            {viewFeature && <MapViewport bounds={L.geoJSON(viewFeature).getBounds()} maxZoom={14} />}
+            {!viewFeature && viewFlowPoint && <MapViewport bounds={[[viewFlowPoint.lat-0.02, viewFlowPoint.lon-0.02],[viewFlowPoint.lat+0.02, viewFlowPoint.lon+0.02]]} maxZoom={14} />}
+          </AppMap>
+        </div>
+      </Modal>
     </div>
   );
 }

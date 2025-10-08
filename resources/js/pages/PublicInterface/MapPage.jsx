@@ -3,7 +3,7 @@
 // ----------------------------------------------------
 import React, { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useMap, GeoJSON } from "react-leaflet";
+import { useMap, GeoJSON, Marker, Popup, CircleMarker } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
@@ -115,20 +115,28 @@ function MapPage() {
   // Flows state
   const [showFlows, setShowFlows] = useState(false);
   const [flows, setFlows] = useState([]);
-  // fetch flows for selected lake when toggle goes on
+  // fetch flows whenever selected lake changes (so Overview can list even if markers hidden)
   useEffect(()=>{
     let abort = false;
     const load = async () => {
-      if (!showFlows || !selectedLakeId) { setFlows([]); return; }
+      if (!selectedLakeId) { setFlows([]); return; }
       try {
         const res = await fetch(`/api/public/lake-flows?lake_id=${selectedLakeId}`);
         if (!res.ok) return; const js = await res.json();
-        if (!abort) setFlows(js);
-      } catch(e) {}
+        if (!abort) setFlows(Array.isArray(js) ? js : []);
+      } catch(e) { if (!abort) setFlows([]); }
     };
     load();
     return () => { abort = true; };
-  }, [showFlows, selectedLakeId]);
+  }, [selectedLakeId]);
+
+  const jumpToFlow = (flow) => {
+    if (!flow || !mapRef.current) return;
+    if (flow.latitude && flow.longitude) {
+      mapRef.current.flyTo([flow.latitude, flow.longitude], 14, { duration: 0.6 });
+    }
+    if (!showFlows) setShowFlows(true);
+  };
 
   return (
     <div className={themeClass} style={{ height: "100vh", width: "100vw", margin: 0, padding: 0, position: 'relative' }}>
@@ -171,25 +179,29 @@ function MapPage() {
           />
         )}
 
-        {/* Flow markers */}
-        {showFlows && flows && flows.map(f => (
-          <Marker
-            key={`flow-${f.id}`}
-            position={[f.latitude, f.longitude]}
-            icon={L.icon({
-              iconUrl: f.flow_type === 'inflow' ? 'data:image/svg+xml;utf8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="teal"><circle cx="12" cy="12" r="10" fill="teal"/><path d="M12 6l4 6h-3l1 5-4-6h3z" fill="white"/></svg>`) : 'data:image/svg+xml;utf8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="purple"><circle cx="12" cy="12" r="10" fill="purple"/><path d="M12 18l-4-6h3l-1-5 4 6h-3z" fill="white"/></svg>`),
-              iconSize: [28,28], iconAnchor:[14,14], popupAnchor:[0,-12]
-            })}
-          >
-            <Popup>
-              <div style={{minWidth:160}}>
-                <strong style={{textTransform:'capitalize'}}>{f.flow_type}</strong><br />
-                {f.name || f.source || 'Flow Point'}<br />
-                <small>Lat: {f.latitude} Lon: {f.longitude}</small>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
+        {showFlows && flows && flows.map((f) => {
+          const lat = Number(f.latitude);
+          const lon = Number(f.longitude);
+          if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+          const isInflow = f.flow_type === 'inflow';
+          const color = isInflow ? '#14b8a6' : '#7c3aed'; // teal / purple
+          return (
+            <CircleMarker
+              key={`flow-${f.id}`}
+              center={[lat, lon]}
+              radius={7}
+              pathOptions={{ color: color, fillColor: color, weight: 1, fillOpacity: 0.95 }}
+            >
+              <Popup>
+                <div style={{ minWidth: 160 }}>
+                  <strong style={{ textTransform: 'capitalize' }}>{f.flow_type}</strong><br />
+                  {f.name || f.source || 'Flow Point'} {f.is_primary ? <em style={{ color: '#fbbf24' }}>★</em> : null}<br />
+                  <small>Lat: {lat} Lon: {lon}</small>
+                </div>
+              </Popup>
+            </CircleMarker>
+          );
+        })}
 
         {/* Sidebar */}
         <Sidebar
@@ -241,8 +253,10 @@ function MapPage() {
         canToggleWatershed={Boolean(selectedLake?.watershed_id || selectedLake?.watershedId || true)}
         onToggleWatershed={handlePanelToggleWatershed}
           authUser={authUser}
-        onToggleFlows={(checked)=>setShowFlows(checked)}
-        showFlows={showFlows}
+  onToggleFlows={(checked)=>setShowFlows(checked)}
+  showFlows={showFlows}
+  flows={flows}
+  onJumpToFlow={jumpToFlow}
         />
 
       {/* UI overlays */}

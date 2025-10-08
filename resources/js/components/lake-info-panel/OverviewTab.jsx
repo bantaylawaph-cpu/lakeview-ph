@@ -9,7 +9,17 @@ const fmtNum = (v, suffix = "", digits = 2) => {
 };
 
 
-function OverviewTab({ lake, showWatershed = false, canToggleWatershed = false, onToggleWatershed }) {
+function OverviewTab({
+  lake,
+  showWatershed = false,
+  canToggleWatershed = false,
+  onToggleWatershed,
+  // New flows integration
+  flows = [],              // array of flow objects with { id, flow_type, name, source, is_primary, latitude, longitude }
+  showFlows = false,       // whether markers are shown on map
+  onToggleFlows,           // (checked:boolean) => void
+  onJumpToFlow,            // (flow) => void (fly map to flow)
+}) {
   const watershedName = useMemo(() => {
     if (!lake) return "–";
     return lake?.watershed?.name || lake?.watershed_name || "–";
@@ -48,6 +58,45 @@ function OverviewTab({ lake, showWatershed = false, canToggleWatershed = false, 
   const areaStr      = useMemo(() => fmtNum(lake?.surface_area_km2, " km²", 2), [lake]);
   const elevationStr = useMemo(() => fmtNum(lake?.elevation_m, " m", 1), [lake]);
   const meanDepthStr = useMemo(() => fmtNum(lake?.mean_depth_m, " m", 1), [lake]);
+
+  // Separate inflows / outflows, keep stable references
+  const inflows = useMemo(() => (flows || []).filter(f => f.flow_type === 'inflow'), [flows]);
+  const outflows = useMemo(() => (flows || []).filter(f => f.flow_type === 'outflow'), [flows]);
+
+  const renderFlowList = (list) => {
+    if (!list || list.length === 0) return <span style={{opacity:0.6}}>None</span>;
+    return (
+      <span style={{display:'inline-flex',flexWrap:'wrap',gap:6}}>
+        {list.map(f => {
+          const label = f.name || f.source || (f.flow_type === 'inflow' ? 'Inflow' : 'Outflow');
+          return (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => onJumpToFlow?.(f)}
+              title={`Jump to ${label}`}
+              style={{
+                background:'rgba(255,255,255,0.08)',
+                border:'1px solid rgba(255,255,255,0.15)',
+                color:'#fff',
+                padding:'2px 6px',
+                borderRadius:4,
+                cursor:'pointer',
+                fontSize:11,
+                lineHeight:1.2,
+                display:'flex',
+                alignItems:'center',
+                gap:4,
+              }}
+            >
+              <span style={{maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{label}</span>
+              {f.is_primary ? <span style={{color:'#fbbf24',fontSize:12}} title="Primary">★</span> : null}
+            </button>
+          );
+        })}
+      </span>
+    );
+  };
 
 
   const showToggle = canToggleWatershed && typeof onToggleWatershed === 'function';
@@ -106,6 +155,36 @@ function OverviewTab({ lake, showWatershed = false, canToggleWatershed = false, 
 
         <div><strong>Mean Depth:</strong></div>
         <div>{meanDepthStr}</div>
+
+        {/* Flows section */}
+        <div><strong>Flows:</strong></div>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+          <span style={{fontSize:12,opacity:0.8}}>{flows?.length || 0} point{(flows?.length||0)===1?'':'s'}</span>
+          <button
+            type="button"
+            aria-pressed={showFlows}
+            title={showFlows ? 'Hide flow markers' : 'Show flow markers'}
+            onClick={() => onToggleFlows?.(!showFlows)}
+            style={{
+              border: 'none',
+              background: 'transparent',
+              color: '#fff',
+              padding: 6,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              borderRadius: 6,
+            }}
+          >
+            <FiMap size={16} />
+          </button>
+        </div>
+
+        <div><strong>Inflows:</strong></div>
+        <div>{renderFlowList(inflows)}</div>
+        <div><strong>Outflows:</strong></div>
+        <div>{renderFlowList(outflows)}</div>
 
         {/* Removed Location (full) row as requested; arrays are shown inline above */}
       </div>
