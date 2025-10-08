@@ -27,28 +27,47 @@ const fmtNum = (value, digits = 2) => {
 
 const fmtDt = (value) => (value ? new Date(value).toLocaleDateString() : "");
 
-const formatLocation = (row) => [row.municipality, row.province, row.region].filter(Boolean).join(", ");
+const firstVal = (v) => (Array.isArray(v) ? v[0] : v);
+const joinVals = (v) => (Array.isArray(v) ? v.join(' / ') : v || '');
+const formatLocation = (row) => [firstVal(row.municipality_list ?? row.municipality), firstVal(row.province_list ?? row.province), firstVal(row.region_list ?? row.region)].filter(Boolean).join(", ");
 
 const normalizeRows = (rows = []) =>
-  rows.map((row) => ({
-    id: row.id,
-    name: row.name,
-    alt_name: row.alt_name ?? "",
-    region: row.region ?? "",
-    province: row.province ?? "",
-    municipality: row.municipality ?? "",
-    class_code: row.class_code ?? "",
-    class_name: row.water_quality_class?.name ?? "",
-    classification: row.class_code ? [row.class_code, row.water_quality_class?.name].filter(Boolean).join(" - ") : "",
-    surface_area_km2: fmtNum(row.surface_area_km2, 2),
-    elevation_m: fmtNum(row.elevation_m, 1),
-    mean_depth_m: fmtNum(row.mean_depth_m, 1),
-    watershed: row.watershed?.name ?? "",
-    created_at: fmtDt(row.created_at),
-    updated_at: fmtDt(row.updated_at),
-    location: formatLocation(row),
-    _raw: row,
-  }));
+  rows.map((row) => {
+    const regionList = row.region_list ?? (Array.isArray(row.region) ? row.region : null);
+    const provinceList = row.province_list ?? (Array.isArray(row.province) ? row.province : null);
+    const municipalityList = row.municipality_list ?? (Array.isArray(row.municipality) ? row.municipality : null);
+
+    const multiRegion = regionList && regionList.length > 1;
+    const multiProvince = provinceList && provinceList.length > 1;
+    const multiMunicipality = municipalityList && municipalityList.length > 1;
+
+    const regionDisplay = multiRegion ? joinVals(regionList) : (firstVal(regionList) ?? (row.region ?? ''));
+    const provinceDisplay = multiProvince ? joinVals(provinceList) : (firstVal(provinceList) ?? (row.province ?? ''));
+    const municipalityDisplay = multiMunicipality ? joinVals(municipalityList) : (firstVal(municipalityList) ?? (row.municipality ?? ''));
+
+    return {
+      id: row.id,
+      name: row.name,
+      alt_name: row.alt_name ?? "",
+      region: regionDisplay,
+      province: provinceDisplay,
+      municipality: municipalityDisplay,
+      region_list: regionList || null,
+      province_list: provinceList || null,
+      municipality_list: municipalityList || null,
+      class_code: row.class_code ?? "",
+      class_name: row.water_quality_class?.name ?? "",
+      classification: row.class_code ? [row.class_code, row.water_quality_class?.name].filter(Boolean).join(" - ") : "",
+      surface_area_km2: fmtNum(row.surface_area_km2, 2),
+      elevation_m: fmtNum(row.elevation_m, 1),
+      mean_depth_m: fmtNum(row.mean_depth_m, 1),
+      watershed: row.watershed?.name ?? "",
+      created_at: fmtDt(row.created_at),
+      updated_at: fmtDt(row.updated_at),
+      location: formatLocation(row),
+      _raw: row,
+    };
+  });
 
 function ManageLakesTab() {
   const [query, setQuery] = useState(() => {
@@ -561,11 +580,20 @@ function ManageLakesTab() {
   // delete flow now handled inline in openDelete
 
   const exportCsv = useCallback(() => {
-    const headers = visibleColumns.map((col) => (typeof col.header === "string" ? col.header : col.id));
+    // Always append *_list columns for region/province/municipality for richer export context
+    const extraCols = [
+      { id: 'region_list', header: 'Region List', accessor: 'region_list' },
+      { id: 'province_list', header: 'Province List', accessor: 'province_list' },
+      { id: 'municipality_list', header: 'Municipality List', accessor: 'municipality_list' },
+    ];
+    const exportCols = [...visibleColumns, ...extraCols];
+    const headers = exportCols.map((col) => (typeof col.header === "string" ? col.header : col.id));
     const csvRows = lakes.map((row) =>
-      visibleColumns
+      exportCols
         .map((col) => {
-          const value = row[col.accessor] ?? "";
+          let value = row[col.accessor];
+          if (Array.isArray(value)) value = value.join('; '); // avoid conflict with comma CSV delimiter
+            if (value == null) value = '';
           const text = String(value);
           return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
         })

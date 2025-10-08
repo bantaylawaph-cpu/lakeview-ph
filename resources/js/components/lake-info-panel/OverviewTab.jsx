@@ -15,11 +15,15 @@ function OverviewTab({ lake, showWatershed = false, canToggleWatershed = false, 
     return lake?.watershed?.name || lake?.watershed_name || "–";
   }, [lake]);
 
-  const locationStr = useMemo(() => {
-    if (!lake) return "–";
-    const parts = [lake.municipality, lake.province, lake.region].filter(Boolean);
-    return parts.length ? parts.join(", ") : "–";
-  }, [lake]);
+  const fmtList = (val) => {
+    if (!val) return '–';
+    if (Array.isArray(val)) return val.join(', ');
+    return String(val);
+  };
+
+  const regionDisplay = useMemo(() => fmtList(lake?.region_list || lake?.region), [lake]);
+  const provinceDisplay = useMemo(() => fmtList(lake?.province_list || lake?.province), [lake]);
+  const municipalityDisplay = useMemo(() => fmtList(lake?.municipality_list || lake?.municipality), [lake]);
 
   const areaStr      = useMemo(() => fmtNum(lake?.surface_area_km2, " km²", 2), [lake]);
   const elevationStr = useMemo(() => fmtNum(lake?.elevation_m, " m", 1), [lake]);
@@ -66,13 +70,13 @@ function OverviewTab({ lake, showWatershed = false, canToggleWatershed = false, 
         </div>
 
         <div><strong>Region:</strong></div>
-        <div>{lake?.region || "–"}</div>
+        <div>{regionDisplay || '–'}</div>
 
         <div><strong>Province:</strong></div>
-        <div>{lake?.province || "–"}</div>
+        <div>{provinceDisplay || '–'}</div>
 
         <div><strong>Municipality/City:</strong></div>
-        <div>{lake?.municipality || "–"}</div>
+        <div>{municipalityDisplay || '–'}</div>
 
         <div><strong>Surface Area:</strong></div>
         <div>{areaStr}</div>
@@ -83,8 +87,7 @@ function OverviewTab({ lake, showWatershed = false, canToggleWatershed = false, 
         <div><strong>Mean Depth:</strong></div>
         <div>{meanDepthStr}</div>
 
-        <div><strong>Location (full):</strong></div>
-        <div>{locationStr}</div>
+        {/* Removed Location (full) row as requested; arrays are shown inline above */}
       </div>
     </>
   );

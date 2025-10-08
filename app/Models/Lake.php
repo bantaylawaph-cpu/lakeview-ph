@@ -14,6 +14,30 @@ class Lake extends Model
         'surface_area_km2','elevation_m','mean_depth_m','class_code'
     ];
 
+    // Cast location fields to array (will become JSON arrays after migration)
+    protected $casts = [
+        'region' => 'array',
+        'province' => 'array',
+        'municipality' => 'array',
+    ];
+
+    // Convenience accessors returning first item for backward compatibility
+    public function getRegionNameAttribute()
+    {
+        $r = $this->region;
+        return is_array($r) ? ($r[0] ?? null) : $r;
+    }
+    public function getProvinceNameAttribute()
+    {
+        $r = $this->province;
+        return is_array($r) ? ($r[0] ?? null) : $r;
+    }
+    public function getMunicipalityNameAttribute()
+    {
+        $r = $this->municipality;
+        return is_array($r) ? ($r[0] ?? null) : $r;
+    }
+
     // A lake belongs to a watershed (nullable is okay)
     public function watershed()
     {

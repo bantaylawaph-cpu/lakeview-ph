@@ -13,10 +13,28 @@ class LakeController extends Controller
 {
     public function index()
     {
-        return Lake::select(
+        $rows = Lake::select(
             'id','watershed_id','name','alt_name','region','province','municipality',
             'surface_area_km2','elevation_m','mean_depth_m','class_code','created_at','updated_at'
         )->with(['watershed:id,name','waterQualityClass:code,name'])->orderBy('name')->get();
+
+        return $rows->map(function($lake){
+            $arr = $lake->toArray();
+            // Provide legacy single-value compatibility (region, province, municipality) returning first element
+                if (is_array($arr['region'])) {
+                    $arr['region_list'] = $arr['region'];
+                    $arr['region'] = $arr['region'][0] ?? null;
+                }
+                if (is_array($arr['province'])) {
+                    $arr['province_list'] = $arr['province'];
+                    $arr['province'] = $arr['province'][0] ?? null;
+                }
+                if (is_array($arr['municipality'])) {
+                    $arr['municipality_list'] = $arr['municipality'];
+                    $arr['municipality'] = $arr['municipality'][0] ?? null;
+                }
+            return $arr;
+        });
     }
 
     public function show(Lake $lake)
@@ -27,7 +45,20 @@ class LakeController extends Controller
             ->select('id')
             ->selectRaw('ST_AsGeoJSON(geom) as geom_geojson')
             ->first();
-        return array_merge($lake->toArray(), ['geom_geojson' => $active->geom_geojson ?? null]);
+        $arr = $lake->toArray();
+        if (is_array($arr['region'])) {
+            $arr['region_list'] = $arr['region'];
+            $arr['region'] = $arr['region'][0] ?? null;
+        }
+        if (is_array($arr['province'])) {
+            $arr['province_list'] = $arr['province'];
+            $arr['province'] = $arr['province'][0] ?? null;
+        }
+        if (is_array($arr['municipality'])) {
+            $arr['municipality_list'] = $arr['municipality'];
+            $arr['municipality'] = $arr['municipality'][0] ?? null;
+        }
+        return array_merge($arr, ['geom_geojson' => $active->geom_geojson ?? null]);
     }
 
     public function store(Request $req)
@@ -36,14 +67,29 @@ class LakeController extends Controller
             'name' => ['required','string','max:255','unique:lakes,name'],
             'watershed_id' => ['nullable','exists:watersheds,id'],
             'alt_name' => ['nullable','string','max:255'],
-            'region' => ['nullable','string','max:255'],
-            'province' => ['nullable','string','max:255'],
-            'municipality' => ['nullable','string','max:255'],
+            // Accept either a string (possibly comma-separated) or an array of strings
+            'region' => ['nullable'],
+            'province' => ['nullable'],
+            'municipality' => ['nullable'],
             'surface_area_km2' => ['nullable','numeric'],
             'elevation_m' => ['nullable','numeric'],
             'mean_depth_m' => ['nullable','numeric'],
             'class_code' => ['nullable','string','max:10', Rule::exists('water_quality_classes','code')],
         ]);
+
+        // Normalize multi-location fields
+        foreach (['region','province','municipality'] as $field) {
+            if (array_key_exists($field, $data)) {
+                $val = $data[$field];
+                if (is_string($val)) {
+                    $val = trim($val);
+                    $data[$field] = $val === '' ? null : array_values(array_unique(array_filter(array_map('trim', explode(',', $val)))));
+                } elseif (is_array($val)) {
+                    $data[$field] = array_values(array_unique(array_filter(array_map(function($v){return is_string($v)?trim($v):$v;}, $val))));
+                    if (empty($data[$field])) $data[$field] = null;
+                }
+            }
+        }
         $lake = Lake::create($data);
         return response()->json($lake->load('watershed:id,name','waterQualityClass:code,name'), 201);
     }
@@ -54,14 +100,26 @@ class LakeController extends Controller
             'name' => ['required','string','max:255', Rule::unique('lakes','name')->ignore($lake->id)],
             'watershed_id' => ['nullable','exists:watersheds,id'],
             'alt_name' => ['nullable','string','max:255'],
-            'region' => ['nullable','string','max:255'],
-            'province' => ['nullable','string','max:255'],
-            'municipality' => ['nullable','string','max:255'],
+            'region' => ['nullable'],
+            'province' => ['nullable'],
+            'municipality' => ['nullable'],
             'surface_area_km2' => ['nullable','numeric'],
             'elevation_m' => ['nullable','numeric'],
             'mean_depth_m' => ['nullable','numeric'],
             'class_code' => ['nullable','string','max:10', Rule::exists('water_quality_classes','code')],
         ]);
+        foreach (['region','province','municipality'] as $field) {
+            if (array_key_exists($field, $data)) {
+                $val = $data[$field];
+                if (is_string($val)) {
+                    $val = trim($val);
+                    $data[$field] = $val === '' ? null : array_values(array_unique(array_filter(array_map('trim', explode(',', $val)))));
+                } elseif (is_array($val)) {
+                    $data[$field] = array_values(array_unique(array_filter(array_map(function($v){return is_string($v)?trim($v):$v;}, $val))));
+                    if (empty($data[$field])) $data[$field] = null;
+                }
+            }
+        }
         $lake->update($data);
         return $lake->load('watershed:id,name','waterQualityClass:code,name');
     }
@@ -107,14 +165,39 @@ class LakeController extends Controller
             $depth_min = request()->query('mean_depth_min');
             $depth_max = request()->query('mean_depth_max');
 
+            // Robust JSON array filtering (Postgres) with graceful fallback
+            $driver = DB::getDriverName();
             if ($region) {
-                $q->where('l.region', $region);
+                $q->where(function($qq) use ($region, $driver) {
+                    if ($driver === 'pgsql') {
+                        // When column is a JSONB array: l.region @> '["RegionName"]'
+                        $qq->whereRaw("(jsonb_typeof(l.region) = 'array' AND l.region @> ?::jsonb)", [json_encode([$region])])
+                           ->orWhereRaw("(jsonb_typeof(l.region) <> 'array' AND l.region::text = ?)", [$region]);
+                    } else {
+                        // MySQL / others: rely on whereJsonContains if available
+                        $qq->whereJsonContains('l.region', $region)->orWhere('l.region', $region);
+                    }
+                });
             }
             if ($province) {
-                $q->where('l.province', $province);
+                $q->where(function($qq) use ($province, $driver) {
+                    if ($driver === 'pgsql') {
+                        $qq->whereRaw("(jsonb_typeof(l.province) = 'array' AND l.province @> ?::jsonb)", [json_encode([$province])])
+                           ->orWhereRaw("(jsonb_typeof(l.province) <> 'array' AND l.province::text = ?)", [$province]);
+                    } else {
+                        $qq->whereJsonContains('l.province', $province)->orWhere('l.province', $province);
+                    }
+                });
             }
             if ($municipality) {
-                $q->where('l.municipality', $municipality);
+                $q->where(function($qq) use ($municipality, $driver) {
+                    if ($driver === 'pgsql') {
+                        $qq->whereRaw("(jsonb_typeof(l.municipality) = 'array' AND l.municipality @> ?::jsonb)", [json_encode([$municipality])])
+                           ->orWhereRaw("(jsonb_typeof(l.municipality) <> 'array' AND l.municipality::text = ?)", [$municipality]);
+                    } else {
+                        $qq->whereJsonContains('l.municipality', $municipality)->orWhere('l.municipality', $municipality);
+                    }
+                });
             }
             if ($class_code) {
                 $q->where('l.class_code', $class_code);
@@ -188,7 +271,20 @@ class LakeController extends Controller
             ->select('id')
             ->selectRaw('ST_AsGeoJSON(geom) as geom_geojson')
             ->first();
-        return array_merge($lake->toArray(), ['geom_geojson' => $active->geom_geojson ?? null]);
+        $arr = $lake->toArray();
+        if (is_array($arr['region'])) {
+            $arr['region_list'] = $arr['region'];
+            $arr['region'] = $arr['region'][0] ?? null;
+        }
+        if (is_array($arr['province'])) {
+            $arr['province_list'] = $arr['province'];
+            $arr['province'] = $arr['province'][0] ?? null;
+        }
+        if (is_array($arr['municipality'])) {
+            $arr['municipality_list'] = $arr['municipality'];
+            $arr['municipality'] = $arr['municipality'][0] ?? null;
+        }
+        return array_merge($arr, ['geom_geojson' => $active->geom_geojson ?? null]);
     }
 }
 

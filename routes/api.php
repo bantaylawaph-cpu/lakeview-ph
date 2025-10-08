@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\LakeController;
 use App\Http\Controllers\WatershedController;
+use App\Http\Controllers\LakeOptionsController;
 use App\Http\Controllers\Api\LayerController as ApiLayerController;
 use App\Http\Controllers\Api\OptionsController;
 use App\Http\Controllers\EmailOtpController;
@@ -286,6 +287,10 @@ Route::get('/options/regions', [OptionsController::class, 'regions']);
 Route::get('/options/provinces', [OptionsController::class, 'provinces']);
 Route::get('/options/municipalities', [OptionsController::class, 'municipalities']);
 Route::get('/options/municipalities', [OptionsController::class, 'municipalities']);
+// New lake-specific distinct location endpoints supporting JSON arrays (can migrate frontend later)
+Route::get('/options/lake-regions', [LakeOptionsController::class, 'regions']);
+Route::get('/options/lake-provinces', [LakeOptionsController::class, 'provinces']);
+Route::get('/options/lake-municipalities', [LakeOptionsController::class, 'municipalities']);
 
 // Stats & Population (public)
 Route::get('/stats/depths', [StatsController::class, 'depths']);

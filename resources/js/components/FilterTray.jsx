@@ -55,21 +55,58 @@ export default function FilterTray({ open, onClose, onApply, initial = {} }) {
 
     // load region/province/municipality distinct lists
     (async () => {
-      try {
-        const r1 = await fetch('/api/options/regions');
-        const jr1 = await r1.json();
-        setRegionOptions(Array.isArray(jr1) ? jr1 : (jr1?.data || []));
-      } catch (e) {}
-      try {
-        const r2 = await fetch('/api/options/provinces');
-        const jr2 = await r2.json();
-        setProvinceOptions(Array.isArray(jr2) ? jr2 : (jr2?.data || []));
-      } catch (e) {}
-      try {
-        const r3 = await fetch('/api/options/municipalities');
-        const jr3 = await r3.json();
-        setMunicipalityOptions(Array.isArray(jr3) ? jr3 : (jr3?.data || []));
-      } catch (e) {}
+      const flattenList = (raw) => {
+        const out = [];
+        const pushMany = (arr) => arr.forEach((v) => { if (typeof v === 'string' && v.trim()) out.push(v.trim()); });
+        (raw || []).forEach((item) => {
+          if (!item && item !== 0) return;
+            if (Array.isArray(item)) { pushMany(item); return; }
+            if (typeof item === 'string') {
+              const trimmed = item.trim();
+              if (!trimmed) return;
+              // Try JSON array
+              if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+                try {
+                  const parsed = JSON.parse(trimmed);
+                  if (Array.isArray(parsed)) { pushMany(parsed); return; }
+                } catch (e) { /* fall through */ }
+              }
+              // Split on commas if present
+              if (trimmed.includes(',')) { pushMany(trimmed.split(',').map(s => s.trim())); return; }
+              // As-is fallback
+              out.push(trimmed);
+              return;
+            }
+            // Non-string scalars
+            out.push(String(item));
+        });
+        // De-dupe & sort natural, case-insensitive
+        return Array.from(new Set(out)).sort((a,b) => a.localeCompare(b,'en',{sensitivity:'base'}));
+      };
+
+      // Preferred endpoints that already flatten JSON arrays
+      const endpoints = {
+        regions: ['/api/options/lake-regions','/api/options/regions'], // fall back
+        provinces: ['/api/options/lake-provinces','/api/options/provinces'],
+        municipalities: ['/api/options/lake-municipalities','/api/options/municipalities'],
+      };
+
+      const fetchList = async (list) => {
+        for (const url of list) {
+          try {
+            const res = await fetch(url);
+            if (!res.ok) continue;
+            const j = await res.json();
+            const arr = Array.isArray(j) ? j : (j?.data || []);
+            if (Array.isArray(arr)) return flattenList(arr);
+          } catch (e) { /* try next */ }
+        }
+        return [];
+      };
+
+      try { setRegionOptions(await fetchList(endpoints.regions)); } catch (e) {}
+      try { setProvinceOptions(await fetchList(endpoints.provinces)); } catch (e) {}
+      try { setMunicipalityOptions(await fetchList(endpoints.municipalities)); } catch (e) {}
     })();
   }, []);
 

@@ -34,7 +34,22 @@ export default function LakeForm({
   const submit = async (e) => {
     e?.preventDefault?.();
     if (!form.name?.trim()) return; // minimal guard
-    return onSubmit?.(form);
+    // Normalize comma-separated multi-value fields (region/province/municipality)
+    const normalizeCsv = (val) => {
+      if (val == null) return "";
+      return String(val)
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .join(', ');
+    };
+    const payload = {
+      ...form,
+      region: normalizeCsv(form.region),
+      province: normalizeCsv(form.province),
+      municipality: normalizeCsv(form.municipality),
+    };
+    return onSubmit?.(payload);
   };
 
   const denrOptions = Array.isArray(classOptions) ? classOptions : [];
@@ -76,24 +91,27 @@ export default function LakeForm({
         </label>
 
         <label className="lv-field">
-          <span>Region</span>
+          <span>Region <small style={{fontWeight:400,color:'#6b7280'}}>(comma-separated)</small></span>
           <input
+            placeholder="e.g. Region IV-A, Region V"
             value={form.region}
             onChange={(e) => setForm({ ...form, region: e.target.value })}
           />
         </label>
 
         <label className="lv-field">
-          <span>Province</span>
+          <span>Province <small style={{fontWeight:400,color:'#6b7280'}}>(comma-separated)</small></span>
           <input
+            placeholder="Laguna, Batangas"
             value={form.province}
             onChange={(e) => setForm({ ...form, province: e.target.value })}
           />
         </label>
 
         <label className="lv-field">
-          <span>Municipality/City</span>
+          <span>Municipality/City <small style={{fontWeight:400,color:'#6b7280'}}>(comma-separated)</small></span>
           <input
+            placeholder="Los Baños, Calamba"
             value={form.municipality}
             onChange={(e) => setForm({ ...form, municipality: e.target.value })}
           />
