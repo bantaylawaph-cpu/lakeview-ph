@@ -19,7 +19,7 @@ class Layer extends Model
     protected $fillable = [
         'body_type','body_id','uploaded_by',
         'name','type','category','srid',
-        'visibility','is_active','notes',
+        'visibility','is_active','is_downloadable','notes',
         'source_type',
         // 'geom','bbox','area_km2' are managed via PostGIS/trigger; leave out of mass-assign by default
     ];
@@ -27,7 +27,8 @@ class Layer extends Model
     protected $casts = [
         'body_id'   => 'integer',
         'srid'      => 'integer',
-        'is_active' => 'boolean',
+    'is_active' => 'boolean',
+    'is_downloadable' => 'boolean',
         'created_at'=> 'datetime',
         'updated_at'=> 'datetime',
     ];

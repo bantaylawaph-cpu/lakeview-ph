@@ -20,6 +20,7 @@ class UpdateLayerRequest extends FormRequest
             'srid'        => 'sometimes|nullable|integer|min:0',
             'visibility'  => 'sometimes|string|in:admin,public,organization_admin',
             'is_active'   => 'sometimes|boolean',
+            'is_downloadable' => 'sometimes|boolean',
             'notes'       => 'sometimes|nullable|string',
             'source_type' => 'sometimes|string|in:geojson,json,shp,kml,gpkg,wkt',
 

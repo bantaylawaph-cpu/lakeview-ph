@@ -22,6 +22,7 @@ class StoreLayerRequest extends FormRequest
             'srid'        => 'nullable|integer|min:0',
             'visibility'  => 'nullable|string|in:admin,public,organization_admin',
             'is_active'   => 'nullable|boolean',
+            'is_downloadable' => 'nullable|boolean',
             'notes'       => 'nullable|string',
             'source_type' => 'nullable|string|in:geojson,json,shp,kml,gpkg,wkt',
 

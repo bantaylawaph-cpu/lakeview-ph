@@ -85,7 +85,7 @@ class LayerController extends Controller
             }
         }
 
-        $query->select('layers.*');
+    $query->select('layers.*'); // includes is_downloadable
         $query->addSelect(DB::raw("COALESCE(users.name, '') AS uploaded_by_name"));
         $query->addSelect(DB::raw("COALESCE(CASE WHEN roles.scope = 'tenant' THEN tenants.name END, 'LakeView') AS uploaded_by_org"));
 
@@ -116,7 +116,7 @@ class LayerController extends Controller
             ->orderByDesc('layers.is_active')
             ->orderByDesc('layers.created_at');
 
-        $query->select(['layers.id','layers.name','layers.notes','layers.is_active','layers.created_at','layers.updated_at']);
+    $query->select(['layers.id','layers.name','layers.notes','layers.is_active','layers.is_downloadable','layers.created_at','layers.updated_at']);
         $query->addSelect(DB::raw("COALESCE(CASE WHEN roles.scope = 'tenant' THEN tenants.name END, 'LakeView') AS uploaded_by_org"));
 
         if ($include->contains('bounds')) $query->selectRaw('ST_AsGeoJSON(bbox) AS bbox_geojson');
@@ -136,7 +136,7 @@ class LayerController extends Controller
             ->where('layers.id', $id)
             ->where('layers.visibility', 'public');
 
-        $q->select(['layers.id','layers.body_type','layers.body_id','layers.name','layers.notes','layers.is_active','layers.created_at','layers.updated_at']);
+    $q->select(['layers.id','layers.body_type','layers.body_id','layers.name','layers.notes','layers.is_active','layers.is_downloadable','layers.created_at','layers.updated_at']);
         $q->addSelect(DB::raw("COALESCE(CASE WHEN roles.scope = 'tenant' THEN tenants.name END, 'LakeView') AS uploaded_by_org"));
         if ($include->contains('geom'))   $q->selectRaw('ST_AsGeoJSON(geom)  AS geom_geojson');
         if ($include->contains('bounds')) $q->selectRaw('ST_AsGeoJSON(bbox)  AS bbox_geojson');
@@ -172,12 +172,13 @@ class LayerController extends Controller
                         throw ValidationException::withMessages(['visibility' => ['Visibility must be Public or Admin.']]);
                 }
                 $data['visibility'] = $visibility;
+                $data['is_downloadable'] = (bool)($data['is_downloadable'] ?? false);
                 if ($role !== Role::SUPERADMIN) $data['is_active'] = false;
 
                 // Use transaction: create row first (without geom), then set geometry via PostGIS SQL
                 return DB::transaction(function () use ($data, $user) {
                         $layer = new Layer();
-                        $layer->fill([
+            $layer->fill([
                                 'body_type'   => $data['body_type'],
                                 'body_id'     => (int)$data['body_id'],
                                 'name'        => $data['name'],
@@ -186,6 +187,7 @@ class LayerController extends Controller
                                 'srid'        => (int)($data['srid']  ?? 4326),
                                 'visibility'  => $data['visibility']  ?? 'public',
                                 'is_active'   => (bool)($data['is_active'] ?? false),
+                'is_downloadable' => (bool)($data['is_downloadable'] ?? false),
                                 'notes'       => $data['notes']       ?? null,
                                 'source_type' => $data['source_type'] ?? 'geojson',
                         ]);
@@ -260,7 +262,7 @@ class LayerController extends Controller
         $super = ($role === Role::SUPERADMIN);
         if (!$super) {
             // Org admin can only modify a subset of fields
-            $allowed = collect($data)->only(['name','type','category','srid','notes','source_type'])->toArray();
+            $allowed = collect($data)->only(['name','type','category','srid','notes','source_type','is_downloadable'])->toArray();
             $data = $allowed;
 
             // Also restrict scope: org_admin can only edit layers uploaded by their tenant or themselves
@@ -280,6 +282,9 @@ class LayerController extends Controller
                 throw ValidationException::withMessages(['visibility' => ['Visibility must be Public or Admin.']]);
             }
             $data['visibility'] = $visibility;
+            if (array_key_exists('is_downloadable', $data)) {
+                $data['is_downloadable'] = (bool)$data['is_downloadable'];
+            }
         }
 
                 // Save basic fields first
@@ -362,5 +367,80 @@ class LayerController extends Controller
             return response()->json([], 204);
         }
         abort(403);
+    }
+
+    /**
+     * Download a layer in a given vector format (geojson|kml).
+     * Auth required; layer must be marked is_downloadable and visibility rules apply.
+     */
+    public function download(Request $request, int $id)
+    {
+        $format = strtolower($request->query('format', 'geojson'));
+        if (!in_array($format, ['geojson','kml'], true)) {
+            return response()->json(['error' => 'Unsupported format. Allowed: geojson,kml'], 422);
+        }
+
+        $user = $request->user();
+        if (!$user) abort(401);
+        $role = $this->resolveRole($user);
+
+        $layer = Layer::query()->where('id', $id)->first();
+        if (!$layer) return response()->json(['error' => 'Not found'], 404);
+        if (!$layer->is_downloadable) abort(403, 'Downloads disabled for this layer.');
+
+        // Visibility gate: public always ok; admin requires privileged role (superadmin/org_admin) or uploader tenant match.
+        if ($layer->visibility !== Layer::VIS_PUBLIC) {
+            if (!in_array($role, [Role::SUPERADMIN, Role::ORG_ADMIN], true)) {
+                abort(403, 'Forbidden');
+            }
+            if ($role === Role::ORG_ADMIN) {
+                // Ensure tenant match when org_admin and layer uploaded by tenant user.
+                $tenantId = $user->tenant_id ?? null;
+                if ($layer->uploaded_by) {
+                    $uploader = \App\Models\User::query()->select(['tenant_id'])->where('id', $layer->uploaded_by)->first();
+                    if (!$uploader || (int)$uploader->tenant_id !== (int)$tenantId) abort(403, 'Forbidden');
+                }
+            }
+        }
+
+        // Build payload from DB.
+        $row = Layer::whereKey($layer->id)
+            ->select('*')
+            ->selectRaw('ST_AsGeoJSON(geom) AS geom_geojson')
+            ->first();
+        if (!$row || !$row->geom_geojson) return response()->json(['error' => 'Geometry missing'], 500);
+
+        if ($format === 'geojson') {
+            $feature = [
+                'type' => 'Feature',
+                'geometry' => json_decode($row->geom_geojson, true),
+                'properties' => [
+                    'id' => $row->id,
+                    'name' => $row->name,
+                    'category' => $row->category,
+                    'notes' => $row->notes,
+                    'body_type' => $row->body_type,
+                    'body_id' => $row->body_id,
+                    'srid' => $row->srid,
+                ],
+            ];
+            return response()->json($feature)
+                ->header('Content-Disposition', 'attachment; filename="layer-'.$row->id.'.geojson"');
+        }
+
+        if ($format === 'kml') {
+            // Use ST_AsKML for direct conversion
+            $kml = DB::table('layers')->where('id', $layer->id)->selectRaw('ST_AsKML(geom) AS kml')->value('kml');
+            $kmlDoc = '<?xml version="1.0" encoding="UTF-8"?>\n' .
+                '<kml xmlns="http://www.opengis.net/kml/2.2"><Document>' .
+                '<Placemark><name>'.htmlspecialchars($row->name ?? ('Layer '.$row->id)).'</name>'.$kml.'</Placemark>' .
+                '</Document></kml>';
+            return response($kmlDoc, 200, [
+                'Content-Type' => 'application/vnd.google-earth.kml+xml; charset=UTF-8',
+                'Content-Disposition' => 'attachment; filename="layer-'.$row->id.'.kml"'
+            ]);
+        }
+
+        abort(500, 'Unhandled format');
     }
 }

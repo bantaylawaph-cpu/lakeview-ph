@@ -241,6 +241,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/admin/audit-logs/{id}', [\App\Http\Controllers\Api\Admin\AuditLogController::class, 'show']);
     Route::get('/layers',           [ApiLayerController::class, 'index'])->name('layers.index');
     Route::get('/layers/active',    [ApiLayerController::class, 'active']);
+    Route::get('/layers/{id}/download', [ApiLayerController::class, 'download'])->whereNumber('id');
 
     // User feedback submission & listing (own only)
     Route::post('/feedback',        [FeedbackController::class, 'store']);

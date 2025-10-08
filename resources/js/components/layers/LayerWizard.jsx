@@ -75,6 +75,7 @@ export default function LayerWizard({
     notes: "",
     visibility: resolvedDefaultVisibility,
     isActive: false,
+  isDownloadable: false,
 
     // viewport
     includeViewport: true,
@@ -249,8 +250,9 @@ export default function LayerWizard({
         type: "base",
         category: form.category,
         srid: Number(form.sourceSrid) || 4326,
-        visibility: form.visibility,          // e.g. public, organization
+  visibility: form.visibility,          // e.g. public, organization
         is_active: allowSetActive ? !!form.isActive : false,
+  is_downloadable: !!form.isDownloadable,
         status: "ready",
         notes: form.notes || null,
         source_type: sourceType,
@@ -536,6 +538,19 @@ export default function LayerWizard({
                   </div>
                 </div>
               )}
+              <div className="form-group">
+                <label>Downloadable</label>
+                <div>
+                  <button
+                    type="button"
+                    className={`pill-btn ${wdata.isDownloadable ? 'primary' : 'ghost'}`}
+                    onClick={() => wSetData((d) => ({ ...d, isDownloadable: !d.isDownloadable }))}
+                    title="Toggle whether this layer can be downloaded"
+                  >
+                    {wdata.isDownloadable ? 'Download Enabled' : 'Allow Download'}
+                  </button>
+                </div>
+              </div>
             </div>
             {error && (
               <div className="alert-note" style={{ marginTop: 8 }}>

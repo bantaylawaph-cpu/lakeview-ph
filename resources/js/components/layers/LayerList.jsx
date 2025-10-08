@@ -56,7 +56,7 @@ function LayerList({
 
   const [editOpen, setEditOpen] = useState(false);
   const [editRow, setEditRow] = useState(null);
-  const [editForm, setEditForm] = useState({ name: "", category: "", notes: "", visibility: "public" });
+  const [editForm, setEditForm] = useState({ name: "", category: "", notes: "", visibility: "public", is_downloadable: false });
   const normalizedVisibilityOptions = useMemo(() => {
     const base = Array.isArray(visibilityOptions) && visibilityOptions.length
       ? visibilityOptions
@@ -406,6 +406,7 @@ function LayerList({
                     <th className="lv-th"><div className="lv-th-inner"><span className="lv-th-label">Name</span></div></th>
                     <th className="lv-th"><div className="lv-th-inner"><span className="lv-th-label">Category</span></div></th>
                     <th className="lv-th"><div className="lv-th-inner"><span className="lv-th-label">Visibility</span></div></th>
+                    <th className="lv-th"><div className="lv-th-inner"><span className="lv-th-label">Downloadable</span></div></th>
                     <th className="lv-th"><div className="lv-th-inner"><span className="lv-th-label">Default Layer</span></div></th>
                     <th className="lv-th"><div className="lv-th-inner"><span className="lv-th-label">Created by</span></div></th>
                     <th className="lv-th"><div className="lv-th-inner"><span className="lv-th-label">Area (km2)</span></div></th>
@@ -428,6 +429,7 @@ function LayerList({
                         <td className="lv-td">{row.name}</td>
                         <td className="lv-td">{row.category || '-'}</td>
                         <td className="lv-td">{getVisibilityLabel(row.visibility)}</td>
+                        <td className="lv-td">{row.is_downloadable ? 'Yes' : 'No'}</td>
                         <td className="lv-td">{row.is_active ? 'Yes' : 'No'}</td>
                         <td className="lv-td">{formatCreator(row)}</td>
                         <td className="lv-td">{row.area_km2 ?? '-'}</td>
@@ -456,6 +458,7 @@ function LayerList({
                                     notes: row.notes || '',
                                     visibility: initialEditVisibility,
                                     is_active: !!row.is_active,
+                                    is_downloadable: !!row.is_downloadable,
                                   });
                                   setEditOpen(true);
                                 }}
@@ -525,6 +528,10 @@ function LayerList({
                     if (currentUserRole === 'superadmin') {
                       patch.visibility = editForm.visibility;
                       patch.is_active = !!editForm.is_active;
+                      patch.is_downloadable = !!editForm.is_downloadable;
+                    } else {
+                      // org_admin path: backend allows is_downloadable modification, include if changed
+                      patch.is_downloadable = !!editForm.is_downloadable;
                     }
                     // Apply patch (visibility & is_active included only for superadmin)
                     await updateLayer(editRow.id, patch);
@@ -601,7 +608,33 @@ function LayerList({
                     </button>
                   </div>
                 </div>
+                <div className="form-group">
+                  <label>Downloadable</label>
+                  <div>
+                    <button
+                      type="button"
+                      className={`pill-btn ${editForm.is_downloadable ? 'primary' : 'ghost'}`}
+                      onClick={() => setEditForm((f) => ({ ...f, is_downloadable: !f.is_downloadable }))}
+                    >
+                      {editForm.is_downloadable ? 'Download Enabled' : 'Allow Download'}
+                    </button>
+                  </div>
+                </div>
               </>
+            )}
+            {currentUserRole === 'org_admin' && (
+              <div className="form-group">
+                <label>Downloadable</label>
+                <div>
+                  <button
+                    type="button"
+                    className={`pill-btn ${editForm.is_downloadable ? 'primary' : 'ghost'}`}
+                    onClick={() => setEditForm((f) => ({ ...f, is_downloadable: !f.is_downloadable }))}
+                  >
+                    {editForm.is_downloadable ? 'Download Enabled' : 'Allow Download'}
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         </Modal>
