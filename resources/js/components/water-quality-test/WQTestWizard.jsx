@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { api, getToken } from "../../lib/api";
-import { alertError, alertSuccess } from "../../utils/alerts";
+import { alertError, alertSuccess, confirm } from "../../utils/alerts";
 import { fetchLakeOptions } from "../../lib/layers";
 import {
   FiMapPin, FiThermometer,
-  FiPlus, FiTrash2, FiEdit2, FiFlag, FiClipboard
+  FiPlus, FiTrash2, FiEdit2, FiClipboard
 } from "react-icons/fi";
 import Wizard from "../Wizard";
 import AppMap from "../AppMap";
@@ -228,10 +228,45 @@ export default function WQTestWizard({
 
   const deleteStationApi = async (data, setData, stationId) => {
     try {
-  await api(`/admin/stations/${encodeURIComponent(stationId)}`, { method: "DELETE" });
-  const list = stationsByLake[String(data.lake_id)] || [];
-  const updated = list.filter((s) => String(s.id) !== String(stationId));
-  setStationsByLake({ ...stationsByLake, [String(data.lake_id)]: updated });
+      const list = stationsByLake[String(data.lake_id)] || [];
+      const target = list.find((s) => String(s.id) === String(stationId));
+      const name = target?.name || String(stationId);
+
+      // Check if there are associated sample-events/tests for this station.
+      let hasTests = false;
+      let testsCount = null;
+      try {
+        const qs = `?station_id=${encodeURIComponent(stationId)}&per_page=1`;
+        const res = await api(`/admin/sample-events${qs}`);
+        // API may return { data: [...] } or an array directly
+        const arr = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+        if (Array.isArray(arr) && arr.length > 0) {
+          hasTests = true;
+          testsCount = null; // we only fetched one for speed; try meta if available
+        } else if (res?.meta && typeof res.meta.total === 'number' && res.meta.total > 0) {
+          hasTests = true;
+          testsCount = res.meta.total;
+        }
+      } catch (e) {
+        // verification failed — proceed to regular confirm but warn user we couldn't verify
+      }
+
+      if (hasTests) {
+        const countText = testsCount ? `${testsCount} ` : '';
+        const ok = await confirm({
+          title: 'Station has associated tests',
+          text: `This station has ${countText}associated water quality test(s). Deleting the station may affect historical records. Delete anyway?`,
+          confirmButtonText: 'Delete'
+        });
+        if (!ok) return;
+      } else {
+        const ok = await confirm({ title: 'Delete station?', text: `Delete "${name}"?`, confirmButtonText: 'Delete' });
+        if (!ok) return;
+      }
+
+      await api(`/admin/stations/${encodeURIComponent(stationId)}`, { method: "DELETE" });
+      const updated = list.filter((s) => String(s.id) !== String(stationId));
+      setStationsByLake({ ...stationsByLake, [String(data.lake_id)]: updated });
       if (String(data.station_id) === String(stationId)) {
         setData({ ...data, station_id: "", station_name: "", station_desc: "" });
       }

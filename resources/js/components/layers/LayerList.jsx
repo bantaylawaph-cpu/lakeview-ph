@@ -87,6 +87,8 @@ function LayerList({
   };
 
   const [previewLayer, setPreviewLayer] = useState(null);
+  const viewMapRef = React.useRef(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
   
   const handlePreviewClick = (row) => {
     if (!row) return;
@@ -121,6 +123,7 @@ function LayerList({
 
     // Attach a token so React remounts the GeoJSON even if the same id is clicked
     setPreviewLayer({ ...row, _previewToken: Date.now() });
+    setPreviewOpen(true);
   };
 
   const [previewGeometry, setPreviewGeometry] = useState(null);
@@ -365,28 +368,40 @@ function LayerList({
             )}
           </div>
 
-          {/* Inline preview map (optional) */}
-          {previewGeometry && (
-            <div style={{ height: 360, borderRadius: 12, overflow: 'hidden', border: '1px solid #e5e7eb', marginBottom: 12 }}>
-              <AppMap view="osm">
-                <GeoJSON
-                  key={`preview-${previewLayer?.id ?? 'layer'}-${previewLayer?._previewToken ?? previewLayer?.geom_geojson?.length ?? 0}`}
-                  data={previewGeometry}
-                  style={{ weight: 2, fillOpacity: 0.1, color: (previewLayer?.body_type === 'watershed' ? '#16a34a' : '#2563eb') }}
-                />
+          {/* Preview modal (replaces inline preview) */}
+          <Modal open={previewOpen} onClose={() => setPreviewOpen(false)} title={previewLayer?.name ? `Layer: ${previewLayer.name}` : 'Layer Preview'} width={900} ariaLabel="Layer Preview">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '80vh' }}>
+              {previewGeometry ? (
+                <div style={{ height: '55vh', minHeight: 260, borderRadius: 8, overflow: 'hidden' }}>
+                  <AppMap view="osm" whenCreated={(map) => (viewMapRef.current = map)}>
+                    <GeoJSON
+                      key={`preview-${previewLayer?.id ?? 'layer'}-${previewLayer?._previewToken ?? previewLayer?.geom_geojson?.length ?? 0}`}
+                      data={previewGeometry}
+                      style={{ weight: 2, fillOpacity: 0.1, color: (previewLayer?.body_type === 'watershed' ? '#16a34a' : '#2563eb') }}
+                    />
 
-                {mapViewport.bounds ? (
-                  <MapViewport
-                    bounds={mapViewport.bounds}
-                    maxZoom={mapViewport.maxZoom}
-                    padding={mapViewport.padding}
-                    pad={mapViewport.pad}
-                    version={mapViewport.token}
-                  />
-                ) : null}
-              </AppMap>
+                    {mapViewport.bounds ? (
+                      <MapViewport
+                        bounds={mapViewport.bounds}
+                        maxZoom={mapViewport.maxZoom}
+                        padding={mapViewport.padding}
+                        pad={mapViewport.pad}
+                        version={mapViewport.token}
+                      />
+                    ) : null}
+                  </AppMap>
+                </div>
+              ) : (
+                <div style={{ height: '55vh', minHeight: 260, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fafafa', color: '#6b7280' }}>
+                  <div style={{ padding: 20, textAlign: 'center' }}>No geometry available for this layer.</div>
+                </div>
+              )}
+
+              <div style={{ marginTop: 0 }}>
+                {previewLayer && previewLayer.name && <div style={{ fontSize: 12, color: '#6b7280' }}>Previewing {previewLayer.name}</div>}
+              </div>
             </div>
-          )}
+          </Modal>
 
           {err && (
             <div className="alert-note" style={{ marginBottom: 8 }}>

@@ -1,20 +1,19 @@
 import React, { useEffect, useState } from "react";
-import { FiEdit2, FiTrash2, FiX } from "react-icons/fi";
+import { FiX } from "react-icons/fi";
 import Modal from "../Modal";
 
 export default function StationModal({
   open,
   onClose,
   lakeId,
-  stations = [],
   editing = null,
   onCreate,
   onUpdate,
-  onDelete,
   canManage = true,
 }) {
   const empty = { id: null, name: "", lat: "", lng: "", description: "" };
   const [form, setForm] = useState(editing ? { ...editing } : empty);
+  const [coordMode, setCoordMode] = useState('manual');
 
   useEffect(() => {
     setForm(editing ? { ...editing } : empty);
@@ -47,59 +46,93 @@ export default function StationModal({
         </div>
       }
     >
-      <div className="dashboard-content" style={{ padding: 16 }}>
-        <div className="org-form">
-          <div className="form-group" style={{ minWidth: 240 }}>
+      <div className="dashboard-content" style={{ padding: 12 }}>
+        <div className="org-form" style={{ gap: 12 }}>
+          <div className="form-group" style={{ minWidth: 240, flex: '1 1 320px' }}>
             <label>Station Name *</label>
             <input value={form.name} onChange={(e) => setForm((x) => ({ ...x, name: e.target.value }))} />
           </div>
-          <div className="form-group">
+          <div className="form-group" style={{ flex: '1 1 240px' }}>
             <label>Description</label>
             <input value={form.description} onChange={(e) => setForm((x) => ({ ...x, description: e.target.value }))} />
           </div>
-          <div className="form-group">
-            <label>Latitude *</label>
-            <input type="number" value={form.lat} onChange={(e) => setForm((x) => ({ ...x, lat: e.target.value }))} />
+
+          <div style={{ flexBasis: '100%', marginTop: 6 }}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <strong style={{ fontSize: 14 }}>Coordinates</strong>
+              <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input type="radio" name="coord-mode-station" value="manual" checked={coordMode === 'manual'} onChange={() => setCoordMode('manual')} /> Manual
+              </label>
+              <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input type="radio" name="coord-mode-station" value="map" checked={coordMode === 'map'} onChange={() => setCoordMode('map')} /> Pin Drop
+              </label>
+              <span style={{ fontSize: 11, color: '#6b7280' }}>Required</span>
+            </div>
           </div>
-          <div className="form-group">
-            <label>Longitude *</label>
-            <input type="number" value={form.lng} onChange={(e) => setForm((x) => ({ ...x, lng: e.target.value }))} />
-          </div>
+
+          {coordMode === 'manual' ? (
+            <>
+              <div className="form-group" style={{ flex: '1 1 160px' }}>
+                <label>Latitude *</label>
+                <input type="number" value={form.lat} onChange={(e) => setForm((x) => ({ ...x, lat: e.target.value }))} />
+              </div>
+              <div className="form-group" style={{ flex: '1 1 160px' }}>
+                <label>Longitude *</label>
+                <input type="number" value={form.lng} onChange={(e) => setForm((x) => ({ ...x, lng: e.target.value }))} />
+              </div>
+            </>
+          ) : (
+            <div style={{ width: '100%', marginTop: 8 }}>
+              <MiniPickMap value={form} onChange={(vals) => setForm((f) => ({ ...f, ...vals }))} />
+            </div>
+          )}
         </div>
 
-        <div className="table-wrapper" style={{ marginTop: 16 }}>
-          <table className="lv-table">
-            <thead>
-              <tr>
-                <th className="lv-th"><div className="lv-th-inner"><span className="lv-th-label">Name</span></div></th>
-                <th className="lv-th"><div className="lv-th-inner"><span className="lv-th-label">Lat</span></div></th>
-                <th className="lv-th"><div className="lv-th-inner"><span className="lv-th-label">Lng</span></div></th>
-                <th className="lv-th"><div className="lv-th-inner"><span className="lv-th-label">Description</span></div></th>
-                <th className="lv-th" style={{ width: 90 }} />
-              </tr>
-            </thead>
-            <tbody>
-              {stations.map((s) => (
-                <tr key={s.id}>
-                  <td>{s.name}</td>
-                  <td>{Number.isFinite(Number(s.lat)) ? Number(s.lat).toFixed(6) : '—'}</td>
-                  <td>{Number.isFinite(Number(s.lng)) ? Number(s.lng).toFixed(6) : '—'}</td>
-                  <td>{s.description || "—"}</td>
-                  <td>
-                    <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                      <button className="pill-btn ghost" onClick={() => canManage && setForm({ ...s })} title="Edit" disabled={!canManage}><FiEdit2 /></button>
-                      <button className="pill-btn ghost danger" onClick={() => canManage && onDelete?.(s.id)} title="Delete" disabled={!canManage}><FiTrash2 /></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {stations.length === 0 && (
-                <tr><td colSpan={5} style={{ color: "#6b7280" }}>No stations yet.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
       </div>
     </Modal>
   );
 }
+
+  function MiniPickMap({ value = {}, onChange }) {
+    const ref = React.useRef(null);
+    const mapRef = React.useRef(null);
+    const markerRef = React.useRef(null);
+
+    useEffect(() => {
+      let mounted = true;
+      (async () => {
+        const L = await import('leaflet');
+        if (!mounted || !ref.current) return;
+        if (ref.current._leaflet_id) return;
+        const map = L.map(ref.current, { center: [value.lat || 12.8797, value.lng || 121.7740], zoom: 6 });
+        mapRef.current = map;
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OSM' }).addTo(map);
+
+        map.on('click', (e) => {
+          const { lat, lng } = e.latlng;
+          if (!markerRef.current) markerRef.current = L.marker([lat, lng]).addTo(map);
+          else markerRef.current.setLatLng([lat, lng]);
+          onChange?.({ lat: Number(lat.toFixed(6)), lng: Number(lng.toFixed(6)) });
+        });
+
+        if (value.lat && value.lng) {
+          markerRef.current = L.marker([value.lat, value.lng]).addTo(map);
+          map.setView([value.lat, value.lng], 12);
+        }
+      })();
+
+      return () => { mounted = false; try { if (mapRef.current) mapRef.current.remove(); } catch {} };
+    }, []); // eslint-disable-line
+
+    useEffect(() => {
+      if (!mapRef.current) return;
+      const lat = value.lat; const lng = value.lng;
+      if (lat && lng) {
+        if (!markerRef.current) markerRef.current = (async () => { const L = await import('leaflet'); return L.marker([lat, lng]).addTo(mapRef.current); })();
+        else markerRef.current.setLatLng([lat, lng]);
+        mapRef.current.setView([lat, lng], 12);
+      }
+    }, [value.lat, value.lng]);
+
+    return <div ref={ref} style={{ height: 320, border: '1px solid #d1d5db', borderRadius: 6 }} />;
+  }

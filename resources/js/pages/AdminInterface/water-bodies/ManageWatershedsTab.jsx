@@ -2,6 +2,7 @@
 import { FiEdit2, FiEye, FiTrash2 } from "react-icons/fi";
 import AppMap from "../../../components/AppMap";
 import MapViewport from "../../../components/MapViewport";
+import Modal from "../../../components/Modal";
 import { GeoJSON } from "react-leaflet";
 import L from "leaflet";
 
@@ -62,6 +63,7 @@ export default function ManageWatershedsTab() {
   const [formInitial, setFormInitial] = useState({ name: "", description: "" });
 
   const mapRef = useRef(null);
+  const viewMapRef = useRef(null);
   const lastLoadedIdRef = useRef(null);
   const [previewRow, setPreviewRow] = useState(null);
   const [previewFeature, setPreviewFeature] = useState(null);
@@ -76,6 +78,8 @@ export default function ManageWatershedsTab() {
     pad: 0.02,
     token: 0,
   });
+
+  const [viewOpen, setViewOpen] = useState(false);
 
   const updateViewport = useCallback((nextBounds, options = {}) => {
     if (!nextBounds?.isValid?.()) return;
@@ -324,6 +328,7 @@ export default function ManageWatershedsTab() {
   const handleView = useCallback(async (row) => {
     const target = row?._raw ?? row;
     await loadPreview(target);
+    setViewOpen(true);
   }, [loadPreview]);
 
   const exportCsv = () => {
@@ -391,55 +396,50 @@ export default function ManageWatershedsTab() {
         </div>
       </div>
 
-      <div className="dashboard-card" style={{ marginTop: 24 }}>
-        <div className="dashboard-card-header">
-          <div className="dashboard-card-title">
-            <FiEye />
-            <span>Watershed Preview</span>
+      {/* Modal preview for watershed */}
+      <Modal open={viewOpen} onClose={() => setViewOpen(false)} title={previewRow?.name ? `Watershed: ${previewRow.name}` : 'Watershed Preview'} width={900} ariaLabel="Watershed Preview">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '80vh' }}>
+          <div style={{ height: '55vh', minHeight: 260, borderRadius: 8, overflow: 'hidden' }}>
+            {previewFeature ? (
+              <AppMap view="osm" whenCreated={(map) => (viewMapRef.current = map)}>
+                <GeoJSON
+                  data={previewFeature}
+                  style={{ color: '#16a34a', weight: 2, fillOpacity: 0.15 }}
+                  onEachFeature={(feat, layer) => {
+                    const nm = feat?.properties?.name || 'Watershed';
+                    layer.bindTooltip(nm, { sticky: true });
+                  }}
+                />
+
+                {mapViewport.bounds ? (
+                  <MapViewport
+                    bounds={mapViewport.bounds}
+                    maxZoom={mapViewport.maxZoom}
+                    padding={mapViewport.padding}
+                    pad={mapViewport.pad}
+                    version={mapViewport.token}
+                  />
+                ) : null}
+              </AppMap>
+            ) : (
+              <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fafafa', color: '#6b7280' }}>
+                <div style={{ padding: 20, textAlign: 'center' }}>No watershed preview available.</div>
+              </div>
+            )}
+          </div>
+
+          <div style={{ marginTop: 0 }}>
+            {previewLoading && <div className="no-data">Loading preview...</div>}
+            {!previewLoading && previewError && <div className="no-data">{previewError}</div>}
+            {!previewLoading && !previewError && !previewFeature && <div className="no-data">No watershed preview available.</div>}
+            {previewFeature && !previewLoading && !previewError && (
+              <div style={{ fontSize: 12, color: '#6b7280' }}>
+                Showing {previewRow?.name || 'Watershed'}
+              </div>
+            )}
           </div>
         </div>
-        <div style={{ height: 360, borderRadius: 12, overflow: "hidden", border: "1px solid #e5e7eb" }}>
-          <AppMap
-            view="osm"
-            style={{ height: "100%", width: "100%" }}
-            whenCreated={(map) => (mapRef.current = map)}
-          >
-            {previewFeature && (
-              <GeoJSON
-                key={`preview-${previewFeature?.properties?.id || "x"}-${JSON.stringify(previewFeature?.geometry ?? {}).length}`}
-                data={previewFeature}
-                style={{ color: "#16a34a", weight: 2, fillOpacity: 0.15 }}
-                onEachFeature={(feat, layer) => {
-                  const nm = feat?.properties?.name || "Watershed";
-                  layer.bindTooltip(nm, { sticky: true });
-                }}
-              />
-            )}
-
-            {mapViewport.bounds ? (
-              <MapViewport
-                bounds={mapViewport.bounds}
-                maxZoom={mapViewport.maxZoom}
-                padding={mapViewport.padding}
-                pad={mapViewport.pad}
-                version={mapViewport.token}
-              />
-            ) : null}
-          </AppMap>
-        </div>
-        <div style={{ marginTop: 8 }}>
-          {previewLoading && <div className="no-data">Loading preview...</div>}
-          {!previewLoading && previewError && <div className="no-data">{previewError}</div>}
-          {!previewLoading && !previewError && !previewFeature && (
-            <div className="no-data">Select a watershed to preview its boundary.</div>
-          )}
-          {previewFeature && !previewLoading && !previewError && (
-            <div style={{ fontSize: 12, color: "#6b7280" }}>
-              Showing {previewRow?.name || "Watershed"}
-            </div>
-          )}
-        </div>
-      </div>
+      </Modal>
 
       <WatershedForm
         open={formOpen}

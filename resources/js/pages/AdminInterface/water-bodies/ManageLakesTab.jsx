@@ -3,6 +3,7 @@ import { FiEye, FiEdit2, FiTrash2, FiLayers } from "react-icons/fi";
 import { GeoJSON } from "react-leaflet";
 import AppMap from "../../../components/AppMap";
 import MapViewport from "../../../components/MapViewport";
+import Modal from "../../../components/Modal";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -94,8 +95,10 @@ function ManageLakesTab() {
   const [classOptions, setClassOptions] = useState([]);
 
   const mapRef = useRef(null);
+  const viewMapRef = useRef(null);
   const lakeGeoRef = useRef(null);
   const watershedGeoRef = useRef(null);
+  const [viewOpen, setViewOpen] = useState(false);
   const [showLakePoly, setShowLakePoly] = useState(false);
   const [showWatershed, setShowWatershed] = useState(false);
   const [showInflow, setShowInflow] = useState(false);
@@ -479,6 +482,7 @@ function ManageLakesTab() {
         resetViewport();
       } finally {
         setLoading(false);
+        setViewOpen(true);
       }
     },
     [loadWatershedFeature, showWatershed, updateViewport, resetViewport]
@@ -515,20 +519,109 @@ function ManageLakesTab() {
     console.debug('[ManageLakesTab] delete clicked', target);
     if (!target) return;
     (async () => {
-      const ok = await confirm({ title: 'Delete lake?', text: `Delete "${target.name}"?`, confirmButtonText: 'Delete' });
-      if (!ok) return;
-      setLoading(true);
-      setErrorMsg("");
+      // Run checks for related records: sample-events (tests) and lake flows (inflow/outflow).
+      let checksOk = false;
       try {
-        await api(`/lakes/${target.id}`, { method: "DELETE" });
-        await fetchLakes();
-        await alertSuccess('Deleted', `"${target.name}" was deleted.`);
+        setLoading(true);
+        setErrorMsg("");
+        const id = target.id;
+
+        // Fetch lake detail to get authoritative watershed linkage
+        let detail = null;
+        try {
+          detail = await api(`/lakes/${encodeURIComponent(id)}`);
+        } catch (e) {
+          // ignore — we'll still try other checks
+        }
+
+        const linkedWatershedId = detail?.watershed_id ?? detail?.watershed?.id ?? target?.watershed_id ?? target?.watershed?.id ?? null;
+        const linkedWatershedName = detail?.watershed?.name ?? target?.watershed?.name ?? null;
+
+        // Parallel checks for sample-events and lake-flows (request 1 item for speed)
+        const checks = await Promise.allSettled([
+          api(`/admin/sample-events?lake_id=${encodeURIComponent(target.id)}&per_page=1`),
+          api(`/lake-flows?lake_id=${encodeURIComponent(target.id)}&per_page=1`),
+        ]);
+
+        let hasEvents = false;
+        let hasFlows = false;
+
+        // sample-events result
+        try {
+          const res = checks[0].status === 'fulfilled' ? checks[0].value : null;
+          const arr = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+          if (Array.isArray(arr) && arr.length > 0) hasEvents = true;
+          else if (res?.meta && typeof res.meta.total === 'number' && res.meta.total > 0) hasEvents = true;
+        } catch (e) {}
+
+        // lake-flows result
+        try {
+          const res = checks[1].status === 'fulfilled' ? checks[1].value : null;
+          const arr = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+          if (Array.isArray(arr) && arr.length > 0) hasFlows = true;
+          else if (res?.meta && typeof res.meta.total === 'number' && res.meta.total > 0) hasFlows = true;
+        } catch (e) {}
+
+        // Build confirmation message
+        const reasons = [];
+        if (hasEvents) reasons.push('associated water quality test(s)');
+        if (hasFlows) reasons.push('inflow/outflow flow point(s)');
+        if (linkedWatershedId) reasons.push(linkedWatershedName ? `linked watershed (${linkedWatershedName})` : 'a linked watershed');
+
+        if (reasons.length) {
+          const list = reasons.join(', ');
+          const ok = await confirm({
+            title: 'Related records detected',
+            text: `This lake has ${list}. Deleting the lake may affect related data. Delete anyway?`,
+            confirmButtonText: 'Delete',
+          });
+          if (!ok) {
+            setLoading(false);
+            return;
+          }
+        } else {
+          const ok = await confirm({ title: 'Delete lake?', text: `Delete "${target.name}"?`, confirmButtonText: 'Delete' });
+          if (!ok) {
+            setLoading(false);
+            return;
+          }
+        }
+
+        // Proceed with delete
+        try {
+          await api(`/lakes/${target.id}`, { method: "DELETE" });
+          await fetchLakes();
+          await alertSuccess('Deleted', `"${target.name}" was deleted.`);
+        } catch (err) {
+          console.error("[ManageLakesTab] Failed to delete lake", err);
+          setErrorMsg("Delete failed. This lake may be referenced by other records.");
+          await alertError('Delete failed', err?.message || 'Could not delete lake');
+        } finally {
+          setLoading(false);
+        }
+        checksOk = true;
       } catch (err) {
-        console.error("[ManageLakesTab] Failed to delete lake", err);
-        setErrorMsg("Delete failed. This lake may be referenced by other records.");
-        await alertError('Delete failed', err?.message || 'Could not delete lake');
-      } finally {
-        setLoading(false);
+        // If checks failed unexpectedly, fallback to simple confirm-delete flow
+        console.error('[ManageLakesTab] Pre-delete checks failed', err);
+        try {
+          const ok = await confirm({ title: 'Delete lake?', text: `Delete "${target.name}"?`, confirmButtonText: 'Delete' });
+          if (!ok) return;
+          setLoading(true);
+          setErrorMsg("");
+          try {
+            await api(`/lakes/${target.id}`, { method: "DELETE" });
+            await fetchLakes();
+            await alertSuccess('Deleted', `"${target.name}" was deleted.`);
+          } catch (err2) {
+            console.error("[ManageLakesTab] Failed to delete lake", err2);
+            setErrorMsg("Delete failed. This lake may be referenced by other records.");
+            await alertError('Delete failed', err2?.message || 'Could not delete lake');
+          } finally {
+            setLoading(false);
+          }
+        } catch (e2) {
+          // nothing
+        }
       }
     })();
   }, [fetchLakes]);
@@ -747,65 +840,50 @@ function ManageLakesTab() {
         </div>
       </div>
 
-      <div style={{ marginTop: 24 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontWeight: 600, color: "#374151" }}>
-            <FiLayers /> Layers
-          </span>
-          <label className="pill-btn" style={{ gap: 6 }}>
-            <input type="checkbox" checked={showLakePoly} onChange={(event) => setShowLakePoly(event.target.checked)} />
-            Lake polygon
-          </label>
-          <label className="pill-btn" style={{ gap: 6 }}>
-            <input type="checkbox" checked={showWatershed} onChange={(event) => setShowWatershed(event.target.checked)} />
-            Watershed
-          </label>
-          <label className="pill-btn" style={{ gap: 6 }}>
-            <input type="checkbox" checked={showInflow} onChange={(event) => setShowInflow(event.target.checked)} />
-            Inflow markers
-          </label>
-          <label className="pill-btn" style={{ gap: 6 }}>
-            <input type="checkbox" checked={showOutflow} onChange={(event) => setShowOutflow(event.target.checked)} />
-            Outflow markers
-          </label>
+      {/* Modal preview for lake */}
+      <Modal open={viewOpen} onClose={() => setViewOpen(false)} title={lakeFeature?.properties?.name ? `Lake: ${lakeFeature.properties.name}` : 'Lake Preview'} width={1000} ariaLabel="Lake Preview">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '80vh' }}>
+          {/* Map area: only render when lake geometry exists; otherwise show placeholder */}
+          {lakeFeature ? (
+            <div style={{ height: '60vh', minHeight: 320, borderRadius: 8, overflow: 'hidden' }}>
+              <AppMap view="osm" whenCreated={(map) => { viewMapRef.current = map; }}>
+                {watershedFeature && (
+                  <GeoJSON data={watershedFeature} style={{ weight: 1.5, color: '#047857', fillOpacity: 0.08 }} />
+                )}
+
+                {lakeFeature && (
+                  <GeoJSON data={lakeFeature} style={{ weight: 2, color: '#2563eb', fillOpacity: 0.1 }} />
+                )}
+
+                {mapViewport.bounds ? (
+                  <MapViewport
+                    bounds={mapViewport.bounds}
+                    maxZoom={mapViewport.maxZoom}
+                    padding={mapViewport.padding}
+                    pad={mapViewport.pad}
+                    version={mapViewport.token}
+                  />
+                ) : null}
+              </AppMap>
+            </div>
+          ) : (
+            <div style={{ height: '60vh', minHeight: 320, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fafafa', color: '#6b7280' }}>
+              <div style={{ padding: 20, textAlign: 'center' }}>
+                <div style={{ fontWeight: 600, marginBottom: 6 }}>No lake geometry</div>
+                <div style={{ fontSize: 13 }}>This lake has no published geometry to preview.</div>
+              </div>
+            </div>
+          )}
+
+          <div style={{ marginTop: 0 }}>
+            {lakeFeature && !loading && !errorMsg && (
+              <div style={{ fontSize: 12, color: '#6b7280' }}>
+                Showing {lakeFeature.properties?.name || 'Lake'}{watershedFeature ? ` — Watershed: ${watershedFeature.properties?.name || ''}` : ''}
+              </div>
+            )}
+          </div>
         </div>
-
-        <div style={{ height: 500, borderRadius: 12, overflow: "hidden" }}>
-          <AppMap
-            view="osm"
-            style={{ height: "100%", width: "100%" }}
-            whenCreated={(map) => (mapRef.current = map)}
-          >
-            {showWatershed && watershedFeature ? (
-              <GeoJSON
-                ref={watershedGeoRef}
-                key={`watershed-${currentWatershedId}-${JSON.stringify(watershedFeature.geometry ?? {}).length}`}
-                data={watershedFeature}
-                style={{ weight: 1.5, color: "#047857", fillOpacity: 0.08 }}
-              />
-            ) : null}
-
-            {showLakePoly && lakeFeature ? (
-              <GeoJSON
-                ref={lakeGeoRef}
-                key={`lake-${lakeFeature.properties?.id ?? "feature"}-${JSON.stringify(lakeFeature.geometry ?? {}).length}`}
-                data={lakeFeature}
-                style={{ weight: 2, color: "#2563eb", fillOpacity: 0.1 }}
-              />
-            ) : null}
-
-            {mapViewport.bounds ? (
-              <MapViewport
-                bounds={mapViewport.bounds}
-                maxZoom={mapViewport.maxZoom}
-                padding={mapViewport.padding}
-                pad={mapViewport.pad}
-                version={mapViewport.token}
-              />
-            ) : null}
-          </AppMap>
-        </div>
-      </div>
+      </Modal>
 
       <LakeForm
         open={formOpen}
@@ -823,5 +901,3 @@ function ManageLakesTab() {
 }
 
 export default ManageLakesTab;
-
-
