@@ -61,6 +61,11 @@ class Lake extends Model
         return $this->belongsTo(WaterQualityClass::class, 'class_code', 'code');
     }
 
+    public function flows()
+    {
+        return $this->hasMany(LakeFlow::class);
+    }
+
     /**
      * Get coordinates as [lat, lon] array (null if missing)
      */

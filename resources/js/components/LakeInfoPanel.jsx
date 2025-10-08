@@ -34,6 +34,8 @@ function LakeInfoPanel({
   showWatershed = false,
   canToggleWatershed = false,
   authUser = null,
+  onToggleFlows,
+  showFlows = false,
 }) {
   const [activeTab, setActiveTab] = useState("overview");
   const [closing, setClosing] = useState(false);
@@ -102,6 +104,7 @@ function LakeInfoPanel({
   <button className={`lake-tab ${activeTab === "tests" ? "active" : ""}`} onClick={() => setActiveTab("tests")}>Tests</button>
         <button className={`lake-tab ${activeTab === "population" ? "active" : ""}`} onClick={() => setActiveTab("population")}>Population Density</button>
         <button className={`lake-tab ${activeTab === "layers" ? "active" : ""}`} onClick={() => setActiveTab("layers")}>Layers</button>
+        <button className={`lake-tab ${activeTab === "flows" ? "active" : ""}`} onClick={() => setActiveTab("flows")}>Flows</button>
       </div>
 
       {/* Content */}
@@ -151,6 +154,15 @@ function LakeInfoPanel({
             onResetToActive={handleResetToActive}
             isAuthenticated={!!authUser}
           />
+        )}
+        {activeTab === "flows" && (
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            <p style={{fontSize:13,lineHeight:1.4}}>Show inflow / outflow points for this lake. These markers appear on the map in distinct colors.</p>
+            <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13}}>
+              <input type="checkbox" checked={showFlows} onChange={e=>onToggleFlows?.(e.target.checked)} /> Show Inflows / Outflows
+            </label>
+            <p style={{fontSize:11,opacity:.7}}>Inflow markers use teal; Outflow markers use purple.</p>
+          </div>
         )}
       </div>
     </div>

@@ -215,6 +215,9 @@ Route::get('/lakes',            [LakeController::class, 'index']);
 Route::get('/lakes/{lake}',     [LakeController::class, 'show'])->whereNumber('lake');
 Route::get('/public/lakes-geo', [LakeController::class, 'publicGeo']);
 Route::get('/public/lakes/{lake}', [LakeController::class, 'publicShow']);
+// Public lake flows
+Route::get('/public/lake-flows', [\App\Http\Controllers\LakeFlowController::class, 'publicIndex']);
+Route::get('/public/lake-flows/{flow}', [\App\Http\Controllers\LakeFlowController::class, 'publicShow'])->whereNumber('flow');
 
 Route::get('/watersheds', [WatershedController::class, 'index']);
 
@@ -270,6 +273,12 @@ Route::middleware(['auth:sanctum', 'role:superadmin'])->group(function () {
     Route::post('/lakes',           [LakeController::class, 'store']);
     Route::put('/lakes/{lake}',     [LakeController::class, 'update'])->whereNumber('lake');
     Route::delete('/lakes/{lake}',  [LakeController::class, 'destroy'])->whereNumber('lake');
+    // Lake flows (write operations restricted same as lakes for now)
+    Route::get('/lake-flows', [\App\Http\Controllers\LakeFlowController::class, 'index']);
+    Route::get('/lake-flows/{flow}', [\App\Http\Controllers\LakeFlowController::class, 'show'])->whereNumber('flow');
+    Route::post('/lake-flows', [\App\Http\Controllers\LakeFlowController::class, 'store']);
+    Route::put('/lake-flows/{flow}', [\App\Http\Controllers\LakeFlowController::class, 'update'])->whereNumber('flow');
+    Route::delete('/lake-flows/{flow}', [\App\Http\Controllers\LakeFlowController::class, 'destroy'])->whereNumber('flow');
 });
 // Public Water Quality Sampling Events (published only)
 Route::get('/public/sample-events', [AdminSamplingEventController::class, 'publicIndex'] ?? function() {

@@ -3,6 +3,7 @@ import { FiMap } from "react-icons/fi";
 
 import ManageLakesTab from "./water-bodies/ManageLakesTab";
 import ManageWatershedsTab from "./water-bodies/ManageWatershedsTab";
+import ManageFlowsTab from "./water-bodies/ManageFlowsTab";
 
 function AdminWaterCat() {
   const [activeTab, setActiveTab] = useState("lakes");
@@ -23,13 +24,8 @@ function AdminWaterCat() {
             >
               Manage Lakes
             </button>
-            <button
-              type="button"
-              className={`pill-btn ${activeTab === "watersheds" ? "primary" : ""}`}
-              onClick={() => setActiveTab("watersheds")}
-            >
-              Manage Watersheds
-            </button>
+            <button type="button" className={`pill-btn ${activeTab === "watersheds" ? "primary" : ""}`} onClick={() => setActiveTab("watersheds")}>Manage Watersheds</button>
+            <button type="button" className={`pill-btn ${activeTab === "flows" ? "primary" : ""}`} onClick={() => setActiveTab("flows")}>Manage Flows</button>
           </div>
         </div>
         <p style={{ marginTop: 8, fontSize: 13, color: "#6b7280" }}>
@@ -37,7 +33,9 @@ function AdminWaterCat() {
         </p>
       </div>
 
-      {activeTab === "lakes" ? <ManageLakesTab /> : <ManageWatershedsTab />}
+  {activeTab === "lakes" && <ManageLakesTab />}
+  {activeTab === "watersheds" && <ManageWatershedsTab />}
+  {activeTab === "flows" && <ManageFlowsTab />}
     </div>
   );
 }

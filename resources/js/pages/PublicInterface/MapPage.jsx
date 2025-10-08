@@ -112,6 +112,24 @@ function MapPage() {
 
   const { jumpToStation } = useWaterQualityMarkers(mapRef);
 
+  // Flows state
+  const [showFlows, setShowFlows] = useState(false);
+  const [flows, setFlows] = useState([]);
+  // fetch flows for selected lake when toggle goes on
+  useEffect(()=>{
+    let abort = false;
+    const load = async () => {
+      if (!showFlows || !selectedLakeId) { setFlows([]); return; }
+      try {
+        const res = await fetch(`/api/public/lake-flows?lake_id=${selectedLakeId}`);
+        if (!res.ok) return; const js = await res.json();
+        if (!abort) setFlows(js);
+      } catch(e) {}
+    };
+    load();
+    return () => { abort = true; };
+  }, [showFlows, selectedLakeId]);
+
   return (
     <div className={themeClass} style={{ height: "100vh", width: "100vw", margin: 0, padding: 0, position: 'relative' }}>
   <AppMap view={selectedView} zoomControl={false} whenCreated={(m) => { mapRef.current = m; try { window.lv_map = m; } catch {} }}>
@@ -152,6 +170,26 @@ function MapPage() {
             }}
           />
         )}
+
+        {/* Flow markers */}
+        {showFlows && flows && flows.map(f => (
+          <Marker
+            key={`flow-${f.id}`}
+            position={[f.latitude, f.longitude]}
+            icon={L.icon({
+              iconUrl: f.flow_type === 'inflow' ? 'data:image/svg+xml;utf8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="teal"><circle cx="12" cy="12" r="10" fill="teal"/><path d="M12 6l4 6h-3l1 5-4-6h3z" fill="white"/></svg>`) : 'data:image/svg+xml;utf8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="purple"><circle cx="12" cy="12" r="10" fill="purple"/><path d="M12 18l-4-6h3l-1-5 4 6h-3z" fill="white"/></svg>`),
+              iconSize: [28,28], iconAnchor:[14,14], popupAnchor:[0,-12]
+            })}
+          >
+            <Popup>
+              <div style={{minWidth:160}}>
+                <strong style={{textTransform:'capitalize'}}>{f.flow_type}</strong><br />
+                {f.name || f.source || 'Flow Point'}<br />
+                <small>Lat: {f.latitude} Lon: {f.longitude}</small>
+              </div>
+            </Popup>
+          </Marker>
+        ))}
 
         {/* Sidebar */}
         <Sidebar
@@ -203,6 +241,8 @@ function MapPage() {
         canToggleWatershed={Boolean(selectedLake?.watershed_id || selectedLake?.watershedId || true)}
         onToggleWatershed={handlePanelToggleWatershed}
           authUser={authUser}
+        onToggleFlows={(checked)=>setShowFlows(checked)}
+        showFlows={showFlows}
         />
 
       {/* UI overlays */}
