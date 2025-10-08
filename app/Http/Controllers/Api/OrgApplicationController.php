@@ -77,11 +77,8 @@ class OrgApplicationController extends Controller
         ]);
 
         $meta = [];
-        if ($initialStatus === 'pending_kyc') {
-            $meta['message'] = 'Application received and will queue until your KYC is verified.';
-        } else {
-            $meta['message'] = 'Application submitted for organization review.';
-        }
+        // Unified, clearer message for user toast
+        $meta['message'] = "Application received. We’ll email you our response.";
 
         // Notify applicant
         try {
@@ -101,6 +98,18 @@ class OrgApplicationController extends Controller
         return response()->json(['data' => $rows]);
     }
 
+    // Admin: list applications for a specific user (for per-user modal)
+    public function adminUserApplications(Request $request, int $userId)
+    {
+        $actor = $request->user();
+        if (!$actor || !$actor->isSuperAdmin()) return response()->json(['message' => 'Forbidden'], 403);
+        $rows = OrgApplication::with(['tenant:id,name'])
+            ->where('user_id', $userId)
+            ->orderByDesc('id')
+            ->get();
+        return response()->json(['data' => $rows]);
+    }
+
     public function decideAdmin($id, Request $request)
     {
         return response()->json(['message' => 'Decisions must be made by an organization admin.'], 403);
@@ -115,7 +124,8 @@ class OrgApplicationController extends Controller
         }
         $status = $request->query('status');
         $q = OrgApplication::query()->with(['user:id,name,email'])
-            ->where('tenant_id', $tenant);
+            ->where('tenant_id', $tenant)
+            ->whereNull('archived_at');
         if ($status) $q->where('status', $status);
         $rows = $q->orderByDesc('id')->limit(100)->get();
         return response()->json(['data' => $rows]);
@@ -148,7 +158,8 @@ class OrgApplicationController extends Controller
         try {
             $user = $app->user()->first();
             if ($user && $user->email) {
-                \Illuminate\Support\Facades\Mail::to($user->email)->queue(new \App\Mail\OrgApplicationDecision($user, $app->status, $data['notes'] ?? null));
+                $tenantName = optional($app->tenant()->first())->name;
+                \Illuminate\Support\Facades\Mail::to($user->email)->queue(new \App\Mail\OrgApplicationDecision($user, $app->status, $data['notes'] ?? null, $tenantName));
             }
         } catch (\Throwable $e) { /* ignore mail failures */ }
 
@@ -169,22 +180,37 @@ class OrgApplicationController extends Controller
             return response()->json(['message' => 'You are already a member of another organization.'], 409);
         }
 
-        // Apply membership
-        $targetRole = Role::where('name', $app->desired_role)->first();
-        if (!$targetRole) return response()->json(['message' => 'Target role not found'], 500);
-        $u->tenant_id = $app->tenant_id;
-        $u->role_id = $targetRole->id;
-        try { $u->save(); } catch (\Throwable $e) { return response()->json(['message' => 'Failed to update user.'], 500); }
+        // Apply updates atomically
+        \DB::beginTransaction();
+        try {
+            // Apply membership
+            $targetRole = Role::where('name', $app->desired_role)->first();
+            if (!$targetRole) {
+                \DB::rollBack();
+                return response()->json(['message' => 'Target role not found'], 500);
+            }
+            $u->tenant_id = $app->tenant_id;
+            $u->role_id = $targetRole->id;
+            $u->save();
 
-        // Mark accepted
-        $app->accepted_at = now();
-        $app->save();
+            // Mark accepted and archive this app
+            $now = now();
+            $app->accepted_at = $now;
+            $app->archived_at = $now;
+            $app->archived_reason = 'accepted';
+            $app->save();
 
-        // Void other active applications for this user
-        OrgApplication::where('user_id', $u->id)
-            ->where('id', '<>', $app->id)
-            ->whereIn('status', ['pending_kyc','pending_org_review','approved','needs_changes'])
-            ->update(['status' => 'rejected']);
+            // Reset other applications
+            OrgApplication::where('user_id', $u->id)
+                ->where('id', '<>', $app->id)
+                ->whereNull('archived_at')
+                ->update(['status' => 'accepted_another_org']);
+
+            \DB::commit();
+        } catch (\Throwable $e) {
+            \DB::rollBack();
+            return response()->json(['message' => 'Failed to finalize acceptance.'], 500);
+        }
 
         return response()->json(['data' => $app, 'message' => 'Membership confirmed.']);
     }

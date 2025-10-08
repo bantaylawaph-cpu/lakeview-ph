@@ -53,8 +53,6 @@ return array(
     'App\\Http\\Requests\\UpdateTenantRequest' => $baseDir . '/app/Http/Requests/UpdateTenantRequest.php',
     'App\\Http\\Requests\\UpdateUserRequest' => $baseDir . '/app/Http/Requests/UpdateUserRequest.php',
     'App\\Http\\Resources\\UserResource' => $baseDir . '/app/Http/Resources/UserResource.php',
-    'App\\Mail\\KycDecision' => $baseDir . '/app/Mail/KycDecision.php',
-    'App\\Mail\\KycSubmitted' => $baseDir . '/app/Mail/KycSubmitted.php',
     'App\\Mail\\OrgApplicationDecision' => $baseDir . '/app/Mail/OrgApplicationDecision.php',
     'App\\Mail\\OrgApplicationSubmitted' => $baseDir . '/app/Mail/OrgApplicationSubmitted.php',
     'App\\Mail\\OtpMail' => $baseDir . '/app/Mail/OtpMail.php',

@@ -9,7 +9,12 @@ class OrgApplication extends Model
 {
     use HasFactory, \App\Support\Audit\Auditable;
 
-    protected $fillable = ['user_id', 'tenant_id', 'desired_role', 'status', 'reviewer_notes'];
+    protected $fillable = ['user_id', 'tenant_id', 'desired_role', 'status', 'reviewer_notes', 'accepted_at', 'archived_at', 'archived_reason'];
+
+    protected $casts = [
+        'accepted_at' => 'datetime',
+        'archived_at' => 'datetime',
+    ];
 
     public function user()
     {

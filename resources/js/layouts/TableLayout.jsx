@@ -22,6 +22,7 @@ export default function TableLayout({
   data = [],
   pageSize = 10,
   actions = [],
+  disableActionsWhen = null, // function(row) => boolean
   resetSignal = 0,
   columnPicker = false,
   toolbar = null,
@@ -466,19 +467,21 @@ export default function TableLayout({
                 ))}
                 {actions?.length ? (
                   <td className="lv-td sticky-right lv-td-actions">
-                    <div className="lv-actions-inline">
-                      {actions.map((act, i) => (
-                        <button
-                          key={i}
-                          className={`icon-btn simple ${act.type === "delete" ? "danger" : act.type === "edit" ? "accent" : ""}`}
-                          title={act.title || act.label}
-                          onClick={() => act.onClick?.(row._raw ?? row)}
-                          aria-label={act.title || act.label}
-                        >
-                          {act.icon}
-                        </button>
-                      ))}
-                    </div>
+                    {(typeof disableActionsWhen === 'function' && disableActionsWhen(row._raw ?? row)) ? null : (
+                      <div className="lv-actions-inline">
+                        {actions.map((act, i) => (
+                          <button
+                            key={i}
+                            className={`icon-btn simple ${act.type === "delete" ? "danger" : act.type === "edit" ? "accent" : ""}`}
+                            title={act.title || act.label}
+                            onClick={() => act.onClick?.(row._raw ?? row)}
+                            aria-label={act.title || act.label}
+                          >
+                            {act.icon}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </td>
                 ) : null}
               </tr>

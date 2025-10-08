@@ -13,7 +13,9 @@ const STATUS_OPTIONS = [
   { value: 'approved', label: 'Approved' },
   { value: 'needs_changes', label: 'Needs Changes' },
   { value: 'rejected', label: 'Rejected' },
+  { value: 'accepted_another_org', label: 'Accepted at another org' },
 ];
+import Modal from '../../components/Modal';
 
 export default function AdminOrgApplications() {
   const [rows, setRows] = useState([]);
@@ -91,11 +93,30 @@ export default function AdminOrgApplications() {
 
   // Mirror AdminUsers: build TableLayout columns and normalized rows
   const [docUserId, setDocUserId] = useState(null);
+  const [userApps, setUserApps] = useState({ open: false, user: null, apps: [], loading: false, error: '' });
 
   const baseColumns = useMemo(() => ([
     { id: 'user', header: 'User', render: (raw) => (
       <div>
-        {raw.user?.name}
+        <button
+          className="pill-btn ghost sm"
+          title="View all applications by this user"
+          onClick={async () => {
+            const user = raw.user;
+            setUserApps({ open: true, user, apps: [], loading: true, error: '' });
+            try {
+              const res = await api.get(`/admin/users/${user.id}/org-applications`);
+              setUserApps({ open: true, user, apps: res?.data || [], loading: false, error: '' });
+            } catch (e) {
+              let msg = 'Failed to load applications.';
+              try { const j = JSON.parse(e?.message||''); msg = j?.message || msg; } catch {}
+              setUserApps({ open: true, user, apps: [], loading: false, error: msg });
+            }
+          }}
+          style={{ padding: '2px 8px' }}
+        >
+          {raw.user?.name}
+        </button>
         <div className="muted" style={{ fontSize: 12 }}>{raw.user?.email}</div>
       </div>
     ), width: 220 },
@@ -113,6 +134,7 @@ export default function AdminOrgApplications() {
         approved: '#22c55e',
         needs_changes: '#eab308',
         rejected: '#ef4444',
+        accepted_another_org: '#64748b',
       }[raw.status] || '#64748b';
       return <span style={{ background: `${color}22`, color, padding: '2px 8px', borderRadius: 999, fontSize: 12 }}>{raw.status}</span>;
     }, width: 160 },
@@ -141,6 +163,9 @@ export default function AdminOrgApplications() {
           Admins can view only; decisions are made by the organization’s admin.
         </div>
       </div>
+      <div className="muted" style={{ margin: '6px 0 10px 0', fontSize: 13 }}>
+        Tip: Click a user’s name to see all of their applications.
+      </div>
 
       <TableToolbar
         tableId="admin-org-applications"
@@ -164,6 +189,54 @@ export default function AdminOrgApplications() {
             pageSize={15}
           />
           <KycDocsModal open={!!docUserId} onClose={() => setDocUserId(null)} userId={docUserId} />
+          <Modal
+            open={userApps.open}
+            onClose={() => setUserApps({ open: false, user: null, apps: [], loading: false, error: '' })}
+            title={userApps.user ? `Applications for ${userApps.user.name}` : 'Applications'}
+            width={720}
+          >
+            {userApps.loading && <div>Loading…</div>}
+            {userApps.error && (
+              <div className="alert error">{String(userApps.error)}</div>
+            )}
+            {!userApps.loading && !userApps.error && (
+              <div style={{ display: 'grid', gap: 10 }}>
+                {userApps.apps.length === 0 && (
+                  <div className="muted">No applications.</div>
+                )}
+                {userApps.apps.map((app) => {
+                  const badgeColor = {
+                    pending_kyc: '#f59e0b',
+                    pending_org_review: '#3b82f6',
+                    approved: '#22c55e',
+                    needs_changes: '#eab308',
+                    rejected: '#ef4444',
+                    accepted_another_org: '#64748b',
+                  }[app.status] || '#64748b';
+                  return (
+                    <div key={app.id} className="card" style={{ border: '1px solid #e5e7eb' }}>
+                      <div className="card-body" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <div style={{ fontWeight: 600 }}>{app.tenant?.name || 'Unknown org'}</div>
+                          <div className="muted" style={{ fontSize: 12 }}>Desired role: {app.desired_role}</div>
+                          <div className="muted" style={{ fontSize: 12 }}>Applied: {app.created_at ? new Date(app.created_at).toLocaleString() : '—'}</div>
+                          {app.accepted_at && (
+                            <div className="muted" style={{ fontSize: 12 }}>Accepted: {new Date(app.accepted_at).toLocaleString()}</div>
+                          )}
+                          {app.archived_at && (
+                            <div className="muted" style={{ fontSize: 12 }}>Archived: {new Date(app.archived_at).toLocaleString()} {app.archived_reason ? `(${app.archived_reason})` : ''}</div>
+                          )}
+                        </div>
+                        <div>
+                          <span style={{ background: `${badgeColor}22`, color: badgeColor, padding: '4px 10px', borderRadius: 999, fontSize: 12 }}>{app.status}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Modal>
         </div>
       </div>
     </div>

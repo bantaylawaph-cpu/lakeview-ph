@@ -110,6 +110,8 @@ Route::middleware(['auth:sanctum','role:superadmin'])->prefix('admin')->group(fu
     // Org Applications (admin)
     Route::get('/org-applications', [OrgApplicationController::class, 'indexAdmin']);
     Route::post('/org-applications/{id}/decision', [OrgApplicationController::class, 'decideAdmin'])->whereNumber('id');
+    // Per-user applications (for admin modal)
+    Route::get('/users/{userId}/org-applications', [OrgApplicationController::class, 'adminUserApplications'])->whereNumber('userId');
 
     // Audit logs (superadmin only here; org_admin has implicit scoping below if added later)
     Route::get('/audit-logs', [\App\Http\Controllers\Api\Admin\AuditLogController::class, 'index']);

@@ -170,8 +170,8 @@ export default function KycPage({ embedded = true, open = true, onClose }) {
         postal_code: e.target.postal_code.value,
       };
       const res = await api.patch('/kyc/profile', payload);
-      setKycProfile(res?.data || {});
-      toastSuccess('KYC profile saved');
+  setKycProfile(res?.data || {});
+  toastSuccess('Profile saved');
     } catch (err) {
       toastError('Save failed', 'Please review your inputs.');
     } finally { setKycSaving(false); }
@@ -211,7 +211,15 @@ export default function KycPage({ embedded = true, open = true, onClose }) {
       try { await api.post('/kyc/submit'); } catch (_) {}
       const res = await createOrgApplication({ tenant_id: Number(chosenTenantId), desired_role: desiredRole });
       setSubmitOk(true);
-      if (res?.message) toastSuccess(res.message);
+      if (res?.message) {
+        // Show longer toast for clarity
+        try {
+          const { Toast } = await import('../../utils/alerts');
+          Toast.fire({ icon: 'success', title: res.message, timer: 6000 });
+        } catch {
+          toastSuccess(res.message);
+        }
+      }
       try { const mine = await api.get('/org-applications/mine'); setMyApplication(mine?.data || null); } catch {}
       if (onClose) onClose();
     } catch (e) {
@@ -274,128 +282,75 @@ export default function KycPage({ embedded = true, open = true, onClose }) {
             {step === 1 && (
               <div style={{ display: 'grid', gap: 12 }}>
                 {myApplication && !showNewApp ? (
-                  <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 12, background: '#f8fafc' }}>
-                    <div style={{ fontWeight: 600, marginBottom: 6 }}>Application submitted</div>
-                    {(() => {
-                      const s = myApplication?.status || '';
-                      const labels = {
-                        pending_kyc: 'Pending',
-                        pending_org_review: 'Pending',
-                        approved: 'Approved',
-                        needs_changes: 'Needs changes',
-                        rejected: 'Rejected',
-                      };
-                      const label = labels[s] || s;
-                      return s ? (
-                        <div style={{ marginBottom: 8 }}>
-                          <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 999, background: '#eef2ff', color: '#1f2937', fontSize: 12, fontWeight: 600 }}>
-                            {label}
-                          </span>
-                        </div>
-                      ) : null;
-                    })()}
-                    <div style={{ fontSize: 14, color: '#374151' }}>
-                      Organization: <strong>{myApplication?.tenant?.name || `#${myApplication?.tenant_id}`}</strong>
+                  <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 12, background: '#fff' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', marginBottom: 8 }}>
+                      <div style={{ fontWeight: 700 }}>Your applications</div>
                     </div>
-                    <div style={{ fontSize: 14, color: '#374151', marginTop: 2 }}>
-                      Role: <strong>{myApplication?.desired_role}</strong>
-                    </div>
-                    {myApplication?.status === 'approved' && !myApplication?.accepted_at && (
-                      <div style={{ marginTop: 10, display: 'flex', justifyContent: 'flex-end' }}>
-                        <button
-                          type="button"
-                          className="auth-btn"
-                          onClick={async () => {
-                            setAcceptingId(myApplication.id);
-                            try {
-                              await api.post(`/org-applications/${myApplication.id}/accept`);
-                              // Refresh auth and local lists
-                              try { const me = await api.get('/auth/me'); if (me?.data) setCurrentUser(me.data); } catch {}
-                              try { const mine = await api.get('/org-applications/mine'); setMyApplication(mine?.data || null); } catch {}
-                              try { const cnt = await api.get('/org-applications/mine/count'); setMyAppCount(cnt?.data?.count || 0); } catch {}
-                              setMyApplications([]);
-                              toastSuccess('Membership accepted');
-                              if (onClose) onClose();
-                            } catch (e) {
-                              const code = e?.response?.status;
-                              if (code === 409) toastError('Cannot accept', 'You may already belong to an organization.');
-                              else if (code === 422) toastError('Cannot accept', 'This application is not eligible for acceptance.');
-                              else toastError('Accept failed', 'Please try again.');
-                            } finally {
-                              setAcceptingId(null);
-                            }
-                          }}
-                          disabled={acceptingId === myApplication.id}
-                          style={{ height: 36, padding: '0 12px', borderRadius: 8 }}
-                        >
-                          {acceptingId === myApplication.id ? 'Accepting…' : 'Accept'}
-                        </button>
-                      </div>
-                    )}
-                    <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>
-                      You may edit your profile or documents while your application is pending.
-                    </div>
-                    {(myAppCount || 0) > 1 && (
-                      <div style={{ marginTop: 12 }}>
-                        <div style={{ fontWeight: 600, marginBottom: 6 }}>Your applications</div>
-                        <div style={{ display: 'grid', gap: 8 }}>
-                          {myApplications.map((app) => (
-                            <div key={app.id} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 8, background: '#fff' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div>
-                                  <div style={{ fontWeight: 600 }}>{app?.tenant?.name || `#${app.tenant_id}`}</div>
-                                  <div style={{ fontSize: 12, color: '#6b7280' }}>Role: {app.desired_role}</div>
-                                </div>
-                                {(() => {
-                                  const s = app?.status || '';
-                                  const labels = { pending_kyc: 'Pending', pending_org_review: 'Pending', approved: 'Approved', needs_changes: 'Needs changes', rejected: 'Rejected' };
-                                  const label = labels[s] || s;
-                                  return (
-                                    <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 999, background: '#eef2ff', color: '#1f2937', fontSize: 12, fontWeight: 600 }}>
-                                      {label}
-                                    </span>
-                                  );
-                                })()}
+                    <div role="list" style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
+                      {(myAppCount > 1 ? myApplications : (myApplication ? [myApplication] : [])).map((app, idx) => {
+                        const s = app?.status || '';
+                        const labels = { pending_kyc: 'Pending', pending_org_review: 'Pending', approved: 'Approved', needs_changes: 'Needs changes', rejected: 'Rejected' };
+                        const label = labels[s] || s;
+                        const rowBg = idx % 2 === 0 ? '#ffffff' : '#f9fafb';
+                        const badgeColor = s === 'approved' ? '#dcfce7' : s === 'rejected' ? '#fee2e2' : s === 'needs_changes' ? '#fef9c3' : '#eef2ff';
+                        const textColor = '#1f2937';
+                        return (
+                          <div key={app.id} role="listitem" style={{ padding: '10px 12px', background: rowBg, borderBottom: '1px solid #e5e7eb' }}>
+                            {/* Line 1: org name (left), status (right) */}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                              <div style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {app?.tenant?.name || `#${app.tenant_id}`}
                               </div>
-                              {app.status === 'approved' && !app.accepted_at && (
-                                <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end' }}>
-                                  <button
-                                    type="button"
-                                    className="auth-btn"
-                                    onClick={async () => {
-                                      setAcceptingId(app.id);
-                                      try {
-                                        await api.post(`/org-applications/${app.id}/accept`);
-                                        // Refresh lists and user
-                                        try { const me = await api.get('/auth/me'); if (me?.data) setCurrentUser(me.data); } catch {}
-                                        try { const mine = await api.get('/org-applications/mine'); setMyApplication(mine?.data || null); } catch {}
-                                        try { const cnt = await api.get('/org-applications/mine/count'); setMyAppCount(cnt?.data?.count || 0); } catch {}
-                                        setMyApplications([]); // force lazy reload if still needed
-                                        // Optional: close modal after acceptance
-                                        toastSuccess('Membership accepted');
-                                        if (onClose) onClose();
-                                      } catch (e) {
-                                        const code = e?.response?.status;
-                                        if (code === 409) toastError('Cannot accept', 'You may already belong to an organization.');
-                                        else if (code === 422) toastError('Cannot accept', 'This application is not eligible for acceptance.');
-                                        else toastError('Accept failed', 'Please try again.');
-                                      } finally {
-                                        setAcceptingId(null);
-                                      }
-                                    }}
-                                    disabled={acceptingId === app.id}
-                                    style={{ height: 36, padding: '0 12px', borderRadius: 8 }}
-                                  >
-                                    {acceptingId === app.id ? 'Accepting…' : 'Accept'}
-                                  </button>
-                                </div>
+                              <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 999, background: badgeColor, color: textColor, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                {label}
+                              </span>
+                            </div>
+                            {/* Line 2: applied role (left), accept button (right) */}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4, gap: 12 }}>
+                              <div>
+                                <div style={{ fontSize: 12, color: '#6b7280' }}>Applied role: <strong style={{ color: '#374151' }}>{app.desired_role}</strong></div>
+                                {/* Show that an email was sent to the user about the status update */}
+                                {app.status && app.status !== 'pending_kyc' && (
+                                  <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>We’ve notified you by email about this update.</div>
+                                )}
+                              </div>
+                              {app.status === 'approved' && !app.accepted_at ? (
+                                <button
+                                  type="button"
+                                  className="auth-btn"
+                                  onClick={async () => {
+                                    setAcceptingId(app.id);
+                                    try {
+                                      await api.post(`/org-applications/${app.id}/accept`);
+                                      try { const me = await api.get('/auth/me'); if (me) setCurrentUser(me); } catch {}
+                                      try { const mine = await api.get('/org-applications/mine'); setMyApplication(mine?.data || null); } catch {}
+                                      try { const cnt = await api.get('/org-applications/mine/count'); setMyAppCount(cnt?.data?.count || 0); } catch {}
+                                      setMyApplications([]);
+                                      toastSuccess('Membership accepted');
+                                      if (onClose) onClose();
+                                    } catch (e) {
+                                      const code = e?.response?.status;
+                                      if (code === 409) toastError('Cannot accept', 'You may already belong to an organization.');
+                                      else if (code === 422) toastError('Cannot accept', 'This application is not eligible for acceptance.');
+                                      else toastError('Accept failed', 'Please try again.');
+                                    } finally {
+                                      setAcceptingId(null);
+                                    }
+                                  }}
+                                  disabled={acceptingId === app.id}
+                                  style={{ padding: '4px 14px', height: 32, minWidth: 88, borderRadius: 8, fontSize: 12, width: 'auto', flex: '0 0 auto', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', whiteSpace: 'nowrap' }}
+                                >
+                                  {acceptingId === app.id ? 'Accepting…' : 'Accept'}
+                                </button>
+                              ) : (
+                                <span />
                               )}
                             </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
                       <button
                         type="button"
                         className="auth-btn"

@@ -75,7 +75,17 @@ function buildUrl(url, params) {
 async function parseResponse(res) {
   const ct = res.headers.get("content-type") || "";
   if (res.status === 204) return {};
-  if (ct.includes("application/json")) return res.json();
+  if (ct.includes("application/json")) {
+    // Be tolerant of empty bodies or invalid JSON from some endpoints
+    const text = await res.text();
+    if (!text || !text.trim()) return {};
+    try {
+      return JSON.parse(text);
+    } catch (_) {
+      // Fall back to a message wrapper rather than throwing
+      return { message: text };
+    }
+  }
   const text = await res.text();
   return { message: text || res.statusText };
 }

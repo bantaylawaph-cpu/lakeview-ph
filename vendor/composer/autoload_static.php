@@ -591,8 +591,6 @@ class ComposerStaticInitc514d8f7b9fc5970bdd94287905ef584
         'App\\Http\\Requests\\UpdateTenantRequest' => __DIR__ . '/../..' . '/app/Http/Requests/UpdateTenantRequest.php',
         'App\\Http\\Requests\\UpdateUserRequest' => __DIR__ . '/../..' . '/app/Http/Requests/UpdateUserRequest.php',
         'App\\Http\\Resources\\UserResource' => __DIR__ . '/../..' . '/app/Http/Resources/UserResource.php',
-        'App\\Mail\\KycDecision' => __DIR__ . '/../..' . '/app/Mail/KycDecision.php',
-        'App\\Mail\\KycSubmitted' => __DIR__ . '/../..' . '/app/Mail/KycSubmitted.php',
         'App\\Mail\\OrgApplicationDecision' => __DIR__ . '/../..' . '/app/Mail/OrgApplicationDecision.php',
         'App\\Mail\\OrgApplicationSubmitted' => __DIR__ . '/../..' . '/app/Mail/OrgApplicationSubmitted.php',
         'App\\Mail\\OtpMail' => __DIR__ . '/../..' . '/app/Mail/OtpMail.php',

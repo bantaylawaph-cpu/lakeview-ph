@@ -13,6 +13,7 @@ const STATUS_OPTIONS = [
   { value: "approved", label: "Approved" },
   { value: "needs_changes", label: "Needs Changes" },
   { value: "rejected", label: "Rejected" },
+  { value: "accepted_another_org", label: "Accepted at another org" },
 ];
 
 export default function OrgApplications() {
@@ -135,6 +136,7 @@ export default function OrgApplications() {
       approved: '#22c55e',
       needs_changes: '#eab308',
       rejected: '#ef4444',
+      accepted_another_org: '#64748b',
     }[props.value] || '#64748b';
     return <span style={{ background: `${color}22`, color, padding: '2px 8px', borderRadius: 999, fontSize: 12 }}>{props.value}</span>;
   };
@@ -212,7 +214,8 @@ export default function OrgApplications() {
             tableId="org-apps-table"
             columns={visibleColumns}
             data={normalized}
-            actions={visibleMap.actions !== false ? actions : []}
+            actions={(visibleMap.actions !== false) ? actions.filter(Boolean) : []}
+            disableActionsWhen={(raw) => raw?.status === 'accepted_another_org' || raw?.status === 'rejected'}
             loading={loading}
             hidePager={false}
             pageSize={15}

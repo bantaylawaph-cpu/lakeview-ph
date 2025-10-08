@@ -17,12 +17,34 @@ class OrgApplicationSubmitted extends Mailable implements ShouldQueue
 
     public function build()
     {
-        $line = $this->initialStatus === 'pending_kyc'
-            ? "We received your application. It will move forward once your KYC is verified."
-            : "Your application is now pending organization review.";
-        return $this->subject('LakeView PH: Organization application submitted')
+        $name = 'there';
+        try {
+            $full = (string) ($this->user->name ?? '');
+            if (trim($full) !== '') {
+                $parts = preg_split('/\s+/', trim($full));
+                if ($parts && strlen($parts[0])) $name = $parts[0];
+            }
+        } catch (\Throwable $e) {}
+
+        $subject = '✅ LakeView PH — Your Organization Application Has Been Received';
+        $content = <<<TEXT
+Good day {$name},
+
+Thank you for submitting your organization application to {$this->tenant->name}.
+
+We’ve successfully received your details and our team will review your submission shortly.
+
+Once the review is complete, we’ll reach out with an update.
+
+Until then, may your day stay smooth sailing.
+
+Best regards,
+— LakeView PH
+TEXT;
+
+        return $this->subject($subject)
             ->text('mail.plain', [
-                'content' => "Hi,\n\n{$line}\n\n— LakeView PH",
+                'content' => $content,
             ]);
     }
 }

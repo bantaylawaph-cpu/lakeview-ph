@@ -19,20 +19,34 @@ class OtpMail extends Mailable implements ShouldQueue
     ) {}
 
     public function build() {
-        $subject = "Your LakeView PH verification code: {$this->code}";
+        // Try to personalize with first name if user exists (mainly for password reset)
+        $firstName = 'there';
+        try {
+            $fullName = \App\Models\User::where('email', $this->email)->value('name');
+            if ($fullName) {
+                $parts = preg_split('/\s+/', trim($fullName));
+                if ($parts && strlen($parts[0])) $firstName = $parts[0];
+            }
+        } catch (\Throwable $e) {}
+
+        $subject = "🔐 Your LakeView PH Verification Code";
+        $content = <<<TEXT
+Hi {$firstName},
+
+Before you dive in, please use the verification code below to continue your request:
+
+👉 {$this->code}
+
+This code will expire in {$this->ttlMinutes} minutes.
+If you didn’t request this, please ignore this email.
+
+Thank you,
+— LakeView PH
+TEXT;
+
         return $this->subject($subject)
             ->text('mail.plain', [
-                'content' => <<<TEXT
-Hi,
-
-Your LakeView PH verification code is:
-
-{$this->code}
-
-This code expires in {$this->ttlMinutes} minutes. If you didn’t request it, you can ignore this email.
-
-— LakeView PH
-TEXT
+                'content' => $content,
             ]);
     }
 }
