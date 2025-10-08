@@ -33,6 +33,7 @@ function LakeInfoPanel({
   onToggleWatershed,
   showWatershed = false,
   canToggleWatershed = false,
+  authUser = null,
 }) {
   const [activeTab, setActiveTab] = useState("overview");
   const [closing, setClosing] = useState(false);
@@ -148,6 +149,7 @@ function LakeInfoPanel({
             selectedLayerId={selectedLayerId}
             onChooseLayer={handleChooseLayer}
             onResetToActive={handleResetToActive}
+            isAuthenticated={!!authUser}
           />
         )}
       </div>

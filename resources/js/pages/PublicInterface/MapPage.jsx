@@ -202,7 +202,8 @@ function MapPage() {
         showWatershed={watershedToggleOn}
         canToggleWatershed={Boolean(selectedLake?.watershed_id || selectedLake?.watershedId || true)}
         onToggleWatershed={handlePanelToggleWatershed}
-      />
+          authUser={authUser}
+        />
 
       {/* UI overlays */}
       <SearchBar onMenuClick={() => setSidebarOpen(true)} onFilterClick={() => setFilterTrayOpen((v) => !v)} />

@@ -428,18 +428,33 @@ class LayerController extends Controller
                 ->header('Content-Disposition', 'attachment; filename="layer-'.$row->id.'.geojson"');
         }
 
-        if ($format === 'kml') {
-            // Use ST_AsKML for direct conversion
-            $kml = DB::table('layers')->where('id', $layer->id)->selectRaw('ST_AsKML(geom) AS kml')->value('kml');
-            $kmlDoc = '<?xml version="1.0" encoding="UTF-8"?>\n' .
-                '<kml xmlns="http://www.opengis.net/kml/2.2"><Document>' .
-                '<Placemark><name>'.htmlspecialchars($row->name ?? ('Layer '.$row->id)).'</name>'.$kml.'</Placemark>' .
-                '</Document></kml>';
-            return response($kmlDoc, 200, [
-                'Content-Type' => 'application/vnd.google-earth.kml+xml; charset=UTF-8',
-                'Content-Disposition' => 'attachment; filename="layer-'.$row->id.'.kml"'
-            ]);
-        }
+                if ($format === 'kml') {
+                        // Generate KML document. ST_AsKML returns only the geometry fragment, so we wrap it.
+                        $kmlGeom = DB::table('layers')
+                                ->where('id', $layer->id)
+                                ->selectRaw('ST_AsKML(geom) AS kml')
+                                ->value('kml');
+                        if (!$kmlGeom) return response()->json(['error' => 'Geometry conversion failed'], 500);
+
+                        $name = htmlspecialchars($row->name ?? ('Layer '.$row->id), ENT_XML1 | ENT_COMPAT, 'UTF-8');
+                        // Build well‑formed KML (no stray literal \n sequences)
+                        $kmlDoc = <<<KML
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+    <Document>
+        <name>{$name}</name>
+        <Placemark>
+            <name>{$name}</name>
+            {$kmlGeom}
+        </Placemark>
+    </Document>
+</kml>
+KML;
+                        return response($kmlDoc, 200, [
+                                'Content-Type' => 'application/vnd.google-earth.kml+xml; charset=UTF-8',
+                                'Content-Disposition' => 'attachment; filename="layer-'.$row->id.'.kml"'
+                        ]);
+                }
 
         abort(500, 'Unhandled format');
     }
