@@ -1,4 +1,5 @@
 import React from "react";
+import { FiDownload } from "react-icons/fi";
 
 const fmtText = (v) => (v && String(v).trim() ? String(v).trim() : "–");
 const getOrgName = (layer) => {
@@ -62,7 +63,11 @@ function LayersTab({
               const isSelected = String(selectedLayerId) === String(layer.id);
               const isActive = String(activeLayerId) === String(layer.id);
               return (
-                <div key={layer.id} className="insight-card" style={{ display: "grid", gap: 6 }}>
+                <div
+                  key={layer.id}
+                  className="insight-card"
+                  style={{ display: "grid", gap: 6, position: "relative" }}
+                >
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
                     <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
                       <input
@@ -98,6 +103,30 @@ function LayersTab({
                   <div style={{ fontSize: 13, opacity: 0.9 }}>
                     <strong>Notes:</strong> {fmtText(layer.notes)}
                   </div>
+
+                  {/* Small circular download button in the bottom-right of the card. */}
+                  <button
+                    type="button"
+                    className="pill-btn liquid"
+                    title="Download layer (coming soon)"
+                    aria-label={`Download layer ${layer.name || layer.id} (coming soon)`}
+                    onClick={(e) => { e.stopPropagation(); /* future download handler */ }}
+                    style={{
+                      position: "absolute",
+                      right: 8,
+                      bottom: 8,
+                      width: 34,
+                      height: 34,
+                      padding: 6,
+                      borderRadius: 999,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <FiDownload style={{ width: 16, height: 16 }} />
+                  </button>
                 </div>
               );
             })}
