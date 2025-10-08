@@ -3,7 +3,7 @@ import L from 'leaflet';
 import { fetchPublicLayers, fetchLakeOptions, fetchPublicLayerGeo } from '../../../lib/layers';
 import { apiPublic } from '../../../lib/api';
 
-// Helper to extract id
+// Helper to extract id (works for polygon layers or point fallback markers)
 const getLakeIdFromFeature = (feat) => {
   const p = feat?.properties || {};
   return feat?.id ?? p.id ?? p.lake_id ?? p.lakeId ?? p.lakeID ?? null;

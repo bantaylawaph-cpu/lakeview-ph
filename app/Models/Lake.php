@@ -11,7 +11,7 @@ class Lake extends Model
 
     protected $fillable = [
         'watershed_id','name','alt_name','region','province','municipality',
-        'surface_area_km2','elevation_m','mean_depth_m','class_code'
+        'surface_area_km2','elevation_m','mean_depth_m','class_code','coordinates'
     ];
 
     // Cast location fields to array (will become JSON arrays after migration)
@@ -59,5 +59,35 @@ class Lake extends Model
     public function waterQualityClass()
     {
         return $this->belongsTo(WaterQualityClass::class, 'class_code', 'code');
+    }
+
+    /**
+     * Get coordinates as [lat, lon] array (null if missing)
+     */
+    public function getLatLonAttribute()
+    {
+        // Raw geometry access requires custom select; fallback to querying directly if relation loaded
+        if (!array_key_exists('coordinates', $this->attributes) || !$this->attributes['coordinates']) {
+            return null;
+        }
+        try {
+            $wkt = $this->getConnection()->selectOne('SELECT ST_AsText(?) as wkt', [$this->attributes['coordinates']]);
+            if (!$wkt || !isset($wkt->wkt)) return null;
+            if (preg_match('/POINT\((-?\d+\.?\d*) (-?\d+\.?\d*)\)/', $wkt->wkt, $m)) {
+                // WKT is lon lat order
+                return [ (float)$m[2], (float)$m[1] ];
+            }
+        } catch (\Throwable $e) { /* ignore */ }
+        return null;
+    }
+
+    /** Return coordinates GeoJSON (Point) or null */
+    public function getCoordinatesGeojsonAttribute()
+    {
+        if (!array_key_exists('coordinates', $this->attributes) || !$this->attributes['coordinates']) return null;
+        try {
+            $row = $this->getConnection()->selectOne('SELECT ST_AsGeoJSON(?) as gj', [$this->attributes['coordinates']]);
+            return $row?->gj ?? null;
+        } catch (\Throwable $e) { return null; }
     }
 }

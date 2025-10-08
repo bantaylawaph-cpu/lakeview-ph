@@ -58,7 +58,12 @@ class LakeController extends Controller
             $arr['municipality_list'] = $arr['municipality'];
             $arr['municipality'] = $arr['municipality'][0] ?? null;
         }
-        return array_merge($arr, ['geom_geojson' => $active->geom_geojson ?? null]);
+        if (!$active || !$active->geom_geojson) {
+            $coordGeo = DB::table('lakes')->where('id',$lake->id)->value(DB::raw('ST_AsGeoJSON(coordinates)'));
+        } else {
+            $coordGeo = $active->geom_geojson;
+        }
+        return array_merge($arr, ['geom_geojson' => $coordGeo]);
     }
 
     public function store(Request $req)
@@ -75,6 +80,8 @@ class LakeController extends Controller
             'elevation_m' => ['nullable','numeric'],
             'mean_depth_m' => ['nullable','numeric'],
             'class_code' => ['nullable','string','max:10', Rule::exists('water_quality_classes','code')],
+            'lat' => ['nullable','numeric','between:-90,90'],
+            'lon' => ['nullable','numeric','between:-180,180'],
         ]);
 
         // Normalize multi-location fields
@@ -89,6 +96,10 @@ class LakeController extends Controller
                     if (empty($data[$field])) $data[$field] = null;
                 }
             }
+        }
+        $lat = $data['lat'] ?? null; $lon = $data['lon'] ?? null; unset($data['lat'],$data['lon']);
+        if ($lat !== null && $lon !== null) {
+            $data['coordinates'] = DB::raw("ST_SetSRID(ST_MakePoint($lon,$lat),4326)");
         }
         $lake = Lake::create($data);
         return response()->json($lake->load('watershed:id,name','waterQualityClass:code,name'), 201);
@@ -107,6 +118,8 @@ class LakeController extends Controller
             'elevation_m' => ['nullable','numeric'],
             'mean_depth_m' => ['nullable','numeric'],
             'class_code' => ['nullable','string','max:10', Rule::exists('water_quality_classes','code')],
+            'lat' => ['nullable','numeric','between:-90,90'],
+            'lon' => ['nullable','numeric','between:-180,180'],
         ]);
         foreach (['region','province','municipality'] as $field) {
             if (array_key_exists($field, $data)) {
@@ -119,6 +132,10 @@ class LakeController extends Controller
                     if (empty($data[$field])) $data[$field] = null;
                 }
             }
+        }
+        $lat = $data['lat'] ?? null; $lon = $data['lon'] ?? null; unset($data['lat'],$data['lon']);
+        if ($lat !== null && $lon !== null) {
+            $data['coordinates'] = DB::raw("ST_SetSRID(ST_MakePoint($lon,$lat),4326)");
         }
         $lake->update($data);
         return $lake->load('watershed:id,name','waterQualityClass:code,name');
@@ -133,24 +150,26 @@ class LakeController extends Controller
     public function publicGeo()
     {
         try {
-            // ACTIVE + PUBLIC default layer per lake
+            // Active + public layer geometry preferred; fallback to lake.coordinates (Point)
             $q = DB::table('lakes as l')
-                ->join('layers as ly', function ($j) {
+                ->leftJoin('layers as ly', function ($j) {
                     $j->on('ly.body_id', '=', 'l.id')
-                    ->where('ly.body_type', 'lake')
-                    ->where('ly.is_active', true)
-                    ->where('ly.visibility', 'public');
+                      ->where('ly.body_type', 'lake')
+                      ->where('ly.is_active', true)
+                      ->where('ly.visibility', 'public');
                 })
                 ->leftJoin('watersheds as w', 'w.id', '=', 'l.watershed_id')
-                ->whereNotNull('ly.geom')
                 ->select(
                     'l.id','l.name','l.alt_name','l.region','l.province','l.municipality',
                     'l.surface_area_km2','l.elevation_m','l.mean_depth_m','l.class_code',
                     'l.created_at','l.updated_at',
                     'w.name as watershed_name',
                     'ly.id as layer_id',
-                    DB::raw('ST_AsGeoJSON(ly.geom) as geom_geojson')
-                );
+                    DB::raw('CASE WHEN ly.geom IS NOT NULL THEN ST_AsGeoJSON(ly.geom) ELSE ST_AsGeoJSON(l.coordinates) END as geom_geojson')
+                )
+                ->where(function($qq){
+                    $qq->whereNotNull('ly.geom')->orWhereNotNull('l.coordinates');
+                });
 
             // Server-side filter parameters (all optional)
             $region = request()->query('region');
@@ -246,6 +265,8 @@ class LakeController extends Controller
                         'surface_area_km2' => $r->surface_area_km2,
                         'elevation_m'      => $r->elevation_m,
                         'mean_depth_m'     => $r->mean_depth_m,
+                        'geometry_source'  => $r->layer_id ? 'layer' : 'coordinates',
+                        'layer_id'         => $r->layer_id,
                     ],
                 ];
             }
@@ -284,7 +305,12 @@ class LakeController extends Controller
             $arr['municipality_list'] = $arr['municipality'];
             $arr['municipality'] = $arr['municipality'][0] ?? null;
         }
-        return array_merge($arr, ['geom_geojson' => $active->geom_geojson ?? null]);
+        if (!$active || !$active->geom_geojson) {
+            $coordGeo = DB::table('lakes')->where('id',$lake->id)->value(DB::raw('ST_AsGeoJSON(coordinates)'));
+        } else {
+            $coordGeo = $active->geom_geojson;
+        }
+        return array_merge($arr, ['geom_geojson' => $coordGeo]);
     }
 }
 

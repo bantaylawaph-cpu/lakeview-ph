@@ -13,6 +13,8 @@ const EMPTY = {
   surface_area_km2: "",
   elevation_m: "",
   mean_depth_m: "",
+  lat: "",
+  lon: "",
 };
 
 export default function LakeForm({
@@ -48,6 +50,8 @@ export default function LakeForm({
       region: normalizeCsv(form.region),
       province: normalizeCsv(form.province),
       municipality: normalizeCsv(form.municipality),
+      lat: form.lat === "" ? undefined : Number(form.lat),
+      lon: form.lon === "" ? undefined : Number(form.lon),
     };
     return onSubmit?.(payload);
   };
@@ -72,7 +76,7 @@ export default function LakeForm({
         </div>
       }
     >
-      <form id="lv-lake-form" onSubmit={submit} className="lv-grid-2">
+  <form id="lv-lake-form" onSubmit={submit} className="lv-grid-2">
         <label className="lv-field">
           <span>Name *</span>
           <input
@@ -176,8 +180,79 @@ export default function LakeForm({
             onChange={(e) => setForm({ ...form, mean_depth_m: e.target.value })}
           />
         </label>
+
+        <div className="lv-field" style={{gridColumn:'1 / span 2'}}>
+          <div style={{display:'flex',gap:16,flexWrap:'wrap'}}>
+            <label style={{flex:'1 1 160px'}} className="lv-field">
+              <span>Latitude</span>
+              <input
+                type="number"
+                step="0.000001"
+                placeholder="14.1702"
+                value={form.lat}
+                onChange={(e) => setForm({ ...form, lat: e.target.value })}
+              />
+            </label>
+            <label style={{flex:'1 1 160px'}} className="lv-field">
+              <span>Longitude</span>
+              <input
+                type="number"
+                step="0.000001"
+                placeholder="121.2245"
+                value={form.lon}
+                onChange={(e) => setForm({ ...form, lon: e.target.value })}
+              />
+            </label>
+            <CoordinatePickToggle form={form} setForm={setForm} />
+          </div>
+        </div>
       </form>
     </Modal>
+  );
+}
+
+// Inline coordinate picker toggle + mini map (lazy simple implementation)
+function CoordinatePickToggle({ form, setForm }) {
+  const [mode, setMode] = React.useState('manual'); // 'manual' | 'map'
+  const mapRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (mode !== 'map') return;
+    // Lazy load leaflet only when needed
+    (async () => {
+      const L = await import('leaflet');
+      if (mapRef.current && !mapRef.current._leaflet_id) {
+        const map = L.map(mapRef.current, { center: [form.lat || 12.8797, form.lon || 121.7740], zoom: 6 });
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OSM' }).addTo(map);
+        let marker = null;
+        const placeMarker = (latlng) => {
+          if (marker) marker.setLatLng(latlng); else marker = L.marker(latlng).addTo(map);
+        };
+        if (form.lat && form.lon) placeMarker([form.lat, form.lon]);
+        map.on('click', (e) => {
+          const { lat, lng } = e.latlng;
+            setForm(f => ({ ...f, lat: Number(lat.toFixed(6)), lon: Number(lng.toFixed(6)) }));
+            placeMarker(e.latlng);
+        });
+      }
+    })();
+  }, [mode, form.lat, form.lon, setForm]);
+
+  return (
+    <div style={{flex:'1 1 100%', minWidth:300}}>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+        <label style={{display:'flex',alignItems:'center',gap:4,fontSize:12}}>
+          <input type="radio" name="coord-mode" value="manual" checked={mode==='manual'} onChange={()=>setMode('manual')} /> Manual
+        </label>
+        <label style={{display:'flex',alignItems:'center',gap:4,fontSize:12}}>
+          <input type="radio" name="coord-mode" value="map" checked={mode==='map'} onChange={()=>setMode('map')} /> Pin Drop
+        </label>
+        <span style={{fontSize:11,color:'#6b7280'}}>Coordinates are an optional fallback marker.</span>
+      </div>
+      {mode === 'map' && (
+        <div ref={mapRef} style={{height:240,border:'1px solid #d1d5db',borderRadius:6}} />
+      )}
+    </div>
   );
 }
 
