@@ -105,7 +105,25 @@ export function useLakeSelection({ publicFC, mapRef, setPanelOpen, setFilterWate
     })();
 
     if (mapRef?.current && layer) {
-      try { const b = layer.getBounds(); if (b?.isValid?.()) mapRef.current.fitBounds(b, { padding: [24,24], maxZoom: 12 }); } catch {}
+      try {
+        // Polygons / multi geometries: use fitBounds
+        if (typeof layer.getBounds === 'function') {
+          const b = layer.getBounds();
+          if (b?.isValid?.()) {
+            mapRef.current.fitBounds(b, { padding: [24,24], maxZoom: 12 });
+            return;
+          }
+        }
+        // Point-like layers (circleMarker / marker): center and zoom in
+        if (typeof layer.getLatLng === 'function') {
+          const latlng = layer.getLatLng();
+          // prefer a closer zoom for points
+          const targetZoom = Math.min(12, mapRef.current.getMaxZoom ? mapRef.current.getMaxZoom() : 12);
+          try { mapRef.current.flyTo([latlng.lat, latlng.lng], targetZoom, { duration: 0.6 }); } catch { mapRef.current.setView([latlng.lat, latlng.lng], targetZoom); }
+        }
+      } catch (err) {
+        console.warn('[useLakeSelection] map zoom failed', err);
+      }
     }
   }, [mapRef, loadPublicLayersForLake, setPanelOpen, setFilterWatershedId]);
 

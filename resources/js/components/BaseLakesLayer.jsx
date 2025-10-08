@@ -24,6 +24,8 @@ export default function BaseLakesLayer({ data, hidePredicate, onFeatureClick }) 
       style={(feat) => feat.geometry?.type === 'Point' ? undefined : { color: '#3388ff', weight: 2, fillOpacity: 0.12 }}
       pointToLayer={pointToLayer}
       onEachFeature={(feat, layer) => {
+        const name = (feat?.properties?.name) || (feat?.properties?.lake_name) || 'Lake';
+        try { layer.bindTooltip(name, { sticky: true, direction: 'top' }); } catch (e) {}
         layer.on('click', () => onFeatureClick && onFeatureClick(feat, layer));
         if (feat.geometry?.type !== 'Point') {
           layer.on('mouseover', () => layer.setStyle({ weight: 3 }));
