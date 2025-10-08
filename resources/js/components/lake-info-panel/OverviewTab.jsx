@@ -16,8 +16,28 @@ function OverviewTab({ lake, showWatershed = false, canToggleWatershed = false, 
   }, [lake]);
 
   const fmtList = (val) => {
-    if (!val) return '–';
-    if (Array.isArray(val)) return val.join(', ');
+    if (val === null || val === undefined || val === '') return '–';
+
+    // Already an array
+    if (Array.isArray(val)) return val.filter(v => v !== null && v !== undefined && v !== '').join(', ');
+
+    // If it's a string that looks like a JSON array, attempt to parse once.
+    if (typeof val === 'string') {
+      const trimmed = val.trim();
+      if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed)) {
+            return parsed.filter(v => v !== null && v !== undefined && v !== '').join(', ');
+          }
+        } catch (e) {
+          // fall through to returning original string
+        }
+      }
+      return trimmed;
+    }
+
+    // Fallback: coerce to string
     return String(val);
   };
 
