@@ -13,6 +13,7 @@ import {
   FiUser,
   FiMapPin,
 } from "react-icons/fi";
+import { FiChevronDown } from "react-icons/fi";
 import { MapContainer, TileLayer, Rectangle, useMap } from "react-leaflet";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { api, clearToken, getToken } from "../lib/api";
@@ -75,6 +76,18 @@ function MiniMapWrapper() {
 function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth, onOpenFeedback, onOpenKyc }) {
   const [me, setMe] = useState(() => getCurrentUser()); // start with cached user if available
   const navigate = useNavigate();
+  const location = useLocation();
+  const [aboutDataOpen, setAboutDataOpen] = useState(() => {
+    // auto-open submenu when on /data routes
+    return /^\/data(\/.*)?$/.test(location.pathname || "");
+  });
+
+  // Keep submenu open when navigating to any /data route
+  useEffect(() => {
+    if (/^\/data(\/.*)?$/.test(location.pathname || "")) {
+      setAboutDataOpen(true);
+    }
+  }, [location.pathname]);
 
   // Fetch and cache user (avoids duplicate network calls across components)
   const fetchAndCache = async () => {
@@ -135,7 +148,6 @@ function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth, onOpenFeedbac
 
   const isLoggedIn = !!me?.id;
   const isPublic = isLoggedIn && (me.role === "public" || !me.role);
-  const location = useLocation();
 
   const onSettingsClick = (e) => {
     if (!isLoggedIn) return; // guard
@@ -163,7 +175,7 @@ function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth, onOpenFeedbac
           {/* Pin */}
           <button
             className={`sidebar-icon-btn ${pinned ? "active" : ""}`}
-            onClick={() => setPinned(!pinned)}
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPinned(!pinned); }}
             title={pinned ? "Unpin Sidebar" : "Pin Sidebar"}
           >
             <FiMapPin size={18} />
@@ -245,11 +257,55 @@ function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth, onOpenFeedbac
             <span>GitHub Page</span>
           </a>
         </li>
-        <li>
-          <Link className="sidebar-row" to="/data" onClick={!pinned ? onClose : undefined}>
+  {/* About the Data (dropdown) */}
+  <li className="has-submenu">
+          <button
+            type="button"
+            className={`sidebar-row dropdown ${aboutDataOpen ? 'open' : ''}`}
+            onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+            onClick={(e) => {
+              // Toggle only; do not navigate or close sidebar
+              e.preventDefault();
+              e.stopPropagation();
+              setAboutDataOpen(v => !v);
+            }}
+            aria-expanded={aboutDataOpen ? "true" : "false"}
+            aria-controls="about-data-submenu"
+            style={{ width: '100%', textAlign: 'left' }}
+          >
             <FiDatabase className="sidebar-icon" />
-            <span>About the Data</span>
-          </Link>
+            <span style={{ flex: 1 }}>About the Data</span>
+            <FiChevronDown className={`chev ${aboutDataOpen ? 'open' : ''}`} />
+          </button>
+          <ul
+            id="about-data-submenu"
+            className={`sidebar-submenu ${aboutDataOpen ? 'open' : ''}`}
+            style={{ listStyle: 'none', paddingLeft: 0, marginTop: 6, marginBottom: 0 }}
+          >
+            <li>
+              <Link
+                className={`sidebar-row ${location.pathname === '/data' ? 'active' : ''}`}
+                to="/data"
+                // Keep sidebar open for About the Data submenu
+                onClick={undefined}
+              >
+                <span>Overview</span>
+              </Link>
+            </li>
+            <li>
+              <a
+                href="#privacy"
+                className={`sidebar-row ${location.pathname === '/data/privacy' ? 'active' : ''}`}
+                onClick={(e) => {
+                  e.preventDefault();
+                  try { window.dispatchEvent(new Event('lv-open-privacy')); } catch {}
+                  // Keep sidebar open
+                }}
+              >
+                <span>Data Privacy Disclaimer</span>
+              </a>
+            </li>
+          </ul>
         </li>
       </ul>
 

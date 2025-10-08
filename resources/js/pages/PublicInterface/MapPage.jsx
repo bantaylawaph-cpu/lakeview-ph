@@ -22,7 +22,6 @@ import AuthModal from "../../components/modals/AuthModal";
 import FilterTray from "../../components/FilterTray";
 import PublicSettingsModal from "../../components/settings/PublicSettingsModal";
 import FeedbackModal from "../../components/feedback/FeedbackModal";
-// ...existing code...
 import HeatmapLoadingIndicator from "../../components/HeatmapLoadingIndicator";
 import HeatmapLegend from "../../components/HeatmapLegend";
 import BackToDashboardButton from "../../components/BackToDashboardButton";
@@ -33,11 +32,7 @@ import { useLakeSelection } from "./hooks/useLakeSelection";
 import { usePopulationHeatmap } from "./hooks/usePopulationHeatmap";
 import { useWaterQualityMarkers } from "./hooks/useWaterQualityMarkers";
 import { useHotkeys } from "./hooks/useHotkeys";
-import KycPage from "./KycPage";
-// ...existing code...
-// KYC wizard removed from MapPage; documents are reviewed via admin/org pages
-// ...existing code...
-import KycPage from "./KycPage";
+import DataPrivacyDisclaimer from "./DataPrivacyDisclaimer";
 
 function MapWithContextMenu({ children }) {
   const map = useMap();
@@ -63,19 +58,9 @@ function MapPage() {
   const [lakePanelOpen, setLakePanelOpen] = useState(false);
   const [measureActive, setMeasureActive] = useState(false);
   const [measureMode, setMeasureMode] = useState("distance");
-// ...existing code...
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
-// ...existing code...
-
-  const [userRole, setUserRole] = useState(null);
-  const [authOpen, setAuthOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false); // settings modal for any logged-in user
-  const [feedbackOpen, setFeedbackOpen] = useState(false); // feedback modal
-  const [authUser, setAuthUser] = useState(() => getCurrentUser());
-  const [authMode, setAuthMode] = useState("login");
-  // KYC wizard removed; keep admin/org review flows only
-// ...existing code...
+  const [privacyOpen, setPrivacyOpen] = useState(false); // data privacy modal
   const [kycOpen, setKycOpen] = useState(false);
   const [filterTrayOpen, setFilterTrayOpen] = useState(false);
 
@@ -90,18 +75,32 @@ function MapPage() {
     const onOpen = () => setSettingsOpen(true);
     window.addEventListener('lv-open-settings', onOpen);
     return () => window.removeEventListener('lv-open-settings', onOpen);
-  }, []);
-      navigate('.', { replace: true, state: {} });
-    }
-  }, [location, navigate]);
+    // Global trigger to open Data Privacy modal
+    useEffect(() => {
+      const onOpen = () => setPrivacyOpen(true);
+      window.addEventListener('lv-open-privacy', onOpen);
+      return () => window.removeEventListener('lv-open-privacy', onOpen);
+    }, []);
 
-  // KYC overlay routing removed
+    // Support navigation with state { openSettings: true }
+    useEffect(() => {
+      if (location.pathname === '/' && location.state?.openSettings) {
+        setSettingsOpen(true);
+        // clear state so back button doesn't reopen repeatedly
+        navigate('.', { replace: true, state: {} });
+      }
+    }, [location, navigate]);
 
-  useEffect(() => {
-    const p = location.pathname;
-    if (p === '/login') { setAuthMode('login'); openAuth('login'); }
-    if (p === '/register') { setAuthMode('register'); openAuth('register'); }
-  }, [location.pathname, openAuth, setAuthMode]);
+    // KYC overlay routing removed
+
+    useEffect(() => {
+      const p = location.pathname;
+      if (p === '/login') { setAuthMode('login'); openAuth('login'); }
+      if (p === '/register') { setAuthMode('register'); openAuth('register'); }
+      if (p === '/data/privacy') { setPrivacyOpen(true); }
+    }, [location.pathname, openAuth, setAuthMode]);
+  }, [location.pathname]);
+// Data Privacy Disclaimer integration resolved
 
   // ---------------- Fetch public lake geometries ----------------
   const { publicFC, activeFilters, applyFilters, baseKey: lakesBaseKey } = usePublicLakes();
@@ -304,6 +303,18 @@ function MapPage() {
 
       {/* Feedback Modal */}
       <FeedbackModal open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
+
+      {/* Data Privacy Modal */}
+      <DataPrivacyDisclaimer
+        open={privacyOpen}
+        onClose={() => {
+          setPrivacyOpen(false);
+          if (location.pathname === "/data/privacy") {
+            // Return to map after closing modal that was opened via route
+            navigate("/", { replace: true });
+          }
+        }}
+      />
 
       {/* Auth Modal */}
       <AuthModal

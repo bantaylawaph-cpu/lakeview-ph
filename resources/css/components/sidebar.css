@@ -132,6 +132,42 @@
   text-align: left;
 }
 
+/* Dropdown row + caret */
+.sidebar-row.dropdown { position: relative; }
+.sidebar-row .chev { transition: transform .2s ease; }
+.sidebar-row .chev.open { transform: rotate(180deg); }
+
+/* Ensure dropdown container stacks header + submenu */
+.sidebar-menu li.has-submenu { display: block; padding: 8px 8px; }
+.sidebar-menu li.has-submenu > .sidebar-row.dropdown {
+  padding: 12px 10px;
+  border-radius: 10px;
+  background: #f8fafc; /* subtle background */
+}
+.sidebar-menu li.has-submenu > .sidebar-row.dropdown.open {
+  background: #eef7f6; /* highlight when open */
+}
+
+/* Submenu slide-down animation */
+.sidebar-submenu {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height .25s ease;
+}
+.sidebar-submenu.open {
+  max-height: 240px; /* enough to reveal items; adjust if more items are added */
+}
+.sidebar-submenu { margin-top: 6px; }
+.sidebar-submenu li { display: block; margin: 0; padding: 0; border: 0; }
+.sidebar-submenu .sidebar-row {
+  padding-left: 28px; /* indent submenu rows */
+  font-size: 13px;
+}
+.sidebar-submenu .sidebar-row.active {
+  color: #00695c;
+  font-weight: 600;
+}
+
 /* Ensure feedback trigger uses the same base text color (inherit from li) */
 .feedback-trigger { color: inherit; }
 .feedback-trigger span { color: inherit; }

@@ -8,6 +8,7 @@ import AboutPage from "./pages/PublicInterface/AboutPage";
 import MapPage from "./pages/PublicInterface/MapPage";
 import KycPage from "./pages/PublicInterface/KycPage";
 import UserManual from "./pages/PublicInterface/UserManual";
+// DataPrivacyDisclaimer is now a modal inside MapPage
 // KYC page is available as a dedicated route as well
 
 // 📊 Dashboards (Role-based)
@@ -33,7 +34,9 @@ function App() {
         <Route path="/" element={<MapPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/manual" element={<UserManual />} />
-        <Route path="/data" element={<AboutData />} />
+    <Route path="/data" element={<AboutData />} />
+    {/* Visiting /data/privacy keeps user on MapPage; modal opens from MapPage by path */}
+    <Route path="/data/privacy" element={<MapPage />} />
     <Route path="/login" element={<MapPage />} />
         <Route path="/signin" element={<Navigate to="/login" replace />} />
         <Route path="/register" element={<MapPage />} />
