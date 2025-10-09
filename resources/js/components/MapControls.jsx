@@ -59,7 +59,12 @@ function MapControls({ defaultCenter = [12.8797, 121.7740], defaultZoom = 6, def
         <button className="btn-floating" onClick={() => setStatsOpen(true)}>
           <FiBarChart2 className="icon-layer" />
         </button>
-        <button className="btn-floating" onClick={handleGeolocation}>
+        <button
+          className="btn-floating"
+          onClick={handleGeolocation}
+          title={geolocated ? "Reset view" : "Go to my location"}
+          aria-pressed={geolocated}
+        >
           <FiCrosshair className="icon-layer" />
         </button>
         <button className="btn-floating" onClick={handleZoomIn}>

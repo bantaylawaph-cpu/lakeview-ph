@@ -11,7 +11,8 @@ class Lake extends Model
 
     protected $fillable = [
         'watershed_id','name','alt_name','region','province','municipality',
-        'surface_area_km2','elevation_m','mean_depth_m','class_code','coordinates'
+        'surface_area_km2','elevation_m','mean_depth_m','class_code','coordinates',
+        'flows_status'
     ];
 
     // Cast location fields to array (will become JSON arrays after migration)
@@ -64,6 +65,22 @@ class Lake extends Model
     public function flows()
     {
         return $this->hasMany(LakeFlow::class);
+    }
+
+    /**
+     * Recompute flows_status from actual relationships.
+     * Will set to 'present' if any flows exist; otherwise remains as-is unless optional $setUnknownWhenEmpty=true.
+     */
+    public function recomputeFlowsStatus(bool $setUnknownWhenEmpty = false): void
+    {
+        $count = $this->flows()->count();
+        if ($count > 0) {
+            $this->flows_status = 'present';
+            $this->saveQuietly();
+        } elseif ($setUnknownWhenEmpty && $this->flows_status !== 'none') {
+            $this->flows_status = 'unknown';
+            $this->saveQuietly();
+        }
     }
 
     /**

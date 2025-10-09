@@ -11,7 +11,7 @@ import AppMap from "../../components/AppMap";
 import MapControls from "../../components/MapControls";
 import SearchBar from "../../components/SearchBar";
 import LayerControl from "../../components/LayerControl";
-import ScreenshotButton from "../../components/ScreenshotButton";
+import ScreenshotButton from "../../components/Screenshotbutton";
 import CoordinatesScale from "../../components/CoordinatesScale"
 import Sidebar from "../../components/Sidebar";
 import KycPage from "./KycPage";
@@ -131,7 +131,8 @@ function MapPage() {
     selectedLake, selectedLakeId, watershedToggleOn,
     lakeOverlayFeature, watershedOverlayFeature, lakeLayers, lakeActiveLayerId,
     baseMatchesSelectedLake, baseKeyBump,
-    selectLakeFeature, applyOverlayByLayerId, handlePanelToggleWatershed, resetToActive
+    selectLakeFeature, applyOverlayByLayerId, handlePanelToggleWatershed, resetToActive,
+    canToggleNominatim, nominatimEnabled, setNominatimEnabled, nominatimLoading,
   } = useLakeSelection({ publicFC, mapRef, setPanelOpen: setLakePanelOpen });
 
   useHotkeys({ toggleLakePanel: () => setLakePanelOpen(v => !v), closeLakePanel: () => setLakePanelOpen(false) });
@@ -149,12 +150,15 @@ function MapPage() {
 
   // Flows state
   const [showFlows, setShowFlows] = useState(false);
-  const [flows, setFlows] = useState([]);
+  // null = loading, [] = loaded but empty, array = loaded
+  const [flows, setFlows] = useState(null);
   // fetch flows whenever selected lake changes (so Overview can list even if markers hidden)
   useEffect(()=>{
     let abort = false;
     const load = async () => {
       if (!selectedLakeId) { setFlows([]); return; }
+      // indicate loading
+      setFlows(null);
       try {
         const res = await fetch(`/api/public/lake-flows?lake_id=${selectedLakeId}`);
         if (!res.ok) return; const js = await res.json();
@@ -220,12 +224,15 @@ function MapPage() {
           />
         )}
 
-        {/* Lake overlay (blue) */}
+        {/* Lake overlay (blue by default; violet when from Nominatim) */}
         {lakeOverlayFeature && (
           <GeoJSON
             key={`lake-overlay-${lakeOverlayFeature?.properties?.layer_id || 'x'}-${JSON.stringify(lakeOverlayFeature?.geometry ?? {}).length}`}
             data={lakeOverlayFeature}
-            style={{ color: '#3388ff', weight: 2.5, fillOpacity: 0.20 }}
+            style={() => {
+              const isNominatim = (lakeOverlayFeature?.properties?.layer_id === 'nominatim' || lakeOverlayFeature?.properties?.source === 'nominatim');
+              return { color: isNominatim ? '#7c3aed' : '#3388ff', weight: 2.5, fillOpacity: 0.20 };
+            }}
             onEachFeature={(feat, layer) => {
               const nm = feat?.properties?.name || 'Layer';
               layer.bindTooltip(nm, { sticky: true });
@@ -288,7 +295,7 @@ function MapPage() {
       </AppMap>
 
       {/* Lake Info Panel */}
-      <LakeInfoPanel
+        <LakeInfoPanel
         isOpen={lakePanelOpen}
         onClose={() => setLakePanelOpen(false)}
         lake={selectedLake}
@@ -302,8 +309,12 @@ function MapPage() {
           await applyOverlayByLayerId(layer.id, { fit: true });
         }}
         showWatershed={watershedToggleOn}
-        canToggleWatershed={Boolean(selectedLake?.watershed_id || selectedLake?.watershedId || true)}
+        canToggleWatershed={Boolean(selectedLake?.watershed_id || selectedLake?.watershedId)}
         onToggleWatershed={handlePanelToggleWatershed}
+          canToggleNominatim={canToggleNominatim}
+          nominatimEnabled={nominatimEnabled}
+          nominatimLoading={nominatimLoading}
+          onToggleNominatim={setNominatimEnabled}
           authUser={authUser}
   onToggleFlows={(checked)=>setShowFlows(checked)}
   showFlows={showFlows}

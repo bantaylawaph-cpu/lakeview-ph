@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { getCurrentUser } from '../../lib/authState';
 import { GeoJSON } from "react-leaflet";
 import AppMap from "../../components/AppMap";
 import "leaflet/dist/leaflet.css";
@@ -88,6 +89,10 @@ export default function LayerWizard({
   const wizardSetRef = useRef(null);
   const [lakeOptions, setLakeOptions] = useState([]);
   const [watershedOptions, setWatershedOptions] = useState([]);
+  // Geocode/nominatim state
+  const [geocodeQuery, setGeocodeQuery] = useState("");
+  const [geocodeResults, setGeocodeResults] = useState([]);
+  const [geocodeLoading, setGeocodeLoading] = useState(false);
 
   useEffect(() => {
     if (initialBodyId === undefined || initialBodyId === null || initialBodyId === "") return;
@@ -150,6 +155,76 @@ export default function LayerWizard({
 
   // -------- file handlers ----------
   const acceptedExt = /\.(geojson|json|kml|zip)$/i;
+
+  // --- Nominatim helpers (uses server proxy /api/geocode/nominatim by default) ---
+  const fetchNominatimCandidates = async (q, limit = 5) => {
+    if (!q || !q.trim()) return [];
+    setGeocodeLoading(true);
+    try {
+      const url = `/api/geocode/nominatim?q=${encodeURIComponent(q)}&limit=${limit}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Geocode failed: ${res.status}`);
+      const json = await res.json();
+      return Array.isArray(json) ? json : [];
+    } finally {
+      setGeocodeLoading(false);
+    }
+  };
+
+  const geomFromNominatim = (item) => {
+    if (!item) return null;
+    if (item.geojson) {
+      const t = item.geojson.type;
+      if (t === "Polygon" || t === "MultiPolygon") return item.geojson;
+      // if it's a GeometryCollection, try to take first polygon
+      if (t === "GeometryCollection" && Array.isArray(item.geojson.geometries)) {
+        const poly = item.geojson.geometries.find((g) => g.type === 'Polygon' || g.type === 'MultiPolygon');
+        if (poly) return poly;
+      }
+    }
+    if (item.boundingbox && item.boundingbox.length === 4) {
+      const [south, north, west, east] = item.boundingbox.map(Number);
+      const polygon = {
+        type: "Polygon",
+        coordinates: [[
+          [west, south],
+          [east, south],
+          [east, north],
+          [west, north],
+          [west, south],
+        ]],
+      };
+      return polygon;
+    }
+    return null;
+  };
+
+  const searchPlace = async () => {
+    if (!geocodeQuery) return;
+    setError("");
+    try {
+      const candidates = await fetchNominatimCandidates(geocodeQuery, 6);
+      setGeocodeResults(candidates);
+      if (!candidates.length) setError("No matches found.");
+    } catch (e) {
+      console.error('[LayerWizard] Geocode failed', e);
+      setError(e?.message || 'Geocode failed.');
+      setGeocodeResults([]);
+    }
+  };
+
+  const useNominatimCandidate = (item) => {
+    const geom = geomFromNominatim(item);
+    if (!geom) {
+      setError('Selected place has no polygon geometry.');
+      return;
+    }
+    const gj = { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: geom, properties: { name: item.display_name } }] };
+    handleParsedGeoJSON(gj, `nominatim:${item.osm_type}/${item.osm_id}`);
+    setData((d) => ({ ...d, sourceSrid: 4326 }));
+    setGeocodeResults([]);
+    setGeocodeQuery('');
+  };
 
   const handleParsedGeoJSON = (parsed, fileName = "") => {
     const { uploadGeom, previewGeom, sourceSrid } = normalizeForPreview(parsed);
@@ -305,6 +380,44 @@ export default function LayerWizard({
               onChange={(e) => handleFile(e.target.files?.[0])}
             />
           </div>
+
+          {(() => {
+            const me = getCurrentUser?.();
+            if (!me || me.role !== 'superadmin') return null;
+            return (
+              <div className="org-form" style={{ marginTop: 10 }}>
+          
+            <div className="form-group" style={{ flexBasis: '100%' }}>
+              <label>Import from place name</label>
+              <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                <input
+                  type="text"
+                  value={geocodeQuery}
+                  onChange={(e) => setGeocodeQuery(e.target.value)}
+                  placeholder="Search place name (e.g., 'Laguna de Bay')"
+                  style={{ flex: 1 }}
+                />
+                <button type="button" className={`pill-btn ${geocodeLoading ? 'ghost' : 'primary'}`} onClick={searchPlace} disabled={geocodeLoading}>
+                  {geocodeLoading ? 'Searching…' : 'Search'}
+                </button>
+              </div>
+              {geocodeResults.length > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  <div className="info-row"><small>Click a result to use its boundary:</small></div>
+                  <div style={{ maxHeight: 160, overflowY: 'auto', marginTop: 8 }}>
+                    {geocodeResults.map((r) => (
+                      <div key={`${r.osm_type}-${r.osm_id}`} className="info-row" style={{ cursor: 'pointer', padding: '8px 6px' }} onClick={() => useNominatimCandidate(r)}>
+                        <div style={{ fontWeight: 600 }}>{r.display_name}</div>
+                        <div style={{ fontSize: 12, color: '#6b7280' }}>{r.class}/{r.type}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+            );
+          })()}
 
           {error && (
             <div className="alert-note" style={{ marginTop: 8 }}>

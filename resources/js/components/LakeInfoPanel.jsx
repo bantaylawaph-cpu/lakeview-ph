@@ -5,6 +5,7 @@ import WaterQualityTab from "./lake-info-panel/WaterQualityTab";
 import HeatmapTab from "./lake-info-panel/HeatmapTab";
 import LayersTab from "./lake-info-panel/LayersTab";
 import TestsTab from "./lake-info-panel/TestsTab";
+import LoadingSpinner from "./LoadingSpinner";
 
 /**
  * Props
@@ -33,6 +34,11 @@ function LakeInfoPanel({
   onToggleWatershed,
   showWatershed = false,
   canToggleWatershed = false,
+  // Nominatim toggle (visible only when no active geometry; base is a marker)
+  canToggleNominatim = false,
+  nominatimEnabled = false,
+  nominatimLoading = false,
+  onToggleNominatim,
   authUser = null,
   onToggleFlows,
   showFlows = false,
@@ -85,9 +91,42 @@ function LakeInfoPanel({
       {/* Header */}
       <div className="lake-info-header">
         <div>
-          <h2 className="lake-info-title" style={{ marginBottom: 2 }}>
-            {lake?.name || "Lake"}
-          </h2>
+          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+            <h2 className="lake-info-title" style={{ marginBottom: 2 }}>
+              {lake?.name || "Lake"}
+            </h2>
+            {canToggleNominatim && (
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                <button
+                  type="button"
+                  aria-pressed={nominatimEnabled}
+                  onClick={() => onToggleNominatim?.(!nominatimEnabled)}
+                  title={nominatimEnabled ? 'Hide map outline from OpenStreetMap' : 'Show map outline from OpenStreetMap'}
+                  disabled={nominatimLoading}
+                  style={{
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    background: nominatimEnabled ? 'rgba(124,58,237,0.25)' : 'rgba(0,0,0,0.2)',
+                    color: '#fff',
+                    padding: '4px 8px',
+                    borderRadius: 6,
+                    cursor: nominatimLoading ? 'wait' : 'pointer',
+                    fontSize: 12,
+                    lineHeight: 1.1,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                  }}
+                >
+                  {nominatimLoading ? <LoadingSpinner label={nominatimEnabled ? 'Hiding…' : 'Loading…'} size={14} color="#fff" inline={true} /> : (nominatimEnabled ? 'Hide OSM Outline' : 'Show OSM Outline')}
+                </button>
+                {nominatimEnabled && (
+                  <div style={{ fontSize: 11, color: '#d1c4ff', opacity: 0.95 }}>
+                    Outline source: OpenStreetMap (Nominatim)
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
           {lake?.alt_name ? (
             <div style={{ fontSize: 13, opacity: 0.7 }}>
               Also known as <em>{lake.alt_name}</em>
@@ -117,6 +156,10 @@ function LakeInfoPanel({
             showWatershed={showWatershed}
             canToggleWatershed={canToggleWatershed}
             onToggleWatershed={onToggleWatershed}
+            // Nominatim toggle
+            canToggleNominatim={canToggleNominatim}
+            nominatimEnabled={nominatimEnabled}
+            onToggleNominatim={onToggleNominatim}
             flows={flows}
             showFlows={showFlows}
             onToggleFlows={onToggleFlows}

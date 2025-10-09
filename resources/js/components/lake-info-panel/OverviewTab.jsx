@@ -1,5 +1,6 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useEffect, useState } from "react";
 import { FiMap } from 'react-icons/fi';
+import LoadingSpinner from "../LoadingSpinner";
 
 const fmtNum = (v, suffix = "", digits = 2) => {
   if (v === null || v === undefined || v === "") return "–";
@@ -20,9 +21,17 @@ function OverviewTab({
   onToggleFlows,           // (checked:boolean) => void
   onJumpToFlow,            // (flow) => void (fly map to flow)
 }) {
+  const [initialLoading, setInitialLoading] = useState(true);
+
+  // Consider the tab 'loaded' once we have a lake id (or when called with no lake)
+  useEffect(() => {
+    if (!lake || !lake.id) { setInitialLoading(false); return; }
+    setInitialLoading(flows === null);
+  }, [lake?.id, flows]);
   const watershedName = useMemo(() => {
     if (!lake) return "–";
-    return lake?.watershed?.name || lake?.watershed_name || "–";
+    // Watershed is either present (relation) or unknown (no relation). Show explicit unknown text.
+    return lake?.watershed?.name || lake?.watershed_name || 'Not yet recorded';
   }, [lake]);
 
   const fmtList = (val) => {
@@ -59,12 +68,14 @@ function OverviewTab({
   const elevationStr = useMemo(() => fmtNum(lake?.elevation_m, " m", 1), [lake]);
   const meanDepthStr = useMemo(() => fmtNum(lake?.mean_depth_m, " m", 1), [lake]);
 
-  // Separate inflows / outflows, keep stable references
+  // Flows tri-state status from API: 'unknown' | 'none' | 'present'
+  const flowsStatus = lake?.flows_status || 'unknown';
+  // Separate inflows / outflows, keep stable references (only meaningful when present)
   const inflows = useMemo(() => (flows || []).filter(f => f.flow_type === 'inflow'), [flows]);
   const outflows = useMemo(() => (flows || []).filter(f => f.flow_type === 'outflow'), [flows]);
 
   const renderFlowList = (list) => {
-    if (!list || list.length === 0) return <span style={{opacity:0.6}}>None</span>;
+    if (!list || list.length === 0) return <span style={{opacity:0.8}}>None</span>;
     return (
       <span style={{display:'inline-flex',flexWrap:'wrap',gap:6}}>
         {list.map(f => {
@@ -100,6 +111,15 @@ function OverviewTab({
 
 
   const showToggle = canToggleWatershed && typeof onToggleWatershed === 'function';
+  const showFlowToggle = flowsStatus === 'present' && (flows && flows.length > 0) && typeof onToggleFlows === 'function';
+
+  if (initialLoading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+        <LoadingSpinner label={"Loading overview…"} color="#fff" />
+      </div>
+    );
+  }
 
   return (
     <>
@@ -108,8 +128,6 @@ function OverviewTab({
           <img src={lake.image} alt={lake.name} />
         </div>
       )}
-
-      {/* checkbox toggle removed; control is the icon button beside the watershed name */}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 16px" }}>
         <div><strong>Watershed:</strong></div>
@@ -139,13 +157,13 @@ function OverviewTab({
         </div>
 
         <div><strong>Region:</strong></div>
-        <div>{regionDisplay || '–'}</div>
+        <div title={regionDisplay || ''}>{regionDisplay || '–'}</div>
 
-        <div><strong>Province:</strong></div>
-        <div>{provinceDisplay || '–'}</div>
+  <div><strong>Province:</strong></div>
+        <div title={provinceDisplay || ''}>{provinceDisplay || '–'}</div>
 
-        <div><strong>Municipality/City:</strong></div>
-        <div>{municipalityDisplay || '–'}</div>
+  <div><strong>Municipality/City:</strong></div>
+        <div title={municipalityDisplay || ''}>{municipalityDisplay || '–'}</div>
 
         <div><strong>Surface Area:</strong></div>
         <div>{areaStr}</div>
@@ -156,37 +174,48 @@ function OverviewTab({
         <div><strong>Mean Depth:</strong></div>
         <div>{meanDepthStr}</div>
 
-        {/* Flows section */}
         <div><strong>Flows:</strong></div>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
-          <span style={{fontSize:12,opacity:0.8}}>{flows?.length || 0} point{(flows?.length||0)===1?'':'s'}</span>
-          <button
-            type="button"
-            aria-pressed={showFlows}
-            title={showFlows ? 'Hide flow markers' : 'Show flow markers'}
-            onClick={() => onToggleFlows?.(!showFlows)}
-            style={{
-              border: 'none',
-              background: 'transparent',
-              color: '#fff',
-              padding: 6,
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              borderRadius: 6,
-            }}
-          >
-            <FiMap size={16} />
-          </button>
-        </div>
+        {flowsStatus === 'present' ? (
+          <>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+              <span style={{fontSize:12,opacity:0.8}}>Inflows: {inflows.length} • Outflows: {outflows.length}</span>
+              {showFlowToggle && (
+                <button
+                  type="button"
+                  aria-pressed={showFlows}
+                  title={showFlows ? 'Hide flow markers' : 'Show flow markers'}
+                  onClick={() => onToggleFlows?.(!showFlows)}
+                  style={{
+                    border: 'none',
+                    background: 'transparent',
+                    color: '#fff',
+                    padding: 6,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    borderRadius: 6,
+                  }}
+                >
+                  <FiMap size={16} />
+                </button>
+              )}
+            </div>
 
-        <div><strong>Inflows:</strong></div>
-        <div>{renderFlowList(inflows)}</div>
-        <div><strong>Outflows:</strong></div>
-        <div>{renderFlowList(outflows)}</div>
+            <div style={{ gridColumn: '1 / -1', fontSize: 11, color: '#ddd', marginTop: 4 }}>
+              <em>Flows are known inlets/outlets for this lake. 'Primary' marks the main channel.</em>
+            </div>
 
-        {/* Removed Location (full) row as requested; arrays are shown inline above */}
+            <div><strong>Inflows:</strong></div>
+            <div>{renderFlowList(inflows)}</div>
+            <div><strong>Outflows:</strong></div>
+            <div>{renderFlowList(outflows)}</div>
+          </>
+        ) : flowsStatus === 'none' ? (
+          <div style={{opacity:0.8}}>None</div>
+        ) : (
+          <div style={{opacity:0.8}}>Not yet recorded</div>
+        )}
       </div>
     </>
   );

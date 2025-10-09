@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\KycProfileController;
 use App\Http\Controllers\Api\OrgApplicationController;
 use App\Http\Controllers\FeedbackController; // user feedback
 use App\Http\Controllers\Api\Admin\FeedbackController as AdminFeedbackController; // admin feedback mgmt
+use App\Http\Controllers\GeocodeController;
 
 /*
 |--------------------------------------------------------------------------
@@ -78,6 +79,8 @@ Route::middleware(['auth:sanctum','role:superadmin'])->prefix('admin')->group(fu
     Route::put('/tenants/{tenant}',      [TenantController::class, 'update'])->whereNumber('tenant');
     Route::delete('/tenants/{tenant}',   [TenantController::class, 'destroy'])->whereNumber('tenant');
     Route::post('/tenants/{id}/restore', [TenantController::class, 'restore'])->whereNumber('id');
+
+    
 
     // Org admin management for a tenant
     Route::get('/tenants/{tenant}/admins',   [TenantController::class, 'admins'])->name('tenants.admins');
@@ -232,6 +235,8 @@ Route::get('/lakes',            [LakeController::class, 'index']);
 Route::get('/lakes/{lake}',     [LakeController::class, 'show'])->whereNumber('lake');
 Route::get('/public/lakes-geo', [LakeController::class, 'publicGeo']);
 Route::get('/public/lakes/{lake}', [LakeController::class, 'publicShow']);
+// Public geocode proxy endpoint (Nominatim)
+Route::get('/geocode/nominatim', [GeocodeController::class, 'nominatimSearch']);
 // Public lake flows
 Route::get('/public/lake-flows', [\App\Http\Controllers\LakeFlowController::class, 'publicIndex']);
 Route::get('/public/lake-flows/{flow}', [\App\Http\Controllers\LakeFlowController::class, 'publicShow'])->whereNumber('flow');

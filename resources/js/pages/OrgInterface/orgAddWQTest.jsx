@@ -51,7 +51,6 @@ export default function OrgAddWQTest() {
         organization={organization}
         lakeGeoms={lakeGeoms}
         onSubmit={async (payload) => {
-          console.debug('[orgAddWQTest] submit', payload);
           try {
             const res = await api('/admin/sample-events', { method: 'POST', body: payload });
             alertSuccess('Saved', 'Water quality test saved to server.');

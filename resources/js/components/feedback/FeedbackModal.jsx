@@ -122,8 +122,7 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
         // Authenticated path still adds metadata; backend handles metadata itself for public endpoint too but we keep parity
         payload.metadata = { ua: navigator.userAgent, lang: navigator.language, tz: Intl.DateTimeFormat().resolvedOptions().timeZone };
       }
-      const endpoint = user ? '/feedback' : '/public/feedback';
-      console.debug('[Feedback] submitting', endpoint, payload);
+  const endpoint = user ? '/feedback' : '/public/feedback';
       const res = await api.post(endpoint, payload);
       // Accept several possible shapes: {data: {...}}, {...}, or empty object
       const created = (res && (res.data || res.item || (res.id && res))) || null;

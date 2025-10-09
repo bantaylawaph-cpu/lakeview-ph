@@ -132,7 +132,6 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
         (lakes || []).forEach((r) => map.set(String(r.id), r.class_code || ""));
         setLakeClassMap(map);
       } catch (e) {
-        console.debug("[StatsModal] failed to fetch lakes", e);
         if (mounted) setLakeOptions([]);
       }
       try { const list = await fetchParameters(); if (mounted) setParamOptions(list); }
@@ -281,7 +280,6 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: 'center', gap: 8 }}>
           <div>
             <button className="pill-btn" onClick={async () => {
-              console.debug('[StatsModal] Clear clicked, activeTab=', activeTab);
               if (activeTab === 'advanced' && advancedRef.current && typeof advancedRef.current.clearAll === 'function') {
                 advancedRef.current.clearAll();
               } else {
@@ -291,7 +289,6 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="pill-btn" onClick={async () => {
-              console.debug('[StatsModal] Export clicked, activeTab=', activeTab);
               if (activeTab === 'advanced' && advancedRef.current && typeof advancedRef.current.exportPdf === 'function') {
                 advancedRef.current.exportPdf();
               } else {

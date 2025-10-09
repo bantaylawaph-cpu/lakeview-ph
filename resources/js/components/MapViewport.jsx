@@ -45,12 +45,6 @@ export default function MapViewport({
       try {
         const mapMaxZoom = typeof maxZoom === 'number' ? maxZoom : map.getMaxZoom();
         const effectivePadding = Array.isArray(padding) ? padding : [24, 24];
-        const center = padded.getCenter();
-        const zoomForBounds = map.getBoundsZoom(padded, true);
-        const cappedZoom = Number.isFinite(zoomForBounds)
-          ? Math.min(zoomForBounds, mapMaxZoom)
-          : mapMaxZoom;
-
         map.stop();
         map.invalidateSize();
         map.fitBounds(padded, {

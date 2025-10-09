@@ -54,7 +54,6 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
         setStandards((rows || []).map(r => ({ id: r.id, code: r.code, name: r.name || r.code })));
       } catch (e) {
         if (!mounted) return;
-        console.debug('[AdvancedStat] failed to load standards', e);
         setStandards([]);
       }
     })();
@@ -73,7 +72,6 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
         setClasses(mapped);
       } catch (e) {
         if (!mounted) return;
-        console.debug('[AdvancedStat] failed to load classes', e);
         setClasses([]);
       }
     })();
@@ -146,7 +144,6 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
         setOrgOptions(derived);
       } catch (e) {
         if (!mounted) return;
-        console.debug('[AdvancedStat] failed to derive orgOptions', e);
         setOrgOptions([]);
       }
     })();
@@ -170,7 +167,6 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
         setSecondaryOrgOptions(derived);
       } catch (e) {
         if (!mounted) return;
-        console.debug('[AdvancedStat] failed to derive secondaryOrgOptions', e);
         setSecondaryOrgOptions([]);
       }
     })();
@@ -224,7 +220,6 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
         }
       } catch(e) {
         if (abort) return;
-        console.debug('[AdvancedStat] depth fetch failed', e);
         setAvailableDepths([]);
       }
     })();
@@ -394,12 +389,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
           }
         }
         if (adv.length) setAdvisories(adv);
-        // Debug logging to help diagnose missing advisories in UI
-        console.debug('[AdvancedStat] advisories debug', {
-          paramCode, evalType, n1, n2, small, large, thrMin, thrMax,
-          mean1: computed.mean1, mean2: computed.mean2, range_distance1: computed.range_distance1, range_distance2: computed.range_distance2,
-          advisories: adv
-        });
+        // advisories derived above
       }
 
       if (series?.events) {
@@ -421,7 +411,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
   };
 
   const clearAll = () => {
-  console.debug('[AdvancedStat] clearAll invoked');
+  // clearAll invoked
     setLakeId('');
     setClassCode('');
     setCompareValue('');
@@ -441,11 +431,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
 
   const exportPdf = async () => {
     try {
-      console.debug('[AdvancedStat] exportPdf invoked', { paramCode, result });
-      if (!result) {
-        console.debug('[AdvancedStat] exportPdf aborted - no result to export');
-        return;
-      }
+      if (!result) return;
       const title = `Advanced statistics - ${paramCode || ''}`;
       const style = `body { font-family: Arial, Helvetica, sans-serif; color: #111; padding: 18px; } h1 { font-size: 18px; } table { border-collapse: collapse; width: 100%; } th, td { border: 1px solid #ddd; padding: 6px; }`;
         const testNames = {

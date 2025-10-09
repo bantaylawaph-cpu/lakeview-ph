@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { FiEye, FiMapPin } from 'react-icons/fi';
 import { apiPublic, buildQuery } from '../../lib/api';
 import { alertError } from '../../utils/alerts';
@@ -9,6 +9,8 @@ export default function TestsTab({ lake, onJumpToStation }) {
   const lakeId = lake?.id ?? null;
   const [tests, setTests] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const initialLoadedRef = useRef(false);
   const [orgs, setOrgs] = useState([]);
   const [orgId, setOrgId] = useState("");
   const [stations, setStations] = useState([]);
@@ -30,11 +32,14 @@ export default function TestsTab({ lake, onJumpToStation }) {
   // If there are no named stations, clear any selected station so filtering doesn't apply.
   useEffect(() => { if (!hasNamedStations) setStationId(""); }, [hasNamedStations]);
 
-  // Fetch tests and dispatch markers. Depend on filter state so markers/tests update when filters change.
+  // Fetch tests and dispatch markers when filters change.
   useEffect(() => {
-    if (!lakeId) { setTests([]); setOrgs([]); setStations([]); setYears([]); return; }
+    if (!lakeId) { setTests([]); setOrgs([]); setStations([]); setYears([]); setInitialLoading(false); return; }
     let mounted = true;
     (async () => {
+      // mark first-load
+      initialLoadedRef.current = false;
+      setInitialLoading(true);
       setLoading(true);
       try {
         const qs = buildQuery({ lake_id: lakeId, limit: 500 });
@@ -101,14 +106,13 @@ export default function TestsTab({ lake, onJumpToStation }) {
           })
           .filter(Boolean);
         try {
-          console.debug('[TestsTab] dispatching lv-wq-markers', markers);
           window.dispatchEvent(new CustomEvent('lv-wq-markers', { detail: { markers } }));
         } catch {}
       } catch (e) {
         console.error('[TestsTab] failed to load', e);
         await alertError('Failed', e?.message || 'Could not load tests');
         if (mounted) setTests([]);
-      } finally { if (mounted) setLoading(false); }
+      } finally { if (mounted) { setLoading(false); if (!initialLoadedRef.current) { initialLoadedRef.current = true; setInitialLoading(false); } } }
     })();
     return () => { mounted = false; };
   }, [lakeId, orgId, stationId, yearFrom, yearTo]);
@@ -128,68 +132,19 @@ export default function TestsTab({ lake, onJumpToStation }) {
             })
             .filter(Boolean);
           try {
-            console.debug('[TestsTab] dispatching lv-wq-markers (org filter)', markers);
             window.dispatchEvent(new CustomEvent('lv-wq-markers', { detail: { markers } }));
           } catch {}
           return;
         }
 
-        // Otherwise, fetch then dispatch
-        if (!lakeId) return;
-        const qs = buildQuery({ lake_id: lakeId, limit: 50 });
-        const res = await apiPublic(`/public/sample-events${qs}`);
-        const rows = Array.isArray(res?.data) ? res.data : [];
-        const markers = rows
-          .map((r) => {
-            const lat = r.latitude ?? r.lat ?? (r.point?.coordinates ? (Array.isArray(r.point.coordinates) ? r.point.coordinates[1] : null) : null) ?? r.station?.latitude ?? r.station?.lat;
-            const lon = r.longitude ?? r.lon ?? (r.point?.coordinates ? (Array.isArray(r.point.coordinates) ? r.point.coordinates[0] : null) : null) ?? r.station?.longitude ?? r.station?.lon;
-            if (lat == null || lon == null) return null;
-            return { lat: Number(lat), lon: Number(lon), label: (r.station?.name || null) };
-          })
-          .filter(Boolean);
-        try { window.dispatchEvent(new CustomEvent('lv-wq-markers', { detail: { markers } })); } catch {}
+        // Otherwise, no-op (the main fetch will dispatch markers when ready)
       } catch (err) {
         console.warn('[TestsTab] failed to respond to marker request', err);
       }
     };
     window.addEventListener('lv-request-wq-markers', onRequest);
     return () => window.removeEventListener('lv-request-wq-markers', onRequest);
-  }, [lakeId, tests]);
-
-    useEffect(() => {
-      if (!lakeId) { setTests([]); setOrgs([]); return; }
-      let mounted = true;
-      (async () => {
-        setLoading(true);
-        try {
-          const qs = buildQuery({ lake_id: lakeId, organization_id: orgId || undefined, limit: 50 });
-          const res = await apiPublic(`/public/sample-events${qs}`);
-          if (!mounted) return;
-          const rows = Array.isArray(res?.data) ? res.data : [];
-          setTests(rows);
-
-          // Derive org list
-          const uniq = new Map();
-          rows.forEach((r) => {
-            const oid = r.organization_id ?? r.organization?.id;
-            const name = r.organization_name ?? r.organization?.name;
-            if (oid && name && !uniq.has(String(oid))) uniq.set(String(oid), { id: oid, name });
-          });
-          setOrgs(Array.from(uniq.values()));
-
-          // Dispatch markers for MapPage so tests render on the map while this tab is active
-          const markers = rows
-            .filter((r) => r && r.latitude != null && r.longitude != null)
-            .map((r) => ({ lat: Number(r.latitude), lon: Number(r.longitude), label: (r.station?.name || null) }));
-          try { window.dispatchEvent(new CustomEvent('lv-wq-markers', { detail: { markers } })); } catch {}
-        } catch (e) {
-          console.error('[TestsTab] failed to load', e);
-          await alertError('Failed', e?.message || 'Could not load tests');
-          if (mounted) setTests([]);
-        } finally { if (mounted) setLoading(false); }
-      })();
-      return () => { mounted = false; };
-    }, [lakeId, orgId]);
+  }, [tests]);
   const extractCoords = (t) => {
     const lat = t.latitude ?? t.lat ?? (t.point?.coordinates ? (Array.isArray(t.point.coordinates) ? t.point.coordinates[1] : null) : null) ?? t.station?.latitude ?? t.station?.lat;
     const lon = t.longitude ?? t.lon ?? (t.point?.coordinates ? (Array.isArray(t.point.coordinates) ? t.point.coordinates[0] : null) : null) ?? t.station?.longitude ?? t.station?.lon;
@@ -212,9 +167,18 @@ export default function TestsTab({ lake, onJumpToStation }) {
     setViewOpen(true);
   };
 
+  if (initialLoading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+        <LoadingSpinner label={"Loading tests…"} color="#fff" />
+      </div>
+    );
+  }
+
   return (
     <div>
       <div style={{ display: 'grid', gap: 8 }}>
+        <div style={{ fontSize: 12, color: '#ddd' }}>Markers are shown on the map while this tab is open.</div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'end', marginBottom: 6 }}>
             <div className="form-group" style={{ flex: 1, minWidth: 0 }}>
               <label style={{ fontSize: 11, marginBottom: 2, color: '#fff' }}>Organization</label>
@@ -234,8 +198,8 @@ export default function TestsTab({ lake, onJumpToStation }) {
             ) : (
               <div className="form-group" style={{ flex: 1, minWidth: 0 }}>
                 <label style={{ fontSize: 11, marginBottom: 2, color: '#fff' }}>Station</label>
-                <select disabled aria-disabled="true" title="Samples only have coordinates" style={{ padding: '6px 8px', color: '#bbb', backgroundColor: 'transparent' }}>
-                  <option>No stations</option>
+                <select disabled aria-disabled="true" title="Samples are coordinate-only — no fixed stations" style={{ padding: '6px 8px', color: '#bbb', backgroundColor: 'transparent' }}>
+                  <option>Samples are coordinate-only — no fixed stations</option>
                 </select>
               </div>
             )}
@@ -261,12 +225,13 @@ export default function TestsTab({ lake, onJumpToStation }) {
               <LoadingSpinner label="Loading tests…" color="#fff" />
             </div>
           )}
-          {!loading && tests.length === 0 && <div className="insight-card"><em>No published tests found for this lake.</em></div>}
+          {!loading && tests.length === 0 && <div className="insight-card"><em>No tests match your filters. Try clearing filters or expanding the date range.</em></div>}
         {tests.map((t) => (
           <div className="insight-card" key={t.id}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <div style={{ fontSize: 13, fontWeight: 700 }}>{t.sampled_at ? new Date(t.sampled_at).toLocaleString() : '–'}</div>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>{t.sampled_at ? new Date(t.sampled_at).toLocaleString() : '–'}</div>
+          <div style={{ fontSize: 11, opacity: 0.7 }}>{t.sampled_at ? '(local time)' : ''}</div>
                 <div style={{ fontSize: 12, opacity: 0.9, marginTop: 4 }}>{t.station?.name || (t.latitude != null && t.longitude != null ? `${Number(t.latitude).toFixed(6)}, ${Number(t.longitude).toFixed(6)}` : 'Station: –')}</div>
                 <div style={{ fontSize: 12, opacity: 0.8, marginTop: 2 }}>{t.organization_name || t.organization?.name || 'Organization'}</div>
               </div>

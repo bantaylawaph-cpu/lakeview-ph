@@ -70,16 +70,25 @@ export function usePopulationHeatmap({ mapRef, selectedLake }) {
     const map = mapRef?.current;
     if (!map) return;
     if (!on) {
-      setEnabled(false); setLoading(false); setResolution(null); setError(null); paramsRef.current = null;
+      // Disable the heatmap but keep the last-used params so a later toggle(true)
+      // without options can reuse them.
+      setEnabled(false); setLoading(false); setResolution(null); setError(null);
       if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
       if (abortRef.current) { try { abortRef.current.abort(); } catch {} abortRef.current = null; }
       clearLayer();
       return;
     }
     if (!selectedLake?.id) return;
-    if (!opts || Number(opts.km) <= 0) { clearLayer(); setEnabled(false); setLoading(false); return; }
+    // If caller provided explicit options, validate them and use them. If no
+    // explicit options were provided, reuse the last-known params (if any),
+    // otherwise fall back to the previous defaults.
+    const hasExplicitOpts = opts && (typeof opts.km !== 'undefined' || typeof opts.year !== 'undefined' || typeof opts.layerId !== 'undefined');
+    if (hasExplicitOpts && Number(opts.km) <= 0) { clearLayer(); setEnabled(false); setLoading(false); return; }
+    const paramsToUse = hasExplicitOpts
+      ? { year: Number(opts.year ?? 2025), km: Number(opts.km ?? 2), layerId: opts.layerId ?? null }
+      : (paramsRef.current || { year: Number(opts.year ?? 2025), km: Number(opts.km ?? 2), layerId: opts.layerId ?? null });
     setEnabled(true);
-    paramsRef.current = { year: Number(opts.year || 2025), km: Number(opts.km || 2), layerId: opts.layerId ?? null };
+    paramsRef.current = paramsToUse;
     if (opts.loading) setLoading(true);
     runFetch();
   }, [runFetch, selectedLake]);

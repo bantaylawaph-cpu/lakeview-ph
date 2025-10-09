@@ -20,6 +20,8 @@ function HeatmapTab({ lake, onToggleHeatmap, currentLayerId = null }) {
   const [yearsLoading, setYearsLoading] = useState(false);
   const [yearsError, setYearsError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const initialLoadedRef = useRef(false);
   const [estimateError, setEstimateError] = useState(null);
   const didInitRef = useRef(false);
   const [heatOn, setHeatOn] = useState(false);
@@ -111,9 +113,9 @@ function HeatmapTab({ lake, onToggleHeatmap, currentLayerId = null }) {
       try {
         const { data } = await axios.get('/api/population/dataset-years');
         if (!active) return;
-        const yrs = Array.isArray(data?.years) ? data.years : [];
+        const yrs = Array.isArray(data?.years) ? data.years.slice().sort((a,b) => Number(b) - Number(a)) : [];
         setAvailableYears(yrs);
-        // If current year not in list, default to first (latest) or null
+        // Use the most recent year (max) as default if none selected
         if (yrs.length > 0) {
           setYear(prev => (prev && yrs.includes(prev) ? prev : yrs[0]));
         } else {
@@ -126,6 +128,10 @@ function HeatmapTab({ lake, onToggleHeatmap, currentLayerId = null }) {
         setYearsError('Failed to load years');
       } finally {
         if (active) setYearsLoading(false);
+        if (!initialLoadedRef.current) {
+          initialLoadedRef.current = true;
+          setInitialLoading(false);
+        }
       }
     };
     fetchYears();
@@ -156,6 +162,14 @@ function HeatmapTab({ lake, onToggleHeatmap, currentLayerId = null }) {
       onToggleHeatmap?.(false);
     }
   };
+
+  if (initialLoading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+        <LoadingSpinner label={"Loading population datasets…"} color="#fff" />
+      </div>
+    );
+  }
 
   return (
   <div style={{ display: 'grid', gap: 8 }}>
@@ -230,10 +244,15 @@ function HeatmapTab({ lake, onToggleHeatmap, currentLayerId = null }) {
           : !year ? 'Select a dataset year to enable estimation.'
           : 'Toggle the heatmap to visualize relative population density (higher intensity = more people). Adjust the buffer and year to refine.'}
       </div>
+      <div style={{ fontSize: 11, color: '#ccc', marginTop: 6 }}>
+        <em>Approximate counts based on gridded population data; relative, not exact.</em>
+      </div>
       <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center' }}>
         <button
           type="button"
           onClick={handleToggleHeat}
+          disabled={!(distance > 0 && year)}
+          title={!(distance > 0 && year) ? (distance <= 0 ? 'Set buffer distance first' : 'Select dataset year first') : ''}
           style={{
             padding: '8px 12px',
             borderRadius: 12,
@@ -241,7 +260,7 @@ function HeatmapTab({ lake, onToggleHeatmap, currentLayerId = null }) {
             background: heatOn ? 'rgba(255,255,255,0.06)' : 'transparent',
             color: '#fff',
             fontWeight: 600,
-            cursor: 'pointer',
+            cursor: !(distance > 0 && year) ? 'not-allowed' : 'pointer',
             width: 160,
             backdropFilter: 'blur(6px)'
           }}

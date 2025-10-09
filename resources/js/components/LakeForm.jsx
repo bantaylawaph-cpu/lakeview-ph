@@ -15,6 +15,7 @@ const EMPTY = {
   mean_depth_m: "",
   lat: "",
   lon: "",
+  flows_status: "", // optional override: '', 'unknown', 'none', 'present'
 };
 
 export default function LakeForm({
@@ -52,6 +53,7 @@ export default function LakeForm({
       municipality: normalizeCsv(form.municipality),
       lat: form.lat === "" ? undefined : Number(form.lat),
       lon: form.lon === "" ? undefined : Number(form.lon),
+      flows_status: form.flows_status === "" ? undefined : form.flows_status,
     };
     return onSubmit?.(payload);
   };
@@ -84,6 +86,19 @@ export default function LakeForm({
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
           />
+        </label>
+
+        <label className="lv-field">
+          <span>Flows data</span>
+          <select
+            value={form.flows_status ?? "unknown"}
+            onChange={(e) => setForm({ ...form, flows_status: e.target.value })}
+          >
+            <option value="present">Exists</option>
+            <option value="none">None</option>
+            <option value="unknown">Not yet recorded</option>
+          </select>
+          <small style={{color:'#6b7280'}}>When set to "Exists", flow records will be shown. When set to "None", this lake is marked as having no inflows/outflows. When set to "Not yet recorded", the system will treat flows as uncollected for this lake.</small>
         </label>
 
         <label className="lv-field">

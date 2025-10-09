@@ -108,8 +108,7 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
       role = idMap[user.role_id] || 'public';
     }
     if (!role) role = 'public';
-    // Debug aid (remove later)
-    try { console.debug('[AuthModal] redirectByRole', { user, derivedRole: role }); } catch {}
+  // no-op: removed debug logging
     if (role === "superadmin") navigate("/admin-dashboard", { replace: true });
     else if (role === "org_admin") navigate("/org-dashboard", { replace: true });
     else if (role === "contributor") navigate("/contrib-dashboard", { replace: true });

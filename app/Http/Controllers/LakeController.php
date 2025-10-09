@@ -15,24 +15,26 @@ class LakeController extends Controller
     {
         $rows = Lake::select(
             'id','watershed_id','name','alt_name','region','province','municipality',
-            'surface_area_km2','elevation_m','mean_depth_m','class_code','created_at','updated_at'
+            'surface_area_km2','elevation_m','mean_depth_m','class_code','created_at','updated_at',
+            'flows_status'
         )->with(['watershed:id,name','waterQualityClass:code,name'])->orderBy('name')->get();
 
         return $rows->map(function($lake){
             $arr = $lake->toArray();
-            // Provide legacy single-value compatibility (region, province, municipality) returning first element
-                if (is_array($arr['region'])) {
-                    $arr['region_list'] = $arr['region'];
-                    $arr['region'] = $arr['region'][0] ?? null;
-                }
-                if (is_array($arr['province'])) {
-                    $arr['province_list'] = $arr['province'];
-                    $arr['province'] = $arr['province'][0] ?? null;
-                }
-                if (is_array($arr['municipality'])) {
-                    $arr['municipality_list'] = $arr['municipality'];
-                    $arr['municipality'] = $arr['municipality'][0] ?? null;
-                }
+            // Provide legacy single-value compatibility (region, province, municipality)
+            // but return comma-separated string for forms and keep full list as *_list
+            if (is_array($arr['region'])) {
+                $arr['region_list'] = $arr['region'];
+                $arr['region'] = count($arr['region']) ? implode(', ', $arr['region']) : null;
+            }
+            if (is_array($arr['province'])) {
+                $arr['province_list'] = $arr['province'];
+                $arr['province'] = count($arr['province']) ? implode(', ', $arr['province']) : null;
+            }
+            if (is_array($arr['municipality'])) {
+                $arr['municipality_list'] = $arr['municipality'];
+                $arr['municipality'] = count($arr['municipality']) ? implode(', ', $arr['municipality']) : null;
+            }
             return $arr;
         });
     }
@@ -46,17 +48,18 @@ class LakeController extends Controller
             ->selectRaw('ST_AsGeoJSON(geom) as geom_geojson')
             ->first();
         $arr = $lake->toArray();
+        // Return comma-separated string for form fields and keep full list in *_list
         if (is_array($arr['region'])) {
             $arr['region_list'] = $arr['region'];
-            $arr['region'] = $arr['region'][0] ?? null;
+            $arr['region'] = count($arr['region']) ? implode(', ', $arr['region']) : null;
         }
         if (is_array($arr['province'])) {
             $arr['province_list'] = $arr['province'];
-            $arr['province'] = $arr['province'][0] ?? null;
+            $arr['province'] = count($arr['province']) ? implode(', ', $arr['province']) : null;
         }
         if (is_array($arr['municipality'])) {
             $arr['municipality_list'] = $arr['municipality'];
-            $arr['municipality'] = $arr['municipality'][0] ?? null;
+            $arr['municipality'] = count($arr['municipality']) ? implode(', ', $arr['municipality']) : null;
         }
         if (!$active || !$active->geom_geojson) {
             $coordGeo = DB::table('lakes')->where('id',$lake->id)->value(DB::raw('ST_AsGeoJSON(coordinates)'));
@@ -82,6 +85,7 @@ class LakeController extends Controller
             'class_code' => ['nullable','string','max:10', Rule::exists('water_quality_classes','code')],
             'lat' => ['nullable','numeric','between:-90,90'],
             'lon' => ['nullable','numeric','between:-180,180'],
+            'flows_status' => ['nullable', Rule::in(['unknown','none','present'])],
         ]);
 
         // Normalize multi-location fields
@@ -120,6 +124,7 @@ class LakeController extends Controller
             'class_code' => ['nullable','string','max:10', Rule::exists('water_quality_classes','code')],
             'lat' => ['nullable','numeric','between:-90,90'],
             'lon' => ['nullable','numeric','between:-180,180'],
+            'flows_status' => ['nullable', Rule::in(['unknown','none','present'])],
         ]);
         foreach (['region','province','municipality'] as $field) {
             if (array_key_exists($field, $data)) {
@@ -251,6 +256,11 @@ class LakeController extends Controller
                 $geom = json_decode($r->geom_geojson, true);
                 if (!$geom) continue;
 
+                // Keep original array values and also provide comma-separated strings for form-friendly clients
+                $propRegion = is_array($r->region) ? (count($r->region) ? implode(', ', $r->region) : null) : $r->region;
+                $propProvince = is_array($r->province) ? (count($r->province) ? implode(', ', $r->province) : null) : $r->province;
+                $propMunicipality = is_array($r->municipality) ? (count($r->municipality) ? implode(', ', $r->municipality) : null) : $r->municipality;
+
                 $features[] = [
                     'type' => 'Feature',
                     'geometry' => $geom,
@@ -258,9 +268,12 @@ class LakeController extends Controller
                         'id'               => $r->id,
                         'name'             => $r->name,
                         'alt_name'         => $r->alt_name,
-                        'region'           => $r->region,
-                        'province'         => $r->province,
-                        'municipality'     => $r->municipality,
+                        'region_list'      => $r->region,
+                        'region'           => $propRegion,
+                        'province_list'    => $r->province,
+                        'province'         => $propProvince,
+                        'municipality_list'=> $r->municipality,
+                        'municipality'     => $propMunicipality,
                         'watershed_name'   => $r->watershed_name,
                         'surface_area_km2' => $r->surface_area_km2,
                         'elevation_m'      => $r->elevation_m,

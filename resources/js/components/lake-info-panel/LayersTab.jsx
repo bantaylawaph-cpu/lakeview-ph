@@ -3,6 +3,8 @@ import { FiDownload, FiFileText, FiGlobe } from "react-icons/fi";
 import Popover from "../common/Popover";
 import { alertError, alertSuccess } from "../../lib/alerts";
 import { getToken } from "../../lib/api";
+import LoadingSpinner from "../LoadingSpinner";
+
 
 const fmtText = (v) => (v && String(v).trim() ? String(v).trim() : "–");
 const getOrgName = (layer) => {
@@ -30,7 +32,9 @@ function LayersTab({
   const downloadAnchorRef = useRef(null);
   const [downloading, setDownloading] = useState(false);
   const [authed, setAuthed] = useState(!!isAuthenticated);
-  // authChecking / spinner removed
+  const [initialLoading, setInitialLoading] = useState(true);
+  const initialLoadedRef = useRef(false);
+  // auth state derived from parent
 
   const closePopover = () => setDownloadLayer(null);
 
@@ -44,7 +48,15 @@ function LayersTab({
   // Keep internal authed in sync if prop switches to true later.
   useEffect(() => { if (isAuthenticated && !authed) setAuthed(true); }, [isAuthenticated, authed]);
 
-  // PNG export removed (redundant with existing screenshot feature)
+  // Consider the tab loaded once we've received the initial layers prop (including empty)
+  useEffect(() => {
+    if (!initialLoadedRef.current) {
+      initialLoadedRef.current = true;
+      setInitialLoading(false);
+    }
+  }, [layers]);
+
+  // PNG export intentionally omitted (use screenshot feature)
 
   const doDownloadVector = async (layer, format) => {
     if (!layer?.is_downloadable) {
@@ -93,10 +105,17 @@ function LayersTab({
     }
   };
 
-  // PNG export logic removed.
   // Use a column flex layout so the scrollable list can stretch to fill the
   // entire lake-info panel. `minHeight: 0` on the scroller is required for
   // overflow to work correctly inside a flex container.
+  if (initialLoading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+        <LoadingSpinner label={"Loading layers…"} color="#fff" />
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <style>{`.spin { animation: spin 1s linear infinite; } @keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg);} }`}</style>

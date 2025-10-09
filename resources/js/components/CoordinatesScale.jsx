@@ -8,7 +8,6 @@ const CoordinatesScale = () => {
   const [coords, setCoords] = useState({ lat: 0, lng: 0 });
   const [mode, setMode] = useState("hover");
   const [scale, setScale] = useState({ width: 100, label: "100 m" });
-  const scaleRef = useRef(null);
 
   // --- Coordinate tracking ---
   useEffect(() => {
@@ -50,15 +49,20 @@ const CoordinatesScale = () => {
         label:
           niceDistance >= 1000
             ? `${(niceDistance / 1000).toFixed(1)} km`
-            : `${niceDistance} m`,
+            : niceDistance < 1
+              ? `<1 m`
+              : `${niceDistance} m`,
       });
     };
 
-    map.on("zoom move", updateScale);
+    // Use lower-frequency events to avoid frequent reflows during interaction
+    map.on("zoomend", updateScale);
+    map.on("moveend", updateScale);
     updateScale();
 
     return () => {
-      map.off("zoom move", updateScale);
+      map.off("zoomend", updateScale);
+      map.off("moveend", updateScale);
     };
   }, [map]);
 
@@ -95,11 +99,7 @@ const CoordinatesScale = () => {
 
     {/* Scale Bar */}
     <div className="scale-bar">
-      <div
-        className="scale-line"
-        style={{ width: `${scale.width}px` }}
-        ref={scaleRef}
-      />
+      <div className="scale-line" style={{ width: `${scale.width}px` }} />
       <div className="scale-label">{scale.label}</div>
     </div>
   </div>

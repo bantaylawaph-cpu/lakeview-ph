@@ -79,7 +79,7 @@ export default function OrgWQTests({
       (async () => {
         try {
           const opts = await fetchLakeOptions();
-          console.debug('[OrgWQTests] fetched lakes:', Array.isArray(opts) ? opts.length : typeof opts, opts);
+          // fetched lakes
           if (!mounted) return;
           setLakes(Array.isArray(opts) ? opts : []);
         } catch (e) {
@@ -196,7 +196,6 @@ export default function OrgWQTests({
             }
           } catch (e) {
             // ignore failures — UI will still show fallback
-            console.debug('[OrgWQTests] user name resolution failed', e);
           }
         })();
       } catch (e) {

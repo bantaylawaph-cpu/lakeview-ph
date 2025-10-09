@@ -27,7 +27,16 @@ const ContextMenu = ({ map, onMeasureDistance, onMeasureArea }) => {
 
     const handleContextMenu = (e) => {
       e.originalEvent.preventDefault();
-      setPosition({ x: e.originalEvent.clientX, y: e.originalEvent.clientY });
+      // compute clamped position so menu doesn't overflow the window
+      const menuW = 220; // conservative estimate
+      const menuH = 160;
+      let x = e.originalEvent.clientX;
+      let y = e.originalEvent.clientY;
+      const vw = window.innerWidth || document.documentElement.clientWidth;
+      const vh = window.innerHeight || document.documentElement.clientHeight;
+      if (x + menuW > vw) x = Math.max(8, vw - menuW - 8);
+      if (y + menuH > vh) y = Math.max(8, vh - menuH - 8);
+      setPosition({ x, y });
       setLatlng(e.latlng);
     };
 
@@ -47,6 +56,7 @@ const ContextMenu = ({ map, onMeasureDistance, onMeasureArea }) => {
       (async () => {
         const coords = `${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`;
         let copied = false;
+        // Try async Clipboard API first
         try {
           if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
             await navigator.clipboard.writeText(coords);
@@ -55,22 +65,25 @@ const ContextMenu = ({ map, onMeasureDistance, onMeasureArea }) => {
         } catch (e) {
           copied = false;
         }
+
         if (!copied) {
-          // Fallback
-          const ta = document.createElement('textarea');
-          ta.value = coords;
-          ta.setAttribute('readonly', '');
-          ta.style.position = 'absolute';
-          ta.style.left = '-9999px';
-          document.body.appendChild(ta);
-          ta.select();
+          // Robust textarea fallback
           try {
-            copied = document.execCommand('copy');
+            const ta = document.createElement('textarea');
+            ta.value = coords;
+            ta.setAttribute('readonly', '');
+            ta.style.position = 'absolute';
+            ta.style.left = '-9999px';
+            document.body.appendChild(ta);
+            ta.focus();
+            ta.select();
+            copied = document.execCommand && document.execCommand('copy');
+            document.body.removeChild(ta);
           } catch (err) {
             copied = false;
           }
-          document.body.removeChild(ta);
         }
+
         if (copied) {
           await alertSuccess('Copied coordinates', coords);
           setPosition(null);
@@ -124,7 +137,7 @@ const ContextMenu = ({ map, onMeasureDistance, onMeasureArea }) => {
             <FaMapMarkerAlt className="context-icon" /> Place pin here
           </li>
           <li className="context-item" onClick={handleCopyCoords}>
-            <FaCopy className="context-icon" /> Copy Coordinate
+            <FaCopy className="context-icon" /> Copy Coordinates
           </li>
         </ul>
       )}
@@ -147,6 +160,7 @@ const ContextMenu = ({ map, onMeasureDistance, onMeasureArea }) => {
           >
             <FaMapMarkerAlt style={{ marginRight: 4, color: "#90caf9" }} />
             {pin.lat.toFixed(5)}, {pin.lng.toFixed(5)}
+            <div style={{ fontSize: 10, opacity: 0.8, marginTop: 6 }}>Right‑click to remove</div>
           </Tooltip>
         </Marker>
       ))}

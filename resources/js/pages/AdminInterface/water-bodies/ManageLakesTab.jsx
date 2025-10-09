@@ -28,6 +28,15 @@ const fmtNum = (value, digits = 2) => {
 
 const fmtDt = (value) => (value ? new Date(value).toLocaleDateString() : "");
 
+const fmtFlowsStatus = (value) => {
+  switch (value) {
+    case 'present': return 'Exists';
+    case 'none': return 'None';
+    case 'unknown':
+    default: return 'Not yet recorded';
+  }
+};
+
 const firstVal = (v) => (Array.isArray(v) ? v[0] : v);
 const joinVals = (v) => (Array.isArray(v) ? v.join(' / ') : v || '');
 const formatLocation = (row) => [firstVal(row.municipality_list ?? row.municipality), firstVal(row.province_list ?? row.province), firstVal(row.region_list ?? row.region)].filter(Boolean).join(", ");
@@ -50,6 +59,7 @@ const normalizeRows = (rows = []) =>
       id: row.id,
       name: row.name,
       alt_name: row.alt_name ?? "",
+      flows_status: row.flows_status ?? 'unknown',
       region: regionDisplay,
       province: provinceDisplay,
       municipality: municipalityDisplay,
@@ -154,6 +164,7 @@ function ManageLakesTab() {
       { id: "surface_area_km2", header: "Surface Area (km^2)", accessor: "surface_area_km2", width: 170, className: "col-sm-hide" },
       { id: "elevation_m", header: "Elevation (m)", accessor: "elevation_m", width: 150, className: "col-md-hide", _optional: true },
       { id: "mean_depth_m", header: "Mean Depth (m)", accessor: "mean_depth_m", width: 160, className: "col-md-hide", _optional: true },
+      { id: "flows_status", header: "Flows", accessor: "flows_status", width: 160, className: "col-md-hide", _optional: true, render: (row) => fmtFlowsStatus(row.flows_status) },
       { id: "watershed", header: "Watershed", accessor: "watershed", width: 220, _optional: true },
       { id: "created_at", header: "Created", accessor: "created_at", width: 140, className: "col-md-hide", _optional: true },
       { id: "updated_at", header: "Updated", accessor: "updated_at", width: 140, className: "col-sm-hide", _optional: true },
@@ -270,6 +281,7 @@ function ManageLakesTab() {
     const [minArea, maxArea] = adv.area_km2 ?? [null, null];
     const [minElevation, maxElevation] = adv.elevation_m ?? [null, null];
     const [minDepth, maxDepth] = adv.mean_depth_m ?? [null, null];
+  const flowsStatusFilter = (adv.flows_status ?? "").toLowerCase();
 
     const filtered = allLakes.filter((row) => {
       const haystack = `${row.name} ${row.alt_name || ""} ${row.location} ${row.watershed} ${row.classification}`.toLowerCase();
@@ -278,7 +290,8 @@ function ManageLakesTab() {
       if (region && (row.region || "").toLowerCase() !== region) return false;
       if (province && (row.province || "").toLowerCase() !== province) return false;
       if (municipality && (row.municipality || "").toLowerCase() !== municipality) return false;
-      if ((adv.class_code ?? "") && (row.class_code || "") !== adv.class_code) return false;
+  if ((adv.class_code ?? "") && (row.class_code || "") !== adv.class_code) return false;
+  if (flowsStatusFilter && (row.flows_status || "").toLowerCase() !== flowsStatusFilter) return false;
 
       const area = row._raw?.surface_area_km2 ?? null;
       if (minArea != null && !(area != null && Number(area) >= Number(minArea))) return false;
@@ -510,6 +523,7 @@ function ManageLakesTab() {
       elevation_m: source.elevation_m ?? "",
       mean_depth_m: source.mean_depth_m ?? "",
       class_code: source.class_code ?? "",
+      flows_status: source.flows_status ?? 'unknown',
     });
     setFormOpen(true);
   }, []);
@@ -641,6 +655,12 @@ function ManageLakesTab() {
       const value = payload[field];
       payload[field] = value == null ? null : String(value).trim() || null;
     });
+    // Normalize flows_status: allow '', null => omit; otherwise pass through
+    if (payload.flows_status === "" || payload.flows_status == null) {
+      delete payload.flows_status;
+    } else {
+      payload.flows_status = String(payload.flows_status);
+    }
     return payload;
   };
 
@@ -768,6 +788,19 @@ function ManageLakesTab() {
         open={filtersOpen}
         onClearAll={() => setAdv({})}
         fields={[
+          {
+            id: "flows_status",
+            label: "Flows Status",
+            type: "select",
+            value: adv.flows_status ?? "",
+            onChange: (value) => setAdv((state) => ({ ...state, flows_status: value })),
+            options: [
+              { value: "", label: "All" },
+              { value: "present", label: "Exists" },
+              { value: "none", label: "None" },
+              { value: "unknown", label: "Not yet recorded" },
+            ],
+          },
           {
             id: "region",
             label: "Region",

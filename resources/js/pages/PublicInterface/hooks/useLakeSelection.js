@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import L from 'leaflet';
 import { fetchPublicLayers, fetchLakeOptions, fetchPublicLayerGeo } from '../../../lib/layers';
+import { searchLakeGeometry } from '../../../lib/nominatim';
 import { apiPublic } from '../../../lib/api';
 
 // Helper to extract id (works for polygon layers or point fallback markers)
@@ -20,6 +21,8 @@ export function useLakeSelection({ publicFC, mapRef, setPanelOpen, setFilterWate
   const [lakeLayers, setLakeLayers] = useState([]);
   const [lakeActiveLayerId, setLakeActiveLayerId] = useState(null);
   const [baseKeyBump, setBaseKeyBump] = useState(0);
+  const [baseIsPoint, setBaseIsPoint] = useState(false);
+  const [nominatimLoading, setNominatimLoading] = useState(false);
 
   const loadPublicLayersForLake = useCallback(async (lakeId) => {
     setLakeOverlayFeature(null);
@@ -104,6 +107,9 @@ export function useLakeSelection({ publicFC, mapRef, setPanelOpen, setFilterWate
       }
     })();
 
+    const geometryType = feat?.geometry?.type || null;
+    setBaseIsPoint(String(geometryType || '').toLowerCase() === 'point');
+
     if (mapRef?.current && layer) {
       try {
         // Polygons / multi geometries: use fitBounds
@@ -125,6 +131,15 @@ export function useLakeSelection({ publicFC, mapRef, setPanelOpen, setFilterWate
         console.warn('[useLakeSelection] map zoom failed', err);
       }
     }
+
+    try {
+      const isPoint = String(geometryType || '').toLowerCase() === 'point';
+      const isNominatimOverlay = !!(lakeOverlayFeature && (lakeOverlayFeature.properties?.layer_id === 'nominatim' || lakeOverlayFeature.properties?.source === 'nominatim'));
+      if (isPoint && isNominatimOverlay) {
+        setLakeOverlayFeature(null);
+        setBaseKeyBump(v => v + 1);
+      }
+    } catch (e) { /* ignore */ }
   }, [mapRef, loadPublicLayersForLake, setPanelOpen, setFilterWatershedId]);
 
   const baseMatchesSelectedLake = useCallback((feat) => {
@@ -161,12 +176,51 @@ export function useLakeSelection({ publicFC, mapRef, setPanelOpen, setFilterWate
     } catch {}
   }, [publicFC, selectedLakeId, mapRef]);
 
+  // Control Nominatim overlay explicitly from the panel
+  const setNominatimEnabled = useCallback(async (checked) => {
+    const name = selectedLakeName || selectedLake?.name || '';
+    if (!baseIsPoint || !name) return;
+    if (nominatimLoading) return; // prevent concurrent toggles
+    // If turning off and current overlay is nominatim, clear it
+    const isNominatim = (lakeOverlayFeature?.properties?.layer_id === 'nominatim' || lakeOverlayFeature?.properties?.source === 'nominatim');
+    if (!checked) {
+      if (isNominatim) {
+        setLakeOverlayFeature(null);
+        setBaseKeyBump(v => v + 1);
+      }
+      return;
+    }
+    // Turning on: fetch and apply
+    try {
+      setNominatimLoading(true);
+      const nominatimFeature = await searchLakeGeometry({ name });
+      if (nominatimFeature && nominatimFeature.geometry) {
+        const feature = {
+          type: 'Feature',
+          properties: { layer_id: 'nominatim', source: 'nominatim', body_type: 'lake', name },
+          geometry: nominatimFeature.geometry,
+        };
+        setLakeOverlayFeature(feature);
+        setBaseKeyBump(v => v + 1);
+        if (mapRef?.current) {
+          try { const gj = L.geoJSON(feature); const b = gj.getBounds(); if (b?.isValid?.()) mapRef.current.fitBounds(b, { padding: [24,24], maxZoom: 13 }); } catch {}
+        }
+      }
+    } catch (e) { console.warn('[useLakeSelection] toggle nominatim failed', e); }
+    finally { setNominatimLoading(false); }
+  }, [baseIsPoint, selectedLakeName, selectedLake, lakeOverlayFeature, mapRef, nominatimLoading]);
+
   return {
     // state
     selectedLake, selectedLakeId, selectedWatershedId, watershedToggleOn,
     lakeOverlayFeature, watershedOverlayFeature, lakeLayers, lakeActiveLayerId,
     baseMatchesSelectedLake, baseKeyBump,
+    // derived
+    canToggleNominatim: Boolean(baseIsPoint && (selectedLakeName || selectedLake?.name)),
+  nominatimEnabled: Boolean(lakeOverlayFeature && (lakeOverlayFeature.properties?.layer_id === 'nominatim' || lakeOverlayFeature.properties?.source === 'nominatim')),
+  nominatimLoading,
     // actions
     selectLakeFeature, applyOverlayByLayerId, handlePanelToggleWatershed, resetToActive,
+    setNominatimEnabled,
   };
 }
