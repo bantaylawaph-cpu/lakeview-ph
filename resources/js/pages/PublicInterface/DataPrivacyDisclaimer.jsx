@@ -1,5 +1,5 @@
 import React from "react";
-import { FiArrowUp } from 'react-icons/fi';
+import { FiArrowUp } from "react-icons/fi";
 import Modal from "../../components/Modal";
 
 function DataPrivacyDisclaimer({ open, onClose }) {
@@ -10,7 +10,7 @@ function DataPrivacyDisclaimer({ open, onClose }) {
       title="Data Privacy Disclaimer"
       width={860}
       cardClassName="auth-card"
-  bodyClassName="content-page modern-scrollbar"
+      bodyClassName="content-page modern-scrollbar"
       ariaLabel="Data Privacy Disclaimer"
     >
       <style>{`
@@ -20,7 +20,7 @@ function DataPrivacyDisclaimer({ open, onClose }) {
           font-weight: 700;
         }
         .privacy-content {
-          padding: 0 12px; /* left/right padding on small screens */
+          padding: 0 12px;
         }
         .privacy-content .intro { margin: 0 0 14px; }
         .privacy-content h2 {
@@ -29,19 +29,32 @@ function DataPrivacyDisclaimer({ open, onClose }) {
           line-height: 1.25;
         }
         .privacy-content section {
-          padding: 0; /* remove encasing */
+          padding: 0;
           border-radius: 0;
           border: none;
-          background: transparent; /* no card */
-          margin: 16px 0; /* keep vertical rhythm */
+          background: transparent;
+          margin: 16px 0;
         }
         .privacy-content p {
           margin: 8px 0;
-          line-height: 1.8; /* more line padding */
+          line-height: 1.8;
           text-align: justify;
           text-justify: inter-word;
         }
-        .privacy-content ul { margin: 8px 0; padding-left: 22px; }
+        .privacy-content ul {
+          margin: 8px 0;
+          list-style: disc;
+          list-style-position: outside;
+          padding-left: 1.25rem;
+        }
+        .privacy-content ol {
+          margin: 8px 0;
+          list-style: decimal;
+          list-style-position: outside;
+          padding-left: 1.25rem;
+        }
+        .privacy-content ul ul { list-style: circle; }
+        .privacy-content ul ul ul { list-style: square; }
         .privacy-content li {
           margin: 6px 0;
           line-height: 1.8;
@@ -56,8 +69,8 @@ function DataPrivacyDisclaimer({ open, onClose }) {
           margin: 10px 0 18px;
           border-radius: 10px;
           border: 1px solid #334155;
-          background: rgba(15,23,42,0.55); /* same hue, darker than body */
-          color: inherit; /* keep same text color */
+          background: rgba(15,23,42,0.55);
+          color: inherit;
         }
         @media (min-width: 640px) {
           .privacy-content { padding: 0 18px; max-width: 720px; margin: 0 auto; }
@@ -81,140 +94,137 @@ function DataPrivacyDisclaimer({ open, onClose }) {
           backdrop-filter: blur(2px);
           transition: background .2s ease, border-color .2s ease, transform .1s ease;
         }
-        .privacy-content .back-to-top-floating svg { stroke: #ffffff; stroke-width: 2.6; }
-        .privacy-content .back-to-top-fixed { position: fixed; right: 24px; bottom: 24px; z-index: 50; }
+        .privacy-content .back-to-top-floating svg { stroke: #ffffff; stroke-width: 2.6; color: #ffffff; }
+        .privacy-content .back-to-top-fixed { position: fixed; right: 24px; bottom: 24px; z-index: 50; color: #ffffff; }
         .privacy-content .back-to-top-floating:hover { background: rgba(255,255,255,0.12); border-color: rgba(148,163,184,0.4); }
         .privacy-content .back-to-top-floating:active { transform: translateY(1px); }
       `}</style>
+
       <div className="privacy-content">
-        <h1>Data Privacy</h1>
-        <p className="muted intro">Effective: {new Date().toLocaleDateString()}</p>
 
         <nav className="privacy-toc" aria-label="Table of contents">
-          <a href="#p1">1. Purpose of Data Collection</a>
-          <a href="#p2">2. Personal Data We Collect</a>
-          <a href="#p3">3. How We Use Data</a>
-          <a href="#p4">4. Data Retention</a>
-          <a href="#p5">5. Sharing and Disclosure</a>
-          <a href="#p6">6. Security Measures</a>
+          <a href="#p1">1. Purpose of Collecting Your Data</a>
+          <a href="#p2">2. What Information We Collect</a>
+          <a href="#p3">3. How We Use Your Information</a>
+          <a href="#p4">4. How Long We Keep Your Data</a>
+          <a href="#p5">5. Sharing Your Data</a>
+          <a href="#p6">6. How We Protect Your Data</a>
           <a href="#p7">7. Your Rights</a>
-          <a href="#p8">8. Contact Information</a>
-          <a href="#p9">9. Consent</a>
-          <a href="#p10">10. Updates</a>
+          <a href="#p8">8. Contact Us</a>
+          <a href="#p9">9. Your Consent</a>
+          <a href="#p10">10. Updates to This Notice</a>
         </nav>
 
         <section id="p1">
-        <h2>1. Purpose of Data Collection</h2>
-        <p>
-          LakeView PH collects and processes personal information to create and manage user accounts, enable participation in organizations, handle Know Your Customer (KYC) verification for contributor access, receive and address feedback, and secure access to platform features. We also process limited technical information (such as a hashed user agent and masked IP) for security, abuse prevention, and service diagnostics.
-        </p>
+          <h2>1. Purpose of Collecting Your Data</h2>
+          <p>
+            LakeView PH collects your information to create and manage your account,
+            help you join organizations, handle your feedback, and keep the platform safe and reliable.
+            We also gather a small amount of technical data, like your browser type and IP address,
+            to improve performance and prevent misuse.
+          </p>
         </section>
 
         <section id="p2">
-        <h2>2. Personal Data We Collect</h2>
-        <ul>
-          <li>Account information: name, email address, password (hashed).</li>
-          <li>Organizational context: desired role and selected organization when applying to join.</li>
-          <li>KYC details (when applicable for contributor/org roles): full name, date of birth, ID type and number, address (street, city/municipality, province, postal code), and uploaded identity/supporting documents (file name, type, size, and MIME type).</li>
-          <li>Feedback submission details: title, message, category; optional guest name and email when feedback is submitted without an account.</li>
-          <li>System metadata: masked IP address, hashed user agent, language settings; and basic audit logs of actions performed within the application.</li>
-        </ul>
+          <h2>2. What Information We Collect</h2>
+          <ul>
+            <li>Account details: name, email, and password (securely encrypted).</li>
+            <li>Organization details: the role you want and the group you apply to join.</li>
+            <li>Identification details: your name, birthday, ID type and number, address, and uploaded ID files (if needed).</li>
+            <li>Feedback details: your message, title, and optional name or email if you send feedback without an account.</li>
+            <li>System info: your IP address, browser type, and records of actions made in the app.</li>
+          </ul>
         </section>
 
         <section id="p3">
-        <h2>3. How We Use and Process Data</h2>
-        <ul>
-          <li>Account creation, authentication, and role-based authorization (using secure tokens).</li>
-          <li>Processing KYC profiles and documents to verify eligibility for organization participation.</li>
-          <li>Handling organizational join applications and notifying users of decisions.</li>
-          <li>Receiving, triaging, and responding to user feedback and service-related inquiries.</li>
-          <li>Operating, maintaining, and improving platform security, integrity, and performance.</li>
-          <li>Complying with legal obligations and responding to lawful requests, when required.</li>
-        </ul>
+          <h2>3. How We Use Your Information</h2>
+          <ul>
+            <li>Create and log you into your account safely.</li>
+            <li>Verify your identity for certain roles or groups.</li>
+            <li>Review and process your applications.</li>
+            <li>Respond to your feedback and questions.</li>
+            <li>Improve and secure our platform.</li>
+            <li>Follow legal requirements when necessary.</li>
+          </ul>
         </section>
 
         <section id="p4">
-        <h2>4. Data Retention</h2>
-        <p>
-          We retain personal data only for as long as necessary to fulfill the purposes described above or as required by law. KYC documents and profiles are kept while the verification process and related organizational participation remain relevant. Feedback records are retained for service improvement and accountability. When data is no longer needed, we will securely delete or anonymize it in accordance with our retention practices.
-        </p>
+          <h2>4. How Long We Keep Your Data</h2>
+          <p>
+            We only keep your information for as long as it is needed for our services or legal purposes.
+            When it’s no longer required, we delete or anonymize it securely.
+          </p>
         </section>
 
         <section id="p5">
-        <h2>5. Data Sharing and Disclosure</h2>
-        <ul>
-          <li>Internal processing: authorized administrators and organization administrators may access KYC/application data strictly to perform reviews and decisions.</li>
-          <li>Service providers: we may use cloud storage or email delivery services to operate the platform; such providers are bound by confidentiality and data protection obligations.</li>
-          <li>Legal compliance: we may disclose data when required by law, regulation, subpoena, or court order.</li>
-          <li>We do not sell personal information.</li>
-        </ul>
+          <h2>5. Sharing Your Data</h2>
+          <ul>
+            <li>Our trusted team members may review certain data for approval or verification.</li>
+            <li>We use partners like email or cloud services who must follow strict privacy rules.</li>
+            <li>We may share data if required by law or authorities.</li>
+          </ul>
+          <p>We never sell your personal information.</p>
         </section>
 
         <section id="p6">
-        <h2>6. Security Measures</h2>
-        <p>
-          We implement organizational, physical, and technical safeguards appropriate to the risks, including:
-        </p>
-        <ul>
-          <li>Access controls and role-based permissions for administrative functions.</li>
-          <li>Password hashing and secure token-based authentication.</li>
-          <li>Audit logging for key actions to enhance accountability.</li>
-          <li>Use of a public storage disk for documents with controlled links and deletion routines.</li>
-          <li>Input validation and basic anti-spam heuristics on public forms.</li>
-        </ul>
-        <p>
-          While we strive to protect your data, no method of transmission or storage is completely secure. Users are encouraged to use strong, unique passwords and keep credentials confidential.
-        </p>
+          <h2>6. How We Protect Your Data</h2>
+          <ul>
+            <li>Secure passwords and login tokens.</li>
+            <li>Access limits for admins only.</li>
+            <li>Tracking important actions for safety.</li>
+            <li>Secure handling and deletion of uploaded files.</li>
+            <li>Basic spam and security checks on forms.</li>
+          </ul>
+          <p>
+            No system is 100% secure. Please use strong passwords and keep them private.
+          </p>
         </section>
 
         <section id="p7">
-        <h2>7. Your Rights</h2>
-        <p>
-          In accordance with the Philippine Data Privacy Act of 2012 (RA 10173) and its implementing rules and regulations, you may exercise the following rights, subject to applicable limitations:
-        </p>
-        <ul>
-          <li>Right to be informed: know how your personal data is collected and processed.</li>
-          <li>Right to access: request a copy of your personal data that we hold.</li>
-          <li>Right to rectification: request corrections to inaccurate or incomplete data.</li>
-          <li>Right to erasure/blocking: request deletion or blocking of personal data where legally and operationally feasible.</li>
-          <li>Right to object: object to processing based on legitimate interests or withdraw consent where processing relies on consent.</li>
-          <li>Right to data portability: request available electronic copies of personal data you provided.</li>
-          <li>Right to file a complaint: lodge a complaint with the National Privacy Commission (NPC).</li>
-        </ul>
-        <p>
-          Requests can be made through the contact details below. We may require verification to confirm your identity and protect your account.
-        </p>
+          <h2>7. Your Rights</h2>
+          <p>
+            Under the Philippine Data Privacy Act of 2012, you have the right to:
+          </p>
+          <ul>
+            <li>Know how your data is collected and used.</li>
+            <li>Ask for a copy of your data.</li>
+            <li>Correct wrong or missing information.</li>
+            <li>Request deletion or blocking of your data when possible.</li>
+            <li>Withdraw consent or object to certain uses.</li>
+            <li>Get an electronic copy of your data.</li>
+            <li>File a complaint with the National Privacy Commission (NPC).</li>
+          </ul>
+          <p>
+            To make a request, contact us using the details below. We may ask for proof of identity.
+          </p>
         </section>
 
         <section id="p8">
-        <h2>8. Contact Information</h2>
-        <p>
-          For privacy concerns, requests, or questions, please contact our Data Protection Officer (DPO):
-        </p>
-        <p>
-          Email: privacy@lakeview.ph (sample) — or submit a request via the in-app Feedback feature.
-        </p>
+          <h2>8. Contact Us</h2>
+          <p>
+            If you have questions or privacy requests, contact our Data Protection Officer (DPO):
+          </p>
+          <p>Email: privacy@lakeview.ph (sample)  
+          Or send a message through the in-app Feedback form.</p>
         </section>
 
         <section id="p9">
-        <h2>9. Consent</h2>
-        <p>
-          By creating an account, submitting feedback, applying to an organization, uploading KYC documents, or otherwise using the LakeView PH services, you acknowledge that you have read this Data Privacy Disclaimer and consent to the collection and processing of your personal data as described herein, in accordance with RA 10173.
-        </p>
+          <h2>9. Your Consent</h2>
+          <p>
+            By creating an account, joining an organization, sending feedback, or using LakeView PH,
+            you agree that we can collect and use your information as explained in this notice.
+          </p>
         </section>
 
-        <section id="p10">
-        <h2>10. Updates to this Disclaimer</h2>
-        <p>
-          We may update this notice from time to time to reflect changes in our processes or legal requirements. The effective date will be revised accordingly. Continued use of the service after updates constitutes acceptance of the revised notice.
-        </p>
-        </section>
         <div className="back-to-top-bar">
           <button
             aria-label="Back to top"
             className="back-to-top-floating back-to-top-fixed"
             type="button"
-            onClick={() => { const c = document.querySelector('.lv-modal-body'); if (c) c.scrollTo({ top: 0, behavior: 'smooth' }); }}
+            onClick={() => {
+              const c = document.querySelector(".lv-modal-body");
+              if (c) c.scrollTo({ top: 0, behavior: "smooth" });
+            }}
             title="Back to top"
           >
             <FiArrowUp size={20} color="#ffffff" />
