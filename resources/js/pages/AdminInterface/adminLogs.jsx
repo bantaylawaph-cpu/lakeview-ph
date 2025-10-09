@@ -52,7 +52,9 @@ export default function AdminAuditLogsPage() {
 	// Legacy hydration cache (kept for backward compatibility but backend now provides entity_name)
 	const [entityNameCache, setEntityNameCache] = useState({});
 	const pendingHydrateRef = useRef(new Set());
-	const [meta, setMeta] = useState({ current_page: 1, last_page: 1, per_page: 25, total: 0 });
+	const [meta, setMeta] = useState({ current_page: 1, last_page: 1, per_page: 10, total: null });
+	const clientMetaCacheRef = useRef(new Map()); // key -> { total, last_page, per_page }
+	const [clientMetaLoading, setClientMetaLoading] = useState(false);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState(null);
 
@@ -215,16 +217,72 @@ export default function AdminAuditLogsPage() {
 				});
 			}
 			const pg = Array.isArray(body) ? null : (body || null);
-			setMeta({
-				current_page: (pg && typeof pg.current_page === 'number') ? pg.current_page : (params.page || 1),
-				last_page: (pg && typeof pg.last_page === 'number') ? pg.last_page : 1,
-				per_page: (pg && typeof pg.per_page === 'number') ? pg.per_page : (params.per_page || perPage),
-				total: (pg && typeof pg.total === 'number') ? pg.total : normalizedItems.length,
-			});
+			const metaObj = pg && typeof pg === 'object' && pg.meta && typeof pg.meta === 'object' ? pg.meta : pg;
+			const effectivePage = params.page || 1;
+			const effectivePerPage = params.per_page || perPage;
+			const metaPresent = !!(metaObj && (typeof metaObj.current_page === 'number' || typeof metaObj.last_page === 'number' || typeof metaObj.total === 'number'));
+			// If server meta exists, trust it
+			if (metaPresent) {
+				setMeta({
+					current_page: typeof metaObj.current_page === 'number' ? metaObj.current_page : effectivePage,
+					last_page: typeof metaObj.last_page === 'number' ? metaObj.last_page : Math.max(1, Math.ceil((typeof metaObj.total === 'number' ? metaObj.total : normalizedItems.length) / effectivePerPage)),
+					per_page: typeof metaObj.per_page === 'number' ? metaObj.per_page : effectivePerPage,
+					total: typeof metaObj.total === 'number' ? metaObj.total : null,
+				});
+			} else {
+				// No server meta. Set provisional meta, then compute total/last_page client-side.
+				setMeta({ current_page: effectivePage, last_page: 1, per_page: effectivePerPage, total: null });
+				// Kick off background computation of totals
+				const baseParams = { ...params };
+				delete baseParams.page;
+				await ensureClientMeta(baseParams, effectivePage, effectivePerPage, normalizedItems.length);
+			}
 		} catch (e) {
 			console.error('Failed to load audit logs', e);
 			setError(e?.response?.data?.message || 'Failed to load');
 		} finally { setLoading(false); }
+	};
+
+	// Compute and cache total/last_page when server doesn't provide meta.
+	const ensureClientMeta = async (baseParams, currentPage, perPageVal, currentPageCount) => {
+		try {
+			const key = `${effectiveBase}?${buildQuery({ ...baseParams, per_page: perPageVal })}`;
+			const cached = clientMetaCacheRef.current.get(key);
+			if (cached && typeof cached.total === 'number' && typeof cached.last_page === 'number') {
+				setMeta(m => ({ ...m, last_page: cached.last_page, total: cached.total, per_page: cached.per_page || perPageVal }));
+				return;
+			}
+			setClientMetaLoading(true);
+			let total = 0;
+			let pageIdx = 1;
+			const maxPages = 500; // safety cap to avoid excessive requests
+			for (; pageIdx <= maxPages; pageIdx++) {
+				let len;
+				if (pageIdx === currentPage && typeof currentPageCount === 'number') {
+					len = currentPageCount;
+				} else {
+					const resp = await api.get(effectiveBase, { params: { ...baseParams, page: pageIdx, per_page: perPageVal } });
+					const b = resp?.data;
+					const arr = Array.isArray(b) ? b : (Array.isArray(b?.data) ? b.data : []);
+					len = Array.isArray(arr) ? arr.filter(it => {
+						const mt = it.model_type || '';
+						const base = String(mt).split('\\').pop();
+						return base !== 'SampleResult';
+					}).length : 0;
+				}
+				total += len;
+				if (len < perPageVal) break; // last page reached
+			}
+			const lastPage = Math.max(1, Math.ceil(total / perPageVal));
+			const computed = { total, last_page: lastPage, per_page: perPageVal };
+			clientMetaCacheRef.current.set(key, computed);
+			setMeta(m => ({ ...m, last_page: lastPage, total, per_page: perPageVal }));
+		} catch (err) {
+			// If computing meta fails, keep provisional values and show without total.
+			console.warn('Failed to compute client-side pagination meta', err);
+		} finally {
+			setClientMetaLoading(false);
+		}
 	};
 
 	// Separate light fetch (unfiltered) to seed option catalogs so they aren't empty when filters active
@@ -503,8 +561,8 @@ export default function AdminAuditLogsPage() {
 				)}
 				<div className="lv-table-pager" style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center' }}>
 					<button className="pill-btn ghost sm" disabled={page <= 1} onClick={() => goPage(page - 1)}>&lt; Prev</button>
-					<span className="pager-text">Page {page} of {meta.last_page} · {meta.total} total</span>
-					<button className="pill-btn ghost sm" disabled={page >= meta.last_page} onClick={() => goPage(page + 1)}>Next &gt;</button>
+					<span className="pager-text">Page {page} of {meta.last_page}{meta?.total != null ? ` · ${meta.total} total` : (clientMetaLoading ? ' · calculating…' : '')}</span>
+					<button className="pill-btn ghost sm" disabled={clientMetaLoading || page >= meta.last_page} onClick={() => goPage(page + 1)}>Next &gt;</button>
 				</div>
 			</div>
 
