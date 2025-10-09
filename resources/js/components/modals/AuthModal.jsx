@@ -330,8 +330,9 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
       width={600}
       ariaLabel="Authentication dialog"
       cardClassName="no-bg no-padding"
+      bodyClassName="auth-modal-body"
     >
-      <div className="auth-box" style={{ width: 560, position: "relative" }}>
+  <div className="auth-box" style={{ position: "relative" }}>
         {/* Close */}
         <button
           type="button"

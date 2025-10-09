@@ -56,6 +56,41 @@
   padding: 16px;
 }
 
+/* Smooth, consistent scrollbars for modal bodies (scoped) */
+.lv-modal-body,
+.lv-modal-card .auth-modal-body {
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+/* Auth modal: use more viewport height when header/footer are hidden */
+.lv-modal-card .auth-modal-body {
+  max-height: calc(100vh - 80px) !important;
+}
+
+/* WebKit-based custom scrollbar */
+.lv-modal-card .auth-modal-body::-webkit-scrollbar {
+  width: 10px;
+}
+.lv-modal-card .auth-modal-body::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.06); /* subtle slate track */
+  border-radius: 10px;
+}
+.lv-modal-card .auth-modal-body::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(148,163,184,0.55), rgba(100,116,139,0.7)); /* slate-400 → slate-500 */
+  border-radius: 10px;
+  border: 2px solid rgba(255,255,255,0.6); /* creates padding effect on light bg */
+}
+.lv-modal-card .auth-modal-body::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(100,116,139,0.7), rgba(71,85,105,0.8)); /* darker on hover */
+}
+
+/* Firefox custom scrollbar */
+.lv-modal-card .auth-modal-body {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100,116,139,0.75) rgba(15,23,42,0.06);
+}
+
 .lv-modal-footer {
   display: flex;
   justify-content: flex-end;

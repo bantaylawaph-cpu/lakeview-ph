@@ -27,6 +27,12 @@
   position: relative;
 }
 
+/* When the auth box is inside a modal card, let it fill available space. */
+.lv-modal-card .auth-box {
+  width: 100%;
+  max-width: none;
+}
+
 /* Left side illustration */
 .auth-illustration {
   flex: 1;
