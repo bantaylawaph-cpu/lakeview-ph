@@ -100,6 +100,7 @@ function OverviewTab({
 
 
   const showToggle = canToggleWatershed && typeof onToggleWatershed === 'function';
+  const showFlowToggle = (flows && flows.length > 0) && typeof onToggleFlows === 'function';
 
   return (
     <>
@@ -160,25 +161,27 @@ function OverviewTab({
         <div><strong>Flows:</strong></div>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
           <span style={{fontSize:12,opacity:0.8}}>{flows?.length || 0} point{(flows?.length||0)===1?'':'s'}</span>
-          <button
-            type="button"
-            aria-pressed={showFlows}
-            title={showFlows ? 'Hide flow markers' : 'Show flow markers'}
-            onClick={() => onToggleFlows?.(!showFlows)}
-            style={{
-              border: 'none',
-              background: 'transparent',
-              color: '#fff',
-              padding: 6,
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              borderRadius: 6,
-            }}
-          >
-            <FiMap size={16} />
-          </button>
+          {showFlowToggle && (
+            <button
+              type="button"
+              aria-pressed={showFlows}
+              title={showFlows ? 'Hide flow markers' : 'Show flow markers'}
+              onClick={() => onToggleFlows?.(!showFlows)}
+              style={{
+                border: 'none',
+                background: 'transparent',
+                color: '#fff',
+                padding: 6,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                borderRadius: 6,
+              }}
+            >
+              <FiMap size={16} />
+            </button>
+          )}
         </div>
 
         <div><strong>Inflows:</strong></div>
