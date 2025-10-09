@@ -13,7 +13,7 @@ export default function HeatmapLegend({ resolution }) {
         </div>
       </div>
       <div style={{ marginTop: 6, lineHeight: 1.3, opacity: 0.85 }}>
-        Relative intensity scaled to local distribution (95th percentile cap & sqrt compression).
+        Relative density (not exact counts). Brighter colors indicate more people compared with nearby areas.
       </div>
       {resolution === 'preview' && (
         <div style={{ marginTop: 4, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, opacity: 0.7 }}>Preview sample… refining</div>

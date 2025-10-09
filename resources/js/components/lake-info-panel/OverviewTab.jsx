@@ -139,14 +139,14 @@ function OverviewTab({
           )}
         </div>
 
-        <div><strong>Region:</strong></div>
-        <div>{regionDisplay || '–'}</div>
+  <div><strong>Region:</strong></div>
+  <div title={regionDisplay || ''}>{regionDisplay || '–'}</div>
 
-        <div><strong>Province:</strong></div>
-        <div>{provinceDisplay || '–'}</div>
+  <div><strong>Province:</strong></div>
+  <div title={provinceDisplay || ''}>{provinceDisplay || '–'}</div>
 
-        <div><strong>Municipality/City:</strong></div>
-        <div>{municipalityDisplay || '–'}</div>
+  <div><strong>Municipality/City:</strong></div>
+  <div title={municipalityDisplay || ''}>{municipalityDisplay || '–'}</div>
 
         <div><strong>Surface Area:</strong></div>
         <div>{areaStr}</div>
@@ -160,7 +160,7 @@ function OverviewTab({
         {/* Flows section */}
         <div><strong>Flows:</strong></div>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
-          <span style={{fontSize:12,opacity:0.8}}>{flows?.length || 0} point{(flows?.length||0)===1?'':'s'}</span>
+          <span style={{fontSize:12,opacity:0.8}}>Inflows: {inflows.length} • Outflows: {outflows.length}</span>
           {showFlowToggle && (
             <button
               type="button"
@@ -183,6 +183,10 @@ function OverviewTab({
             </button>
           )}
         </div>
+
+          <div style={{ gridColumn: '1 / -1', fontSize: 11, color: '#ddd', marginTop: 4 }}>
+            <em>Flows are known inlets/outlets for this lake. 'Primary' marks the main channel.</em>
+          </div>
 
         <div><strong>Inflows:</strong></div>
         <div>{renderFlowList(inflows)}</div>

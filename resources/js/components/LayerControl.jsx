@@ -18,7 +18,7 @@ function LayerControl({ selectedView, setSelectedView }) {
       {/* Dropdown Panel */}
       {open && (
         <div className="layer-panel">
-          <h6 className="layer-title">Toggle Map Views</h6>
+          <h6 className="layer-title">Basemap style</h6>
           <label>
             <input
               type="radio"
@@ -27,7 +27,7 @@ function LayerControl({ selectedView, setSelectedView }) {
               checked={selectedView === "satellite"}
               onChange={() => setSelectedView("satellite")}
             />
-            <span>Satellite View</span>
+            <span>Satellite</span>
           </label>
           <label>
             <input
@@ -37,7 +37,7 @@ function LayerControl({ selectedView, setSelectedView }) {
               checked={selectedView === "topographic"}
               onChange={() => setSelectedView("topographic")}
             />
-            <span>Topographic View</span>
+            <span>Topographic</span>
           </label>
           <label>
             <input
@@ -47,7 +47,7 @@ function LayerControl({ selectedView, setSelectedView }) {
               checked={selectedView === "street"}
               onChange={() => setSelectedView("street")}
             />
-            <span>Street View</span>
+            <span>Streets</span>
           </label>
           <label>
             <input
@@ -57,7 +57,7 @@ function LayerControl({ selectedView, setSelectedView }) {
               checked={selectedView === "osm"}
               onChange={() => setSelectedView("osm")}
             />
-            <span>OpenStreetMap</span>
+            <span>Streets (OSM)</span>
           </label>
         </div>
       )}

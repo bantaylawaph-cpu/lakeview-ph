@@ -137,7 +137,7 @@ const ContextMenu = ({ map, onMeasureDistance, onMeasureArea }) => {
             <FaMapMarkerAlt className="context-icon" /> Place pin here
           </li>
           <li className="context-item" onClick={handleCopyCoords}>
-            <FaCopy className="context-icon" /> Copy Coordinate
+            <FaCopy className="context-icon" /> Copy Coordinates
           </li>
         </ul>
       )}
@@ -160,6 +160,7 @@ const ContextMenu = ({ map, onMeasureDistance, onMeasureArea }) => {
           >
             <FaMapMarkerAlt style={{ marginRight: 4, color: "#90caf9" }} />
             {pin.lat.toFixed(5)}, {pin.lng.toFixed(5)}
+            <div style={{ fontSize: 10, opacity: 0.8, marginTop: 6 }}>Right‑click to remove</div>
           </Tooltip>
         </Marker>
       ))}

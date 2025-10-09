@@ -54,8 +54,8 @@ function WaterQualityTab({ lake }) {
       const lim = (timeRange === "all" || timeRange === "custom") ? 5000 : 1000;
       let fromEff, toEff;
       if (timeRange === 'all') { fromEff = undefined; toEff = undefined; }
-      else if (!dateFrom && !dateTo) { const d = new Date(today); d.setFullYear(d.getFullYear() - 5); fromEff = fmtIso(d); toEff = fmtIso(today); }
-      else { fromEff = dateFrom || undefined; toEff = dateTo || undefined; }
+    else if (!dateFrom && !dateTo) { const d = new Date(today); d.setFullYear(d.getFullYear() - 5); fromEff = fmtIso(d); toEff = fmtIso(today); }
+    else { fromEff = dateFrom || undefined; toEff = dateTo || undefined; }
 
       const qs = buildQuery({
         lake_id: lakeId,
@@ -183,6 +183,9 @@ function WaterQualityTab({ lake }) {
       window.dispatchEvent(new CustomEvent('lv-wq-markers', { detail: { markers } }));
     } catch {}
   }, [visibleTests]);
+
+  // Informational hint for users
+  // This is UI-only text shown at the top of the tab content area if desired.
 
   // Helpers for time bucketing
   const parseDate = (iso) => { try { return new Date(iso); } catch { return null; } };
@@ -479,6 +482,7 @@ function WaterQualityTab({ lake }) {
 
   return (
     <>
+      <div style={{ fontSize: 12, color: '#ddd', marginBottom: 6 }}>Markers are shown on the map while this tab is open.</div>
   <div style={{ display: 'grid', gridTemplateColumns: 'auto auto 1fr 1fr auto', alignItems: 'end', gap: 6, marginBottom: 6, overflow: 'hidden' }}>
         {/* Range */}
         <div className="form-group" style={{ minWidth: 120 }}>
@@ -525,21 +529,20 @@ function WaterQualityTab({ lake }) {
             <div className="form-group" style={{ minWidth: 0 }}>
             <label style={{ marginBottom: 2, fontSize: 11, color: '#fff' }}>Station</label>
             <select value={station} onChange={(e) => setStation(e.target.value)} style={{ padding: '6px 8px' }}>
-              <option value="">All Stations</option>
-              {stations.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
+              <option value="">All</option>
+              {stations.map((s) => (<option key={s} value={s}>{s}</option>))}
             </select>
           </div>
-          ) : (
-        <div className="form-group" style={{ minWidth: 0 }}>
-          <label style={{ marginBottom: 2, fontSize: 11, color: '#fff' }}>Station</label>
-          <select disabled aria-disabled="true" title="Samples only have coordinates" style={{ padding: '6px 8px', color: '#bbb', backgroundColor: 'transparent' }}>
-                <option>No stations</option>
-              </select>
-            </div>
-          )}
+        ) : (
+          <div className="form-group" style={{ flex: 1, minWidth: 0 }}>
+            <label style={{ fontSize: 11, marginBottom: 2, color: '#fff' }}>Station</label>
+            <select disabled aria-disabled="true" title="Samples are coordinate-only — no fixed stations" style={{ padding: '6px 8px', color: '#bbb', backgroundColor: 'transparent' }}>
+              <option>Samples are coordinate-only — no fixed stations</option>
+            </select>
+          </div>
+        )}
       </div>
+  <div style={{ fontSize: 11, color: '#bbb', marginBottom: 6 }}>(Dates shown in local time)</div>
       {loading && (
         <div style={{ margin: '2px 0 8px 0' }}>
           <LoadingSpinner label="Loading data..." color="#fff" />

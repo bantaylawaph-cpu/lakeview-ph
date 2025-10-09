@@ -165,6 +165,7 @@ export default function TestsTab({ lake, onJumpToStation }) {
   return (
     <div>
       <div style={{ display: 'grid', gap: 8 }}>
+        <div style={{ fontSize: 12, color: '#ddd' }}>Markers are shown on the map while this tab is open.</div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'end', marginBottom: 6 }}>
             <div className="form-group" style={{ flex: 1, minWidth: 0 }}>
               <label style={{ fontSize: 11, marginBottom: 2, color: '#fff' }}>Organization</label>
@@ -184,8 +185,8 @@ export default function TestsTab({ lake, onJumpToStation }) {
             ) : (
               <div className="form-group" style={{ flex: 1, minWidth: 0 }}>
                 <label style={{ fontSize: 11, marginBottom: 2, color: '#fff' }}>Station</label>
-                <select disabled aria-disabled="true" title="Samples only have coordinates" style={{ padding: '6px 8px', color: '#bbb', backgroundColor: 'transparent' }}>
-                  <option>No stations</option>
+                <select disabled aria-disabled="true" title="Samples are coordinate-only — no fixed stations" style={{ padding: '6px 8px', color: '#bbb', backgroundColor: 'transparent' }}>
+                  <option>Samples are coordinate-only — no fixed stations</option>
                 </select>
               </div>
             )}
@@ -211,12 +212,13 @@ export default function TestsTab({ lake, onJumpToStation }) {
               <LoadingSpinner label="Loading tests…" color="#fff" />
             </div>
           )}
-          {!loading && tests.length === 0 && <div className="insight-card"><em>No published tests found for this lake.</em></div>}
+          {!loading && tests.length === 0 && <div className="insight-card"><em>No tests match your filters. Try clearing filters or expanding the date range.</em></div>}
         {tests.map((t) => (
           <div className="insight-card" key={t.id}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <div style={{ fontSize: 13, fontWeight: 700 }}>{t.sampled_at ? new Date(t.sampled_at).toLocaleString() : '–'}</div>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>{t.sampled_at ? new Date(t.sampled_at).toLocaleString() : '–'}</div>
+          <div style={{ fontSize: 11, opacity: 0.7 }}>{t.sampled_at ? '(local time)' : ''}</div>
                 <div style={{ fontSize: 12, opacity: 0.9, marginTop: 4 }}>{t.station?.name || (t.latitude != null && t.longitude != null ? `${Number(t.latitude).toFixed(6)}, ${Number(t.longitude).toFixed(6)}` : 'Station: –')}</div>
                 <div style={{ fontSize: 12, opacity: 0.8, marginTop: 2 }}>{t.organization_name || t.organization?.name || 'Organization'}</div>
               </div>
