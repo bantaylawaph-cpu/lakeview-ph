@@ -330,7 +330,7 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
       width={600}
       ariaLabel="Authentication dialog"
       cardClassName="no-bg no-padding"
-      bodyClassName="auth-modal-body"
+      bodyClassName="auth-modal-body modern-scrollbar"
     >
   <div className="auth-box" style={{ position: "relative" }}>
         {/* Close */}

@@ -149,21 +149,11 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
     <Modal
       open={open}
       onClose={onClose}
-      title={<span style={{ color: '#fff' }}>Feedback</span>}
+      title={"Feedback"}
       width={width}
       ariaLabel="User feedback dialog"
-      style={{
-        background: 'rgba(30, 60, 120, 0.65)',
-        color: '#fff',
-        backdropFilter: 'blur(12px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(12px) saturate(180%)',
-        border: '1px solid rgba(255,255,255,0.25)'
-      }}
-      footerStyle={{
-        background: 'transparent',
-        borderTop: '1px solid rgba(255,255,255,0.18)',
-        color: '#fff'
-      }}
+      cardClassName="auth-card"
+  bodyClassName="content-page modern-scrollbar"
       footer={(
         <div className="lv-modal-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button type="button" className="pill-btn ghost sm" onClick={resetForm} disabled={submitting || (!title && !message && !guestName && !guestEmail)}>Reset</button>
@@ -171,26 +161,27 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
         </div>
       )}
     >
-      {!user && (
-        <div className="lv-status-info" style={{ marginBottom: 12, fontSize:13 }}>
-          You can submit feedback as a guest. Providing a name or email is optional but helps us follow up.
-        </div>
-      )}
-      <div className="liquid-glass" data-mode="single" style={{ paddingTop:0 }}>
-        <div className="lv-settings-grid">
-          <div className="insight-card" style={{ width:'100%' }}>
+      <div className="feedback-container">
+        {!user && (
+          <div className="lv-status-info" style={{ marginBottom: 12, fontSize:13 }}>
+            You can submit feedback as a guest. Providing a name or email is optional but helps us follow up.
+          </div>
+        )}
+        <div className="feedback-layout" data-mode="single">
+          <div className="lv-settings-grid">
+            <div className="insight-card feedback-form-card">
             <h3 style={{ marginTop:0 }}>Submit New Feedback</h3>
             <form id="feedback-form" ref={formRef} onSubmit={handleSubmit} noValidate>
               <fieldset disabled={submitting} style={{ border:'none', padding:0, margin:0, display:'grid', gap:16 }}>
                 {!user && (
                   <>
                     <div className="lv-field-row">
-                      <label style={{ color: '#fff' }}>Name (optional)</label>
-                      <input type="text" value={guestName} onChange={e=>setGuestName(e.target.value)} maxLength={120} placeholder="Your name" style={{ color: '#fff', background: 'transparent', border: '1px solid rgba(255,255,255,0.18)' }} />
+                      <label>Name (optional)</label>
+                      <input type="text" value={guestName} onChange={e=>setGuestName(e.target.value)} maxLength={120} placeholder="Your name" />
                     </div>
                     <div className="lv-field-row">
-                      <label style={{ color: '#fff' }}>Email (optional)</label>
-                      <input type="email" value={guestEmail} onChange={e=>setGuestEmail(e.target.value)} maxLength={160} placeholder="you@example.com" style={{ color: '#fff', background: 'transparent', border: '1px solid rgba(255,255,255,0.18)' }} />
+                      <label>Email (optional)</label>
+                      <input type="email" value={guestEmail} onChange={e=>setGuestEmail(e.target.value)} maxLength={160} placeholder="you@example.com" />
                     </div>
                     {/* Honeypot field (hidden from real users) */}
                     <div style={{ position:'absolute', left:'-9999px', width:1, height:1, overflow:'hidden' }} aria-hidden="true">
@@ -200,7 +191,7 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
                   </>
                 )}
                 <div className={`lv-field-row ${titleError ? 'has-error' : ''}`}>
-                  <label htmlFor="fb-title" style={{ color: '#fff' }}>Title <span className="req">*</span></label>
+                  <label htmlFor="fb-title">Title <span className="req">*</span></label>
                   <input
                     id="fb-title"
                     name="feedback-title"
@@ -213,13 +204,12 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
                     aria-invalid={!!titleError}
                     aria-describedby={titleError ? 'fb-title-err' : undefined}
                     placeholder="Concise summary (e.g. Layer legend overlaps)"
-                    style={{ color: '#fff', background: 'transparent', border: '1px solid rgba(255,255,255,0.18)' }}
                   />
                   <div className="char-counter" style={rawTitleLen < MIN_TITLE && tTitle ? { color:'var(--danger, #dc2626)' } : {}}>{title.length}/160</div>
                   {titleError && <div id="fb-title-err" className="field-error" style={{ color:'var(--danger, #dc2626)', fontSize:12, marginTop:4 }}>{titleError}</div>}
                 </div>
                 <div className={`lv-field-row ${categoryError ? 'has-error' : ''}`}>
-                  <label htmlFor="fb-category" style={{ color: '#fff' }}>Category <span className="req">*</span></label>
+                  <label htmlFor="fb-category">Category <span className="req">*</span></label>
                   <select
                     id="fb-category"
                     name="feedback-category"
@@ -229,19 +219,18 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
                     required
                     aria-invalid={!!categoryError}
                     aria-describedby={categoryError ? 'fb-category-err' : undefined}
-                    style={{ color: '#fff', background: 'transparent', border: '1px solid rgba(255,255,255,0.18)' }}
                   >
-                    <option value="" style={{ color: '#111' }}>— Select —</option>
-                    <option value="bug" style={{ color: '#111' }}>Bug</option>
-                    <option value="suggestion" style={{ color: '#111' }}>Suggestion</option>
-                    <option value="data" style={{ color: '#111' }}>Data</option>
-                    <option value="ui" style={{ color: '#111' }}>UI/UX</option>
-                    <option value="other" style={{ color: '#111' }}>Other</option>
+                    <option value="">— Select —</option>
+                    <option value="bug">Bug</option>
+                    <option value="suggestion">Suggestion</option>
+                    <option value="data">Data</option>
+                    <option value="ui">UI/UX</option>
+                    <option value="other">Other</option>
                   </select>
                   {categoryError && <div id="fb-category-err" className="field-error" style={{ color:'var(--danger, #dc2626)', fontSize:12, marginTop:4 }}>{categoryError}</div>}
                 </div>
                 <div className={`lv-field-row ${messageError ? 'has-error' : ''}`}>
-                  <label htmlFor="fb-message" style={{ color: '#fff' }}>Message <span className="req">*</span></label>
+                  <label htmlFor="fb-message">Message <span className="req">*</span></label>
                   <textarea
                     id="fb-message"
                     name="feedback-message"
@@ -254,7 +243,7 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
                     aria-invalid={!!messageError}
                     aria-describedby={messageError ? 'fb-message-err' : undefined}
                     placeholder="Describe the issue or idea."
-                    style={{ resize:'vertical', color: '#fff', background: 'transparent', border: '1px solid rgba(255,255,255,0.18)' }}
+                    style={{ resize:'vertical' }}
                   />
                   <div className="char-counter" style={rawMsgLen < MIN_MESSAGE && tMessage ? { color:'var(--danger, #dc2626)' } : {}}>{message.length}/2000</div>
                   {messageError && <div id="fb-message-err" className="field-error" style={{ color:'var(--danger, #dc2626)', fontSize:12, marginTop:4 }}>{messageError}</div>}
@@ -264,13 +253,13 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
                 {/* footer buttons moved into Modal.footer for consistency */}
               </fieldset>
             </form>
+            </div>
           </div>
         </div>
-      </div>
-      {user && (
-        <div style={{ marginTop:24 }}>
-          <h3 style={{ margin:'0 0 12px' }}>My Submissions</h3>
-          <div className="feedback-list" style={{ display:'grid', gap:14 }}>
+        {user && (
+          <div className="feedback-submissions">
+            <h3 style={{ margin:'0 0 12px' }}>My Submissions</h3>
+            <div className="feedback-list">
             {list.length === 0 && !loadingList && (<div className="insight-card" style={{ textAlign:'center' }}>No feedback yet.</div>)}
             {list.map(item => (
               <div key={item.id} className="insight-card" style={{ display:'grid', gap:6, padding:'14px 16px' }}>
@@ -292,14 +281,15 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
               </div>
             ))}
             {loadingList && <div className="muted" style={{ textAlign:'center' }}><LoadingSpinner label="Loading submissions…" /></div>}
-            {hasMore && !loadingList && (
-              <div style={{ textAlign:'center' }}>
-                <button className="pill-btn ghost sm" onClick={() => fetchMine({ page: page + 1 })}>Load More</button>
-              </div>
-            )}
+              {hasMore && !loadingList && (
+                <div style={{ textAlign:'center' }}>
+                  <button className="pill-btn ghost sm" onClick={() => fetchMine({ page: page + 1 })}>Load More</button>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </Modal>
   );
 }

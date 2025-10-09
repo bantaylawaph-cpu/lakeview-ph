@@ -32,6 +32,60 @@
   text-transform: lowercase;
 }
 
+/* Layout inside Feedback modal */
+.lv-modal-card.auth-card .feedback-layout { padding-top: 0; }
+.lv-modal-card.auth-card .feedback-container { max-width: none; width: 100%; margin: 0; }
+.lv-modal-card.auth-card .feedback-form-card { width: 100%; margin: 0; }
+.lv-modal-card.auth-card .feedback-form-card h3 { margin-top: 0; }
+
+/* Tighten grid spacing slightly for visual balance */
+.lv-modal-card.auth-card .lv-settings-grid { gap: 16px; }
+
+/* Center the submissions block as well */
+.lv-modal-card.auth-card .feedback-submissions { margin-top: 24px; width: 100%; margin-left: 0; margin-right: 0; }
+.lv-modal-card.auth-card .feedback-list { display: grid; gap: 14px; }
+
+/* Add mild horizontal padding so sections have breathing room while spanning full width */
+.lv-modal-card.auth-card .feedback-layout,
+.lv-modal-card.auth-card .feedback-submissions {
+  padding-inline: 8px;
+  padding-left: 16px; /* a little more left padding */
+}
+
+/* Dark variant select styling for better aesthetics */
+.lv-modal-card.auth-card .lv-field-row select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid #334155;
+  color: #f1f5f9;
+  padding: 10px 36px 10px 12px; /* add inner padding, keep space for arrow */
+  border-radius: 10px; /* rounded corners */
+}
+
+/* Focus state */
+.lv-modal-card.auth-card .lv-field-row select:focus-visible {
+  outline: none;
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.35);
+  background: rgba(15, 23, 42, 0.75);
+}
+
+/* Custom dropdown arrow via data-URI SVG */
+.lv-modal-card.auth-card .lv-field-row select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23cbd5e1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 16px;
+}
+
+/* Options text in dropdown (supported in many browsers) */
+.lv-modal-card.auth-card .lv-field-row select option {
+  color: #ffffff;
+  background: #0f172a; /* dark menu bg; some browsers use this */
+}
+
 .admin-reply-box {
   font-size: 12px;
   background: #f8fafc;

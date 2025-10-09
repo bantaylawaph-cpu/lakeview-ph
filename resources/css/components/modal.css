@@ -56,40 +56,78 @@
   padding: 16px;
 }
 
-/* Smooth, consistent scrollbars for modal bodies (scoped) */
-.lv-modal-body,
-.lv-modal-card .auth-modal-body {
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
+/* Dark auth-like variant (requested rgba(30,41,59,0.95)) */
+.lv-modal-card.auth-card {
+  background: rgba(30, 41, 59, 0.95);
+  color: #f1f5f9;
+  border: 1px solid #334155; /* slate-700 */
+}
+.lv-modal-card.auth-card .lv-modal-header {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15); /* subtle divider */
+}
+.lv-modal-card.auth-card .lv-modal-title { color: #e5e7eb; }
+.lv-modal-card.auth-card .lv-modal-body { color: #e5e7eb; }
+.lv-modal-card.auth-card .lv-modal-footer {
+  background: rgba(15, 23, 42, 0.35);
+  border-top: 1px solid rgba(148, 163, 184, 0.15);
+}
+.lv-modal-card.auth-card .lv-icon-btn { color: #cbd5e1; }
+.lv-modal-card.auth-card .lv-icon-btn:hover { color: #ffffff; }
+
+/* Settings content inside dark modal card */
+.lv-modal-card.auth-card .lv-modern-settings {
+  /* Provide variables to modern-settings.css */
+  --lv-color-surface: rgba(15, 23, 42, 0.35);
+  --lv-color-border: #334155;
+  --lv-color-text-muted: #9fb0c7;
+}
+.lv-modal-card.auth-card .lv-settings-panel {
+  background: var(--lv-color-surface);
+  border-color: var(--lv-color-border);
+  color: #f1f5f9;
+}
+.lv-modal-card.auth-card .lv-field-row label { color: #cbd5e1; }
+
+/* Inputs: dark translucent background, light text */
+.lv-modal-card.auth-card .lv-field-row input[type="text"],
+.lv-modal-card.auth-card .lv-field-row input[type="email"],
+.lv-modal-card.auth-card .lv-field-row input[type="password"] {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid #334155;
+  color: #f1f5f9;
+}
+.lv-modal-card.auth-card .lv-field-row input::placeholder {
+  color: #94a3b8;
+}
+.lv-modal-card.auth-card .lv-field-row input:focus-visible {
+  outline: none;
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.35);
+  background: rgba(15, 23, 42, 0.75);
 }
 
-/* Auth modal: use more viewport height when header/footer are hidden */
-.lv-modal-card .auth-modal-body {
-  max-height: calc(100vh - 80px) !important;
+/* Password toggle button style */
+.lv-modal-card.auth-card .password-collapse-toggle {
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid #334155;
+  color: #e2e8f0;
+}
+.lv-modal-card.auth-card .password-collapse-toggle:hover {
+  background: rgba(30, 41, 59, 0.6);
 }
 
-/* WebKit-based custom scrollbar */
-.lv-modal-card .auth-modal-body::-webkit-scrollbar {
-  width: 10px;
+/* Primary button gradient per request */
+.lv-modal-card.auth-card .btn-primary {
+  background: linear-gradient(135deg, #3b82f6, #06b6d4);
+  color: #fff;
+  border: none;
 }
-.lv-modal-card .auth-modal-body::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.06); /* subtle slate track */
-  border-radius: 10px;
-}
-.lv-modal-card .auth-modal-body::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, rgba(148,163,184,0.55), rgba(100,116,139,0.7)); /* slate-400 → slate-500 */
-  border-radius: 10px;
-  border: 2px solid rgba(255,255,255,0.6); /* creates padding effect on light bg */
-}
-.lv-modal-card .auth-modal-body::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, rgba(100,116,139,0.7), rgba(71,85,105,0.8)); /* darker on hover */
+.lv-modal-card.auth-card .btn-primary:hover {
+  filter: brightness(1.05);
 }
 
-/* Firefox custom scrollbar */
-.lv-modal-card .auth-modal-body {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(100,116,139,0.75) rgba(15,23,42,0.06);
-}
+/* Smooth scroll containment: reserved space is handled by modern-scrollbar utility */
+.lv-modal-body { overscroll-behavior: contain; scrollbar-gutter: stable; }
 
 .lv-modal-footer {
   display: flex;

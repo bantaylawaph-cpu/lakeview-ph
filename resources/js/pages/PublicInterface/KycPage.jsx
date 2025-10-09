@@ -43,6 +43,29 @@ export default function KycPage({ embedded = true, open = true, onClose }) {
   const [tenantsLoading, setTenantsLoading] = useState(false);
   const cacheRef = useRef({}); // in-memory TTL cache
 
+  // Determine if we're rendering inside the dark auth modal variant
+  const isDarkModal = embedded && user && (!role || role === 'public');
+
+  // Derived styles for dark vs light contexts (only applied inside modal)
+  const inputS = isDarkModal
+    ? { ...inputStyle, border: '1px solid #334155', background: 'rgba(15,23,42,0.55)', color: '#e2e8f0' }
+    : inputStyle;
+  const helpTextS = isDarkModal
+    ? { ...helpTextStyle, color: '#94a3b8' }
+    : helpTextStyle;
+  const buttonOutlineS = isDarkModal
+    ? { ...buttonOutline, background: 'rgba(15,23,42,0.35)', color: '#e2e8f0', border: '1px solid #334155' }
+    : buttonOutline;
+  const cardBorder = isDarkModal ? '#334155' : '#e5e7eb';
+  const listRowBg = (idx) => {
+    if (!isDarkModal) return idx % 2 === 0 ? '#ffffff' : '#f9fafb';
+    return idx % 2 === 0 ? 'rgba(15,23,42,0.55)' : 'rgba(15,23,42,0.7)';
+  };
+  const previewBg = isDarkModal ? 'rgba(2,6,23,0.6)' : '#f8fafc';
+  const docCardBg = isDarkModal ? 'rgba(15,23,42,0.5)' : '#ffffff';
+  const mutedColor = isDarkModal ? '#94a3b8' : '#64748b';
+  const legendBorder = isDarkModal ? '#334155' : '#e6eaf0';
+
   useEffect(() => {
     let mounted = true;
     const controllerMine = new AbortController();
@@ -206,7 +229,14 @@ export default function KycPage({ embedded = true, open = true, onClose }) {
     )}
 
     {embedded && user && (!role || role === 'public') && (
-      <Modal open={!!open} onClose={() => { if (onClose) onClose(); else navigate('/', { replace: false }); }} title="Join an Organization" width={860} bodyClassName="modern-scrollbar">
+      <Modal
+        open={!!open}
+        onClose={() => { if (onClose) onClose(); else navigate('/', { replace: false }); }}
+        title="Join an Organization"
+        width={860}
+        cardClassName="auth-card"
+        bodyClassName="content-page modern-scrollbar"
+      >
         {/* Applications list (always first) */}
         {!inWizard && (
           <div style={{ display:'grid', gap:12, marginBottom:8 }}>
@@ -216,25 +246,30 @@ export default function KycPage({ embedded = true, open = true, onClose }) {
             ) : applicationsArray.length === 0 ? (
               <div style={{ fontSize:14, color:'#6b7280' }}>No applications submitted.</div>
             ) : (
-              <div role="list" style={{ border:'1px solid #e5e7eb', borderRadius:8, overflow:'hidden' }}>
+              <div role="list" style={{ border:`1px solid ${cardBorder}`, borderRadius:8, overflow:'hidden' }}>
                 {applicationsArray.map((app, idx) => {
                   const s = app?.status || '';
                   const labels = { pending_kyc:'Pending', pending_org_review:'Pending', approved:'Approved', needs_changes:'Needs changes', rejected:'Rejected' };
                   const label = labels[s] || s;
-                  const rowBg = idx % 2 === 0 ? '#ffffff' : '#f9fafb';
-                  const badgeColor = s==='approved' ? '#dcfce7' : s==='rejected' ? '#fee2e2' : s==='needs_changes' ? '#fef9c3' : '#eef2ff';
-                  const textColor = '#1f2937';
+                  const rowBg = listRowBg(idx);
+                  const badge = s === 'approved'
+                    ? { bg: '#22c55e', fg: '#ffffff' } // green-500
+                    : s === 'rejected'
+                    ? { bg: '#ef4444', fg: '#ffffff' } // red-500
+                    : s === 'needs_changes'
+                    ? { bg: '#E0A800', fg: '#ffffff' } // updated amber per request
+                    : { bg: '#6366f1', fg: '#ffffff' }; // indigo-500 (pending/default)
                   return (
-                    <div key={app.id} role="listitem" style={{ padding:'10px 12px', background:rowBg, borderBottom:'1px solid #e5e7eb' }}>
+                    <div key={app.id} role="listitem" style={{ padding:'10px 12px', background:rowBg, borderBottom:`1px solid ${cardBorder}` }}>
                       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
                         <div style={{ fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{app?.tenant?.name || `#${app.tenant_id}`}</div>
-                        <span style={{ display:'inline-block', padding:'2px 8px', borderRadius:999, background:badgeColor, color:textColor, fontSize:12, fontWeight:600, whiteSpace:'nowrap' }}>{label}</span>
+                        <span style={{ display:'inline-block', padding:'2px 8px', borderRadius:999, background:badge.bg, color:badge.fg, fontSize:12, fontWeight:600, whiteSpace:'nowrap' }}>{label}</span>
                       </div>
                       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:4, gap:12 }}>
                         <div>
-                          <div style={{ fontSize:12, color:'#6b7280' }}>Applied role: <strong style={{ color:'#374151' }}>{app.desired_role}</strong></div>
+                          <div style={{ fontSize:12, color: isDarkModal ? '#cbd5e1' : '#6b7280' }}>Applied role: <strong style={{ color: isDarkModal ? '#e2e8f0' : '#374151' }}>{app.desired_role}</strong></div>
                           {app.status && app.status !== 'pending_kyc' && (
-                            <div style={{ fontSize:11, color:'#64748b', marginTop:2 }}>We’ve notified you by email about this update.</div>
+                            <div style={{ fontSize:11, color: mutedColor, marginTop:2 }}>We’ve notified you by email about this update.</div>
                           )}
                         </div>
                         {app.status === 'approved' && !app.accepted_at ? (
@@ -282,15 +317,15 @@ export default function KycPage({ embedded = true, open = true, onClose }) {
               <div style={{ display:'grid', gap:12 }}>
                 <label>
                   <div style={{ fontWeight:600, marginBottom:6 }}>Select Organization</div>
-                  <select value={chosenTenantId} onChange={(e) => setChosenTenantId(e.target.value)} required style={{ width:'100%', padding:'8px 10px' }}>
+                  <select value={chosenTenantId} onChange={(e) => setChosenTenantId(e.target.value)} required style={{ ...inputS }}>
                     <option value="" disabled>{(tenantsLoading || loading) ? 'Loading organizations…' : 'Choose an organization…'}</option>
                     {(tenants || []).map(t => (<option key={t.id} value={t.id}>{t.name}</option>))}
                   </select>
-                  <div style={{ fontSize:12, color:'#6b7280', marginTop:4 }}>Pick the organization you want to join.</div>
+                  <div style={{ ...helpTextS, marginTop:4 }}>Pick the organization you want to join.</div>
                 </label>
                 {errors.tenant && <div style={{ color:'#b42318' }}>{errors.tenant}</div>}
 
-                <fieldset style={{ border:'1px solid #e6eaf0', borderRadius:8, padding:12 }}>
+                <fieldset style={{ border:`1px solid ${legendBorder}`, borderRadius:8, padding:12 }}>
                   <legend style={{ padding:'0 6px' }}>Desired Role</legend>
                   <label style={{ display:'flex', gap:8, alignItems:'center', marginBottom:6 }}>
                     <input type="radio" name="desired_role" value="contributor" checked={desiredRole === 'contributor'} onChange={() => setDesiredRole('contributor')} />
@@ -300,12 +335,12 @@ export default function KycPage({ embedded = true, open = true, onClose }) {
                     <input type="radio" name="desired_role" value="org_admin" checked={desiredRole === 'org_admin'} onChange={() => setDesiredRole('org_admin')} />
                     <span>Org Admin (longer review)</span>
                   </label>
-                  <div style={{ fontSize:12, color:'#6b7280', marginTop:6 }}>Choose the role you prefer. Org Admin may take longer to review.</div>
+                  <div style={{ ...helpTextS, marginTop:6 }}>Choose the role you prefer. Org Admin may take longer to review.</div>
                 </fieldset>
                 {errors.role && <div style={{ color:'#b42318' }}>{errors.role}</div>}
 
                 <div style={{ display:'flex', justifyContent:'space-between', gap:8, marginTop:8 }}>
-                  <button type="button" onClick={exitWizard} style={{ ...buttonOutline, height:44, padding:'0 16px', borderRadius:10 }}>Cancel</button>
+                  <button type="button" onClick={exitWizard} style={{ ...buttonOutlineS, height:44, padding:'0 16px', borderRadius:10 }}>Cancel</button>
                   <div style={{ flex:1 }} />
                   <button className="auth-btn" type="button" onClick={() => { if (validateStep1()) next(); }} disabled={!tenants?.length} style={{ height:44, padding:'0 16px', borderRadius:10, margin:0 }}>Next</button>
                 </div>
@@ -316,17 +351,17 @@ export default function KycPage({ embedded = true, open = true, onClose }) {
               <form className="kyc-form" onSubmit={(e) => { if (!validateStep2(e.target)) { e.preventDefault(); return; } saveKyc(e).then(() => next()); }} style={{ display:'grid', gap:18 }}>
                 <div style={grid2}>
                   <label style={{ display:'block' }}>Full Name
-                    <input name="full_name" type="text" defaultValue={kycProfile?.full_name || ''} style={inputStyle} />
-                    <div style={{ ...helpTextStyle, color: errors.full_name ? '#b42318' : helpTextStyle.color }}>{errors.full_name || 'Your full legal name as shown on ID.'}</div>
+                    <input name="full_name" type="text" defaultValue={kycProfile?.full_name || ''} style={inputS} />
+                    <div style={{ ...helpTextS, color: errors.full_name ? '#b42318' : helpTextS.color }}>{errors.full_name || 'Your full legal name as shown on ID.'}</div>
                   </label>
                   <label style={{ display:'block' }}>Date of Birth
-                    <input name="dob" type="date" defaultValue={kycProfile?.dob || ''} style={inputStyle} />
-                    <div style={helpTextStyle}>YYYY-MM-DD</div>
+                    <input name="dob" type="date" defaultValue={kycProfile?.dob || ''} style={inputS} />
+                    <div style={helpTextS}>YYYY-MM-DD</div>
                   </label>
                 </div>
                 <div style={grid2}>
                   <label style={{ display:'block' }}>ID Type
-                    <select name="id_type_select" value={idTypeSel} onChange={(e) => setIdTypeSel(e.target.value)} style={inputStyle}>
+                    <select name="id_type_select" value={idTypeSel} onChange={(e) => setIdTypeSel(e.target.value)} style={inputS}>
                       <option value="">Select type…</option>
                       <option value="passport">Passport</option>
                       <option value="national_id">National ID</option>
@@ -334,37 +369,37 @@ export default function KycPage({ embedded = true, open = true, onClose }) {
                       <option value="other">Other</option>
                     </select>
                     {idTypeSel === 'other' && (
-                      <input name="id_type_other" type="text" value={idTypeOther} onChange={(e) => setIdTypeOther(e.target.value)} placeholder="Specify ID type" style={{ ...inputStyle, marginTop:8 }} />
+                      <input name="id_type_other" type="text" value={idTypeOther} onChange={(e) => setIdTypeOther(e.target.value)} placeholder="Specify ID type" style={{ ...inputS, marginTop:8 }} />
                     )}
-                    <div style={{ ...helpTextStyle, color: errors.id_type ? '#b42318' : helpTextStyle.color }}>{errors.id_type || 'e.g., Passport, National ID, Driver’s License, or specify other.'}</div>
+                    <div style={{ ...helpTextS, color: errors.id_type ? '#b42318' : helpTextS.color }}>{errors.id_type || 'e.g., Passport, National ID, Driver’s License, or specify other.'}</div>
                   </label>
                   <label style={{ display:'block' }}>ID Number
-                    <input name="id_number" type="text" defaultValue={kycProfile?.id_number || ''} style={inputStyle} />
-                    <div style={{ ...helpTextStyle, color: errors.id_number ? '#b42318' : helpTextStyle.color }}>{errors.id_number || 'Enter exactly as shown on the ID.'}</div>
+                    <input name="id_number" type="text" defaultValue={kycProfile?.id_number || ''} style={inputS} />
+                    <div style={{ ...helpTextS, color: errors.id_number ? '#b42318' : helpTextS.color }}>{errors.id_number || 'Enter exactly as shown on the ID.'}</div>
                   </label>
                 </div>
                 <div style={{ display:'grid', gap:16, gridTemplateColumns:'1fr' }}>
                   <label style={{ display:'block' }}>Address
-                    <input name="address_line1" type="text" defaultValue={kycProfile?.address_line1 || ''} style={inputStyle} />
-                    <div style={helpTextStyle}>Street address, Purok/Barangay if applicable.</div>
+                    <input name="address_line1" type="text" defaultValue={kycProfile?.address_line1 || ''} style={inputS} />
+                    <div style={helpTextS}>Street address, Purok/Barangay if applicable.</div>
                   </label>
                 </div>
                 <div style={grid3}>
                   <label style={{ display:'block' }}>City
-                    <input name="city" type="text" defaultValue={kycProfile?.city || ''} style={inputStyle} />
-                    <div style={helpTextStyle}>City or Municipality.</div>
+                    <input name="city" type="text" defaultValue={kycProfile?.city || ''} style={inputS} />
+                    <div style={helpTextS}>City or Municipality.</div>
                   </label>
                   <label style={{ display:'block' }}>Province
-                    <input name="province" type="text" defaultValue={kycProfile?.province || ''} style={inputStyle} />
-                    <div style={helpTextStyle}>Province/Region.</div>
+                    <input name="province" type="text" defaultValue={kycProfile?.province || ''} style={inputS} />
+                    <div style={helpTextS}>Province/Region.</div>
                   </label>
                   <label style={{ display:'block' }}>Postal Code
-                    <input name="postal_code" type="text" defaultValue={kycProfile?.postal_code || ''} style={inputStyle} />
-                    <div style={helpTextStyle}>ZIP/Postal code.</div>
+                    <input name="postal_code" type="text" defaultValue={kycProfile?.postal_code || ''} style={inputS} />
+                    <div style={helpTextS}>ZIP/Postal code.</div>
                   </label>
                 </div>
                 <div style={{ display:'flex', justifyContent:'flex-end', alignItems:'center', gap:10 }}>
-                  <button type="button" onClick={prev} style={{ height:44, padding:'0 16px', background:'#ffffff', color:'#111827', border:'1px solid #111827', borderRadius:10, fontWeight:600, margin:0 }}>Back</button>
+                  <button type="button" onClick={prev} style={{ ...buttonOutlineS, height:44, padding:'0 16px', borderRadius:10, fontWeight:600, margin:0 }}>Back</button>
                   <button className="auth-btn" type="submit" disabled={kycSaving} style={{ height:44, padding:'0 16px', borderRadius:10, margin:0 }}>{kycSaving ? 'Saving…' : 'Save & Continue'}</button>
                 </div>
               </form>
@@ -373,11 +408,11 @@ export default function KycPage({ embedded = true, open = true, onClose }) {
             {step === 3 && (
               <div>
                 <div style={{ fontWeight:600, marginBottom:6 }}>Documents</div>
-                <div style={{ fontSize:12, color:'#6b7280', marginBottom:6 }}>Upload clear JPG, PNG, or PDF up to 5 MB. If your ID has front and back, upload both. Make sure text and photos are readable.</div>
+                <div style={{ fontSize:12, color: helpTextS.color, marginBottom:6 }}>Upload clear JPG, PNG, or PDF up to 5 MB. If your ID has front and back, upload both. Make sure text and photos are readable.</div>
                 <div style={{ display:'flex', flexWrap:'wrap', gap:10, justifyContent:'center', marginBottom:6 }}>
-                  <label style={{ ...buttonOutline, cursor:'pointer' }}>Upload ID Front<input type="file" data-type="id_front" onChange={uploadDoc} accept=".jpg,.jpeg,.png,.pdf" style={{ display:'none' }} /></label>
-                  <label style={{ ...buttonOutline, cursor:'pointer' }}>Upload ID Back<input type="file" data-type="id_back" onChange={uploadDoc} accept=".jpg,.jpeg,.png,.pdf" style={{ display:'none' }} /></label>
-                  <label style={{ ...buttonOutline, cursor:'pointer' }}>Upload Supporting<input type="file" data-type="supporting" onChange={uploadDoc} accept=".jpg,.jpeg,.png,.pdf" style={{ display:'none' }} /></label>
+                  <label style={{ ...buttonOutlineS, cursor:'pointer' }}>Upload ID Front<input type="file" data-type="id_front" onChange={uploadDoc} accept=".jpg,.jpeg,.png,.pdf" style={{ display:'none' }} /></label>
+                  <label style={{ ...buttonOutlineS, cursor:'pointer' }}>Upload ID Back<input type="file" data-type="id_back" onChange={uploadDoc} accept=".jpg,.jpeg,.png,.pdf" style={{ display:'none' }} /></label>
+                  <label style={{ ...buttonOutlineS, cursor:'pointer' }}>Upload Supporting<input type="file" data-type="supporting" onChange={uploadDoc} accept=".jpg,.jpeg,.png,.pdf" style={{ display:'none' }} /></label>
                 </div>
                 {kycDocs?.length > 0 && (
                   <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(220px, 1fr))', gap:12, marginTop:10 }}>
@@ -387,8 +422,8 @@ export default function KycPage({ embedded = true, open = true, onClose }) {
                       const isPdf = (doc.mime || '') === 'application/pdf' || /\.pdf$/i.test(lowerPath);
                       const url = doc.url || (doc.path ? (String(doc.path).startsWith('/storage') ? doc.path : `/storage/${doc.path}`) : '#');
                       return (
-                        <div key={doc.id} style={{ border:'1px solid #e5e7eb', borderRadius:10, overflow:'hidden', background:'#fff' }}>
-                          <div style={{ height:160, background:'#f8fafc', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                        <div key={doc.id} style={{ border:`1px solid ${cardBorder}`, borderRadius:10, overflow:'hidden', background: docCardBg }}>
+                          <div style={{ height:160, background: previewBg, display:'flex', alignItems:'center', justifyContent:'center' }}>
                             {isImage ? (<img src={url} alt={doc.type} loading="lazy" style={{ maxWidth:'100%', maxHeight:'100%', objectFit:'contain' }} />) : isPdf ? (<span style={{ color:'#64748b' }}>PDF Preview</span>) : (<span style={{ color:'#64748b' }}>File</span>)}
                           </div>
                           <div style={{ padding:10, fontSize:13 }}>
@@ -396,11 +431,11 @@ export default function KycPage({ embedded = true, open = true, onClose }) {
                               <div style={{ fontWeight:600, textTransform:'capitalize' }}>{String(doc.type || '').replace('_',' ')}</div>
                               <div className="muted" style={{ fontSize:12 }}>{formatBytes(doc.size_bytes)}</div>
                             </div>
-                            <div className="muted" style={{ fontSize:12, marginBottom:8 }}>{doc.created_at ? new Date(doc.created_at).toLocaleString() : ''}</div>
+                            <div className="muted" style={{ fontSize:12, marginBottom:8, color: mutedColor }}>{doc.created_at ? new Date(doc.created_at).toLocaleString() : ''}</div>
                             <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-                              <a href={url} target="_blank" rel="noreferrer" style={{ ...buttonOutline, height:36, padding:'0 12px', borderRadius:8 }}>Open</a>
-                              <a href={url} download style={{ ...buttonOutline, height:36, padding:'0 12px', borderRadius:8 }}>Download</a>
-                              <button type="button" onClick={() => deleteDoc(doc.id)} style={{ ...buttonOutline, height:36, padding:'0 12px', borderRadius:8 }}>Delete</button>
+                              <a href={url} target="_blank" rel="noreferrer" style={{ ...buttonOutlineS, height:36, padding:'0 12px', borderRadius:8 }}>Open</a>
+                              <a href={url} download style={{ ...buttonOutlineS, height:36, padding:'0 12px', borderRadius:8 }}>Download</a>
+                              <button type="button" onClick={() => deleteDoc(doc.id)} style={{ ...buttonOutlineS, height:36, padding:'0 12px', borderRadius:8 }}>Delete</button>
                             </div>
                           </div>
                         </div>
@@ -409,7 +444,7 @@ export default function KycPage({ embedded = true, open = true, onClose }) {
                   </div>
                 )}
                 <div style={{ display:'flex', justifyContent:'flex-end', alignItems:'center', gap:10, marginTop:16 }}>
-                  <button type="button" onClick={prev} style={buttonOutline}>Back</button>
+                  <button type="button" onClick={prev} style={buttonOutlineS}>Back</button>
                   {(!myApplication || showNewApp) && (
                     <button className="auth-btn" type="button" onClick={finalizeApplication} disabled={submitting || !chosenTenantId} style={{ height:44, padding:'0 16px', borderRadius:10, margin:0 }}>{submitting ? 'Submitting…' : 'Submit Application'}</button>
                   )}
