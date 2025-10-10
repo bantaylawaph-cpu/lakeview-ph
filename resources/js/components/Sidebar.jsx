@@ -19,6 +19,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { api, clearToken, getToken } from "../lib/api";
 import { getCurrentUser, setCurrentUser, ensureUser, isStale } from "../lib/authState";
 import "leaflet/dist/leaflet.css";
+import "../../css/util/scrollbars.css";
 import { confirm, alertSuccess } from "../utils/alerts";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -75,6 +76,8 @@ function MiniMapWrapper() {
 // ─────────────────────────────────────────────────────────────────────────────
 function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth, onOpenFeedback, onOpenKyc, onAboutDataToggle }) {
   const [me, setMe] = useState(() => getCurrentUser()); // start with cached user if available
+  const containerRef = useRef(null);
+  const suppressNextOutsideCloseRef = useRef(false);
   const navigate = useNavigate();
   const location = useLocation();
   const [aboutDataOpen, setAboutDataOpen] = useState(() => {
@@ -159,6 +162,26 @@ function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth, onOpenFeedbac
   const isLoggedIn = !!me?.id;
   const isPublic = isLoggedIn && (me.role === "public" || !me.role);
 
+  // Close sidebar on outside click when open and not pinned
+  useEffect(() => {
+    if (!isOpen || pinned) return;
+    const handlePointerDown = (e) => {
+      try {
+        if (suppressNextOutsideCloseRef.current) {
+          suppressNextOutsideCloseRef.current = false;
+          return; // ignore this one outside-close cycle
+        }
+        const el = containerRef.current;
+        if (!el) return;
+        if (!el.contains(e.target)) {
+          onClose?.();
+        }
+      } catch {}
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [isOpen, pinned, onClose]);
+
   const onSettingsClick = (e) => {
     if (!isLoggedIn) return; // guard
     e.preventDefault();
@@ -184,7 +207,11 @@ function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth, onOpenFeedbac
   const isActive = (path) => location.pathname === path;
 
   return (
-    <div className={`sidebar ${isOpen ? "open" : ""} ${pinned ? "pinned" : ""}`}>
+    <div
+      className={`sidebar ${isOpen ? "open" : ""} ${pinned ? "pinned" : ""}`}
+      ref={containerRef}
+      style={{ display: 'flex', flexDirection: 'column', height: '100%' }}
+    >
       {/* Header */}
       <div className="sidebar-header">
         <div className="sidebar-logo">
@@ -220,8 +247,10 @@ function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth, onOpenFeedbac
         <MiniMapWrapper />
       </div>
 
-      {/* Menu Links */}
-      <ul className="sidebar-menu">
+      {/* Scrollable middle content (menu, about data, etc.) */}
+      <div className="sidebar-scroll modern-scrollbar" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+        {/* Menu Links */}
+        <ul className="sidebar-menu">
         
 
         {isLoggedIn && (isPublic) && (
@@ -279,28 +308,42 @@ function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth, onOpenFeedbac
             <span>GitHub Page</span>
           </a>
         </li>
-  {/* About the Data (dropdown) */}
-  <li className="has-submenu">
+        {/* About the Data (dropdown) */}
+        <li className="has-submenu">
           <a
             href="#about-data"
             className={`sidebar-row ${aboutDataOpen ? 'open' : ''}`}
             role="button"
-            onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+            onPointerDown={(e) => {
+              // Prevent the global document pointerdown outside-close from firing
+              suppressNextOutsideCloseRef.current = true;
+              try { e.stopPropagation(); } catch {}
+              try { e.nativeEvent && e.nativeEvent.stopImmediatePropagation && e.nativeEvent.stopImmediatePropagation(); } catch {}
+            }}
+            onMouseDown={(e) => {
+              suppressNextOutsideCloseRef.current = true;
+              e.preventDefault();
+              e.stopPropagation();
+            }}
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              setAboutDataOpen(v => {
+              setAboutDataOpen((v) => {
                 const nv = !v;
-                try { onAboutDataToggle && onAboutDataToggle(nv); } catch {}
+                try {
+                  onAboutDataToggle && onAboutDataToggle(nv);
+                } catch {}
                 return nv;
               });
             }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
-                setAboutDataOpen(v => {
+                setAboutDataOpen((v) => {
                   const nv = !v;
-                  try { onAboutDataToggle && onAboutDataToggle(nv); } catch {}
+                  try {
+                    onAboutDataToggle && onAboutDataToggle(nv);
+                  } catch {}
                   return nv;
                 });
               }
@@ -309,16 +352,18 @@ function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth, onOpenFeedbac
                 // focus first submenu item after opening
                 setTimeout(() => {
                   try {
-                    const first = document.querySelector('#about-data-submenu .sidebar-row');
+                    const first = document.querySelector(
+                      '#about-data-submenu .sidebar-row'
+                    );
                     first && first.focus && first.focus();
                   } catch {}
                 }, 10);
               }
               if (e.key === 'ArrowUp' && aboutDataOpen) {
-                setAboutDataOpen(false);
+                setAboutDataOpen(true);
               }
             }}
-            aria-expanded={aboutDataOpen ? "true" : "false"}
+            aria-expanded={aboutDataOpen ? 'true' : 'false'}
             aria-controls="about-data-submenu"
             style={{ width: '100%', textAlign: 'left' }}
           >
@@ -326,16 +371,27 @@ function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth, onOpenFeedbac
             <span style={{ flex: 1 }}>About the Data</span>
             <FiChevronDown className={`chev ${aboutDataOpen ? 'open' : ''}`} />
           </a>
+
           <ul
             id="about-data-submenu"
             className={`sidebar-submenu ${aboutDataOpen ? 'open' : ''}`}
-            style={{ listStyle: 'none', paddingLeft: 0, marginTop: 6, marginBottom: 0 }}
+            style={{
+              listStyle: 'none',
+              paddingLeft: 0,
+              marginTop: 6,
+              marginBottom: 0,
+            }}
           >
             <li>
               <a
                 href="#overview"
                 className="sidebar-row"
-                onClick={(e) => { e.preventDefault(); try { window.dispatchEvent(new Event('lv-open-about-data')); } catch {} }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  try {
+                    window.dispatchEvent(new Event('lv-open-about-data'));
+                  } catch {}
+                }}
               >
                 <span>Overview</span>
               </a>
@@ -343,10 +399,14 @@ function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth, onOpenFeedbac
             <li>
               <a
                 href="#privacy"
-                className={`sidebar-row ${location.pathname === '/data/privacy' ? 'active' : ''}`}
+                className={`sidebar-row ${
+                  location.pathname === '/data/privacy' ? 'active' : ''
+                }`}
                 onClick={(e) => {
                   e.preventDefault();
-                  try { window.dispatchEvent(new Event('lv-open-privacy')); } catch {}
+                  try {
+                    window.dispatchEvent(new Event('lv-open-privacy'));
+                  } catch {}
                   // Keep sidebar open
                 }}
               >
@@ -355,18 +415,20 @@ function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth, onOpenFeedbac
             </li>
           </ul>
         </li>
-      </ul>
 
-      {/* Bottom Menu */}
-      <ul className="sidebar-bottom">
         {isLoggedIn && (
-          <li>
+          <li className="force-border">
             <a className="sidebar-row" href="#settings" onClick={onSettingsClick}>
               <FiSettings className="sidebar-icon" />
               <span>Settings</span>
             </a>
           </li>
         )}
+        </ul>
+      </div>
+
+      {/* Bottom Menu */}
+      <ul className="sidebar-bottom">
 
         {isLoggedIn ? (
           <>

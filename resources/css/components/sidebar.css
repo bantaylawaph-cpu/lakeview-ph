@@ -88,6 +88,11 @@
   border-bottom: none;
 }
 
+/* Utility: force border on specific items (e.g., last item when needed) */
+.sidebar-menu li.force-border {
+  border-bottom: 1px solid #bbb !important;
+}
+
 /* Sidebar Icons */
 .sidebar-icon {
   font-size: 18px;
