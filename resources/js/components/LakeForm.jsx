@@ -98,7 +98,6 @@ export default function LakeForm({
             <option value="none">None</option>
             <option value="unknown">Not yet recorded</option>
           </select>
-          <small style={{color:'#6b7280'}}>When set to "Exists", flow records will be shown. When set to "None", this lake is marked as having no inflows/outflows. When set to "Not yet recorded", the system will treat flows as uncollected for this lake.</small>
         </label>
 
         <label className="lv-field">

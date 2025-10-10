@@ -18,7 +18,7 @@ function normalizeName(name = "") {
   return String(name || "").trim();
 }
 
-function buildSearchUrl({ q, countryCodes = "ph", limit = 5 }) {
+function buildSearchUrl({ q, countryCodes = "ph", limit = 5, viewbox, bounded = false }) {
   const usp = new URLSearchParams({
     format: "geojson",
     polygon_geojson: "1",
@@ -28,6 +28,8 @@ function buildSearchUrl({ q, countryCodes = "ph", limit = 5 }) {
     limit: String(limit)
   });
   if (countryCodes) usp.append("countrycodes", countryCodes);
+  if (viewbox) usp.append("viewbox", String(viewbox)); // left,top,right,bottom
+  if (bounded) usp.append("bounded", "1");
   return `https://nominatim.openstreetmap.org/search?${usp.toString()}`;
 }
 
@@ -36,21 +38,35 @@ function isWaterFeature(props = {}) {
   const cls = String(props.class || props["@class"] || "").toLowerCase();
   const typ = String(props.type || props["@type"] || "").toLowerCase();
   const cat = `${cls}:${typ}`;
-  if (cls === "water" || cls === "natural" || cls === "landuse") {
-    if (typ.includes("lake")) return true;
-    if (typ.includes("reservoir")) return true;
-    if (typ.includes("water")) return true;
-    if (typ.includes("riverbank")) return true;
+  // quick excludes (avoid buildings, amenities, etc.)
+  if (cls === 'amenity' || cls === 'building' || cls === 'highway' || cls === 'place') return false;
+  // direct class/type matches
+  if (cls === "water" || cls === "waterway") return true;
+  if (cls === "natural") {
+    if (typ === 'water' || typ.includes('lake') || typ.includes('wetland')) return true;
   }
-  // fallback: namedetails/category waterbody
-  if (props.extratags && (props.extratags.water || props.extratags.waterway)) return true;
-  // loose fallback
-  return /water|lake|reservoir|river/i.test(cat);
+  if (cls === "landuse") {
+    if (typ.includes('reservoir')) return true;
+  }
+  // extratags from OSM
+  const xt = props.extratags || {};
+  const waterTag = String(xt.water || '').toLowerCase();
+  const naturalTag = String(xt.natural || '').toLowerCase();
+  const waterwayTag = String(xt.waterway || '').toLowerCase();
+  if (naturalTag === 'water') return true;
+  if (['lake','reservoir','lagoon','pond'].includes(waterTag)) return true;
+  if (['riverbank'].includes(waterwayTag)) return true;
+  // loose fallback on class:type keywords
+  return /\b(water|lake|reservoir|river)\b/i.test(cat);
 }
 
-function pickBestFeature(features = [], wantedName = "") {
+function pickBestFeature(features = [], wantedName = "", { requireWater = false } = {}) {
   if (!Array.isArray(features) || !features.length) return null;
-  const polys = features.filter(f => f && f.geometry && /Polygon/i.test(f.geometry.type || ""));
+  let polys = features.filter(f => f && f.geometry && /Polygon/i.test(f.geometry.type || ""));
+  // If requested, keep only water-like features
+  if (requireWater) {
+    polys = polys.filter(f => isWaterFeature(f.properties || {}));
+  }
   if (!polys.length) return null;
   const w = wantedName.toLowerCase();
   // Score features: name match + water-ness + area (approx by coords length)
@@ -76,24 +92,32 @@ function pickBestFeature(features = [], wantedName = "") {
  * Search Nominatim for a lake geometry by name.
  * Returns a GeoJSON Feature (Polygon/MultiPolygon) or null.
  */
-export async function searchLakeGeometry({ name, countryHint = "Philippines", countryCodes = "ph", limit = 5 } = {}) {
+export async function searchLakeGeometry({ name, countryHint = "Philippines", countryCodes = "ph", limit = 5, viewbox = null, bounded = false, contextParts = [], requireWater = true } = {}) {
   const clean = normalizeName(name);
   if (!clean) return null;
-  // Try with country appended for better precision
-  const queries = [`${clean}, ${countryHint}`.trim(), clean];
+  // Build contextual queries: name + (contextParts) + country, then fallbacks
+  const ctx = (Array.isArray(contextParts) ? contextParts : [])
+    .map(s => String(s || "").trim())
+    .filter(Boolean);
+  const contextJoined = [...ctx, countryHint].filter(Boolean).join(", ");
+  const queries = [
+    contextJoined ? `${clean}, ${contextJoined}` : `${clean}, ${countryHint}`,
+    `${clean}, ${countryHint}`,
+    clean,
+  ];
   for (const q of queries) {
-    const key = `search:${q}|cc=${countryCodes}|lim=${limit}`;
+    const key = `search:${q}|cc=${countryCodes}|lim=${limit}|vb=${viewbox || ''}|bd=${bounded ? 1 : 0}|rw=${requireWater ? 1 : 0}`;
     const cached = cacheGet(key);
     if (cached !== undefined && cached !== null) {
       if (!cached) continue; // cached miss
       return cached;
     }
-    const url = buildSearchUrl({ q, countryCodes, limit });
+    const url = buildSearchUrl({ q, countryCodes, limit, viewbox, bounded });
     try {
       const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
       if (!res.ok) { cacheSet(key, null); continue; }
       const data = await res.json();
-      const feat = pickBestFeature(data?.features || [], clean);
+      const feat = pickBestFeature(data?.features || [], clean, { requireWater });
       if (feat) { cacheSet(key, feat); return feat; }
       cacheSet(key, null);
     } catch (_) {

@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import Swal from 'sweetalert2';
 import L from 'leaflet';
 import { fetchPublicLayers, fetchLakeOptions, fetchPublicLayerGeo } from '../../../lib/layers';
 import { searchLakeGeometry } from '../../../lib/nominatim';
@@ -193,7 +194,47 @@ export function useLakeSelection({ publicFC, mapRef, setPanelOpen, setFilterWate
     // Turning on: fetch and apply
     try {
       setNominatimLoading(true);
-      const nominatimFeature = await searchLakeGeometry({ name });
+      // Build a tight viewbox around the selected feature to avoid same-name lakes elsewhere
+      let viewbox = null;
+      let bounded = false;
+      let contextParts = [];
+      try {
+        // Prefer current map bounds; else compute from the selected base feature geometry
+        let bounds = null;
+        if (mapRef?.current && typeof mapRef.current.getBounds === 'function') {
+          const b = mapRef.current.getBounds();
+          if (b && b.isValid && b.isValid()) bounds = b;
+        }
+        if (!bounds && publicFC && (selectedLakeId != null || selectedLakeName)) {
+          try {
+            const f = publicFC.features?.find(ft => {
+              const id = getLakeIdFromFeature(ft);
+              if (selectedLakeId != null && id != null) return String(id) === String(selectedLakeId);
+              const fname = (ft?.properties?.name || '').trim().toLowerCase();
+              return selectedLakeId == null && !!selectedLakeName && fname === String(selectedLakeName).trim().toLowerCase();
+            });
+            if (f) {
+              const gj = L.geoJSON(f);
+              const b = gj.getBounds();
+              if (b && b.isValid && b.isValid()) bounds = b;
+            }
+          } catch {}
+        }
+        if (bounds) {
+          const pad = 0.02; // ~small pad degrees
+          const west = Math.max(-180, bounds.getWest() - pad);
+          const south = Math.max(-90, bounds.getSouth() - pad);
+          const east = Math.min(180, bounds.getEast() + pad);
+          const north = Math.min(90, bounds.getNorth() + pad);
+          viewbox = `${west},${north},${east},${south}`; // left,top,right,bottom
+          bounded = true;
+        }
+        // Add admin context if available from selectedLake
+        const p = selectedLake || {};
+        contextParts = [p.municipality, p.province, p.region].filter(Boolean);
+      } catch {}
+
+  const nominatimFeature = await searchLakeGeometry({ name, viewbox, bounded, contextParts, requireWater: true });
       if (nominatimFeature && nominatimFeature.geometry) {
         const feature = {
           type: 'Feature',
@@ -205,10 +246,21 @@ export function useLakeSelection({ publicFC, mapRef, setPanelOpen, setFilterWate
         if (mapRef?.current) {
           try { const gj = L.geoJSON(feature); const b = gj.getBounds(); if (b?.isValid?.()) mapRef.current.fitBounds(b, { padding: [24,24], maxZoom: 13 }); } catch {}
         }
+      } else {
+        // No geometry found within bounds: notify user with SweetAlert2
+        try {
+          const lakeLabel = name ? ` for "${name}"` : '';
+          await Swal.fire({
+            icon: 'info',
+            title: 'No water body found',
+            text: `No OpenStreetMap water body geometry was found${lakeLabel} within the selected area.`,
+            confirmButtonText: 'OK',
+          });
+        } catch {}
       }
     } catch (e) { console.warn('[useLakeSelection] toggle nominatim failed', e); }
     finally { setNominatimLoading(false); }
-  }, [baseIsPoint, selectedLakeName, selectedLake, lakeOverlayFeature, mapRef, nominatimLoading]);
+  }, [baseIsPoint, selectedLakeName, selectedLake, lakeOverlayFeature, mapRef, nominatimLoading, publicFC, selectedLakeId]);
 
   return {
     // state

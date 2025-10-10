@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentUser } from '../../lib/authState';
+import { useAuthRole } from '../../pages/PublicInterface/hooks/useAuthRole';
 import { GeoJSON } from "react-leaflet";
 import AppMap from "../../components/AppMap";
 import "leaflet/dist/leaflet.css";
@@ -93,6 +94,8 @@ export default function LayerWizard({
   const [geocodeQuery, setGeocodeQuery] = useState("");
   const [geocodeResults, setGeocodeResults] = useState([]);
   const [geocodeLoading, setGeocodeLoading] = useState(false);
+  // Use the shared auth hook so UI reacts correctly on refresh/navigation
+  const { userRole, authUser } = useAuthRole();
 
   useEffect(() => {
     if (initialBodyId === undefined || initialBodyId === null || initialBodyId === "") return;
@@ -381,12 +384,9 @@ export default function LayerWizard({
             />
           </div>
 
-          {(() => {
-            const me = getCurrentUser?.();
-            if (!me || me.role !== 'superadmin') return null;
-            return (
-              <div className="org-form" style={{ marginTop: 10 }}>
-          
+          {userRole === 'superadmin' && (
+            <div className="org-form" style={{ marginTop: 10 }}>
+
             <div className="form-group" style={{ flexBasis: '100%' }}>
               <label>Import from place name</label>
               <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
@@ -416,8 +416,7 @@ export default function LayerWizard({
               )}
             </div>
           </div>
-            );
-          })()}
+          )}
 
           {error && (
             <div className="alert-note" style={{ marginTop: 8 }}>

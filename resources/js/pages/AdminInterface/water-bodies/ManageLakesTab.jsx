@@ -173,7 +173,8 @@ function ManageLakesTab() {
   );
 
   const defaultsVisible = useMemo(() => {
-    const initial = { name: true, alt_name: true, region: true, province: true, municipality: true, classification: true, surface_area_km2: true };
+    // Default visible columns: Name, Region, Province, DENR Class (classification), Flows (flows_status), Watershed
+    const initial = { name: true, region: true, province: true, classification: true, flows_status: true, watershed: true };
     baseColumns.forEach((col) => {
       if (!(col.id in initial)) initial[col.id] = false;
     });
@@ -229,6 +230,22 @@ function ManageLakesTab() {
       // ignore storage failure
     }
   }, [adv]);
+
+  const restoreDefaults = useCallback(() => {
+    try {
+      localStorage.removeItem(VIS_KEY);
+      localStorage.removeItem(ADV_KEY);
+      localStorage.removeItem(SEARCH_KEY);
+    } catch (err) {
+      // ignore storage errors
+    }
+    // Reset UI state
+    setVisibleMap(defaultsVisible);
+    setAdv({});
+    setQuery("");
+    // Reset table widths by triggering resetSignal
+    triggerResetWidths();
+  }, [defaultsVisible]);
 
   const fetchWatersheds = useCallback(async () => {
     try {
@@ -776,11 +793,12 @@ function ManageLakesTab() {
         }}
         filters={[]}
         columnPicker={{ columns: baseColumns, visibleMap, onVisibleChange: setVisibleMap }}
-        onResetWidths={triggerResetWidths}
+  onResetWidths={() => { triggerResetWidths(); restoreDefaults(); }}
         onRefresh={fetchLakes}
         onExport={exportCsv}
         onAdd={openCreate}
         onToggleFilters={() => setFiltersOpen((value) => !value)}
+        onRestoreDefaults={restoreDefaults}
         filtersBadgeCount={activeFilterCount}
       />
 
