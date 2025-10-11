@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { getCurrentUser, setCurrentUser } from "../../lib/authState";
 import { listTenantsOptions, createOrgApplication } from "../../lib/api";
 import api from "../../lib/api";
-import { toastSuccess, toastError } from "../../utils/alerts";
+import { toastSuccess, toastError } from "../../lib/alerts";
 import Modal from "../../components/Modal";
 
 // Hoisted styles
@@ -203,7 +203,7 @@ export default function KycPage({ embedded = true, open = true, onClose }) {
       try { await api.post('/kyc/submit'); } catch(_) {}
       const res = await createOrgApplication({ tenant_id: Number(chosenTenantId), desired_role: desiredRole });
       setSubmitOk(true);
-      if (res?.message) { try { const { Toast } = await import('../../utils/alerts'); Toast.fire({ icon: 'success', title: res.message, timer: 6000 }); } catch { toastSuccess(res.message); } }
+  if (res?.message) { try { const { Toast } = await import('../../lib/alerts'); Toast.fire({ icon: 'success', title: res.message, timer: 6000 }); } catch { toastSuccess(res.message); } }
       try { const mine = await api.get('/org-applications/mine'); setMyApplication(mine?.data || null); } catch {}
       exitWizard();
       if (onClose) onClose();

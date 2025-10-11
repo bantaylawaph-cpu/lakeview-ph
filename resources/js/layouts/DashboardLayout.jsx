@@ -9,7 +9,7 @@ import {
   FiChevronsRight,
 } from "react-icons/fi";
 import { api, clearToken, getToken } from "../lib/api";
-import { confirm, alertSuccess } from "../utils/alerts"; // ⬅️ SweetAlert2 helpers
+import { confirm, alertSuccess } from "../lib/alerts"; // ⬅️ SweetAlert2 helpers
 
 export default function DashboardLayout({ links, user, children }) {
   const [collapsed, setCollapsed] = useState(false);

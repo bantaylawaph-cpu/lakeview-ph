@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Modal from "../Modal";
 import { apiPublic } from "../../lib/api";
-import { alertError } from "../../utils/alerts";
+import { alertError } from "../../lib/alerts";
 import AppMap from "../AppMap";
 import MapViewport from "../MapViewport";
 import { Marker, Popup } from "react-leaflet";

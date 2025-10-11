@@ -20,7 +20,7 @@ import { api, clearToken, getToken } from "../lib/api";
 import { getCurrentUser, setCurrentUser, ensureUser, isStale } from "../lib/authState";
 import "leaflet/dist/leaflet.css";
 import "../../css/util/scrollbars.css";
-import { confirm, alertSuccess } from "../utils/alerts";
+import { confirm, alertSuccess } from "../lib/alerts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MiniMap that stays centered and updates live

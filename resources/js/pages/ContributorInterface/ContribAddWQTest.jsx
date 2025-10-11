@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect } from "react";
 import WQTestWizard from "../../components/water-quality-test/WQTestWizard";
 import { FiDroplet } from "react-icons/fi";
 import { api } from "../../lib/api";
-import { alertError, alertSuccess } from "../../utils/alerts";
+import { alertError, alertSuccess } from "../../lib/alerts";
 
 /**
  * Contributor-facing WQ Test creation page.

@@ -3,7 +3,7 @@ import { FiSettings, FiX } from 'react-icons/fi';
 import Popover from "../common/Popover";
 import { apiPublic } from "../../lib/api";
 import { fetchSampleEvents, deriveOrgOptions } from "./data/fetchers"; // removed unused fetchParameters
-import { alertSuccess, alertError } from '../../utils/alerts';
+import { alertSuccess, alertError } from '../../lib/alerts';
 import { runOneSample, runTwoSample } from './statsAdapter'; // consolidated test execution
 import { fmt, sci } from './formatters';
 import ResultPanel from './ResultPanel';

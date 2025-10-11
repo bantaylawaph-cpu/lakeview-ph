@@ -1,0 +1,25 @@
+/* SweetAlert2 customization for LakeView PH */
+/* Keep alerts above app modals and add rounded corners and subtle shadow */
+.swal-container {
+  z-index: 33000 !important; /* above any app modal overlays */
+}
+.swal-popup {
+  border-radius: 14px !important; /* rounded corners */
+  padding: 1.125rem 1.25rem !important;
+  box-shadow: 0 12px 28px rgba(17, 24, 39, 0.22), 0 2px 8px rgba(17, 24, 39, 0.12);
+}
+.swal-title {
+  font-weight: 700;
+}
+.swal-text {
+  font-size: 0.9375rem;
+  color: #374151; /* gray-700 */
+}
+.swal-confirm, .swal-cancel {
+  border-radius: 9999px !important; /* pill buttons */
+  padding: 0.5rem 1rem !important;
+}
+/* Toast tweaks */
+.swal2-container.swal2-top-end > .swal2-popup.swal-popup {
+  border-radius: 12px !important;
+}

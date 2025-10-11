@@ -1,5 +1,5 @@
 import React from 'react';
-import { alertSuccess, alertError } from '../../utils/alerts';
+import { alertSuccess, alertError } from '../../lib/alerts';
 
 export default function ValuesTable({ result, lakes, lakeId, compareValue, showAllValues, setShowAllValues, fmt }) {
   if (!result) return null;

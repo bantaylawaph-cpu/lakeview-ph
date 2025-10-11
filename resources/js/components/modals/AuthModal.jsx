@@ -6,7 +6,7 @@ import {
   requestForgotOtp, verifyForgotOtp, resetWithTicket, resendOtp } 
   from "../../lib/api";
 import { setCurrentUser } from "../../lib/authState";
-import { alertSuccess, alertError, alertInfo } from "../../utils/alerts";
+import { alertSuccess, alertError, alertInfo } from "../../lib/alerts";
 import Modal from "../../components/Modal";
 import { FiX, FiEye, FiEyeOff } from "react-icons/fi";
 

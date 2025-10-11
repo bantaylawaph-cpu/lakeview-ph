@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import api from '../../lib/api';
 import { setCurrentUser, getCurrentUser } from '../../lib/authState';
-import { alertSuccess, alertError } from '../../utils/alerts';
+import { alertSuccess, alertError } from '../../lib/alerts';
 
 export default function useUpdateSelf() {
   const [loading, setLoading] = useState(false);

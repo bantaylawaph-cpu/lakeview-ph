@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { apiPublic, buildQuery } from "../../lib/api";
-import { alertError } from "../../utils/alerts";
+import { alertError } from "../../lib/alerts";
 import { fetchStationsForLake } from "../stats-modal/data/fetchers";
 import {
   Chart as ChartJS,

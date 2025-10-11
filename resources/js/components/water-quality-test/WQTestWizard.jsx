@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { api, getToken } from "../../lib/api";
-import { alertError, alertSuccess, confirm } from "../../utils/alerts";
+import { alertError, alertSuccess, confirm } from "../../lib/alerts";
 import { fetchLakeOptions } from "../../lib/layers";
 import {
   FiMapPin, FiThermometer,

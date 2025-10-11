@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect } from "react";
 import { FiDroplet } from "react-icons/fi";
 import WQTestWizard from "../../components/water-quality-test/WQTestWizard";
 import { api } from "../../lib/api";
-import { alertError, alertSuccess } from "../../utils/alerts";
+import { alertError, alertSuccess } from "../../lib/alerts";
 
 /**
  * IMPORTANT: Route-level layout (DashboardLayout) should wrap this page.

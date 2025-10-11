@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { FiEye, FiMapPin } from 'react-icons/fi';
 import { apiPublic, buildQuery } from '../../lib/api';
-import { alertError } from '../../utils/alerts';
+import { alertError } from '../../lib/alerts';
 import PublicWQTestModal from '../modals/PublicWQTestModal';
 import LoadingSpinner from '../LoadingSpinner';
 
