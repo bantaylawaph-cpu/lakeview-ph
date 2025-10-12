@@ -8,7 +8,7 @@ import useDebounce from "../../hooks/useDebounce";
  * - lake
  * - onToggleHeatmap?: (enabled:boolean, km:number) => void
  */
-function HeatmapTab({ lake, onToggleHeatmap, currentLayerId = null }) {
+function HeatmapTab({ lake, onToggleHeatmap, onClearHeatmap, currentLayerId = null, hasHeatLayer = false, heatEnabled = false, heatLoading = false }) {
   // Start at 0 so nothing is fetched until user explicitly sets a distance
   // Immediate UI distance while sliding
   const [distance, setDistance] = useState(0);
@@ -26,6 +26,7 @@ function HeatmapTab({ lake, onToggleHeatmap, currentLayerId = null }) {
   const didInitRef = useRef(false);
   const [heatOn, setHeatOn] = useState(false);
   const estimateAbortRef = useRef(null);
+  const [loadingAction, setLoadingAction] = useState(null); // 'show' | 'refresh' | null
 
   // Inject lightweight CSS for an indeterminate progress bar once
   useEffect(() => {
@@ -151,17 +152,35 @@ function HeatmapTab({ lake, onToggleHeatmap, currentLayerId = null }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [heatOn, debouncedDistance, year, currentLayerId, lake?.id]);
 
-  const handleToggleHeat = () => {
-    if (!heatOn) {
+  const handleShow = () => {
+    // Always attempt to show/fetch using current params
+    if (debouncedDistance > 0 && year) {
       setHeatOn(true);
-      if (debouncedDistance > 0 && year) {
-        onToggleHeatmap?.(true, { km: debouncedDistance, year, layerId: currentLayerId, loading: true });
-      }
-    } else {
-      setHeatOn(false);
-      onToggleHeatmap?.(false);
+      setLoadingAction('show');
+      onToggleHeatmap?.(true, { km: debouncedDistance, year, layerId: currentLayerId, loading: true });
     }
   };
+
+  const handleClear = () => {
+    // Clear the current heat layer and cancel inflight; do not change heatOn state
+    if (typeof onClearHeatmap === 'function') onClearHeatmap();
+    // If clearing during an active load, reset local loading action so no spinner remains
+    setLoadingAction(null);
+  };
+
+  const handleRefresh = () => {
+    // Force a refetch using current params; assumes the feature is conceptually on
+    if (debouncedDistance > 0 && year) {
+      setHeatOn(true);
+      setLoadingAction('refresh');
+      onToggleHeatmap?.(true, { km: debouncedDistance, year, layerId: currentLayerId, loading: true });
+    }
+  };
+
+  // When loading completes, clear the button-specific loading indicator
+  useEffect(() => {
+    if (!heatLoading) setLoadingAction(null);
+  }, [heatLoading]);
 
   if (initialLoading) {
     return (
@@ -247,26 +266,70 @@ function HeatmapTab({ lake, onToggleHeatmap, currentLayerId = null }) {
       <div style={{ fontSize: 11, color: '#ccc', marginTop: 6 }}>
         <em>Approximate counts based on gridded population data; relative, not exact.</em>
       </div>
-      <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center' }}>
+      <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}>
         <button
           type="button"
-          onClick={handleToggleHeat}
-          disabled={!(distance > 0 && year)}
-          title={!(distance > 0 && year) ? (distance <= 0 ? 'Set buffer distance first' : 'Select dataset year first') : ''}
+          onClick={handleClear}
+          disabled={!heatEnabled || !hasHeatLayer}
+          title={!hasHeatLayer ? 'No heatmap to clear' : 'Clear the current heatmap layer (no refetch)'}
+          style={{
+            padding: '8px 10px',
+            borderRadius: 12,
+            border: '1px solid rgba(255,255,255,0.12)',
+            background: 'transparent',
+            color: '#fff',
+            cursor: (!heatEnabled || !hasHeatLayer) ? 'not-allowed' : 'pointer',
+            width: 110,
+            backdropFilter: 'blur(6px)'
+          }}
+        >
+          Clear
+        </button>
+        <button
+          type="button"
+          onClick={handleShow}
+          disabled={!(distance > 0 && year) || hasHeatLayer}
+          title={hasHeatLayer ? 'Heatmap already shown (clear to show again)' : (!(distance > 0 && year) ? (distance <= 0 ? 'Set buffer distance first' : 'Select dataset year first') : '')}
           style={{
             padding: '8px 12px',
             borderRadius: 12,
             border: '1px solid rgba(255,255,255,0.12)',
-            background: heatOn ? 'rgba(255,255,255,0.06)' : 'transparent',
+            background: 'transparent',
             color: '#fff',
             fontWeight: 600,
-            cursor: !(distance > 0 && year) ? 'not-allowed' : 'pointer',
+            cursor: (!(distance > 0 && year) || hasHeatLayer) ? 'not-allowed' : 'pointer',
             width: 160,
             backdropFilter: 'blur(6px)'
           }}
           aria-pressed={heatOn}
         >
-          {heatOn ? 'Hide Heatmap' : (distance <= 0 ? 'Enable (set km first)' : (!year ? 'Enable (select year)' : 'Show Heatmap'))}
+          {heatLoading && loadingAction === 'show' ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <LoadingSpinner label="Showing…" size={16} color="#fff" inline={true} />
+            </span>
+          ) : 'Show Heatmap'}
+        </button>
+        <button
+          type="button"
+          onClick={handleRefresh}
+          disabled={!(distance > 0 && year) || (!heatEnabled && !hasHeatLayer)}
+          title={!(distance > 0 && year) ? (distance <= 0 ? 'Set buffer distance first' : 'Select dataset year first') : ((!heatEnabled && !hasHeatLayer) ? 'Show heatmap first' : 'Refresh heatmap')}
+          style={{
+            padding: '8px 10px',
+            borderRadius: 12,
+            border: '1px solid rgba(255,255,255,0.12)',
+            background: 'transparent',
+            color: '#fff',
+            cursor: (!(distance > 0 && year) || (!heatEnabled && !hasHeatLayer)) ? 'not-allowed' : 'pointer',
+            width: 110,
+            backdropFilter: 'blur(6px)'
+          }}
+        >
+          {heatLoading && loadingAction === 'refresh' ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <LoadingSpinner label="Refreshing…" size={16} color="#fff" inline={true} />
+            </span>
+          ) : 'Refresh'}
         </button>
       </div>
     </div>

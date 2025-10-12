@@ -1,7 +1,7 @@
 // ----------------------------------------------------
 // Main Map Page Component for LakeView PH
 // ----------------------------------------------------
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useMap, GeoJSON, Marker, Popup, CircleMarker } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
@@ -137,7 +137,29 @@ function MapPage() {
 
   useHotkeys({ toggleLakePanel: () => setLakePanelOpen(v => !v), closeLakePanel: () => setLakePanelOpen(false) });
 
-  const { enabled: heatEnabled, loading: heatLoading, error: heatError, resolution: heatResolution, toggle: togglePopulationHeatmap, clearError: clearHeatError } = usePopulationHeatmap({ mapRef, selectedLake });
+  // Compute selected lake bounds (prefer overlay; else from base FeatureCollection)
+  const selectedLakeBounds = useMemo(() => {
+    try {
+      if (lakeOverlayFeature) {
+        const gj = L.geoJSON(lakeOverlayFeature); const b = gj.getBounds();
+        if (b && b.isValid && b.isValid()) return b;
+      }
+      if (publicFC && selectedLakeId != null) {
+        const getLakeIdFromFeature = (feat) => {
+          const p = feat?.properties || {};
+          return feat?.id ?? p.id ?? p.lake_id ?? p.lakeId ?? p.lakeID ?? null;
+        };
+        const f = publicFC.features?.find(ft => {
+          const id = getLakeIdFromFeature(ft);
+          return id != null && String(id) === String(selectedLakeId);
+        });
+        if (f) { const gj = L.geoJSON(f); const b = gj.getBounds(); if (b && b.isValid && b.isValid()) return b; }
+      }
+    } catch {}
+    return null;
+  }, [lakeOverlayFeature, publicFC, selectedLakeId]);
+
+  const { enabled: heatEnabled, loading: heatLoading, error: heatError, resolution: heatResolution, toggle: togglePopulationHeatmap, clear: clearHeatmap, hasLayer: hasHeatLayer, clearError: clearHeatError } = usePopulationHeatmap({ mapRef, selectedLake, lakeBounds: selectedLakeBounds });
 
   // population estimate event handling now inside hook
 
@@ -295,12 +317,15 @@ function MapPage() {
       </AppMap>
 
       {/* Lake Info Panel */}
-        <LakeInfoPanel
+  <LakeInfoPanel
         isOpen={lakePanelOpen}
         onClose={() => setLakePanelOpen(false)}
         lake={selectedLake}
         onJumpToStation={jumpToStation}
         onToggleHeatmap={togglePopulationHeatmap}
+  onClearHeatmap={clearHeatmap}
+  heatEnabled={heatEnabled}
+  heatLoading={heatLoading}
         layers={lakeLayers}
         activeLayerId={lakeActiveLayerId}
         onResetToActive={resetToActive}
@@ -320,7 +345,8 @@ function MapPage() {
   showFlows={showFlows}
   flows={flows}
   onJumpToFlow={jumpToFlow}
-        />
+  hasHeatLayer={hasHeatLayer}
+  />
 
       {/* UI overlays */}
       <SearchBar onMenuClick={() => setSidebarOpen(true)} onFilterClick={() => setFilterTrayOpen((v) => !v)} />
@@ -340,7 +366,7 @@ function MapPage() {
           <button onClick={clearHeatError} style={{ marginTop: 6, background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', padding: '4px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}>Dismiss</button>
         </div>
       )}
-      {heatEnabled && !heatLoading && <HeatmapLegend resolution={heatResolution} />}
+  {hasHeatLayer && !heatLoading && <HeatmapLegend resolution={heatResolution} />}
       {/* Back to Dashboard */}
       <BackToDashboardButton role={userRole} />
 

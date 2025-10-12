@@ -115,7 +115,8 @@ export async function fetchPopPoints({ lakeId, year = 2025, radiusKm = 2, layerI
   }
   const { data } = await axios.get('/api/population/points', { params, ...axiosOpts });
   const raw = Array.isArray(data?.points) ? data.points : [];
-  return normalizeHeat(raw);
+  const normalized = normalizeHeat(raw);
+  return { raw, normalized };
 }
 
 // Progressive fetching: first a small quick sample, then full dataset.

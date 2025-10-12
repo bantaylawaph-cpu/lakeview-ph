@@ -13,6 +13,9 @@ import LoadingSpinner from "./LoadingSpinner";
  * - onClose: () => void
  * - lake: { id, name, ... }
  * - onToggleHeatmap?: (enabled:boolean, km:number) => void
+ * - onClearHeatmap?: () => void
+ * - heatEnabled?: boolean
+ * - heatLoading?: boolean
  * - layers?: Array<{ id, name, notes?, uploaded_by_org?, is_active? }>
  * - activeLayerId?: number|string|null
  * - onSelectLayer?: (layer: object) => void
@@ -27,6 +30,9 @@ function LakeInfoPanel({
   lake,
   onJumpToStation,
   onToggleHeatmap,
+  onClearHeatmap,
+  heatEnabled = false,
+  heatLoading = false,
   layers = [],
   activeLayerId = null,
   onSelectLayer,
@@ -44,6 +50,7 @@ function LakeInfoPanel({
   showFlows = false,
   flows = [],            // pass through from MapPage
   onJumpToFlow,          // callback to focus map on a flow
+  hasHeatLayer = false,
 }) {
   const [activeTab, setActiveTab] = useState("overview");
   const [closing, setClosing] = useState(false);
@@ -186,11 +193,15 @@ function LakeInfoPanel({
           <HeatmapTab
             lake={lake}
             onToggleHeatmap={onToggleHeatmap}
+            onClearHeatmap={onClearHeatmap}
             currentLayerId={
               selectedLayerId != null && String(selectedLayerId) !== String(activeLayerId ?? '')
                 ? selectedLayerId
                 : null
             }
+            hasHeatLayer={hasHeatLayer}
+            heatEnabled={heatEnabled}
+            heatLoading={heatLoading}
           />
         )}
 

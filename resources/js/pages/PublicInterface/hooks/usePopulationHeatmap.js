@@ -1,13 +1,17 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import L from 'leaflet';
 import { createHeatLayer, fetchPopPointsProgressive } from '../../../map/leafletHeat';
 
-export function usePopulationHeatmap({ mapRef, selectedLake }) {
+export function usePopulationHeatmap({ mapRef, selectedLake, lakeBounds = null }) {
   const [enabled, setEnabled] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [resolution, setResolution] = useState(null); // 'preview' | 'final'
   const paramsRef = useRef(null);
   const heatLayerRef = useRef(null);
+  const rawPointsRef = useRef([]); // store raw points for hover calculations
+  const hoverTooltipRef = useRef(null);
+  const hoverHandlersRef = useRef(null);
   const debounceRef = useRef(null);
   const abortRef = useRef(null);
   const inFlightRef = useRef(false);
@@ -19,6 +23,24 @@ export function usePopulationHeatmap({ mapRef, selectedLake }) {
     if (map && heatLayerRef.current) { try { map.removeLayer(heatLayerRef.current); } catch {} }
     heatLayerRef.current = null;
   };
+
+  const clear = useCallback(() => {
+    // Cancel in-flight fetches and pending timers
+    if (abortRef.current) { try { abortRef.current.abort(); } catch {} abortRef.current = null; }
+    if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
+    pendingFetchRef.current = null; inFlightRef.current = false; estimateInFlightRef.current = false;
+    // Remove hover tooltip and clear raw data so no stale values are shown
+    const map = mapRef?.current;
+    const hh = hoverHandlersRef.current;
+    if (map && hh) { try { map.off('mousemove', hh.onMove); map.off('mouseout', hh.onOut); } catch {} }
+    hoverHandlersRef.current = null;
+    if (hoverTooltipRef.current && hoverTooltipRef.current._map) { try { hoverTooltipRef.current.remove(); } catch {} }
+    rawPointsRef.current = [];
+    // Remove the current heat layer
+    clearLayer();
+    // Reset UI state but keep the feature enabled so users can refresh/trigger later
+    setLoading(false); setResolution(null); setError(null);
+  }, [mapRef]);
 
   const runFetch = useCallback(() => {
     const map = mapRef?.current;
@@ -45,14 +67,18 @@ export function usePopulationHeatmap({ mapRef, selectedLake }) {
     inFlightRef.current = true;
     setLoading(true); setResolution(null); setError(null);
     const runner = fetchPopPointsProgressive(params, {
-      onIntermediate: (pts) => {
+      onIntermediate: (payload) => {
+        const pts = payload?.normalized || [];
+        rawPointsRef.current = Array.isArray(payload?.raw) ? payload.raw : [];
         if (!heatLayerRef.current) {
           const layer = createHeatLayer(pts);
           heatLayerRef.current = layer; layer.addTo(map);
         } else { heatLayerRef.current.__setData?.(pts); }
         setResolution('preview');
       },
-      onFinal: (pts) => {
+      onFinal: (payload) => {
+        const pts = payload?.normalized || [];
+        rawPointsRef.current = Array.isArray(payload?.raw) ? payload.raw : rawPointsRef.current;
         if (heatLayerRef.current) { heatLayerRef.current.__setData?.(pts); }
         else { const layer = createHeatLayer(pts); heatLayerRef.current = layer; layer.addTo(map); }
         setLoading(false); setResolution('final'); setError(null);
@@ -75,6 +101,12 @@ export function usePopulationHeatmap({ mapRef, selectedLake }) {
       setEnabled(false); setLoading(false); setResolution(null); setError(null);
       if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
       if (abortRef.current) { try { abortRef.current.abort(); } catch {} abortRef.current = null; }
+      // Tear down hover tooltip and handlers
+      const map = mapRef?.current;
+      const hh = hoverHandlersRef.current;
+      if (map && hh) { try { map.off('mousemove', hh.onMove); map.off('mouseout', hh.onOut); } catch {} }
+      hoverHandlersRef.current = null;
+      if (hoverTooltipRef.current && hoverTooltipRef.current._map) { try { hoverTooltipRef.current.remove(); } catch {} }
       clearLayer();
       return;
     }
@@ -93,17 +125,164 @@ export function usePopulationHeatmap({ mapRef, selectedLake }) {
     runFetch();
   }, [runFetch, selectedLake]);
 
-  // React to map move/zoom when enabled
+  // React to map zoom when enabled (do not refetch on pan so the layer persists)
   useEffect(() => {
     const map = mapRef?.current;
     if (!map || !enabled) return;
     const schedule = () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => { runFetch(); }, 200);
+      debounceRef.current = setTimeout(() => {
+        try {
+          // If entire lake bounds are visible, skip refetch on pan/zoom
+          if (lakeBounds && typeof map.getBounds === 'function') {
+            const v = map.getBounds();
+            if (v && v.contains && v.contains(lakeBounds)) {
+              return; // fully visible: no refetch
+            }
+          }
+        } catch {}
+        runFetch();
+      }, 200);
     };
-    map.on('moveend', schedule); map.on('zoomend', schedule);
-    return () => { try { map.off('moveend', schedule); map.off('zoomend', schedule); } catch {}; if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [enabled, runFetch]);
+    map.on('zoomend', schedule);
+    return () => { try { map.off('zoomend', schedule); } catch {}; if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [enabled, runFetch, lakeBounds]);
+
+  // Hover tooltip: show value at point or sum of aggregated points within heat radius
+  useEffect(() => {
+    const map = mapRef?.current;
+    const layer = heatLayerRef.current;
+    const hasData = Array.isArray(rawPointsRef.current) && rawPointsRef.current.length > 0;
+    if (!map || !enabled || !layer || !hasData) return;
+
+    // Create (or reuse) a tooltip
+    let tooltip = hoverTooltipRef.current;
+    if (!tooltip) {
+      try {
+        tooltip = L.tooltip({
+          permanent: false,
+          direction: 'top',
+          opacity: 0.95,
+          offset: [0, -8],
+          className: 'lv-heat-hover'
+        });
+        hoverTooltipRef.current = tooltip;
+      } catch (e) {
+        // Leaflet not available or other issue; bail out gracefully
+        return;
+      }
+    }
+
+    let rafId = null;
+    let lastTs = 0;
+    const throttleMs = 60; // ~16 FPS max compute rate
+
+    const computeAt = (e) => {
+      try {
+        const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        if (now - lastTs < throttleMs) return;
+        lastTs = now;
+
+        const latlng = e?.latlng;
+        if (!latlng) return;
+        const radiusPx = Number(layer?.options?.radius) || 18;
+        const pt = map.latLngToContainerPoint(latlng);
+        const pt2 = L.point(pt.x + radiusPx, pt.y);
+        const latlng2 = map.containerPointToLatLng(pt2);
+        const metersRadius = map.distance(latlng, latlng2);
+
+        const raw = rawPointsRef.current || [];
+        let count = 0;
+        let sum = 0;
+        for (let i = 0; i < raw.length; i++) {
+          const p = raw[i];
+          const pll = L.latLng(p[0], p[1]);
+          const d = map.distance(latlng, pll);
+          if (d <= metersRadius) {
+            count++;
+            const v = Number(p[2]);
+            if (Number.isFinite(v)) sum += v;
+          }
+        }
+
+        if (count > 0) {
+          // Show approximate integer value (no decimals) as population is whole people
+          const approx = Math.round(sum || 0);
+          const content = `~${approx.toLocaleString()}`;
+          tooltip.setLatLng(latlng).setContent(content);
+          if (!tooltip._map) tooltip.addTo(map);
+        } else {
+          if (tooltip._map) tooltip.remove();
+        }
+      } catch {}
+    };
+
+    const onMove = (e) => {
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        computeAt(e);
+      });
+    };
+    const onOut = () => {
+      if (tooltip && tooltip._map) {
+        try { tooltip.remove(); } catch {}
+      }
+    };
+
+    map.on('mousemove', onMove);
+    map.on('mouseout', onOut);
+    hoverHandlersRef.current = { onMove, onOut };
+
+    return () => {
+      if (rafId) { try { cancelAnimationFrame(rafId); } catch {} rafId = null; }
+      try { map.off('mousemove', onMove); map.off('mouseout', onOut); } catch {}
+      if (hoverTooltipRef.current && hoverTooltipRef.current._map) {
+        try { hoverTooltipRef.current.remove(); } catch {}
+      }
+      hoverHandlersRef.current = null;
+    };
+  }, [enabled, resolution, mapRef]);
+
+  // When selected lake changes: immediately cancel any in-flight fetch, remove the
+  // existing heat layer, clear pending debounces, and reset UI state so no stale
+  // data or listeners linger from the previous lake.
+  useEffect(() => {
+    // Abort network and progressive runners
+    if (abortRef.current) { try { abortRef.current.abort(); } catch {} abortRef.current = null; }
+    inFlightRef.current = false;
+    // Clear any scheduled fetch
+    if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
+    pendingFetchRef.current = null;
+    // Remove hover tooltip and handlers
+    const map = mapRef?.current;
+    const hh = hoverHandlersRef.current;
+    if (map && hh) { try { map.off('mousemove', hh.onMove); map.off('mouseout', hh.onOut); } catch {} }
+    hoverHandlersRef.current = null;
+    if (hoverTooltipRef.current && hoverTooltipRef.current._map) { try { hoverTooltipRef.current.remove(); } catch {} }
+    // Clear layer from the map
+    clearLayer();
+    // Reset UI flags; keep enabled=false unless user toggles again for the new lake
+    setLoading(false); setResolution(null); setError(null); setEnabled(false);
+    // Also reset estimate lifecycle state to avoid auto-refetch from previous cycle
+    estimateInFlightRef.current = false;
+  }, [selectedLake?.id]);
+
+  // On unmount: abort, clear timers and layer to prevent leaks
+  useEffect(() => {
+    return () => {
+      if (abortRef.current) { try { abortRef.current.abort(); } catch {} abortRef.current = null; }
+      if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
+      pendingFetchRef.current = null; estimateInFlightRef.current = false; inFlightRef.current = false;
+      // Remove hover tooltip and handlers
+      const map = mapRef?.current;
+      const hh = hoverHandlersRef.current;
+      if (map && hh) { try { map.off('mousemove', hh.onMove); map.off('mouseout', hh.onOut); } catch {} }
+      hoverHandlersRef.current = null;
+      if (hoverTooltipRef.current && hoverTooltipRef.current._map) { try { hoverTooltipRef.current.remove(); } catch {} }
+      clearLayer();
+    };
+  }, []);
 
   // Listen for population estimate lifecycle events
   useEffect(() => {
@@ -125,5 +304,6 @@ export function usePopulationHeatmap({ mapRef, selectedLake }) {
   }, [enabled, runFetch]);
 
   const clearError = () => setError(null);
-  return { enabled, loading, error, resolution, toggle, clearError };
+  const hasLayer = !!heatLayerRef.current;
+  return { enabled, loading, error, resolution, toggle, clear, hasLayer, clearError };
 }
