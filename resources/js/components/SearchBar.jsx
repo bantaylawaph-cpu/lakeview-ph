@@ -1,8 +1,30 @@
 // src/components/SearchBar.jsx
-import React from "react";
-import { FiMenu, FiSearch, FiFilter } from "react-icons/fi";
+import React, { useState, useCallback, useRef } from "react";
+import { FiMenu, FiSearch, FiFilter, FiX } from "react-icons/fi";
 
-function SearchBar({ onMenuClick, onFilterClick }) {
+function SearchBar({ onMenuClick, onFilterClick, onSearch, onClear }) {
+  const [text, setText] = useState("");
+  const inputRef = useRef(null);
+
+  const triggerSearch = useCallback(() => {
+    const q = (text || "").trim();
+    if (!q) return;
+    if (typeof onSearch === "function") onSearch(q);
+  }, [text, onSearch]);
+
+  const onKeyDown = (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      triggerSearch();
+    }
+  };
+
+  const clearText = () => {
+    setText("");
+    try { inputRef.current?.focus(); } catch (_) {}
+    if (typeof onClear === "function") onClear();
+  };
+
   return (
     <div className="search-bar">
       {/* ✅ Hamburger opens sidebar */}
@@ -10,9 +32,22 @@ function SearchBar({ onMenuClick, onFilterClick }) {
         <FiMenu size={18} />
       </button>
 
-      <input type="text" placeholder="Search LakeView" />
+      <input
+        type="text"
+        placeholder="Search LakeView"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={onKeyDown}
+        ref={inputRef}
+      />
 
-      <button className="btn-floating">
+      {text?.length > 0 && (
+        <button className="btn-floating" onClick={clearText} title="Clear">
+          <FiX size={18} />
+        </button>
+      )}
+
+      <button className="btn-floating" onClick={triggerSearch}>
         <FiSearch size={18} />
       </button>
 

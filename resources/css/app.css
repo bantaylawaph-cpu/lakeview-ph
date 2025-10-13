@@ -29,6 +29,7 @@
 /* Base */
 @import './base/globals.css';
 @import './base/themes.css';
+@import './util/scrollbars.css';
 
 /* Layouts */
 @import './layouts/auth.css';

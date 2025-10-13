@@ -340,6 +340,8 @@ Route::get('/options/regions', [OptionsController::class, 'regions']);
 Route::get('/options/provinces', [OptionsController::class, 'provinces']);
 Route::get('/options/municipalities', [OptionsController::class, 'municipalities']);
 Route::get('/options/municipalities', [OptionsController::class, 'municipalities']);
+// Public semantic search
+Route::post('/search', [\App\Http\Controllers\SearchController::class, 'query']);
 // New lake-specific distinct location endpoints supporting JSON arrays (can migrate frontend later)
 Route::get('/options/lake-regions', [LakeOptionsController::class, 'regions']);
 Route::get('/options/lake-provinces', [LakeOptionsController::class, 'provinces']);

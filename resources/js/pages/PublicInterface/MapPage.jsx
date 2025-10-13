@@ -20,6 +20,7 @@ import MeasureTool from "../../components/MeasureTool";
 import LakeInfoPanel from "../../components/LakeInfoPanel";
 import AuthModal from "../../components/modals/AuthModal";
 import FilterTray from "../../components/FilterTray";
+import SearchResultsPopover from "../../components/SearchResultsPopover";
 import PublicSettingsModal from "../../components/settings/PublicSettingsModal";
 import FeedbackModal from "../../components/feedback/FeedbackModal";
 import HeatmapLoadingIndicator from "../../components/HeatmapLoadingIndicator";
@@ -34,6 +35,7 @@ import { useWaterQualityMarkers } from "./hooks/useWaterQualityMarkers";
 import { useHotkeys } from "./hooks/useHotkeys";
 import DataPrivacyDisclaimer from "./DataPrivacyDisclaimer";
 import AboutData from "./AboutData";
+import api from "../../lib/api";
 
 function MapWithContextMenu({ children }) {
   const map = useMap();
@@ -69,6 +71,57 @@ function MapPage() {
   const [aboutDataMenuOpen, setAboutDataMenuOpen] = useState(false);
   const aboutDataMenuOpenRef = React.useRef(false);
   useEffect(() => { aboutDataMenuOpenRef.current = aboutDataMenuOpen; }, [aboutDataMenuOpen]);
+
+  // Search state
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState(null);
+  const [searchResults, setSearchResults] = useState([]);
+
+  const handleSearch = async (query) => {
+    setSearchOpen(true);
+    setSearchLoading(true);
+    setSearchError(null);
+    try {
+      const res = await api.post('/search', { query });
+      const rows = (res && (res.data || res.rows || res.results)) || [];
+      setSearchResults(Array.isArray(rows) ? rows : []);
+    } catch (e) {
+      setSearchError(e?.message || 'Search failed');
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  const flyToCoordinates = (gj) => {
+    if (!gj || !mapRef.current) return;
+    try {
+      const feat = typeof gj === 'string' ? JSON.parse(gj) : gj;
+      // Support Point centering; for polygons, fit bounds via leaflet
+      if (feat && feat.type === 'Point' && Array.isArray(feat.coordinates)) {
+        const [lon, lat] = feat.coordinates;
+        if (Number.isFinite(lat) && Number.isFinite(lon)) {
+          mapRef.current.flyTo([lat, lon], 11, { duration: 0.6 });
+        }
+      }
+    } catch {}
+  };
+
+  const handleSelectResult = async (item) => {
+    // Prefer coordinates_geojson returned by backend
+    if (item && item.coordinates_geojson) {
+      flyToCoordinates(item.coordinates_geojson);
+    }
+    setSearchOpen(false);
+    // Optionally open the lake panel if we can resolve the lake by id/name in future iterations.
+  };
+
+  const handleClearSearch = () => {
+    setSearchResults([]);
+    setSearchError(null);
+    setSearchOpen(false);
+  };
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -323,7 +376,20 @@ function MapPage() {
         />
 
       {/* UI overlays */}
-      <SearchBar onMenuClick={() => setSidebarOpen(true)} onFilterClick={() => setFilterTrayOpen((v) => !v)} />
+      <SearchBar
+        onMenuClick={() => setSidebarOpen(true)}
+        onFilterClick={() => setFilterTrayOpen((v) => !v)}
+        onSearch={handleSearch}
+        onClear={handleClearSearch}
+      />
+      <SearchResultsPopover
+        open={searchOpen}
+        results={searchResults}
+        loading={searchLoading}
+        error={searchError}
+        onClose={() => setSearchOpen(false)}
+        onSelect={handleSelectResult}
+      />
       <FilterTray
         open={filterTrayOpen}
         onClose={() => setFilterTrayOpen(false)}
