@@ -161,7 +161,8 @@ export default function AdminAuditLogsPage() {
 		setLoading(true); setError(null);
 		try {
 			const res = await api.get(effectiveBase, { params });
-			const body = res?.data;
+			// api.get returns the parsed JSON body; for Laravel paginator, it's an object with `data` and meta fields
+			const body = res;
 			let items = Array.isArray(body) ? body : (Array.isArray(body?.data) ? body.data : []); // adapt paginator
 			// Remove SampleResult rows (database-only artifacts)
 			if (Array.isArray(items)) {
@@ -217,6 +218,7 @@ export default function AdminAuditLogsPage() {
 				});
 			}
 			const pg = Array.isArray(body) ? null : (body || null);
+			// Handle both shapes: top-level meta fields or nested meta
 			const metaObj = pg && typeof pg === 'object' && pg.meta && typeof pg.meta === 'object' ? pg.meta : pg;
 			const effectivePage = params.page || 1;
 			const effectivePerPage = params.per_page || perPage;
@@ -369,8 +371,10 @@ export default function AdminAuditLogsPage() {
 					const base = modelBase;
 					if (base === 'SamplingEvent') {
 						const nm = r.entity_name || extractLakeName(r);
-						const lakeLabel = nm ? truncate(nm) : (r.model_id ? `Lake #${r.model_id}` : 'Lake');
-						return `${actor} ${verb} ${lakeLabel} at ${fmt(r.event_at)}`;
+						const lakeLabel = nm ? truncate(nm) : null;
+						return lakeLabel
+							? `${actor} ${verb} Sampling Event of ${lakeLabel} at ${fmt(r.event_at)}`
+							: `${actor} ${verb} Sampling Event at ${fmt(r.event_at)}`;
 					}
 					const entityName = extractEntityName(r);
 					if (entityName) return `${actor} ${verb} ${truncate(entityName)}`;
@@ -560,9 +564,13 @@ export default function AdminAuditLogsPage() {
 					/>
 				)}
 				<div className="lv-table-pager" style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center' }}>
-					<button className="pill-btn ghost sm" disabled={page <= 1} onClick={() => goPage(page - 1)}>&lt; Prev</button>
-					<span className="pager-text">Page {page} of {meta.last_page}{meta?.total != null ? ` · ${meta.total} total` : (clientMetaLoading ? ' · calculating…' : '')}</span>
-					<button className="pill-btn ghost sm" disabled={clientMetaLoading || page >= meta.last_page} onClick={() => goPage(page + 1)}>Next &gt;</button>
+					<button className="pill-btn ghost sm" disabled={loading || page <= 1} onClick={() => goPage(page - 1)}>&lt; Prev</button>
+					{loading || clientMetaLoading ? (
+						<span className="pager-text">Loading…</span>
+					) : (
+						<span className="pager-text">Page {meta.current_page ?? page} of {meta.last_page}{meta?.total != null ? ` · ${meta.total} total` : ''}</span>
+					)}
+					<button className="pill-btn ghost sm" disabled={loading || clientMetaLoading || page >= meta.last_page} onClick={() => goPage(page + 1)}>Next &gt;</button>
 				</div>
 			</div>
 
@@ -587,9 +595,14 @@ export default function AdminAuditLogsPage() {
 						<div><strong style={{ width:110, display:'inline-block' }}>Role:</strong> {detailRow.actor_role || detailRow.actor?.role || '—'}</div>
 						<div><strong style={{ width:110, display:'inline-block' }}>Action:</strong> {detailRow.action}</div>
 						<div><strong style={{ width:110, display:'inline-block' }}>Entity:</strong>{' '}
-							{detailRow.entity_name
-								? detailRow.entity_name
-								: (detailRow.model_type ? detailRow.model_type.split('\\').pop() : 'Record')}
+							{(() => {
+								const base = detailRow.model_type ? detailRow.model_type.split('\\').pop() : 'Record';
+								if (base === 'SamplingEvent') {
+									const nm = detailRow.entity_name || extractLakeName(detailRow);
+									return nm ? `Sampling Event of ${nm}` : 'Sampling Event';
+								}
+								return detailRow.entity_name ? detailRow.entity_name : base;
+							})()}
 							{detailRow.model_id ? ` #${detailRow.model_id}` : ''}
 						</div>
 						<div><strong style={{ width:110, display:'inline-block' }}>Timestamp:</strong> {fmt(detailRow.event_at)}</div>
