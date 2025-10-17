@@ -11,12 +11,13 @@ class Feedback extends Model
     protected $table = 'feedback';
 
     protected $fillable = [
-        'user_id','tenant_id','title','message','category','status','metadata','admin_response','resolved_at',
+        'user_id','tenant_id','lake_id','title','message','category','status','metadata','images','admin_response','resolved_at',
         'is_guest','guest_name','guest_email','spam_score'
     ];
 
     protected $casts = [
         'metadata' => 'array',
+        'images' => 'array',
         'resolved_at' => 'datetime',
         'is_guest' => 'boolean',
         'spam_score' => 'integer',
@@ -35,6 +36,7 @@ class Feedback extends Model
 
     public function user(): BelongsTo { return $this->belongsTo(User::class); }
     public function tenant(): BelongsTo { return $this->belongsTo(Tenant::class); }
+    public function lake(): BelongsTo { return $this->belongsTo(Lake::class); }
 
     public function getSubmitterNameAttribute(): string
     {

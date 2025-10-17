@@ -12,7 +12,7 @@ class FeedbackController extends Controller
 {
     public function index(Request $request)
     {
-        $q = Feedback::query()->with(['user:id,name,email','tenant:id,name']);
+    $q = Feedback::query()->with(['user:id,name,email','tenant:id,name','lake:id,name']);
 
         if ($status = $request->query('status')) {
             $q->where('status', $status);
@@ -69,7 +69,7 @@ class FeedbackController extends Controller
 
     public function show(Feedback $feedback)
     {
-        $feedback->load(['user:id,name,email','tenant:id,name']);
+    $feedback->load(['user:id,name,email','tenant:id,name','lake:id,name']);
         return response()->json(['data' => $feedback]);
     }
 

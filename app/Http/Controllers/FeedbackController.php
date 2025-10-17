@@ -6,16 +6,50 @@ use App\Http\Requests\StoreFeedbackRequest;
 use App\Http\Requests\PublicStoreFeedbackRequest;
 use App\Models\Feedback;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class FeedbackController extends Controller
 {
     public function store(StoreFeedbackRequest $request)
     {
         $user = $request->user();
-        $data = $request->validated();
-        $data['user_id'] = $user->id;
-        if ($user->tenant_id) {
-            $data['tenant_id'] = $user->tenant_id;
+        $v = $request->validated();
+
+        $data = [
+            'user_id' => $user->id,
+            'tenant_id' => $user->tenant_id ?: null,
+            'title' => $v['title'] ?? ($v['type'] ?? 'Lake feedback'),
+            'message' => $v['message'] ?? ($v['description'] ?? ''),
+            'category' => $this->mapTypeToCategory($v['type'] ?? ($v['category'] ?? null)),
+            'lake_id' => $v['lake_id'] ?? null,
+            'metadata' => array_merge($v['metadata'] ?? [], [
+                'client' => [
+                    'ua_hash' => substr(sha1((string)$request->userAgent()), 0, 16),
+                    'lang' => $request->header('Accept-Language'),
+                ],
+            ]),
+        ];
+
+        // Handle image uploads if present
+        if ($request->hasFile('images')) {
+            $paths = [];
+            $filesMeta = [];
+            foreach ($request->file('images') as $file) {
+                if (!$file->isValid()) continue;
+                $stored = $this->storeWithOriginalName($file, $user?->id);
+                $paths[] = $stored;
+                $filesMeta[] = [
+                    'path' => $stored,
+                    'original' => (string) $file->getClientOriginalName(),
+                    'mime' => (string) $file->getClientMimeType(),
+                    'size' => (int) $file->getSize(),
+                ];
+            }
+            if (!empty($paths)) $data['images'] = $paths;
+            if (!empty($filesMeta)) {
+                $data['metadata'] = array_merge($data['metadata'] ?? [], ['files' => $filesMeta]);
+            }
         }
         $feedback = Feedback::create($data);
         return response()->json(['data' => $feedback], 201);
@@ -30,16 +64,22 @@ class FeedbackController extends Controller
         $user = $request->user();
         $v = $request->validated();
 
+        // Accept both legacy public feedback fields and new lake feedback fields
+        $title = $v['title'] ?? ($v['type'] ?? 'Lake feedback');
+        $message = $v['message'] ?? ($v['description'] ?? '');
+        $category = $this->mapTypeToCategory($v['type'] ?? ($v['category'] ?? null));
+
         $payload = [
-            'title' => trim($v['title']),
-            'message' => trim($v['message']),
-            'category' => $v['category'] ?? null,
+            'title' => trim($title),
+            'message' => trim($message),
+            'category' => $category,
+            'lake_id' => $v['lake_id'] ?? null,
             'metadata' => [
                 'client' => [
                     'ip' => $this->maskIp($request->ip()),
                     'ua_hash' => substr(sha1((string)$request->userAgent()), 0, 16),
                     'lang' => $request->header('Accept-Language'),
-                ]
+                ],
             ],
         ];
 
@@ -50,14 +90,70 @@ class FeedbackController extends Controller
         } else {
             $payload['is_guest'] = true;
             $payload['guest_name'] = $v['guest_name'] ?? null;
-            $payload['guest_email'] = $v['guest_email'] ?? null;
+            $payload['guest_email'] = $v['guest_email'] ?? ($v['contact'] ?? null);
         }
 
         // Spam heuristic scoring
         $payload['spam_score'] = $this->computeSpamScore($payload['message']);
 
+        // Handle image uploads (multipart)
+        if ($request->hasFile('images')) {
+            $paths = [];
+            $filesMeta = [];
+            foreach ($request->file('images') as $file) {
+                if (!$file->isValid()) continue;
+                $stored = $this->storeWithOriginalName($file, $user?->id);
+                $paths[] = $stored;
+                $filesMeta[] = [
+                    'path' => $stored,
+                    'original' => (string) $file->getClientOriginalName(),
+                    'mime' => (string) $file->getClientMimeType(),
+                    'size' => (int) $file->getSize(),
+                ];
+            }
+            if (!empty($paths)) $payload['images'] = $paths;
+            if (!empty($filesMeta)) {
+                $payload['metadata'] = array_merge($payload['metadata'] ?? [], ['files' => $filesMeta]);
+            }
+        }
+
         $feedback = Feedback::create($payload);
         return response()->json(['data' => $feedback], 201);
+    }
+
+    /**
+     * Store uploaded file to public disk using a readable, mostly-original filename.
+     * Ensures uniqueness and safety by slugifying the base name and appending timestamp + short rand.
+     */
+    private function storeWithOriginalName($file, $userId = null): string
+    {
+        try {
+            $orig = (string) $file->getClientOriginalName();
+        } catch (\Throwable $e) {
+            $orig = '';
+        }
+        $base = $orig !== '' ? pathinfo($orig, PATHINFO_FILENAME) : 'file';
+        $ext = strtolower($file->getClientOriginalExtension() ?: $file->extension());
+        $slug = Str::slug(mb_substr($base, 0, 80)) ?: 'file';
+        $stamp = date('Ymd-His');
+        $uid = $userId ? ('u'.$userId.'-') : '';
+        $rand = Str::lower(Str::random(5));
+        $name = $uid.$slug.'-'.$stamp.'-'.$rand.($ext ? ('.'.$ext) : '');
+        return $file->storeAs('feedback', $name, 'public');
+    }
+
+    private function mapTypeToCategory($typeOrCategory): ?string
+    {
+        if (!$typeOrCategory) return null;
+        $t = strtolower(trim($typeOrCategory));
+        // Map UI strings to existing categories
+        return match ($t) {
+            'missing information' => 'data',
+            'incorrect data' => 'data',
+            'add photo' => 'ui',
+            'other' => 'other',
+            default => $t,
+        };
     }
 
     private function computeSpamScore(string $text): int

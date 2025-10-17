@@ -7,6 +7,8 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 
 class LakeController extends Controller
@@ -62,7 +64,8 @@ class LakeController extends Controller
             $arr['municipality'] = count($arr['municipality']) ? implode(', ', $arr['municipality']) : null;
         }
         if (!$active || !$active->geom_geojson) {
-            $coordGeo = DB::table('lakes')->where('id',$lake->id)->value(DB::raw('ST_AsGeoJSON(coordinates)'));
+            $row = DB::table('lakes')->where('id',$lake->id)->selectRaw('ST_AsGeoJSON(coordinates) as gj')->first();
+            $coordGeo = $row->gj ?? null;
         } else {
             $coordGeo = $active->geom_geojson;
         }
@@ -150,6 +153,39 @@ class LakeController extends Controller
     {
         $lake->delete();
         return response()->json(['message' => 'Lake deleted']);
+    }
+
+    /**
+     * Upload or replace a lake's image. Stores on public disk and saves relative path to image_path.
+     */
+    public function uploadImage(Request $request, Lake $lake)
+    {
+        $validated = $request->validate([
+            'image' => ['required','file','mimes:jpg,jpeg,png,webp','max:5120'], // up to 5MB
+        ]);
+
+        $file = $request->file('image');
+        $dir = 'lakes/' . $lake->id;
+        $ext = strtolower($file->getClientOriginalExtension() ?: 'jpg');
+        $safeName = Str::slug($lake->name ?: ('lake-'.$lake->id));
+        $filename = $safeName . '-' . now()->format('Ymd-His') . '-' . substr(bin2hex(random_bytes(4)),0,8) . '.' . $ext;
+
+        // Delete previous file if exists (best-effort)
+        if ($lake->image_path) {
+            try { Storage::disk('public')->delete($lake->image_path); } catch (\Throwable $e) { /* ignore */ }
+        }
+
+        $stored = Storage::disk('public')->putFileAs($dir, $file, $filename);
+        $path = $stored ?: ($dir . '/' . $filename);
+        $lake->image_path = $path;
+        $lake->save();
+
+        return response()->json([
+            'id' => $lake->id,
+            'image' => asset('storage/'.$path),
+            'image_path' => $path,
+            'message' => 'Image uploaded',
+        ], 201);
     }
     
     public function publicGeo()
@@ -319,7 +355,8 @@ class LakeController extends Controller
             $arr['municipality'] = $arr['municipality'][0] ?? null;
         }
         if (!$active || !$active->geom_geojson) {
-            $coordGeo = DB::table('lakes')->where('id',$lake->id)->value(DB::raw('ST_AsGeoJSON(coordinates)'));
+            $row = DB::table('lakes')->where('id',$lake->id)->selectRaw('ST_AsGeoJSON(coordinates) as gj')->first();
+            $coordGeo = $row->gj ?? null;
         } else {
             $coordGeo = $active->geom_geojson;
         }

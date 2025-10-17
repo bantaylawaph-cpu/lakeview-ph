@@ -6,6 +6,7 @@ import HeatmapTab from "./lake-info-panel/HeatmapTab";
 import LayersTab from "./lake-info-panel/LayersTab";
 import TestsTab from "./lake-info-panel/TestsTab";
 import LoadingSpinner from "./LoadingSpinner";
+import LakeFeedbackModal from "./lake-info-panel/LakeFeedbackModal";
 
 /**
  * Props
@@ -51,6 +52,7 @@ function LakeInfoPanel({
   const [activeTab, setActiveTab] = useState("overview");
   const [closing, setClosing] = useState(false);
   const [selectedLayerId, setSelectedLayerId] = useState(activeLayerId ?? null);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   useEffect(() => { if (isOpen) setClosing(false); }, [isOpen]);
 
@@ -116,19 +118,20 @@ function LakeInfoPanel({
         <button className={`lake-tab ${activeTab === "overview" ? "active" : ""}`} onClick={() => setActiveTab("overview")}>Overview</button>
   <button className={`lake-tab ${activeTab === "water" ? "active" : ""}`} onClick={() => setActiveTab("water")}>Water Quality</button>
   <button className={`lake-tab ${activeTab === "tests" ? "active" : ""}`} onClick={() => setActiveTab("tests")}>Tests</button>
-        <button className={`lake-tab ${activeTab === "population" ? "active" : ""}`} onClick={() => setActiveTab("population")}>Population Density</button>
+        {/* <button className={`lake-tab ${activeTab === "population" ? "active" : ""}`} onClick={() => setActiveTab("population")}>Population Density</button> */}
         <button className={`lake-tab ${activeTab === "layers" ? "active" : ""}`} onClick={() => setActiveTab("layers")}>Layers</button>
         {/* Flows tab removed; flows now in Overview */}
       </div>
 
       {/* Content */}
-      <div className="lake-info-content">
+      <div className="lake-info-content modern-scrollbar">
         {activeTab === "overview" && (
           <OverviewTab
             lake={lake}
             showWatershed={showWatershed}
             canToggleWatershed={canToggleWatershed}
             onToggleWatershed={onToggleWatershed}
+            onOpenFeedback={() => setFeedbackOpen(true)}
             // Nominatim/OSM outline feature removed
             flows={flows}
             showFlows={showFlows}
@@ -180,6 +183,7 @@ function LakeInfoPanel({
         )}
         {/* Flows content removed */}
       </div>
+      <LakeFeedbackModal open={feedbackOpen} onClose={() => setFeedbackOpen(false)} lake={lake} />
     </div>
   );
 }

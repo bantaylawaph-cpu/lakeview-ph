@@ -15,6 +15,7 @@ function OverviewTab({
   showWatershed = false,
   canToggleWatershed = false,
   onToggleWatershed,
+  onOpenFeedback,
   // New flows integration
   flows = [],              // array of flow objects with { id, flow_type, name, source, is_primary, latitude, longitude }
   showFlows = false,       // whether markers are shown on map
@@ -217,6 +218,30 @@ function OverviewTab({
           <div style={{opacity:0.8}}>Not yet recorded</div>
         )}
       </div>
+      {typeof onOpenFeedback === 'function' && (
+        <div style={{ gridColumn: '1 / -1', textAlign:'center', margin:'28px 0 8px' }}>
+          <div style={{ fontSize:12, opacity:0.95, fontStyle:'italic' }}>Do you see any missing information or want to submit information regarding this lake?</div>
+          <button
+            type="button"
+            onClick={() => onOpenFeedback?.()}
+            title="Submit feedback about this lake"
+            style={{
+              background:'transparent',
+              border:'none',
+              padding:0,
+              marginTop:6,
+              color:'#cfe3ff',
+              textDecoration:'underline',
+              cursor:'pointer',
+              fontWeight:600,
+              fontSize:12,
+              fontStyle:'italic',
+            }}
+          >
+            Click Here
+          </button>
+        </div>
+      )}
     </>
   );
 }
