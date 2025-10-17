@@ -154,7 +154,12 @@ export default function SingleLake({
   const stationMaps = new Map(); // stationName -> Map(bucket -> {sum,cnt})
       const depthBands = new Map(); // depthKey -> Map(bucket -> {sum,cnt})
       const depthBandKey = (raw) => { const n = Number(raw); if (!Number.isFinite(n)) return 'NA'; return String(Math.round(n)); };
-      let thMin = null, thMax = null;
+      // threshold collection is now per-standard (not single global)
+      const thByStandard = new Map(); // stdKey -> { stdLabel, min: number|null, max: number|null, buckets: Set<string> }
+      const ensureStdEntry = (stdKey, stdLabel) => {
+        if (!thByStandard.has(stdKey)) thByStandard.set(stdKey, { stdLabel: stdLabel || `Standard ${stdKey}`, min: null, max: null, buckets: new Set() });
+        return thByStandard.get(stdKey);
+      };
       for (const ev of evs) {
         const sName = eventStationName(ev) || '';
         if (!selectedStations.includes(sName)) continue;
@@ -181,8 +186,16 @@ export default function SingleLake({
             const agg = band.get(bk) || { sum: 0, cnt: 0 };
             agg.sum += v; agg.cnt += 1; band.set(bk, agg); depthBands.set(dk, band);
           }
-          if (r?.threshold?.min_value != null && thMin == null) thMin = Number(r.threshold.min_value);
-          if (r?.threshold?.max_value != null && thMax == null) thMax = Number(r.threshold.max_value);
+          // Collect threshold by applied standard and bucket (keyed by standard code)
+          const stdId = r?.threshold?.standard_id ?? ev?.applied_standard_id ?? null;
+          const stdKey = r?.threshold?.standard?.code || r?.threshold?.standard?.name || (stdId != null ? String(stdId) : null);
+          const stdLabel = stdKey;
+          if (stdKey != null && (r?.threshold?.min_value != null || r?.threshold?.max_value != null)) {
+            const entry = ensureStdEntry(String(stdKey), stdLabel);
+            if (r?.threshold?.min_value != null) entry.min = Number(r.threshold.min_value);
+            if (r?.threshold?.max_value != null) entry.max = Number(r.threshold.max_value);
+            entry.buckets.add(bk);
+          }
         }
       }
       const allLabels = new Set();
@@ -214,8 +227,21 @@ export default function SingleLake({
         }
       }
 
-      if (thMin != null) datasets.push({ label: 'Min Threshold', data: labels.map(() => thMin), borderColor: 'rgba(16,185,129,1)', backgroundColor: 'rgba(16,185,129,0.15)', borderDash: [4,4], pointRadius: 0, tension: 0 });
-      if (thMax != null) datasets.push({ label: 'Max Threshold', data: labels.map(() => thMax), borderColor: 'rgba(239,68,68,1)', backgroundColor: 'rgba(239,68,68,0.15)', borderDash: [4,4], pointRadius: 0, tension: 0 });
+      // Add per-standard threshold lines drawn only over buckets where the standard appears
+      // Use distinct colors for min (green) and max (red)
+      const minColor = '#16a34a'; // green
+      const maxColor = '#ef4444'; // red
+      Array.from(thByStandard.entries()).forEach(([stdKey, entry]) => {
+        if (entry.min != null) {
+            const data = labels.map((lb) => entry.buckets.has(lb) ? entry.min : null);
+            datasets.push({ label: `${entry.stdLabel} – Min`, data, borderColor: minColor, backgroundColor: `${minColor}33`, borderDash: [4,4], pointRadius: 0, tension: 0, spanGaps: true });
+          }
+          if (entry.max != null) {
+            const data = labels.map((lb) => entry.buckets.has(lb) ? entry.max : null);
+            // Use same visual style as Min; only color differs
+            datasets.push({ label: `${entry.stdLabel} – Max`, data, borderColor: maxColor, backgroundColor: `${maxColor}33`, borderDash: [4,4], pointRadius: 0, tension: 0, spanGaps: true });
+          }
+      });
 
       return { labels, datasets };
   }, [events, selectedParam, JSON.stringify(selectedStations), bucket, timeRange, dateFrom, dateTo, seriesMode]);

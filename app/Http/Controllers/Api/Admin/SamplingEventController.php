@@ -349,7 +349,9 @@ class SamplingEventController extends Controller
                 'results' => function ($query) {
                     $query->with([
                         'parameter:id,code,name,unit,group',
+                        // Ensure the threshold's standard (code/name) is available to consumers
                         'threshold:id,parameter_id,class_code,standard_id,min_value,max_value,notes',
+                        'threshold.standard:id,code,name',
                     ]);
                 },
                 'createdBy:id,name',

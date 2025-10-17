@@ -136,9 +136,10 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
         const { fetchLakeOptions } = await import("../../lib/layers");
         const lakes = await fetchLakeOptions();
         if (!mounted) return;
-        setLakeOptions(Array.isArray(lakes) ? lakes : []);
+  const base = Array.isArray(lakes) ? lakes : [];
+  setLakeOptions(base);
         const map = new Map();
-        (lakes || []).forEach((r) => map.set(String(r.id), r.class_code || ""));
+  (base || []).forEach((r) => map.set(String(r.id), r.class_code || ""));
         setLakeClassMap(map);
       } catch (e) {
         if (mounted) setLakeOptions([]);

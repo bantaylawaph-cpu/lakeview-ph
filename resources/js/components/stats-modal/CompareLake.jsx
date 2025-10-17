@@ -223,7 +223,14 @@ function CompareLake({
       if (mode==='year') return `${y}`; if (mode==='quarter') return `${y}-Q${q}`; return `${y}-${String(m).padStart(2,'0')}`;
     };
     const bucketSortKey = (k) => { if (!k) return 0; const m=/^([0-9]{4})(?:-(?:Q([1-4])|([0-9]{2})))?$/.exec(k); if(!m) return 0; const y=Number(m[1]); const q=m[2]?(Number(m[2])*3):0; const mo=m[3]?Number(m[3]):0; return y*12+(q||mo); };
-  const lakeMaps = new Map(); const perStationMaps = {}; let thMin=null, thMax=null;
+  const lakeMaps = new Map(); const perStationMaps = {}; // thresholds now tracked per-lake & per-standard
+    const thByLakeAndStandard = new Map(); // lakeId -> Map(stdKey -> { stdLabel, min, max, buckets:Set })
+    const ensureStdEntry = (lkKey, stdKey, stdLabel) => {
+      if (!thByLakeAndStandard.has(lkKey)) thByLakeAndStandard.set(lkKey, new Map());
+      const inner = thByLakeAndStandard.get(lkKey);
+      if (!inner.has(stdKey)) inner.set(stdKey, { stdLabel: stdLabel || `Standard ${stdKey}`, min: null, max: null, buckets: new Set() });
+      return inner.get(stdKey);
+    };
     const process = (lakeId, arr, stationsSel, orgSel) => {
       for (const ev of arr||[]) {
         const oidEv = ev.organization_id ?? ev.organization?.id ?? null;
@@ -247,8 +254,16 @@ function CompareLake({
             const aggS = stMap.get(bk) || { sum:0, cnt:0 };
             aggS.sum += v; aggS.cnt += 1; stMap.set(bk, aggS); lakeMap.set(nm, stMap);
           } catch (e) { /* noop */ }
-          if (r?.threshold?.min_value != null && thMin == null) thMin = Number(r.threshold.min_value);
-          if (r?.threshold?.max_value != null && thMax == null) thMax = Number(r.threshold.max_value);
+          // thresholds by standard for this lake (key by standard code)
+          const stdId = r?.threshold?.standard_id ?? ev?.applied_standard_id ?? null;
+          const stdKey = r?.threshold?.standard?.code || r?.threshold?.standard?.name || (stdId != null ? String(stdId) : null);
+          const stdLabel = stdKey;
+          if (stdKey != null && (r?.threshold?.min_value != null || r?.threshold?.max_value != null)) {
+            const entry = ensureStdEntry(key, String(stdKey), stdLabel);
+            if (r?.threshold?.min_value != null) entry.min = Number(r.threshold.min_value);
+            if (r?.threshold?.max_value != null) entry.max = Number(r.threshold.max_value);
+            entry.buckets.add(bk);
+          }
         }
       }
     };
@@ -295,8 +310,28 @@ function CompareLake({
         datasets.push({ label: lakeOptions.find((x)=>String(x.id)===String(lk))?.name || String(lk), data, borderColor: i===0?'rgba(59,130,246,1)':`hsl(${(i*70)%360} 80% 60%)`, backgroundColor: i===0?'rgba(59,130,246,0.2)':`hsl(${(i*70)%360} 80% 60% / 0.2)`, pointRadius:3, pointHoverRadius:4, tension:0.2, spanGaps: true });
       }
     });
-    if (thMin != null) datasets.push({ label:'Min Threshold', data: labels.map(()=>thMin), borderColor:'rgba(16,185,129,1)', backgroundColor:'rgba(16,185,129,0.15)', borderDash:[4,4], pointRadius:0, tension:0 });
-    if (thMax != null) datasets.push({ label:'Max Threshold', data: labels.map(()=>thMax), borderColor:'rgba(239,68,68,1)', backgroundColor:'rgba(239,68,68,0.15)', borderDash:[4,4], pointRadius:0, tension:0 });
+    // Add per-lake, per-standard threshold lines only over buckets where that standard appears
+    // Use distinct color pairs for Lake A vs Lake B: min (green) and max (red)
+    const lakeMinColors = ['#16a34a', '#22c55e']; // A, B greens
+    const lakeMaxColors = ['#ef4444', '#dc2626']; // A, B reds
+    lakesToRender.forEach((lk, li) => {
+      const lkKey = String(lk);
+      const inner = thByLakeAndStandard.get(lkKey);
+      if (!inner) return;
+      Array.from(inner.entries()).forEach(([stdKey, entry]) => {
+        const minColor = lakeMinColors[li % lakeMinColors.length];
+        const maxColor = lakeMaxColors[li % lakeMaxColors.length];
+        if (entry.min != null) {
+          const data = labels.map((lb) => entry.buckets.has(lb) ? entry.min : null);
+          datasets.push({ label: `${lakeOptions.find((x)=>String(x.id)===String(lk))?.name || String(lk)} – ${entry.stdLabel} – Min`, data, borderColor: minColor, backgroundColor: `${minColor}33`, borderDash: [4,4], pointRadius: 0, tension: 0, spanGaps: true });
+        }
+        if (entry.max != null) {
+          const data = labels.map((lb) => entry.buckets.has(lb) ? entry.max : null);
+          // match Min style; only color differs
+          datasets.push({ label: `${lakeOptions.find((x)=>String(x.id)===String(lk))?.name || String(lk)} – ${entry.stdLabel} – Max`, data, borderColor: maxColor, backgroundColor: `${maxColor}33`, borderDash: [4,4], pointRadius: 0, tension: 0, spanGaps: true });
+        }
+      });
+    });
     return { labels, datasets };
   }, [eventsA, eventsB, lakeA, lakeB, selectedStationsA, selectedStationsB, selectedOrgA, selectedOrgB, selectedParam, bucket, lakeOptions, seriesMode]);
 
