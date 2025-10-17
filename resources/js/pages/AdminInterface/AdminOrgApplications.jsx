@@ -8,12 +8,12 @@ import KycDocsModal from '../../components/KycDocsModal';
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All' },
-  { value: 'pending_kyc', label: 'Pending KYC' },
+  { value: 'pending_kyc', label: 'Pending' },
   { value: 'pending_org_review', label: 'Pending Org Review' },
   { value: 'approved', label: 'Approved' },
   { value: 'needs_changes', label: 'Needs Changes' },
   { value: 'rejected', label: 'Rejected' },
-  { value: 'accepted_another_org', label: 'Accepted at another org' },
+  { value: 'accepted_another_org', label: 'Accepted Another Org' },
 ];
 import Modal from '../../components/Modal';
 
@@ -31,6 +31,17 @@ export default function AdminOrgApplications() {
     desired_role: true,
     status: true,
   });
+
+  // Map status codes to formal labels for display
+  const STATUS_LABELS = useMemo(() => ({
+    pending_kyc: 'Pending',
+    pending_org_review: 'Pending Org Review',
+    approved: 'Approved',
+    needs_changes: 'Needs Changes',
+    rejected: 'Rejected',
+    accepted_another_org: 'Accepted Another Org',
+  }), []);
+  const statusLabel = (code) => STATUS_LABELS[code] || code || '';
 
   const COLUMNS = useMemo(() => ([
     { id: 'user', header: 'User' },
@@ -73,16 +84,16 @@ export default function AdminOrgApplications() {
       const primary = sorted[0];
       // Derive a status summary: if multiple distinct statuses, show primary plus count.
       const uniqueStatuses = Array.from(new Set(list.map(a => a.status).filter(Boolean)));
-      let statusLabel = primary?.status || '';
+      let statusLbl = statusLabel(primary?.status) || '';
       if (uniqueStatuses.length > 1) {
-        statusLabel = `${primary?.status} (+${uniqueStatuses.length - 1})`;
+        statusLbl = `${statusLabel(primary?.status)} (+${uniqueStatuses.length - 1})`;
       }
       rows.push({
         id: `user-${user.id}`,
         user,
         primary_app: primary,
         apps: list,
-        status_summary: statusLabel,
+        status_summary: statusLbl,
       });
     }
     return rows;
@@ -279,7 +290,7 @@ export default function AdminOrgApplications() {
                           )}
                         </div>
                         <div>
-                          <span style={{ background: `${badgeColor}22`, color: badgeColor, padding: '4px 10px', borderRadius: 999, fontSize: 12 }}>{app.status}</span>
+                          <span style={{ background: `${badgeColor}22`, color: badgeColor, padding: '4px 10px', borderRadius: 999, fontSize: 12 }}>{statusLabel(app.status)}</span>
                         </div>
                       </div>
                     </div>

@@ -3,13 +3,21 @@
 namespace App\Http\Controllers;
 
 use App\Services\Semantic\SemanticSearch;
+use App\Services\Search\AnalyticalSearchService;
+use App\Services\Search\AttributeSearchService;
+use App\Services\Search\SuggestSearchService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 class SearchController extends Controller
 {
-    public function __construct(private SemanticSearch $search) {}
+    public function __construct(
+        private SemanticSearch $search,
+        private AnalyticalSearchService $analytical,
+        private AttributeSearchService $attribute,
+        private SuggestSearchService $suggestService,
+    ) {}
 
     public function query(Request $request)
     {
@@ -134,87 +142,32 @@ class SearchController extends Controller
         $isAnalytical = $hasLargest || $hasSmallest || $hasDeepest || $hasHighest || $hasLowest || $hasLongest;
         if ($isAnalytical && in_array($entity, ['lakes','watersheds'], true)) {
             $orderDir = ($hasSmallest || $hasLowest) ? 'ASC' : 'DESC';
-            $params = ['limit' => $finalLimit];
-            if ($place) $params['place'] = '%' . $place . '%';
-
             if ($entity === 'lakes') {
-                // Decide metric
-                $attributeUsed = 'area_m2';
-                if ($hasDeepest) $attributeUsed = 'depth';
-                elseif ($hasHighest || $hasLowest) $attributeUsed = 'elevation';
-                elseif ($hasLongest) $attributeUsed = 'shoreline_m';
-
-                if ($attributeUsed === 'area_m2') {
-                    $sql = <<<SQL
-SELECT l.id,
-       COALESCE(NULLIF(l.name, ''), NULLIF(l.alt_name, ''), 'Lake') AS name,
-       l.region, l.province,
-       ST_AsGeoJSON(l.coordinates) AS coordinates_geojson,
-       ST_Area(ly.geom::geography) AS metric_value
-FROM lakes l
-LEFT JOIN layers ly ON ly.body_type='lake' AND ly.body_id=l.id AND ly.is_active=true AND ly.visibility='public'
-WHERE ly.geom IS NOT NULL
-%s
-ORDER BY metric_value {$orderDir} NULLS LAST
-LIMIT :limit
-SQL;
-                } elseif ($attributeUsed === 'shoreline_m') {
-                    $sql = <<<SQL
-SELECT l.id,
-       COALESCE(NULLIF(l.name, ''), NULLIF(l.alt_name, ''), 'Lake') AS name,
-       l.region, l.province,
-       ST_AsGeoJSON(l.coordinates) AS coordinates_geojson,
-       ST_Perimeter(ly.geom::geography) AS metric_value
-FROM lakes l
-LEFT JOIN layers ly ON ly.body_type='lake' AND ly.body_id=l.id AND ly.is_active=true AND ly.visibility='public'
-WHERE ly.geom IS NOT NULL
-%s
-ORDER BY metric_value {$orderDir} NULLS LAST
-LIMIT :limit
-SQL;
-                } else { // depth / elevation from lakes table (schema uses mean_depth_m, elevation_m)
-                    $col = $attributeUsed === 'depth' ? 'l.mean_depth_m' : 'l.elevation_m';
-                    $sql = <<<SQL
-SELECT l.id,
-       COALESCE(NULLIF(l.name, ''), NULLIF(l.alt_name, ''), 'Lake') AS name,
-       l.region, l.province,
-       ST_AsGeoJSON(l.coordinates) AS coordinates_geojson,
-       {$col} AS metric_value
-FROM lakes l
-WHERE {$col} IS NOT NULL
-%s
-ORDER BY metric_value {$orderDir} NULLS LAST
-LIMIT :limit
-SQL;
-                }
-                $wherePlace = $place ? "AND ((l.region::text) ILIKE :place OR (l.province::text) ILIKE :place)" : '';
-                $rows = DB::select(sprintf($sql, $wherePlace), $params);
-                return response()->json([
-                    'data' => $mapRows($rows, 'lakes', $attributeUsed),
-                    'intent' => [ 'code' => 'ANALYTICAL', 'metric' => $attributeUsed, 'order' => $orderDir, 'limit' => $finalLimit ],
-                    'diagnostics' => [ 'approach' => 'controller-analytical', 'entity' => $entity, 'place' => $place ],
+                $metric = 'area_m2';
+                if ($hasDeepest) $metric = 'depth';
+                elseif ($hasHighest || $hasLowest) $metric = 'elevation';
+                elseif ($hasLongest) $metric = 'shoreline_m';
+                $data = $this->analytical->searchLakes([
+                    'place' => $place,
+                    'orderDir' => $orderDir,
+                    'metric' => $metric,
+                    'limit' => $finalLimit,
                 ]);
-            } else { // watersheds
-                $attributeUsed = 'area_m2';
-                // Compute area from published layers to avoid depending on missing columns on watersheds
-                $sql = <<<SQL
-                    SELECT w.id,
-                           w.name AS name,
-                           ST_AsGeoJSON(ly.geom) AS geom,
-                           ST_Area(ly.geom::geography) AS metric_value
-                    FROM watersheds w
-                    LEFT JOIN layers ly ON ly.body_type='watershed' AND ly.body_id=w.id AND ly.is_active=true AND ly.visibility='public'
-                    WHERE ly.geom IS NOT NULL
-                    %s
-                    ORDER BY metric_value {$orderDir} NULLS LAST
-                    LIMIT :limit
-                SQL;
-                $wherePlace = $place ? "AND (w.name ILIKE :place OR COALESCE(w.description,'') ILIKE :place)" : '';
-                $rows = DB::select(sprintf($sql, $wherePlace), $params);
                 return response()->json([
-                    'data' => $mapRows($rows, 'watersheds', $attributeUsed),
-                    'intent' => [ 'code' => 'ANALYTICAL', 'metric' => $attributeUsed, 'order' => $orderDir, 'limit' => $finalLimit ],
-                    'diagnostics' => [ 'approach' => 'controller-analytical', 'entity' => $entity, 'place' => $place ],
+                    'data' => $data,
+                    'intent' => [ 'code' => 'ANALYTICAL', 'metric' => $metric, 'order' => $orderDir, 'limit' => $finalLimit ],
+                    'diagnostics' => [ 'approach' => 'service-analytical', 'entity' => $entity, 'place' => $place ],
+                ]);
+            } else {
+                $data = $this->analytical->searchWatersheds([
+                    'place' => $place,
+                    'orderDir' => $orderDir,
+                    'limit' => $finalLimit,
+                ]);
+                return response()->json([
+                    'data' => $data,
+                    'intent' => [ 'code' => 'ANALYTICAL', 'metric' => 'area_m2', 'order' => $orderDir, 'limit' => $finalLimit ],
+                    'diagnostics' => [ 'approach' => 'service-analytical', 'entity' => $entity, 'place' => $place ],
                 ]);
             }
         }
@@ -222,140 +175,13 @@ SQL;
         // Attribute/fuzzy search by entity using ILIKE
     $kw = '%' . trim($q) . '%';
     $hasLakeKeyword = (bool) preg_match('/\blakes?\b/i', $q);
-        $rows = [];
-        $tableUsed = $entity;
-        if ($entity === 'lakes') {
-            $sql = <<<SQL
-                SELECT l.id,
-                       COALESCE(NULLIF(l.name, ''), NULLIF(l.alt_name, ''), 'Lake') AS name,
-                       l.class_code, l.region, l.province,
-                       (CASE WHEN ly.geom IS NOT NULL THEN ST_Area(ly.geom::geography)/1000000.0 ELSE NULL END) AS area_km2_from_layer,
-                       ST_AsGeoJSON(l.coordinates) AS coordinates_geojson
-                FROM lakes l
-                LEFT JOIN layers ly ON ly.body_type='lake' AND ly.body_id=l.id AND ly.is_active=true AND ly.visibility='public'
-                WHERE (
-                    l.name ILIKE :kwName OR
-                    l.alt_name ILIKE :kwName OR
-                    (:useRegionMatch = 1 AND ((l.region::text) ILIKE :kw OR (l.province::text) ILIKE :kw))
-                )
-                %s
-                ORDER BY name ASC
-                LIMIT :limit
-            SQL;
-            $wherePlace = $place ? "AND ((l.region::text) ILIKE :place OR (l.province::text) ILIKE :place)" : '';
-            $params = [
-                'kw' => $kw,
-                'kwName' => $hasLakeKeyword ? '%lake%' : $kw,
-                'useRegionMatch' => $place ? 0 : 1,
-                'limit' => $limit,
-            ] + ($place ? ['place' => '%'.$place.'%'] : []);
-            $rows = DB::select(sprintf($sql, $wherePlace), $params);
-        } elseif ($entity === 'watersheds') {
-            // Search by name/description; pull geom from active layer if available
-            $sql = <<<SQL
-                SELECT w.id,
-                       COALESCE(w.name, COALESCE(ly.layer_name, ly.name)) AS name,
-                       CASE WHEN ly.geom IS NOT NULL THEN ST_AsGeoJSON(ly.geom) ELSE NULL END AS geom
-                FROM watersheds w
-                LEFT JOIN layers ly ON ly.body_type='watershed' AND ly.body_id=w.id AND ly.is_active=true AND ly.visibility='public'
-                WHERE (
-                    w.name ILIKE :kw OR
-                    COALESCE(w.description,'') ILIKE :kw OR
-                    COALESCE(ly.layer_name, ly.name) ILIKE :kw
-                )
-                %s
-                ORDER BY name ASC
-                LIMIT :limit
-            SQL;
-            $wherePlace = $place ? "AND (w.name ILIKE :place OR COALESCE(w.description,'') ILIKE :place)" : '';
-            $params = ['kw' => $kw, 'limit' => $limit] + ($place ? ['place' => '%'.$place.'%'] : []);
-            $rows = DB::select(sprintf($sql, $wherePlace), $params);
-        } elseif ($entity === 'layers') {
-            $sql = <<<SQL
-                SELECT ly.id,
-                       COALESCE(ly.layer_name, ly.name) AS name,
-                       ly.category, ly.description, ly.source,
-                       CASE WHEN ly.geom IS NOT NULL THEN ST_AsGeoJSON(ly.geom) ELSE NULL END AS geom
-                FROM layers ly
-                WHERE (
-                    COALESCE(ly.layer_name, ly.name) ILIKE :kw OR
-                    ly.category ILIKE :kw OR
-                    ly.description ILIKE :kw OR
-                    ly.source ILIKE :kw
-                )
-                ORDER BY name ASC
-                LIMIT :limit
-            SQL;
-            $params = ['kw' => $kw, 'limit' => $limit];
-            $rows = DB::select($sql, $params);
-        } elseif ($entity === 'parameters') {
-            // Parameters table uses 'name'; include aliases if alias table exists
-            $hasAliases = Schema::hasTable('parameter_aliases');
-            if ($hasAliases) {
-                $sql = <<<SQL
-                    SELECT DISTINCT p.id,
-                           p.name AS name,
-                           p.category, p.unit
-                    FROM parameters p
-                    LEFT JOIN parameter_aliases pa ON pa.parameter_id = p.id
-                    WHERE (
-                        p.name ILIKE :kw OR p.code ILIKE :kw OR
-                        COALESCE(p.category,'') ILIKE :kw OR
-                        COALESCE(p.unit,'') ILIKE :kw OR
-                        COALESCE(pa.alias,'') ILIKE :kw
-                    )
-                    ORDER BY name ASC
-                    LIMIT :limit
-                SQL;
-            } else {
-                $sql = <<<SQL
-                    SELECT DISTINCT p.id,
-                           p.name AS name,
-                           p.category, p.unit
-                    FROM parameters p
-                    WHERE (
-                        p.name ILIKE :kw OR p.code ILIKE :kw OR
-                        COALESCE(p.category,'') ILIKE :kw OR
-                        COALESCE(p.unit,'') ILIKE :kw
-                    )
-                    ORDER BY name ASC
-                    LIMIT :limit
-                SQL;
-            }
-            $params = ['kw' => $kw, 'limit' => $limit];
-            $rows = DB::select($sql, $params);
-        } elseif ($entity === 'lake_flows') {
-            // Match available schema: name/alt_name/source/flow_type and the parent lake name
-            $sql = <<<SQL
-                SELECT f.id,
-                       COALESCE(NULLIF(f.name,''), NULLIF(f.alt_name,''), CONCAT(f.flow_type, ' flow')) AS name,
-                       f.flow_type,
-                       f.source,
-                       l.name AS lake_name,
-                       ST_AsGeoJSON(f.coordinates) AS coordinates_geojson,
-                       f.latitude, f.longitude
-                FROM lake_flows f
-                LEFT JOIN lakes l ON l.id = f.lake_id
-                WHERE (
-                    COALESCE(f.name, '') ILIKE :kw OR
-                    COALESCE(f.alt_name, '') ILIKE :kw OR
-                    COALESCE(f.source, '') ILIKE :kw OR
-                    f.flow_type ILIKE :kw OR
-                    COALESCE(l.name,'') ILIKE :kw
-                )
-                ORDER BY name ASC
-                LIMIT :limit
-            SQL;
-            $params = ['kw' => $kw, 'limit' => $limit];
-            $rows = DB::select($sql, $params);
-        }
-
-        // If we got attribute matches, return unified response
-        if (!empty($rows)) {
+        // Attribute/fuzzy search via service
+        $data = $this->attribute->search($entity, $q, $place, $limit);
+        if (!empty($data)) {
             return response()->json([
-                'data' => $mapRows($rows, $tableUsed, null),
-                'intent' => [ 'code' => 'ATTRIBUTE', 'entity' => $tableUsed ],
-                'diagnostics' => [ 'approach' => 'controller-attribute', 'place' => $place ],
+                'data' => $data,
+                'intent' => [ 'code' => 'ATTRIBUTE', 'entity' => $entity ],
+                'diagnostics' => [ 'approach' => 'service-attribute', 'place' => $place ],
             ]);
         }
 
@@ -392,79 +218,10 @@ SQL;
     {
         $q = (string) $request->query('q', '');
         $q = trim($q);
-        if ($q === '' || mb_strlen($q) < 2) {
-            return response()->json(['data' => []]);
-        }
-
-    $limitParam = (int) $request->query('limit', 8);
+        if ($q === '' || mb_strlen($q) < 2) return response()->json(['data' => []]);
+        $limitParam = (int) $request->query('limit', 8);
         $limit = max(1, min(20, $limitParam));
-    $kw = '%' . $q . '%';
-    // Tokenize to get last token for prefix behavior
-    $tokens = preg_split('/[^\p{L}0-9]+/u', strtolower($q), -1, PREG_SPLIT_NO_EMPTY);
-    $lastToken = $tokens ? end($tokens) : '';
-    $kwp = ($lastToken !== '') ? ($lastToken . '%') : ($q . '%');
-    $prefixOnly = ($lastToken !== '' && mb_strlen($lastToken) <= 3);
-    $hasLakeWord = false;
-    foreach ($tokens as $t) { if ($t === 'lake' || $t === 'lakes') { $hasLakeWord = true; break; } }
-    $kwLake = '%lake%';
-    $kwpLake = 'lake%';
-
-        $results = [];
-
-        // Lakes
-        $sqlLakes = <<<SQL
-            SELECT l.id,
-                   COALESCE(NULLIF(l.name, ''), NULLIF(l.alt_name, ''), 'Lake') AS name,
-                   'lakes' AS entity,
-                   NULL::text AS subtitle,
-                   CASE
-                      WHEN l.name ILIKE :kwp OR l.alt_name ILIKE :kwp OR (:hasLake::boolean AND (l.name ILIKE :kwpLake OR l.alt_name ILIKE :kwpLake)) THEN 0
-                     WHEN (l.region::text) ILIKE :kwp OR (l.province::text) ILIKE :kwp THEN 1
-                      WHEN l.name ILIKE :kw OR l.alt_name ILIKE :kw OR (l.region::text) ILIKE :kw OR (l.province::text) ILIKE :kw OR (:hasLake::boolean AND (l.name ILIKE :kwLake OR l.alt_name ILIKE :kwLake)) THEN 2
-                     ELSE 3
-                   END AS rank
-            FROM lakes l
-            WHERE (
-                l.name ILIKE :kw OR
-                l.alt_name ILIKE :kw OR
-                (l.region::text) ILIKE :kw OR
-                (l.province::text) ILIKE :kw OR
-                (:hasLake::boolean AND (l.name ILIKE :kwLake OR l.alt_name ILIKE :kwLake))
-            )
-            %s
-            ORDER BY rank ASC, name ASC
-            LIMIT :limit
-        SQL;
-        $extra = '';
-        $params = ['kw' => $kw, 'kwp' => $kwp, 'kwLake' => $kwLake, 'kwpLake' => $kwpLake, 'hasLake' => $hasLakeWord ? 1 : 0, 'limit' => $limit];
-        if ($prefixOnly) {
-            $extra .= " AND (l.name ILIKE :kwp OR l.alt_name ILIKE :kwp OR (l.region::text) ILIKE :kwp OR (l.province::text) ILIKE :kwp OR (:hasLake::boolean AND (l.name ILIKE :kwpLake OR l.alt_name ILIKE :kwpLake)))";
-        }
-        if ($hasLakeWord) {
-            $extra .= " AND (COALESCE(l.name,'') ILIKE '%lake%' OR COALESCE(l.alt_name,'') ILIKE '%lake%')";
-        }
-        $rows = DB::select(sprintf($sqlLakes, $extra), $params);
-        foreach ($rows as $r) {
-            $results[] = [ 'entity' => 'lakes', 'id' => $r->id, 'label' => $r->name, 'subtitle' => null ];
-        }
-
-        // Watersheds suggestions removed per refinement request
-
-        // Layers and Parameters suggestions intentionally removed per refinement request
-
-        // Optional: analytical hint when matching keywords
-        $qlc = strtolower($q);
-        if (count($results) > 0 && (str_contains($qlc, 'largest') || str_contains($qlc, 'deepest') || str_contains($qlc, 'highest') || str_contains($qlc, 'lowest'))) {
-            array_unshift($results, [
-                'entity' => 'hint',
-                'id' => null,
-                'label' => 'Press Enter to run analytical search',
-                'subtitle' => null,
-            ]);
-            // Trim back to limit
-            $results = array_slice($results, 0, $limit);
-        }
-
+        $results = $this->suggestService->suggest($q, $limit);
         return response()->json(['data' => $results]);
     }
 }

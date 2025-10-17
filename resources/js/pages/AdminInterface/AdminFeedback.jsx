@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { FiRefreshCw, FiEye, FiXCircle, FiMessageSquare } from 'react-icons/fi';
+import { FiRefreshCw, FiEye, FiXCircle, FiMessageSquare, FiFileText, FiChevronLeft, FiChevronRight, FiExternalLink } from 'react-icons/fi';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import Modal from '../../components/Modal';
 import api from '../../lib/api';
+import TableToolbar from '../../components/table/TableToolbar';
 
 const STATUS_ORDER = ['open','in_progress','resolved','wont_fix'];
 const STATUS_LABEL = STATUS_ORDER.reduce((acc, k) => {
@@ -24,19 +25,178 @@ const StatusPill = ({ status }) => (
   <span className={`feedback-status ${status}`}>{STATUS_LABEL[status] || status}</span>
 );
 
+function AttachmentsModal({ open, onClose, item }) {
+  const [sel, setSel] = React.useState(0);
+  React.useEffect(() => {
+    if (open) setSel(0);
+  }, [open, item]);
+  if (!open || !item) return null;
+  const imgs = Array.isArray(item.images) ? item.images : [];
+  const count = imgs.length;
+  const getFileName = (src) => {
+    try {
+      const files = item?.metadata?.files;
+      if (Array.isArray(files)) {
+        const hit = files.find(f => typeof f?.path === 'string' && (src.endsWith(f.path) || f.path.endsWith(src) || src.includes(f.path)));
+        if (hit?.original) return String(hit.original);
+      }
+    } catch {}
+    const seg = (src || '').split('/').pop();
+    return seg || 'file.pdf';
+  };
+  const getUrl = (src) => (src && typeof src === 'string' && src.startsWith('http') ? src : `/storage/${src || ''}`);
+  const isPdfSrc = (src) => /\.pdf($|\?)/i.test(src || '');
+  const currentSrc = imgs[sel] || '';
+  const currentUrl = getUrl(currentSrc);
+  const currentIsPdf = isPdfSrc(currentSrc);
+  const goPrev = () => setSel((p) => (count === 0 ? 0 : (p - 1 + count) % count));
+  const goNext = () => setSel((p) => (count === 0 ? 0 : (p + 1) % count));
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={`Attachments for #${item.id}`}
+      width={860}
+      ariaLabel="Attachments dialog"
+    >
+      {imgs.length === 0 ? (
+        <div className="muted">No attachments.</div>
+      ) : (
+        <div style={{ display: 'grid', gap: 12 }}>
+          {/* Preview area */}
+          <div style={{ position: 'relative', background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 8, padding: 8 }}>
+            {!currentIsPdf ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 360 }}>
+                <img
+                  src={currentUrl}
+                  alt={`Preview ${sel + 1}`}
+                  style={{ maxWidth: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: 6 }}
+                />
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 360 }}>
+                <iframe
+                  title={`PDF ${sel + 1}`}
+                  src={currentUrl}
+                  style={{ width: '100%', height: '60vh', border: 'none', background: '#fff', borderRadius: 6 }}
+                />
+              </div>
+            )}
+            {currentIsPdf && (
+              <div className="muted" style={{ position: 'absolute', left: 12, bottom: 10, fontSize: 12, background: '#ffffffcc', padding: '2px 6px', borderRadius: 6, border: '1px solid #e5e7eb' }}>
+                {getFileName(currentSrc)}
+              </div>
+            )}
+            {/* Controls */}
+            {count > 1 && (
+              <>
+                <button
+                  className="pill-btn ghost sm"
+                  onClick={goPrev}
+                  style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)' }}
+                  title="Previous"
+                >
+                  <FiChevronLeft />
+                </button>
+                <button
+                  className="pill-btn ghost sm"
+                  onClick={goNext}
+                  style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)' }}
+                  title="Next"
+                >
+                  <FiChevronRight />
+                </button>
+              </>
+            )}
+            <a
+              className="pill-btn ghost sm"
+              href={currentUrl}
+              target="_blank"
+              rel="noreferrer"
+              style={{ position: 'absolute', right: 8, bottom: 8 }}
+              title="Open in new tab"
+            >
+              <FiExternalLink /> Open
+            </a>
+          </div>
+          {/* Thumbnails */}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {imgs.map((raw, idx) => {
+              const src = raw && typeof raw === 'string' ? raw : '';
+              const url = getUrl(src);
+              const isPdf = isPdfSrc(src);
+              const isActive = idx === sel;
+              const commonStyle = {
+                borderRadius: 6,
+                border: isActive ? '2px solid #3b82f6' : '1px solid #e5e7eb',
+                background: '#fff',
+                cursor: 'pointer',
+              };
+              return isPdf ? (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setSel(idx)}
+                  title={getFileName(src)}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 8px', ...commonStyle }}
+                >
+                  <FiFileText /> <span style={{ fontSize: 12, maxWidth: 180, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{getFileName(src)}</span>
+                </button>
+              ) : (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setSel(idx)}
+                  title={`Select image ${idx + 1}`}
+                  style={{ padding: 0, ...commonStyle }}
+                >
+                  <img src={url} alt={`Thumb ${idx + 1}`} style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 6 }} />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 function FeedbackDetailModal({ open, onClose, item, onSave }) {
   const [status, setStatus] = useState(item?.status || 'open');
   const [adminResponse, setAdminResponse] = useState(item?.admin_response || '');
   const [saving, setSaving] = useState(false);
+  const [sel, setSel] = useState(0);
 
   useEffect(() => {
     if (open) {
       setStatus(item?.status || 'open');
       setAdminResponse(item?.admin_response || '');
+      setSel(0);
     }
   }, [open, item]);
 
   if (!open || !item) return null;
+
+  const imgs = Array.isArray(item.images) ? item.images : [];
+  const count = imgs.length;
+  const getUrl = (src) => (src && typeof src === 'string' && src.startsWith('http') ? src : `/storage/${src || ''}`);
+  const isPdfSrc = (src) => /\.pdf($|\?)/i.test(src || '');
+  const currentSrc = imgs[sel] || '';
+  const currentUrl = getUrl(currentSrc);
+  const currentIsPdf = isPdfSrc(currentSrc);
+  const goPrev = () => setSel((p) => (count === 0 ? 0 : (p - 1 + count) % count));
+  const goNext = () => setSel((p) => (count === 0 ? 0 : (p + 1) % count));
+  const getFileName = (src) => {
+    try {
+      const files = item?.metadata?.files;
+      if (Array.isArray(files)) {
+        const hit = files.find(f => typeof f?.path === 'string' && (src.endsWith(f.path) || f.path.endsWith(src) || src.includes(f.path)));
+        if (hit?.original) return String(hit.original);
+      }
+    } catch {}
+    const seg = (src || '').split('/').pop();
+    return seg || 'file.pdf';
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -56,76 +216,119 @@ function FeedbackDetailModal({ open, onClose, item, onSave }) {
       open={open}
       onClose={onClose}
       title={`Feedback #${item.id}`}
-      width={720}
+      width={980}
       ariaLabel="Feedback detail dialog"
       bodyClassName="feedback-detail-body"
     >
-      <div className="lv-settings-panel" style={{ gap: 14 }}>
-        <h3 style={{ margin: 0, fontSize: '1rem' }}>{item.title}</h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            <span style={{ fontSize: 12, fontWeight: 600 }}>Status:</span> <StatusPill status={status} />
+      <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 16 }}>
+        {/* Left: content + preview */}
+        <div className="lv-settings-panel" style={{ gap: 14 }}>
+          <h3 style={{ margin: 0, fontSize: '1.05rem' }}>{item.title}</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ fontSize: 12, fontWeight: 600 }}>Status:</span> <StatusPill status={status} />
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ fontSize: 12, fontWeight: 600 }}>Category:</span> {item.category ? <span className="feedback-category-badge">{item.category}</span> : <span style={{ fontSize: 12 }}>—</span>}
+            </div>
+            {item.lake?.name && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <span style={{ fontSize: 12, fontWeight: 600 }}>Lake:</span> <span>{item.lake.name}</span>
+              </div>
+            )}
+            <div style={{ fontSize: 11, color: '#64748b' }}>Submitted: {new Date(item.created_at).toLocaleString()}</div>
           </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            <span style={{ fontSize: 12, fontWeight: 600 }}>Category:</span> {item.category ? <span className="feedback-category-badge">{item.category}</span> : <span style={{ fontSize: 12 }}>—</span>}
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Message:</div>
+            <div style={{ fontSize: 13, whiteSpace: 'pre-wrap' }}>{item.message}</div>
           </div>
-          <div style={{ fontSize: 11, color: '#64748b' }}>Submitted: {new Date(item.created_at).toLocaleString()}</div>
+
+          {imgs.length > 0 && (
+            <div style={{ display: 'grid', gap: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 600 }}>Attachments</div>
+              <div style={{ position: 'relative', background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 8, padding: 8 }}>
+                {!currentIsPdf ? (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 320 }}>
+                    <img src={currentUrl} alt={`Preview ${sel + 1}`} style={{ maxWidth: '100%', maxHeight: '50vh', objectFit: 'contain', borderRadius: 6 }} />
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 320 }}>
+                    <iframe title={`PDF ${sel + 1}`} src={currentUrl} style={{ width: '100%', height: '50vh', border: 'none', background: '#fff', borderRadius: 6 }} />
+                  </div>
+                )}
+                {currentIsPdf && (
+                  <div className="muted" style={{ position: 'absolute', left: 12, bottom: 10, fontSize: 12, background: '#ffffffcc', padding: '2px 6px', borderRadius: 6, border: '1px solid #e5e7eb' }}>
+                    {getFileName(currentSrc)}
+                  </div>
+                )}
+                {count > 1 && (
+                  <>
+                    <button className="pill-btn ghost sm" onClick={goPrev} style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)' }} title="Previous">
+                      <FiChevronLeft />
+                    </button>
+                    <button className="pill-btn ghost sm" onClick={goNext} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)' }} title="Next">
+                      <FiChevronRight />
+                    </button>
+                  </>
+                )}
+                <a className="pill-btn ghost sm" href={currentUrl} target="_blank" rel="noreferrer" style={{ position: 'absolute', right: 8, bottom: 8 }} title="Open in new tab">
+                  <FiExternalLink /> Open
+                </a>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {imgs.map((raw, idx) => {
+                  const src = raw && typeof raw === 'string' ? raw : '';
+                  const url = getUrl(src);
+                  const isPdf = isPdfSrc(src);
+                  const isActive = idx === sel;
+                  const commonStyle = { borderRadius: 6, border: isActive ? '2px solid #3b82f6' : '1px solid #e5e7eb', background: '#fff', cursor: 'pointer' };
+                  return isPdf ? (
+                    <button key={idx} type="button" onClick={() => setSel(idx)} title={getFileName(src)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 8px', ...commonStyle }}>
+                      <FiFileText /> <span style={{ fontSize: 12, maxWidth: 160, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{getFileName(src)}</span>
+                    </button>
+                  ) : (
+                    <button key={idx} type="button" onClick={() => setSel(idx)} title={`Select image ${idx + 1}`} style={{ padding: 0, ...commonStyle }}>
+                      <img src={url} alt={`Thumb ${idx + 1}`} style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 6 }} />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Message:</div>
-          <div style={{ fontSize: 13, whiteSpace: 'pre-wrap' }}>{item.message}</div>
-        </div>
-      </div>
-      <div className="lv-settings-panel" style={{ gap: 12 }}>
-        <h3 style={{ margin: 0, fontSize: '1rem' }}>Moderation</h3>
-        <div className="lv-field-row">
-          <label htmlFor="fb-detail-status">Status</label>
-          <select
-            id="fb-detail-status"
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            style={{
-              border: '1px solid #d1d5db',
-              borderRadius: 6,
-              padding: '6px 10px',
-              background: '#fff',
-              fontSize: 14,
-            }}
-          >
-            {STATUS_ORDER.map((s) => (
-              <option key={s} value={s}>
-                {STATUS_LABEL[s]}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="lv-field-row">
-          <label htmlFor="fb-detail-response">Admin Response</label>
-          <textarea
-            id="fb-detail-response"
-            value={adminResponse}
-            onChange={(e) => setAdminResponse(e.target.value)}
-            rows={4}
-            maxLength={4000}
-            placeholder="Provide context, resolution notes, or rationale."
-            style={{
-              resize: 'vertical',
-              border: '1px solid #d1d5db',
-              borderRadius: 6,
-              padding: '8px 10px',
-              fontSize: 14,
-              lineHeight: 1.4,
-              background: '#fff',
-            }}
-          />
-        </div>
-        <div className="settings-actions" style={{ justifyContent: 'flex-end' }}>
-          <button className="pill-btn ghost" type="button" onClick={onClose} disabled={saving}>
-            Cancel
-          </button>
-          <button className="btn-primary" type="button" disabled={saving} onClick={handleSave}>
-            {saving ? 'Saving…' : 'Save Changes'}
-          </button>
+
+        {/* Right: moderation */}
+        <div className="lv-settings-panel" style={{ gap: 12 }}>
+          <h3 style={{ margin: 0, fontSize: '1rem' }}>Moderation</h3>
+          <div className="lv-field-row">
+            <label htmlFor="fb-detail-status">Status</label>
+            <select
+              id="fb-detail-status"
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              style={{ border: '1px solid #d1d5db', borderRadius: 6, padding: '6px 10px', background: '#fff', fontSize: 14 }}
+            >
+              {STATUS_ORDER.map((s) => (
+                <option key={s} value={s}>{STATUS_LABEL[s]}</option>
+              ))}
+            </select>
+          </div>
+          <div className="lv-field-row">
+            <label htmlFor="fb-detail-response">Admin Response</label>
+            <textarea
+              id="fb-detail-response"
+              value={adminResponse}
+              onChange={(e) => setAdminResponse(e.target.value)}
+              rows={8}
+              maxLength={4000}
+              placeholder="Provide context, resolution notes, or rationale."
+              style={{ resize: 'vertical', border: '1px solid #d1d5db', borderRadius: 6, padding: '8px 10px', fontSize: 14, lineHeight: 1.4, background: '#fff' }}
+            />
+          </div>
+          <div className="settings-actions" style={{ justifyContent: 'flex-end' }}>
+            <button className="pill-btn ghost" type="button" onClick={onClose} disabled={saving}>Cancel</button>
+            <button className="btn-primary" type="button" disabled={saving} onClick={handleSave}>{saving ? 'Saving…' : 'Save Changes'}</button>
+          </div>
         </div>
       </div>
     </Modal>
@@ -150,6 +353,34 @@ export default function AdminFeedback() {
   const [selectedIds, setSelectedIds] = useState([]);
   const [bulkStatus, setBulkStatus] = useState('');
   const [bulkApplying, setBulkApplying] = useState(false);
+  const [docsOpen, setDocsOpen] = useState(false);
+  const [docsItem, setDocsItem] = useState(null);
+  const [showFilters, setShowFilters] = useState(true);
+
+  // Column picker wiring
+  const COLUMNS = useMemo(() => ([
+    { id: 'title', header: 'Title' },
+    { id: 'user', header: 'User' },
+    { id: 'source', header: 'Source' },
+    { id: 'lake', header: 'Lake' },
+    { id: 'category', header: 'Category' },
+    { id: 'docs', header: 'Documents' },
+    { id: 'status', header: 'Status' },
+    { id: 'org', header: 'Org' },
+    { id: 'created', header: 'Created' },
+  ]), []);
+  const [visibleMap, setVisibleMap] = useState(() => ({
+    title: true,
+    user: true,
+    source: true,
+    lake: true,
+    category: true,
+    docs: true,
+    status: true,
+    org: false,
+    created: false,
+  }));
+  const visibleColumns = useMemo(() => COLUMNS.filter(c => visibleMap[c.id] !== false).map(c => c.id), [COLUMNS, visibleMap]);
 
   const fetchData = useCallback(async (opts={}) => {
     const p = opts.page || page;
@@ -208,6 +439,8 @@ export default function AdminFeedback() {
       case 'title': return row.title?.toLowerCase?.() || '';
       case 'user': return (row.user?.name || '').toLowerCase();
       case 'org': return (row.tenant?.name || '').toLowerCase();
+      case 'lake': return (row.lake?.name || '').toLowerCase();
+      case 'source': return row.lake?.id ? 0 : 1; // Lake Panel first
       case 'category': return (row.category || '').toLowerCase();
       case 'status': return STATUS_ORDER.indexOf(row.status);
       case 'created': return row.created_at ? new Date(row.created_at).getTime() : 0;
@@ -277,6 +510,15 @@ export default function AdminFeedback() {
         <p className="muted" style={{ marginTop:4 }}>Review, search, categorize, and resolve user-submitted feedback.</p>
       </div>
 
+      <TableToolbar
+        tableId="admin-feedback"
+        search={{ value: search, onChange: setSearch, placeholder: 'Search name/title/message… (press / to focus)' }}
+        columnPicker={{ columns: COLUMNS, visibleMap, onVisibleChange: setVisibleMap }}
+        onToggleFilters={() => setShowFilters(v => !v)}
+        onRefresh={() => fetchData({ page: 1 })}
+      />
+
+      {showFilters && (
       <div className="advanced-filters" style={{ marginTop:16 }}>
         <div className="advanced-filters-header" style={{ marginBottom:10 }}>
           <strong>Filters</strong>
@@ -335,7 +577,8 @@ export default function AdminFeedback() {
             </select>
           </div>
         </div>
-      </div>
+  </div>
+  )}
 
       <div className="table-wrapper" style={{ marginTop:18 }}>
         {selectedIds.length > 0 && (
@@ -358,7 +601,7 @@ export default function AdminFeedback() {
                     <input type="checkbox" aria-label="Select all on page" checked={selectedIds.length>0 && selectedIds.length===rows.length} onChange={toggleSelectAll} disabled={rows.length===0} />
                   </div>
                 </th>
-                {['title','user','org','category','status','created'].map(col => (
+                {visibleColumns.map(col => (
                   <th key={col} className="lv-th">
                     <div className="lv-th-inner">
                       <button
@@ -367,12 +610,7 @@ export default function AdminFeedback() {
                         onClick={() => applySort(col)}
                         aria-label={`Sort by ${col}`}
                       >
-                        {col === 'title' && 'Title'}
-                        {col === 'user' && 'User'}
-                        {col === 'org' && 'Org'}
-                        {col === 'category' && 'Category'}
-                        {col === 'status' && 'Status'}
-                        {col === 'created' && 'Created'}
+                        {COLUMNS.find(c => c.id === col)?.header || col}
                         {sort.id === col && (
                           <span style={{ marginLeft: 6, fontSize: 12, color: '#6b7280' }}>
                             {sort.dir === 'asc' ? '▲' : '▼'}
@@ -387,31 +625,90 @@ export default function AdminFeedback() {
             </thead>
             <tbody>
               {!loading && rows.length === 0 && (
-                <tr><td className="lv-td" colSpan={8} style={{ textAlign:'center' }}>No feedback found.</td></tr>
+                <tr><td className="lv-td" colSpan={2 + visibleColumns.length} style={{ textAlign:'center' }}>No feedback found.</td></tr>
               )}
               {loading && (
-                <tr><td className="lv-td" colSpan={8} style={{ textAlign:'center' }}><LoadingSpinner label="Loading feedback…" /></td></tr>
+                <tr><td className="lv-td" colSpan={2 + visibleColumns.length} style={{ textAlign:'center' }}><LoadingSpinner label="Loading feedback…" /></td></tr>
               )}
               {sortedRows.map(r => (
                 <tr key={r.id} className="lv-tr">
                   <td className="lv-td" style={{ width:32 }}>
                     <input type="checkbox" aria-label={`Select feedback ${r.id}`} checked={selectedIds.includes(r.id)} onChange={()=>toggleRow(r.id)} />
                   </td>
-                  <td className="lv-td" style={{ maxWidth:240 }}><div style={{ fontWeight:600, fontSize:13 }}>{r.title}</div><div style={{ fontSize:11, color:'#64748b', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{r.message}</div></td>
-                  <td className="lv-td" style={{ fontSize:12 }}>
-                    {r.is_guest ? (
-                      <span style={{ display:'inline-flex', alignItems:'center', gap:4 }}>
-                        <span className="badge" style={{ background:'#f59e0b20', color:'#b45309', padding:'2px 6px', borderRadius:6, fontSize:11 }}>Guest</span>
-                        {r.guest_name || '—'}
-                      </span>
-                    ) : (r.user?.name || '—')}
-                  </td>
-                  <td className="lv-td" style={{ fontSize:12 }}>
-                    {r.tenant?.name || ''}
-                  </td>
-                  <td className="lv-td" style={{ fontSize:12 }}>{r.category ? <span className="feedback-category-badge">{r.category}</span> : '—'}</td>
-                  <td className="lv-td" style={{ fontSize:12 }}><StatusPill status={r.status} /></td>
-                  <td className="lv-td" style={{ fontSize:12 }}>{r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}</td>
+                  {visibleColumns.map(col => {
+                    if (col === 'title') {
+                      return (
+                        <td key={col} className="lv-td" style={{ maxWidth:240 }}>
+                          <div style={{ fontWeight:600, fontSize:13 }}>{r.title}</div>
+                          <div style={{ fontSize:11, color:'#64748b', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{r.message}</div>
+                        </td>
+                      );
+                    }
+                    if (col === 'user') {
+                      return (
+                        <td key={col} className="lv-td" style={{ fontSize:12 }}>
+                          {r.is_guest ? (
+                            <span style={{ display:'inline-flex', alignItems:'center', gap:4 }}>
+                              <span className="badge" style={{ background:'#f59e0b20', color:'#b45309', padding:'2px 6px', borderRadius:6, fontSize:11 }}>Guest</span>
+                              {r.guest_name || '—'}
+                            </span>
+                          ) : (r.user?.name || '—')}
+                        </td>
+                      );
+                    }
+                    if (col === 'org') {
+                      return (
+                        <td key={col} className="lv-td" style={{ fontSize:12 }}>
+                          {r.tenant?.name || ''}
+                        </td>
+                      );
+                    }
+                    if (col === 'lake') {
+                      return (
+                        <td key={col} className="lv-td" style={{ fontSize:12 }}>{r.lake?.name || '—'}</td>
+                      );
+                    }
+                    if (col === 'category') {
+                      return (
+                        <td key={col} className="lv-td" style={{ fontSize:12 }}>{r.category ? <span className="feedback-category-badge">{r.category}</span> : '—'}</td>
+                      );
+                    }
+                    if (col === 'source') {
+                      const isLake = !!r.lake?.id;
+                      const label = isLake ? 'Lake Panel' : 'System';
+                      const color = isLake ? '#3b82f6' : '#64748b';
+                      return (
+                        <td key={col} className="lv-td" style={{ fontSize:12 }}>
+                          <span style={{ background: `${color}22`, color, padding: '2px 8px', borderRadius: 999, fontSize: 12 }}>{label}</span>
+                        </td>
+                      );
+                    }
+                    if (col === 'docs') {
+                      return (
+                        <td key={col} className="lv-td" style={{ fontSize:12 }}>
+                          <button
+                            className="pill-btn ghost sm"
+                            onClick={() => { setDocsItem(r); setDocsOpen(true); }}
+                            disabled={!Array.isArray(r.images) || r.images.length === 0}
+                            title={Array.isArray(r.images) && r.images.length > 0 ? 'View attachments' : 'No attachments'}
+                          >
+                            <FiFileText /> View{Array.isArray(r.images) && r.images.length > 0 ? ` (${r.images.length})` : ''}
+                          </button>
+                        </td>
+                      );
+                    }
+                    if (col === 'status') {
+                      return (
+                        <td key={col} className="lv-td" style={{ fontSize:12 }}><StatusPill status={r.status} /></td>
+                      );
+                    }
+                    if (col === 'created') {
+                      return (
+                        <td key={col} className="lv-td" style={{ fontSize:12 }}>{r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}</td>
+                      );
+                    }
+                    return null;
+                  })}
                   <td className="lv-td sticky-right" style={{ fontSize:12 }}>
                     <div className="lv-actions-inline">
                       <button className="pill-btn ghost sm" onClick={() => openDetail(r)} title="View & edit"><FiEye size={14}/></button>
@@ -436,6 +733,7 @@ export default function AdminFeedback() {
         item={selected}
         onSave={handleSaved}
       />
+      <AttachmentsModal open={docsOpen} onClose={() => setDocsOpen(false)} item={docsItem} />
     </div>
   );
 }

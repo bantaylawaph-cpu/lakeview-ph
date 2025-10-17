@@ -8,12 +8,12 @@ import Modal from "../../components/Modal";
 
 const STATUS_OPTIONS = [
   { value: "", label: "All" },
-  { value: "pending_kyc", label: "Pending KYC" },
+  { value: "pending_kyc", label: "Pending" },
   { value: "pending_org_review", label: "Pending Org Review" },
   { value: "approved", label: "Approved" },
   { value: "needs_changes", label: "Needs Changes" },
   { value: "rejected", label: "Rejected" },
-  { value: "accepted_another_org", label: "Accepted at another org" },
+  { value: "accepted_another_org", label: "Accepted Another Org" },
 ];
 
 export default function OrgApplications() {
@@ -31,6 +31,17 @@ export default function OrgApplications() {
     actions: true,
   });
   const [decisionModal, setDecisionModal] = useState({ open: false, id: null, action: null, notes: '', submitting: false, error: '' });
+
+  // Map status codes to formal labels for display
+  const STATUS_LABELS = useMemo(() => ({
+    pending_kyc: 'Pending',
+    pending_org_review: 'Pending Org Review',
+    approved: 'Approved',
+    needs_changes: 'Needs Changes',
+    rejected: 'Rejected',
+    accepted_another_org: 'Accepted Another Org',
+  }), []);
+  const statusLabel = (code) => STATUS_LABELS[code] || code || '';
 
   const COLUMNS = useMemo(() => ([
     { id: "user", header: "User" },
@@ -111,7 +122,7 @@ export default function OrgApplications() {
       const v = c.id === 'user' ? (r.user?.name ?? '')
         : c.id === 'email' ? (r.user?.email ?? '')
         : c.id === 'desired_role' ? (r.desired_role ?? '')
-        : c.id === 'status' ? (r.status ?? '')
+        : c.id === 'status' ? (statusLabel(r.status) ?? '')
         : '';
       const s = String(v ?? '');
       return '"' + s.replaceAll('"', '""') + '"';
@@ -138,7 +149,7 @@ export default function OrgApplications() {
       rejected: '#ef4444',
       accepted_another_org: '#64748b',
     }[props.value] || '#64748b';
-    return <span style={{ background: `${color}22`, color, padding: '2px 8px', borderRadius: 999, fontSize: 12 }}>{props.value}</span>;
+    return <span style={{ background: `${color}22`, color, padding: '2px 8px', borderRadius: 999, fontSize: 12 }}>{statusLabel(props.value)}</span>;
   };
 
   const baseColumns = useMemo(() => ([

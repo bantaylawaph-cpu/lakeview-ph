@@ -3,6 +3,7 @@ import Modal from '../Modal';
 import api from '../../lib/api';
 import { getCurrentUser } from '../../lib/authState';
 import LoadingSpinner from '../LoadingSpinner';
+import DataPrivacyDisclaimer from '../../pages/PublicInterface/DataPrivacyDisclaimer';
 
 // Status pill uses feedback-status classes from feedback.css
 function StatusPill({ status }) {
@@ -15,6 +16,10 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('');
   const [message, setMessage] = useState('');
+  // Attachments: screenshots only (png/jpg)
+  const [files, setFiles] = useState([]);
+  const [previews, setPreviews] = useState([]);
+  const fileInputRef = useRef(null);
   // Guest-only fields
   const [guestName, setGuestName] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
@@ -29,6 +34,9 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
   const mountedRef = useRef(true);
   const formRef = useRef(null);
   const triggerRef = useRef(null);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
+
+  // no file preview needed for "My Submissions"
 
   // Field interaction (touched) tracking for validation messages
   const [tTitle, setTTitle] = useState(false);
@@ -91,7 +99,36 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
     return () => window.removeEventListener('keydown', handleKey, true);
   }, [open, onClose]);
 
-  const resetForm = () => { setTitle(''); setCategory(''); setMessage(''); setGuestName(''); setGuestEmail(''); if (honeypotRef.current) honeypotRef.current.value=''; };
+  const resetForm = () => { setTitle(''); setCategory(''); setMessage(''); setGuestName(''); setGuestEmail(''); setFiles([]); if (honeypotRef.current) honeypotRef.current.value=''; };
+
+  // File selection and previews (screenshots only)
+  const ALLOWED_MIME = ['image/png', 'image/jpeg'];
+  const isAllowedFile = (f) => {
+    const maxSize = 25 * 1024 * 1024; // 25MB
+    if (f.size > maxSize) return false;
+    if (ALLOWED_MIME.includes(f.type)) return true;
+    const name = (f.name || '').toLowerCase();
+    return name.endsWith('.png') || name.endsWith('.jpg') || name.endsWith('.jpeg');
+  };
+  const onFilesSelected = (evt) => {
+    const picked = Array.from(evt.target.files || []);
+    const validPicked = picked.filter(isAllowedFile);
+    const invalidCount = picked.length - validPicked.length;
+    let combined = [...files, ...validPicked];
+    let trimmed = combined;
+    let overLimit = false;
+    if (combined.length > 6) { trimmed = combined.slice(0, 6); overLimit = true; }
+    if (invalidCount > 0 && overLimit) setError('Some files were skipped and the limit is 6 files. Allowed: PNG/JPG up to 25MB each.');
+    else if (invalidCount > 0) setError('Some files were skipped. Allowed: PNG/JPG up to 25MB each.');
+    else if (overLimit) setError('You can upload up to 6 files.');
+    setFiles(trimmed);
+    try { evt.target.value = ''; } catch {}
+  };
+  useEffect(() => {
+    const urls = files.map(f => (f.type && f.type.startsWith('image/')) ? URL.createObjectURL(f) : null);
+    setPreviews(urls);
+    return () => { urls.forEach(u => { if (u) try { URL.revokeObjectURL(u); } catch {} }); };
+  }, [files]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -111,19 +148,20 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
     }
     setSubmitting(true); setError(''); setSuccess('');
     try {
-      const payload = { title: title.trim(), message: message.trim(), category: category || null };
+      const fd = new FormData();
+      fd.append('title', title.trim());
+      fd.append('message', message.trim());
+      if (category) fd.append('category', category);
       if (!user) {
-        if (guestName.trim()) payload.guest_name = guestName.trim();
-        if (guestEmail.trim()) payload.guest_email = guestEmail.trim();
-        // Honeypot field appended when present
-        const hpVal = honeypotRef.current?.value;
-        if (hpVal) payload.website = hpVal; // if bot filled -> backend validation rejects
+        if (guestName.trim()) fd.append('guest_name', guestName.trim());
+        if (guestEmail.trim()) fd.append('guest_email', guestEmail.trim());
+        const hpVal = honeypotRef.current?.value; if (hpVal) fd.append('website', hpVal);
       } else {
-        // Authenticated path still adds metadata; backend handles metadata itself for public endpoint too but we keep parity
-        payload.metadata = { ua: navigator.userAgent, lang: navigator.language, tz: Intl.DateTimeFormat().resolvedOptions().timeZone };
+        fd.append('metadata', JSON.stringify({ ua: navigator.userAgent, lang: navigator.language, tz: Intl.DateTimeFormat().resolvedOptions().timeZone }));
       }
-  const endpoint = user ? '/feedback' : '/public/feedback';
-      const res = await api.post(endpoint, payload);
+      if (files && files.length) { files.forEach((f) => fd.append('images[]', f)); }
+      const endpoint = user ? '/feedback' : '/public/feedback';
+      const res = await api.upload(endpoint, fd, { headers: {} });
       // Accept several possible shapes: {data: {...}}, {...}, or empty object
       const created = (res && (res.data || res.item || (res.id && res))) || null;
       if (created) {
@@ -152,11 +190,17 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
       width={width}
       ariaLabel="User feedback dialog"
       cardClassName="auth-card"
-  bodyClassName="content-page modern-scrollbar"
+      bodyClassName="content-page modern-scrollbar"
       footer={(
-        <div className="lv-modal-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <button type="button" className="pill-btn ghost sm" onClick={resetForm} disabled={submitting || (!title && !message && !guestName && !guestEmail)}>Reset</button>
-          <button type="submit" form="feedback-form" className="pill-btn primary" disabled={submitting || !isValid}>{submitting ? 'Submitting…' : 'Submit'}</button>
+        <div className="lv-modal-actions" style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+          <div className="muted" style={{ fontSize:12, textAlign:'left' }}>
+            By submitting, you agree to our{' '}
+            <a href="#" onClick={(e)=>{e.preventDefault(); setPrivacyOpen(true);}} style={{ textDecoration:'underline', fontStyle:'italic', color:'inherit' }}>Privacy Notice</a>.
+          </div>
+          <div style={{ display:'flex', gap:8 }}>
+            <button type="button" className="pill-btn ghost sm" onClick={resetForm} disabled={submitting || (!title && !message && !guestName && !guestEmail)}>Reset</button>
+            <button type="submit" form="feedback-form" className="pill-btn primary" disabled={submitting || !isValid}>{submitting ? 'Submitting…' : 'Submit'}</button>
+          </div>
         </div>
       )}
     >
@@ -247,6 +291,47 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
                   <div className="char-counter" style={rawMsgLen < MIN_MESSAGE && tMessage ? { color:'var(--danger, #dc2626)' } : {}}>{message.length}/2000</div>
                   {messageError && <div id="fb-message-err" className="field-error" style={{ color:'var(--danger, #dc2626)', fontSize:12, marginTop:4 }}>{messageError}</div>}
                 </div>
+                <div className="lv-field-row">
+                  <label htmlFor="fb-files">Attachments (optional)</label>
+                  <div className="muted" style={{ fontSize:12, marginTop:-6, marginBottom:6 }}>Screenshots only (PNG, JPG), up to 6 files, 25MB each.</div>
+                  <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                    <input
+                      ref={fileInputRef}
+                      id="fb-files"
+                      type="file"
+                      accept="image/png,image/jpeg"
+                      multiple
+                      onChange={onFilesSelected}
+                      style={{ display:'none' }}
+                    />
+                    <button type="button" className="pill-btn ghost sm" onClick={() => fileInputRef.current?.click()}>Add files</button>
+                    {files && files.length > 0 && (
+                      <div className="muted" style={{ fontSize:12 }}>
+                        {files.length} file{files.length>1?'s':''} selected
+                      </div>
+                    )}
+                  </div>
+                  {files && files.length > 0 && (
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(120px, 1fr))', gap:10, marginTop:10 }}>
+                      {files.map((f, idx) => (
+                        <div key={idx} className="insight-card" style={{ padding:6, textAlign:'center' }}>
+                          <img src={previews[idx]} alt={f.name} style={{ width:'100%', height:110, objectFit:'cover', borderRadius:6 }} />
+                          <div className="muted" style={{ fontSize:10, marginTop:6, wordBreak:'break-all' }}>{f.name}</div>
+                          <div style={{ marginTop:6 }}>
+                            <button
+                              type="button"
+                              onClick={() => setFiles(prev => prev.filter((_, i) => i !== idx))}
+                              className="pill-btn ghost sm"
+                              title="Delete this file"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 {error && <div className="lv-status-error" role="alert">{error}</div>}
                 {success && <div className="lv-status-success" role="status">{success}</div>}
                 {/* footer buttons moved into Modal.footer for consistency */}
@@ -265,10 +350,14 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, flexWrap:'wrap' }}>
                   <strong style={{ fontSize:15 }}>{item.title}</strong>
                   <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-                    {item.category && <span className="feedback-category-badge">{item.category}</span>}
                     <StatusPill status={item.status} />
                   </div>
                 </div>
+                {item.category && (
+                  <div style={{ marginTop:2 }}>
+                    <span className="feedback-category-badge">{item.category}</span>
+                  </div>
+                )}
                 <div style={{ whiteSpace:'pre-wrap', fontSize:13, lineHeight:1.45 }}>{item.message}</div>
                 {item.admin_response && (
                   <div className="admin-reply-box"><strong>Admin Response:</strong><br />{item.admin_response}</div>
@@ -289,6 +378,7 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
           </div>
         )}
       </div>
+      <DataPrivacyDisclaimer open={privacyOpen} onClose={() => setPrivacyOpen(false)} />
     </Modal>
   );
 }
