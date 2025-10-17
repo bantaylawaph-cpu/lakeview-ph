@@ -374,8 +374,30 @@ export default function LayerWizard({
       await alertSuccess("Layer created successfully.");
     } catch (e) {
       console.error('[LayerWizard] Publish failed', e);
-      setError(e?.message || "Failed to publish layer.");
-      await alertError('Failed to publish layer', e?.message || '');
+      // Try to produce a friendly, actionable error for admins when the DB unique
+      // constraint for a single active layer per body is violated.
+      const apiData = e?.response?.data;
+      const rawMsg = (typeof apiData === 'string') ? apiData : (apiData?.message || e?.message || '');
+
+      const uniqueDefaultPattern = /uq_layers_active_per_body|duplicate key value|already exists|UniqueConstraint/i;
+      let friendly = rawMsg || 'Failed to publish layer.';
+      if (uniqueDefaultPattern.test(String(rawMsg))) {
+        friendly = 'A default layer already exists for the selected body. Disable the "Default Enabled" flag on the existing layer, or uncheck "Set as Default" here before publishing.';
+      } else {
+        // If the API returned a more specific nested message, try to surface it without stack traces
+        try {
+          const parsed = typeof e.message === 'string' ? JSON.parse(e.message) : null;
+          const pm = parsed?.message || parsed?.error || null;
+          if (pm && typeof pm === 'string' && pm.trim()) {
+            friendly = pm.replace(/\r?\n/g, ' ');
+          }
+        } catch (_) {
+          // ignore parse errors
+        }
+      }
+
+      setError(friendly);
+      await alertError('Failed to publish layer', friendly);
     }
   };
 

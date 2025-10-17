@@ -19,6 +19,7 @@ delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({ iconRetinaUrl: markerIcon2x, iconUrl: markerIcon, shadowUrl: markerShadow });
 
 import api from "../../lib/api";
+import kpiCache from '../../lib/kpiCache';
 
 /* KPI Grid */
 function KPIGrid() {
@@ -120,38 +121,63 @@ export default function AdminOverview() {
 
     try {
       // orgs: use a lightweight KPI endpoint that returns { count }
-      const orgRes = await api.get('/admin/kpis/orgs');
-      const orgTotal = orgRes?.data?.count ?? (orgRes?.count ?? null);
-      publish('orgs', { value: orgTotal, loading: false });
+      const key = 'admin:orgs';
+      const cached = kpiCache.getKpi(key);
+      if (cached !== null) {
+        publish('orgs', { value: cached, loading: false });
+      } else {
+        const orgRes = await api.get('/admin/kpis/orgs');
+        const orgTotal = orgRes?.data?.count ?? (orgRes?.count ?? null);
+        kpiCache.setKpi(key, orgTotal);
+        publish('orgs', { value: orgTotal, loading: false });
+      }
     } catch (e) {
       publish('orgs', { value: null, loading: false, error: true });
     }
 
     try {
-      // users: use KPI endpoint returning aggregated registered user count
-      const userRes = await api.get('/admin/kpis/users');
-      const userTotal = userRes?.data?.count ?? (userRes?.count ?? null);
-      publish('users', { value: userTotal, loading: false });
+      const key = 'admin:users';
+      const cached = kpiCache.getKpi(key);
+      if (cached !== null) {
+        publish('users', { value: cached, loading: false });
+      } else {
+        const userRes = await api.get('/admin/kpis/users');
+        const userTotal = userRes?.data?.count ?? (userRes?.count ?? null);
+        kpiCache.setKpi(key, userTotal);
+        publish('users', { value: userTotal, loading: false });
+      }
     } catch (e) {
       publish('users', { value: null, loading: false, error: true });
     }
 
     try {
-      // lakes: /lakes returns an array (public) so just get length
-      const lakeRes = await api.get('/lakes');
-      const lakesList = Array.isArray(lakeRes) ? lakeRes : lakeRes?.data ?? [];
-      const lakeTotal = Array.isArray(lakesList) ? lakesList.length : 0;
-      publish('lakes', { value: lakeTotal, loading: false });
+      const key = 'admin:lakes';
+      const cached = kpiCache.getKpi(key);
+      if (cached !== null) {
+        publish('lakes', { value: cached, loading: false });
+      } else {
+        const lakeRes = await api.get('/lakes');
+        const lakesList = Array.isArray(lakeRes) ? lakeRes : lakeRes?.data ?? [];
+        const lakeTotal = Array.isArray(lakesList) ? lakesList.length : 0;
+        kpiCache.setKpi(key, lakeTotal);
+        publish('lakes', { value: lakeTotal, loading: false });
+      }
     } catch (e) {
       publish('lakes', { value: null, loading: false, error: true });
     }
 
     try {
-      // sampling events: use admin sample-events endpoint; per_page not supported but index returns data array
-      const evRes = await api.get('/admin/sample-events');
-      const evList = evRes?.data ?? [];
-      const evTotal = Array.isArray(evList) ? evList.length : (evRes?.data?.length ?? 0);
-      publish('events', { value: evTotal, loading: false });
+      const key = 'admin:events';
+      const cached = kpiCache.getKpi(key);
+      if (cached !== null) {
+        publish('events', { value: cached, loading: false });
+      } else {
+        const evRes = await api.get('/admin/sample-events');
+        const evList = evRes?.data ?? [];
+        const evTotal = Array.isArray(evList) ? evList.length : (evRes?.data?.length ?? 0);
+        kpiCache.setKpi(key, evTotal);
+        publish('events', { value: evTotal, loading: false });
+      }
     } catch (e) {
       publish('events', { value: null, loading: false, error: true });
     }

@@ -19,6 +19,7 @@ L.Icon.Default.mergeOptions({
 });
 
 import api from '../../lib/api';
+import kpiCache from '../../lib/kpiCache';
 
 function KpiCard({ title, value, loading, error, onRefresh, icon }) {
   const display = loading ? '…' : (error ? '—' : (value ?? '0'));
@@ -75,19 +76,34 @@ export default function ContribOverview({ tenantId: propTenantId }) {
     publish('myPublished', { loading: true });
     publish('orgPublished', { loading: true });
     try {
-      const r = await api.get(`/contrib/${tenantId}/kpis/my-tests`);
-      const draft = r?.data?.draft ?? r?.draft ?? 0;
-      const published = r?.data?.published ?? r?.published ?? 0;
-      publish('myDraft', { value: draft, loading: false });
-      publish('myPublished', { value: published, loading: false });
+      const key = `contrib:${tenantId}:my-tests`;
+      const cached = kpiCache.getKpi(key);
+      if (cached) {
+        publish('myDraft', { value: cached.draft ?? 0, loading: false });
+        publish('myPublished', { value: cached.published ?? 0, loading: false });
+      } else {
+        const r = await api.get(`/contrib/${tenantId}/kpis/my-tests`);
+        const draft = r?.data?.draft ?? r?.draft ?? 0;
+        const published = r?.data?.published ?? r?.published ?? 0;
+        kpiCache.setKpi(key, { draft, published });
+        publish('myDraft', { value: draft, loading: false });
+        publish('myPublished', { value: published, loading: false });
+      }
     } catch (e) {
       publish('myDraft', { value: null, loading: false, error: true });
       publish('myPublished', { value: null, loading: false, error: true });
     }
     try {
-      const r2 = await api.get(`/contrib/${tenantId}/kpis/org-tests`);
-      const publishedOrg = r2?.data?.published ?? r2?.published ?? 0;
-      publish('orgPublished', { value: publishedOrg, loading: false });
+      const key = `contrib:${tenantId}:org-tests`;
+      const cached = kpiCache.getKpi(key);
+      if (cached !== null) {
+        publish('orgPublished', { value: cached, loading: false });
+      } else {
+        const r2 = await api.get(`/contrib/${tenantId}/kpis/org-tests`);
+        const publishedOrg = r2?.data?.published ?? r2?.published ?? 0;
+        kpiCache.setKpi(key, publishedOrg);
+        publish('orgPublished', { value: publishedOrg, loading: false });
+      }
     } catch (e) {
       publish('orgPublished', { value: null, loading: false, error: true });
     }

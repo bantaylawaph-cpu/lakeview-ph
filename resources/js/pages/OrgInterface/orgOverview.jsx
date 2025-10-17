@@ -23,6 +23,7 @@ L.Icon.Default.mergeOptions({
 });
 
 import api from "../../lib/api";
+import kpiCache from '../../lib/kpiCache';
 
 function KpiCard({ title, value, loading, error, onRefresh, icon }) {
   const display = loading ? '…' : (error ? '—' : (value ?? '0'));
@@ -115,17 +116,46 @@ export default function OrgOverview({ tenantId: propTenantId }) {
     publish('members', { loading: true });
     publish('tests', { loading: true });
     publish('pending', { loading: true });
+    // Members
     try {
-      const r = await api.get(`/org/${tenantId}/kpis/members`);
-      publish('members', { value: r?.data?.count ?? r?.count ?? null, loading: false });
+      const key = `org:${tenantId}:members`;
+      const cached = kpiCache.getKpi(key);
+      if (cached) {
+        publish('members', { value: cached, loading: false });
+      } else {
+        const r = await api.get(`/org/${tenantId}/kpis/members`);
+        const val = r?.data?.count ?? r?.count ?? null;
+        kpiCache.setKpi(key, val);
+        publish('members', { value: val, loading: false });
+      }
     } catch (e) { publish('members', { value: null, loading: false, error: true }); }
+
+    // Tests
     try {
-      const r = await api.get(`/org/${tenantId}/kpis/tests`);
-      publish('tests', { value: r?.data?.count ?? r?.count ?? null, loading: false });
+      const key = `org:${tenantId}:tests`;
+      const cached = kpiCache.getKpi(key);
+      if (cached) {
+        publish('tests', { value: cached, loading: false });
+      } else {
+        const r = await api.get(`/org/${tenantId}/kpis/tests`);
+        const val = r?.data?.count ?? r?.count ?? null;
+        kpiCache.setKpi(key, val);
+        publish('tests', { value: val, loading: false });
+      }
     } catch (e) { publish('tests', { value: null, loading: false, error: true }); }
+
+    // Pending
     try {
-      const r = await api.get(`/org/${tenantId}/kpis/tests/draft`);
-      publish('pending', { value: r?.data?.count ?? r?.count ?? null, loading: false });
+      const key = `org:${tenantId}:pending`;
+      const cached = kpiCache.getKpi(key);
+      if (cached) {
+        publish('pending', { value: cached, loading: false });
+      } else {
+        const r = await api.get(`/org/${tenantId}/kpis/tests/draft`);
+        const val = r?.data?.count ?? r?.count ?? null;
+        kpiCache.setKpi(key, val);
+        publish('pending', { value: val, loading: false });
+      }
     } catch (e) { publish('pending', { value: null, loading: false, error: true }); }
   }, [tenantId, publish]);
 

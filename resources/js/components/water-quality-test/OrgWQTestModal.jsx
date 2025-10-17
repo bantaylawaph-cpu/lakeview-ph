@@ -120,7 +120,7 @@ export default function OrgWQTestModal({
     return () => {
       mounted = false;
     };
-  }, [open, record && record.id]);
+  }, [open, record]);
 
   // derive geographic values from multiple possible field names
   const geo = useMemo(() => {
