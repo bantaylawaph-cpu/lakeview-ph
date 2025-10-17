@@ -232,7 +232,6 @@ function MapPage() {
     lakeOverlayFeature, watershedOverlayFeature, lakeLayers, lakeActiveLayerId,
     baseMatchesSelectedLake, baseKeyBump,
     selectLakeFeature, applyOverlayByLayerId, handlePanelToggleWatershed, resetToActive,
-    canToggleNominatim, nominatimEnabled, setNominatimEnabled, nominatimLoading,
   } = useLakeSelection({ publicFC, mapRef, setPanelOpen: setLakePanelOpen });
 
   useHotkeys({ toggleLakePanel: () => setLakePanelOpen(v => !v), closeLakePanel: () => setLakePanelOpen(false) });
@@ -346,15 +345,12 @@ function MapPage() {
           />
         )}
 
-        {/* Lake overlay (blue by default; violet when from Nominatim) */}
+        {/* Lake overlay (blue by default) */}
         {lakeOverlayFeature && (
           <GeoJSON
             key={`lake-overlay-${lakeOverlayFeature?.properties?.layer_id || 'x'}-${JSON.stringify(lakeOverlayFeature?.geometry ?? {}).length}`}
             data={lakeOverlayFeature}
-            style={() => {
-              const isNominatim = (lakeOverlayFeature?.properties?.layer_id === 'nominatim' || lakeOverlayFeature?.properties?.source === 'nominatim');
-              return { color: isNominatim ? '#7c3aed' : '#3388ff', weight: 2.5, fillOpacity: 0.20 };
-            }}
+            style={() => ({ color: '#3388ff', weight: 2.5, fillOpacity: 0.20 })}
             onEachFeature={(feat, layer) => {
               const nm = feat?.properties?.name || 'Layer';
               layer.bindTooltip(nm, { sticky: true });
@@ -417,7 +413,7 @@ function MapPage() {
       </AppMap>
 
       {/* Lake Info Panel */}
-  <LakeInfoPanel
+    <LakeInfoPanel
         isOpen={lakePanelOpen}
         onClose={() => setLakePanelOpen(false)}
         lake={selectedLake}
@@ -436,10 +432,7 @@ function MapPage() {
         showWatershed={watershedToggleOn}
         canToggleWatershed={Boolean(selectedLake?.watershed_id || selectedLake?.watershedId)}
         onToggleWatershed={handlePanelToggleWatershed}
-          canToggleNominatim={canToggleNominatim}
-          nominatimEnabled={nominatimEnabled}
-          nominatimLoading={nominatimLoading}
-          onToggleNominatim={setNominatimEnabled}
+          // Nominatim/OSM outline feature removed
           authUser={authUser}
   onToggleFlows={(checked)=>setShowFlows(checked)}
   showFlows={showFlows}
