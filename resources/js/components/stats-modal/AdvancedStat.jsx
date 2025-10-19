@@ -49,80 +49,78 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
   const infoSections = React.useMemo(() => ([
     {
       heading: 'Purpose',
-      text: 'Advanced Statistics helps you answer questions about water quality using your filtered dataset. You can check if a lake meets a standard, compare two lakes, or show that values are safely within a target range.'
+      text: 'Answer water‑quality questions with your filtered data: check if a lake meets a standard, compare two lakes, or confirm values sit within a safe range.'
     },
     {
       heading: 'When to use it',
       bullets: [
-        'One-sample: Compare one lake against a standard/class or a target number.',
-        'Two-sample: Compare two lakes in the same time window.',
-        'Equivalence (TOST): Show the typical value is inside a safe window (between lower and upper bounds).'
+        'One‑sample: One lake vs a standard/class or a target.',
+        'Two‑sample: Compare two lakes in the same period.',
+        'Equivalence (TOST): Show the typical value is inside a safe window.'
       ]
     },
     {
       heading: 'Organizations (required)',
-      text: 'Organizations are the source of the dataset. Select the organization that collected the samples. For two-lake comparisons, pick one organization per lake. This avoids mixing data from different sources.'
+      text: 'Pick the data source. For two‑lake comparisons, select one organization per lake to avoid mixing sources.'
     },
     {
       heading: 'Quick start',
       bullets: [
-        'Pick the Applied Standard (to load the correct threshold bounds).',
-        'Choose a Parameter (e.g., DO, pH).',
-        'Select a Primary Lake and its Organization (required).',
-        'Optionally choose Compare: a Water Quality Class or another Lake. If you choose another Lake, also pick its Organization.',
-        'Set the date range in the gear menu and (optionally) filter to an exact depth.',
-        'Pick a Test (some are auto-disabled if not applicable), then click Run Test.',
-        'Read the result summary, p-value, and advisories. Use Export to save a PDF.'
+        'Select Applied Standard and Parameter (e.g., DO, pH).',
+        'Choose Primary Lake + its Organization.',
+        'Optionally set Compare to a Class or another Lake (then pick its Organization).',
+        'Open the gear to set years and (optionally) an exact depth.',
+        'Pick a Test (disabled when not applicable) and click Run Test.',
+        'Review the summary, p‑value, and advisories; use Export for PDF.'
       ]
     },
     {
-      heading: 'Choosing depth and date range',
+      heading: 'Depth & date',
       bullets: [
-        'All depths (mean): Uses all available depths together.',
-        'Exact depth: Focus on a specific depth (the list updates based on your filters).',
-        'Date range: Make sure “From year” is not after “To year”.'
+        'All depths (mean): Use all available depths together.',
+        'Exact depth: Focus on one depth (list responds to filters).',
+        'Years: “From” must not exceed “To”.'
       ]
     },
     {
-      heading: 'Test types in simple terms',
+      heading: 'Test guide (plain English)',
       bullets: [
-        'Shapiro–Wilk (normality check): Tells you if your data look roughly bell-shaped. If not normal (or very small n), prefer non‑parametric tests like Wilcoxon or Sign.',
-        'Levene variance test: Checks whether two groups have similar spread/variability. If spreads differ, prefer Welch t-test or a non‑parametric test.',
-        'One-sample t-test: Tests if the average differs from a target/limit.',
-        'Wilcoxon signed-rank (one-sample): Like t‑test but robust when data aren’t normal.',
-        'Sign test (one-sample): Very simple and robust; only uses whether values are above or below the target.',
-        'Equivalence TOST (t): Shows the mean is inside a safe window (between lower and upper bounds).',
-        'Equivalence TOST (Wilcoxon): Same idea as TOST but robust to non‑normal data.',
-        'Student t-test (two-sample): Compares averages when groups have similar spread.',
-        'Welch t-test (two-sample): Compares averages when spreads may differ (safer default).',
-        'Mann–Whitney U: Non‑parametric two‑sample test that compares typical values.',
-        'Mood median test: Compares medians between two groups.'
+        'Shapiro–Wilk: Normality check; if not normal or n is small, prefer Wilcoxon/Sign.',
+        'Levene: Compares variability; if unequal, prefer Welch or non‑parametric.',
+        'One‑sample t: Is the average different from a target/limit?',
+        'Wilcoxon (1‑sample): Robust alternative when not normal.',
+        'Sign test (1‑sample): Very robust; uses above/below only.',
+        'TOST (t/Wilcoxon): Show the mean is within lower/upper bounds.',
+        'Student t (2‑sample): Averages with similar variability.',
+        'Welch t (2‑sample): Safer when variability differs.',
+        'Mann–Whitney U: Non‑parametric comparison of typical values.',
+        'Mood median: Compares medians.'
       ]
     },
     {
       heading: 'Interpreting results',
       bullets: [
-        'p‑value: Smaller p‑values (e.g., < 0.05) mean stronger evidence for the stated conclusion.',
-        'Confidence level: 95% is standard; higher means wider intervals and stricter tests.',
-        'Equivalence (TOST): You “pass” when both one‑sided p‑values are below your alpha (e.g., 0.05).',
-        'Advisories: Quick notes about sample size, imbalance, or distance to thresholds.'
+        'p‑value: Smaller (e.g., < 0.05) = stronger evidence.',
+        'Confidence level: 95% is common; higher = wider intervals, stricter.',
+        'TOST: Pass when both one‑sided p‑values are below alpha (e.g., 0.05).',
+        'Advisories: Notes on sample size, imbalance, and distance to limits.'
       ]
     },
     {
       heading: 'Export & options',
       bullets: [
-        'Export PDF: Saves your selections and the results (including sample events when available).',
-        'Advanced options (gear): Set date range and confidence level.',
-        'Toggles in results: “Exact p-values” and “Show all values” help with auditing.'
+        'Export PDF: Saves selections and results (with events when available).',
+        'Gear: Set year range and confidence level.',
+        'Result toggles: “Exact p‑values” and “Show all values” for auditing.'
       ]
     },
     {
       heading: 'Tips & edge cases',
       bullets: [
-        'Run button disabled? Check that Applied Standard, Parameter, Lake, Organization(s), and Test are selected, and the year range is valid.',
-        'Not enough data: Some tests require at least 2 samples per group.',
-        'Depth list empty? Adjust date range, lake, parameter, or organization filters.',
-        'Two-lake comparisons use per-lake aggregates from the server; the client doesn’t average across stations.'
+        'Run disabled? Check Standard, Parameter, Lake, Org(s), Test, and years.',
+        'Data minimums: Many tests need ≥2 samples (per group).',
+        'Empty depth list? Adjust years, lake, parameter, or organization.',
+        'Two‑lake mode uses server per‑lake aggregates; the client doesn’t average stations.'
       ]
     }
   ]), []);

@@ -39,6 +39,9 @@ export default function AdminLayers({ currentUserRole = ROLES.SUPERADMIN }) { //
             </button>
           </div>
         </div>
+        <p style={{ marginTop: 8, fontSize: 13, color: '#6b7280' }}>
+          Upload and manage base map layers used for map visualizations and body overlays.
+        </p>
       </div>
 
       {activeTab === 'upload' && (

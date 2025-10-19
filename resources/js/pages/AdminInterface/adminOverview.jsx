@@ -18,8 +18,8 @@ function KPIGrid() {
     <div className="kpi-grid">
       <KpiCard id="orgs" icon={<FiBriefcase />} title="Organizations" to="/admin-dashboard/organizations" />
       <KpiCard id="users" icon={<FiUsers />} title="Registered Users" to="/admin-dashboard/users" />
-      <KpiCard id="lakes" icon={<FiMap />} title="Lakes in Database" to="/admin-dashboard/lakes" />
-      <KpiCard id="events" icon={<FiDroplet />} title="Water Quality Reports in Database" to="/admin-dashboard/wq-tests" />
+      <KpiCard id="lakes" icon={<FiMap />} title="Lakes" to="/admin-dashboard/lakes" />
+      <KpiCard id="events" icon={<FiDroplet />} title="Water Quality Reports" to="/admin-dashboard/wq-tests" />
     </div>
   );
 }
@@ -166,6 +166,16 @@ export default function AdminOverview() {
 
   return (
     <>
+      <div className="dashboard-card" style={{ marginBottom: 16 }}>
+        <div className="dashboard-card-header">
+          <div className="dashboard-card-title">
+            <span>Overview</span>
+          </div>
+        </div>
+        <p style={{ marginTop: 8, fontSize: 13, color: "#6b7280" }}>
+          Quick operational metrics and recent platform KPIs for administrators.
+        </p>
+      </div>
       <KPIGrid />
     </>
   );

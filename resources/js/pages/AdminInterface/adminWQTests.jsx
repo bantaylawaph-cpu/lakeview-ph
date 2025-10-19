@@ -262,8 +262,11 @@ export default function AdminWQTests({ initialLakes = [], initialTests = [], par
     <div className="dashboard-content">
       <div className="dashboard-card">
         <div className="dashboard-card-header">
-          <div className="dashboard-card-title"><FiDroplet /><span>Water Quality Tests (Admin)</span></div>
+          <div className="dashboard-card-title"><FiDroplet /><span>Water Quality Tests</span></div>
         </div>
+        <p style={{ marginTop: 8, fontSize: 13, color: '#6b7280' }}>
+          Browse, filter, and manage water quality test records across organizations.
+        </p>
         <div className="dashboard-card-body">
           {toolbarNode}
           <FilterPanel
