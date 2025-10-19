@@ -209,8 +209,15 @@ function MapPage() {
   // Route-based auth/privacy handling
   useEffect(() => {
     const p = location.pathname;
-    if (p === '/login') { setAuthMode('login'); openAuth('login'); }
-    if (p === '/register') { setAuthMode('register'); openAuth('register'); }
+    if (p === '/login') {
+      // Always reset to login mode when hitting /login to avoid lingering verify/reset states
+      setAuthMode('login');
+      openAuth('login');
+    }
+    if (p === '/register') {
+      setAuthMode('register');
+      openAuth('register');
+    }
     if (p === '/data/privacy') { setPrivacyOpen(true); }
     if (p === '/data') { setAboutDataOpenModal(true); }
   }, [location.pathname, openAuth, setAuthMode]);

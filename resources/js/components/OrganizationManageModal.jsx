@@ -7,26 +7,40 @@ import Swal from "sweetalert2";
 import LoadingSpinner from "./LoadingSpinner";
 
 export default function OrganizationManageModal({ org, open, onClose }) {
-	const [activeTab, setActiveTab] = useState("admins");
-	// Contributors logic removed
-	const [admins, setAdmins] = useState([]);
+	const [activeTab, setActiveTab] = useState("members");
+	const [members, setMembers] = useState([]); // org_admin + contributor
+	const [publicUsers, setPublicUsers] = useState([]);
 	const [loading, setLoading] = useState(false);
 	const [editing, setEditing] = useState(null); // user being edited
 	const [editForm, setEditForm] = useState({ name: "", email: "" });
 	const [saving, setSaving] = useState(false);
 
+	// Client-side filters
+	const [memberRoleFilter, setMemberRoleFilter] = useState(""); // '', 'org_admin', 'contributor'
+	const [memberNameFilter, setMemberNameFilter] = useState("");
+	const [publicNameFilter, setPublicNameFilter] = useState("");
+
 	useEffect(() => {
 		if (open && org) fetchTabs();
 		// eslint-disable-next-line
-	}, [open, org]);
+	}, [open, org, activeTab]);
 
 	const fetchTabs = async () => {
 		setLoading(true);
 		try {
-			const adminsRes = await api.get(`/admin/tenants/${org.id}/admins`).catch(() => ({ data: [] }));
-			setAdmins(adminsRes.data || []);
+			const promises = [];
+			// Members: reuse admin users index filtered by tenant_id and roles
+			promises.push(api.get('/admin/users', { params: { tenant_id: org.id } }).catch(() => ({ data: { data: [] } })));
+			// Public users list
+			promises.push(api.get('/admin/users', { params: { role: 'public', tenant_null: true } }).catch(() => ({ data: { data: [] } })));
+			const [membersRes, publicRes] = await Promise.all(promises);
+			const mm = Array.isArray(membersRes?.data?.data) ? membersRes.data.data : (Array.isArray(membersRes?.data) ? membersRes.data : []);
+			setMembers(mm.filter(u => ['org_admin','contributor'].includes(u.role)));
+			const pu = Array.isArray(publicRes?.data?.data) ? publicRes.data.data : (Array.isArray(publicRes?.data) ? publicRes.data : []);
+			setPublicUsers(pu);
 		} catch (e) {
-			// fallback: show nothing
+			// ignore, show empty states
+			setMembers([]); setPublicUsers([]);
 		} finally {
 			setLoading(false);
 		}
@@ -81,12 +95,54 @@ export default function OrganizationManageModal({ org, open, onClose }) {
 		}
 	};
 
+	// Member actions (promote/demote/remove)
+	const promoteToAdmin = async (user) => {
+		try {
+			await api.put(`/admin/users/${user.id}`, { role: 'org_admin', tenant_id: org.id, name: user.name, email: user.email });
+			await fetchTabs();
+			Swal.fire('Promoted','User is now an organization admin.','success');
+		} catch (e) {
+			Swal.fire('Failed', e?.response?.data?.message || 'Could not promote user.', 'error');
+		}
+	};
+	const demoteToContributor = async (user) => {
+		try {
+			await api.put(`/admin/users/${user.id}`, { role: 'contributor', tenant_id: org.id, name: user.name, email: user.email });
+			await fetchTabs();
+			Swal.fire('Updated','User is now a contributor.','success');
+		} catch (e) {
+			Swal.fire('Failed', e?.response?.data?.message || 'Could not update user.', 'error');
+		}
+	};
+	const removeFromOrg = async (user) => {
+		const ok = await Swal.fire({ title:'Remove from organization?', text:`${user.name} will lose access to ${org.name}.`, icon:'warning', showCancelButton:true, confirmButtonText:'Remove', confirmButtonColor:'#dc2626' }).then(r=>r.isConfirmed);
+		if (!ok) return;
+		try {
+			await api.put(`/admin/users/${user.id}`, { role: 'public', tenant_id: null, name: user.name, email: user.email });
+			await fetchTabs();
+			Swal.fire('Removed','User removed from organization.','success');
+		} catch (e) {
+			Swal.fire('Failed', e?.response?.data?.message || 'Could not remove user.', 'error');
+		}
+	};
+
+	// Public user -> add as contributor
+	const addAsContributor = async (user) => {
+		try {
+			await api.put(`/admin/users/${user.id}`, { role: 'contributor', tenant_id: org.id, name: user.name || user.email, email: user.email });
+			await fetchTabs();
+			Swal.fire('Added','User added as contributor.','success');
+		} catch (e) {
+			Swal.fire('Failed', e?.response?.data?.message || 'Could not add user.', 'error');
+		}
+	};
+
 	return (
 		<Modal
 			open={open}
 			onClose={onClose}
 			title={`Manage Organization: ${org?.name || ""}`}
-			width={600}
+			width={900}
 			ariaLabel="Organization Manage Modal"
 			footer={
 				<div className="lv-modal-actions">
@@ -96,39 +152,99 @@ export default function OrganizationManageModal({ org, open, onClose }) {
 				</div>
 			}
 		>
-			<div style={{ fontWeight: 600, fontSize: 18, marginBottom: 18 }}>Organization Admins</div>
-			<div className="lv-modal-section" style={{ minHeight: 320, background: '#f8fafc', borderRadius: 12, padding: 16, boxShadow: '0 2px 8px #0001', marginBottom: 0 }}>
+			{/* Tabs */}
+			<div className="lv-tabs" style={{ display:'flex', gap:8, marginBottom:12 }}>
+				<button className={`pill-btn ${activeTab==='members'?'primary':''}`} onClick={()=>setActiveTab('members')}>Members</button>
+				<button className={`pill-btn ${activeTab==='public'?'primary':''}`} onClick={()=>setActiveTab('public')}>Public Users</button>
+			</div>
+			<div className="lv-modal-section" style={{ minHeight: 360, background: '#f8fafc', borderRadius: 12, padding: 16, boxShadow: '0 2px 8px #0001', marginBottom: 0 }}>
 				{loading ? (
-					<div style={{ padding: 24 }}><LoadingSpinner label="Loading organization admins…" /></div>
+					<div style={{ padding: 24 }}><LoadingSpinner label="Loading…" /></div>
 				) : (
 					<>
-						<div>
-							<div style={{ overflowX: 'auto', width: '100%' }}>
-								<table className="lv-table" style={{ minWidth: 420, width: '100%', background: '#fff', borderRadius: 8, overflow: 'hidden', boxShadow: '0 1px 4px #0001' }}>
-									<thead style={{ background: '#f1f5f9' }}>
-										<tr style={{ fontWeight: 500 }}><th>Name</th><th>Email</th><th style={{ width: 120 }}>Actions</th></tr>
+						{activeTab === 'members' && (
+							<div style={{ overflowX:'auto' }}>
+								{/* Filters */}
+								<div style={{ display:'flex', gap:12, alignItems:'center', marginBottom:12 }}>
+									<label className="lv-field" style={{ minWidth: 180 }}>
+										<span>Role</span>
+										<select value={memberRoleFilter} onChange={e=>setMemberRoleFilter(e.target.value)}>
+											<option value="">All</option>
+											<option value="org_admin">Org Admin</option>
+											<option value="contributor">Contributor</option>
+										</select>
+									</label>
+									<label className="lv-field" style={{ flex:1 }}>
+										<span>Search name</span>
+										<input placeholder="Type a name…" value={memberNameFilter} onChange={e=>setMemberNameFilter(e.target.value)} />
+									</label>
+								</div>
+								<table className="lv-table" style={{ minWidth: 520, width:'100%', background:'#fff', borderRadius:8, overflow:'hidden', boxShadow:'0 1px 4px #0001' }}>
+									<thead style={{ background:'#f1f5f9' }}>
+										<tr style={{ fontWeight:500 }}><th>Name</th><th>Email</th><th>Role</th><th style={{ width: 220 }}>Actions</th></tr>
 									</thead>
 									<tbody>
-										{admins.length === 0 ? (
-											<tr><td colSpan={3} style={{ textAlign: 'center', color: '#888', padding: 24 }}>No org admins found</td></tr>
-										) : admins.map((a) => (
-											<tr key={a.id}>
-												<td>{a.name}</td>
-												<td>{a.email}</td>
-												<td style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-													<button title="Edit" aria-label={`Edit ${a.email}`} type="button" className="pill-btn ghost sm" onClick={() => openEdit(a)}>
-														<FiEdit2 />
-													</button>
-													<button title="Remove" aria-label={`Remove ${a.email}`} type="button" className="pill-btn ghost sm red-text" onClick={() => handleRemove(a)}>
-														<FiTrash2 />
-													</button>
+										{(members
+											.filter(u => !memberRoleFilter || u.role === memberRoleFilter)
+											.filter(u => !memberNameFilter || (u.name || '').toLowerCase().includes(memberNameFilter.toLowerCase()))
+										).length === 0 ? (
+											<tr><td colSpan={4} style={{ textAlign:'center', color:'#888', padding:24 }}>No members yet</td></tr>
+										) : members
+											.filter(u => !memberRoleFilter || u.role === memberRoleFilter)
+											.filter(u => !memberNameFilter || (u.name || '').toLowerCase().includes(memberNameFilter.toLowerCase()))
+											.map(u => (
+											<tr key={u.id}>
+												<td>{u.name}</td>
+												<td>{u.email}</td>
+												<td>{u.role || '—'}</td>
+												<td style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+													{u.role === 'contributor' && (
+														<button className="pill-btn ghost sm" onClick={()=>promoteToAdmin(u)}>Promote to Admin</button>
+													)}
+													{u.role === 'org_admin' && (
+														<button className="pill-btn ghost sm" onClick={()=>demoteToContributor(u)}>Demote to Contributor</button>
+													)}
+													<button className="pill-btn ghost sm red-text" onClick={()=>removeFromOrg(u)}>Remove</button>
 												</td>
 											</tr>
 										))}
 									</tbody>
 								</table>
 							</div>
-						</div>
+						)}
+						{activeTab === 'public' && (
+							<div style={{ overflowX:'auto' }}>
+								{/* Filters */}
+								<div style={{ display:'flex', gap:12, alignItems:'center', marginBottom:12 }}>
+									<label className="lv-field" style={{ flex:1 }}>
+										<span>Search name</span>
+										<input placeholder="Type a name…" value={publicNameFilter} onChange={e=>setPublicNameFilter(e.target.value)} />
+									</label>
+								</div>
+								<table className="lv-table" style={{ minWidth: 520, width:'100%', background:'#fff', borderRadius:8, overflow:'hidden', boxShadow:'0 1px 4px #0001' }}>
+									<thead style={{ background:'#f1f5f9' }}>
+										<tr style={{ fontWeight:500 }}><th>Name</th><th>Email</th><th style={{ width: 200 }}>Actions</th></tr>
+									</thead>
+									<tbody>
+										{(publicUsers
+											.filter(u => !publicNameFilter || (u.name || '').toLowerCase().includes(publicNameFilter.toLowerCase()))
+										).length === 0 ? (
+											<tr><td colSpan={3} style={{ textAlign:'center', color:'#888', padding:24 }}>No public users found</td></tr>
+										) : publicUsers
+											.filter(u => !publicNameFilter || (u.name || '').toLowerCase().includes(publicNameFilter.toLowerCase()))
+											.map(u => (
+											<tr key={u.id}>
+												<td>{u.name || '—'}</td>
+												<td>{u.email}</td>
+												<td>
+													<button className="pill-btn ghost sm" onClick={()=>addAsContributor(u)}>Add as Contributor</button>
+												</td>
+											</tr>
+										))}
+									</tbody>
+								</table>
+							</div>
+						)}
 					</>
 				)}
 			</div>

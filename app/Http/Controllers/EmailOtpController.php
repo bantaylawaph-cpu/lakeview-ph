@@ -48,7 +48,10 @@ class EmailOtpController extends Controller
             ->first();
 
         if ($existing) {
-            $remaining = $this->cooldownRemaining($existing->last_sent_at);
+            $lastSentAt = isset($existing->last_sent_at) && $existing->last_sent_at
+                ? \Carbon\Carbon::parse($existing->last_sent_at)
+                : null;
+            $remaining = $this->cooldownRemaining($lastSentAt);
             if ($remaining > 0) {
                 return ['ok' => false, 'cooldown' => $remaining];
             }
@@ -91,7 +94,10 @@ class EmailOtpController extends Controller
             ->first();
 
         if (!$row) return ['ok' => false, 'reason' => 'not_found'];
-        if ($this->now()->greaterThan($row->expires_at)) return ['ok' => false, 'reason' => 'expired'];
+        $expiresAt = isset($row->expires_at) && $row->expires_at
+            ? \Carbon\Carbon::parse($row->expires_at)
+            : null;
+        if ($expiresAt && $this->now()->greaterThan($expiresAt)) return ['ok' => false, 'reason' => 'expired'];
         if ($row->attempts >= $this->maxAttempts) return ['ok' => false, 'reason' => 'too_many_attempts'];
 
         $expected = $row->code_hash;

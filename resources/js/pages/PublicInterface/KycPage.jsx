@@ -176,6 +176,14 @@ export default function KycPage({ embedded = true, open = true, onClose }) {
   const exitWizard = () => { setInWizard(false); setShowNewApp(false); setStep(1); setChosenTenantId(''); setErrors({}); };
 
   const validateStep1 = () => { const e = {}; if (!chosenTenantId) e.tenant = 'Please choose an organization'; if (!desiredRole) e.role = 'Please choose a role'; setErrors(e); return Object.keys(e).length === 0; };
+  // Guard: prevent duplicate applications for the same organization (pending/approved/needs_changes)
+  const canApplyToSelected = useMemo(() => {
+    const tid = Number(chosenTenantId || 0);
+    if (!tid) return false;
+    const arr = (myAppCount > 1 ? myApplications : (myApplication ? [myApplication] : [])) || [];
+    const block = new Set(['pending_kyc','pending_org_review','approved','needs_changes']);
+    return !arr.some(a => Number(a?.tenant_id) === tid && block.has(String(a?.status || '').toLowerCase()));
+  }, [chosenTenantId, myApplication, myApplications, myAppCount]);
   const validateStep2 = (formEl) => { const e = {}; const full_name = formEl?.full_name?.value?.trim(); const sel = formEl?.id_type_select?.value || ""; const other = formEl?.id_type_other?.value?.trim(); const id_type = sel === 'other' ? other : sel; const id_number = formEl?.id_number?.value?.trim(); if (!full_name) e.full_name='Full name is required'; if (!id_type) e.id_type='ID type is required'; if (!id_number) e.id_number='ID number is required'; setErrors(e); return Object.keys(e).length === 0; };
 
   const saveKyc = async (e) => {
@@ -287,7 +295,7 @@ export default function KycPage({ embedded = true, open = true, onClose }) {
                               else if (code === 422) toastError('Cannot accept', 'This application is not eligible for acceptance.');
                               else toastError('Accept failed', 'Please try again.');
                             } finally { setAcceptingId(null); }
-                          }} disabled={acceptingId === app.id} style={{ padding:'4px 14px', height:32, minWidth:88, borderRadius:8, fontSize:12, width:'auto', flex:'0 0 auto', display:'inline-flex', alignItems:'center', justifyContent:'center', whiteSpace:'nowrap' }}>{acceptingId === app.id ? 'Accepting…' : 'Accept'}</button>
+                          }} disabled={acceptingId === app.id} style={{ padding:'6px 14px', height:32, minWidth:88, borderRadius:999, fontSize:12, width:'auto', flex:'0 0 auto', display:'inline-flex', alignItems:'center', justifyContent:'center', whiteSpace:'nowrap', background:'#16a34a', color:'#ffffff' }}>{acceptingId === app.id ? 'Accepting…' : 'Accept'}</button>
                         ) : <span />}
                       </div>
                     </div>
@@ -342,7 +350,7 @@ export default function KycPage({ embedded = true, open = true, onClose }) {
                 <div style={{ display:'flex', justifyContent:'space-between', gap:8, marginTop:8 }}>
                   <button type="button" onClick={exitWizard} style={{ ...buttonOutlineS, height:44, padding:'0 16px', borderRadius:10 }}>Cancel</button>
                   <div style={{ flex:1 }} />
-                  <button className="auth-btn" type="button" onClick={() => { if (validateStep1()) next(); }} disabled={!tenants?.length} style={{ height:44, padding:'0 16px', borderRadius:10, margin:0 }}>Next</button>
+                  <button className="auth-btn" type="button" onClick={() => { if (!validateStep1()) return; if (!canApplyToSelected) { toastError('Duplicate application not allowed', 'You have already applied to this organization.'); return; } next(); }} disabled={!tenants?.length} style={{ height:44, padding:'0 16px', borderRadius:10, margin:0 }}>Next</button>
                 </div>
               </div>
             )}

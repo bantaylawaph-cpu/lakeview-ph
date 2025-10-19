@@ -157,7 +157,10 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
         if (guestEmail.trim()) fd.append('guest_email', guestEmail.trim());
         const hpVal = honeypotRef.current?.value; if (hpVal) fd.append('website', hpVal);
       } else {
-        fd.append('metadata', JSON.stringify({ ua: navigator.userAgent, lang: navigator.language, tz: Intl.DateTimeFormat().resolvedOptions().timeZone }));
+        // Send metadata as an array using bracket notation so Laravel parses it correctly
+        fd.append('metadata[ua]', navigator.userAgent || '');
+        fd.append('metadata[lang]', navigator.language || '');
+        fd.append('metadata[tz]', (Intl.DateTimeFormat().resolvedOptions().timeZone) || '');
       }
       if (files && files.length) { files.forEach((f) => fd.append('images[]', f)); }
       const endpoint = user ? '/feedback' : '/public/feedback';
