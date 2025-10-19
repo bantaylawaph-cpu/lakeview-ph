@@ -12,8 +12,11 @@ import Wizard from "../../components/Wizard";
 
 import {
   boundsFromGeom,
+  detectEpsg,
   normalizeForPreview,
   reprojectMultiPolygonTo4326,
+  toMultiPolygon,
+  looksLikeDegrees,
 } from "../../utils/geo";
 
 import { createLayer, fetchLakeOptions, fetchWatershedOptions } from "../../lib/layers";
@@ -21,6 +24,8 @@ import { alertSuccess, alertError } from "../../lib/alerts";
 import MapViewport from "../../components/MapViewport";
 import { kml as kmlToGeoJSON } from "@tmcw/togeojson";
 import shp from "shpjs";
+import { parseGpkgToGeoJSON, GPKG_MAX_SIZE } from "../../utils/gpkg";
+import Modal from "../../components/Modal";
 
 export default function LayerWizard({
   defaultBodyType = "lake",
@@ -96,6 +101,13 @@ export default function LayerWizard({
   const [geocodeLoading, setGeocodeLoading] = useState(false);
   // Use the shared auth hook so UI reacts correctly on refresh/navigation
   const { userRole, authUser } = useAuthRole();
+  // Multi-feature selection state
+  const [pendingFeatures, setPendingFeatures] = useState([]); // array of GeoJSON Features (polygons)
+  const [pendingCrs, setPendingCrs] = useState(null); // carry CRS from source if provided
+  const [pendingFileName, setPendingFileName] = useState("");
+  const [featureModalOpen, setFeatureModalOpen] = useState(false);
+  const [featureSelectedIdx, setFeatureSelectedIdx] = useState(0);
+  const [featureMapVersion, setFeatureMapVersion] = useState(0);
 
   useEffect(() => {
     if (initialBodyId === undefined || initialBodyId === null || initialBodyId === "") return;
@@ -157,7 +169,62 @@ export default function LayerWizard({
   ];
 
   // -------- file handlers ----------
-  const acceptedExt = /\.(geojson|json|kml|zip)$/i;
+  const acceptedExt = /\.(geojson|json|kml|zip|gpkg)$/i;
+
+  // --- Multi-feature helpers ---
+  const polygonFeaturesFrom = (root) => {
+    if (!root || typeof root !== 'object') return { features: [], crs: null };
+    const crs = root.crs || null;
+    const t = (root.type || '').toLowerCase();
+    const onlyPoly = (f) => f && typeof f === 'object' && f.type === 'Feature' && f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon');
+    if (t === 'featurecollection') {
+      const feats = (root.features || []).filter(onlyPoly);
+      return { features: feats, crs };
+    }
+    if (t === 'feature') {
+      return onlyPoly(root) ? { features: [root], crs } : { features: [], crs };
+    }
+    if (t === 'polygon' || t === 'multipolygon') {
+      return { features: [{ type: 'Feature', geometry: root, properties: {} }], crs };
+    }
+    return { features: [], crs };
+  };
+
+  const guessFeatureLabel = (feat, idx) => {
+    const props = feat?.properties || {};
+    const keys = ['name', 'NAME', 'lake', 'lake_name', 'Lake', 'LName', 'id', 'ID'];
+    for (const k of keys) {
+      if (props[k]) return String(props[k]);
+    }
+    return `Feature ${idx + 1}`;
+  };
+
+  const beginFeatureSelection = (feats, crs, fileName) => {
+    setPendingFeatures(feats);
+    setPendingCrs(crs || null);
+    setPendingFileName(fileName || '');
+    setError('Multiple polygons found. Please pick one to continue.');
+    // Clear any prior parsed geom to block navigation until selection
+    setData((d) => ({ ...d, uploadGeom: null, previewGeom: null, geomText: '', fileName }));
+    try { wizardSetRef.current?.({ uploadGeom: null, previewGeom: null, geomText: '', fileName }); } catch (_) {}
+    setFeatureSelectedIdx(0);
+    setFeatureModalOpen(true);
+    setFeatureMapVersion((v) => v + 1);
+  };
+
+  const chooseFeature = (index) => {
+    const feat = pendingFeatures[index];
+    if (!feat) return;
+    // Attach CRS hint (if any) so SRID detection sees it
+    const single = { type: 'Feature', geometry: feat.geometry, properties: feat.properties || {} };
+    if (pendingCrs) single.crs = pendingCrs;
+    // You can pass Feature directly; normalizeForPreview handles Feature
+    handleParsedGeoJSON(single, pendingFileName || data.fileName || '');
+    setPendingFeatures([]);
+    setPendingCrs(null);
+    setPendingFileName('');
+    setFeatureModalOpen(false);
+  };
 
   // --- Nominatim helpers (uses server proxy /api/geocode/nominatim by default) ---
   // Helper: derive a concise name from a Nominatim item
@@ -274,6 +341,22 @@ export default function LayerWizard({
     try { wizardSetRef.current?.({ uploadGeom, previewGeom, sourceSrid, geomText: JSON.stringify(parsed, null, 2), fileName }); } catch (e) { /* ignore */ }
   };
 
+  const handleUploadGeoJSON = (parsed, fileName = "") => {
+    const { features, crs } = polygonFeaturesFrom(parsed);
+    if (!features.length) {
+      setError('No Polygon/MultiPolygon geometries found in the file.');
+      return;
+    }
+    if (features.length === 1) {
+      const single = { type: 'Feature', geometry: features[0].geometry, properties: features[0].properties || {} };
+      if (crs) single.crs = crs;
+      handleParsedGeoJSON(single, fileName);
+      return;
+    }
+    // Multiple: let user pick
+    beginFeatureSelection(features, crs, fileName);
+  };
+
   const handleFile = async (file) => {
     if (!file) return;
     if (!acceptedExt.test(file.name)) {
@@ -282,11 +365,20 @@ export default function LayerWizard({
     }
     try {
       const lower = file.name.toLowerCase();
+      if (lower.endsWith('.gpkg')) {
+        if (typeof file.size === 'number' && file.size > GPKG_MAX_SIZE) {
+          setError(`GeoPackage too large for in-browser parsing (max ~${Math.round(GPKG_MAX_SIZE / (1024*1024))}MB).`);
+          return;
+        }
+        const gj = await parseGpkgToGeoJSON(file);
+        handleUploadGeoJSON(gj, file.name);
+        return;
+      }
       if (lower.endsWith('.kml')) {
         const text = await file.text();
         const dom = new DOMParser().parseFromString(text, 'text/xml');
         const gj = kmlToGeoJSON(dom);
-        handleParsedGeoJSON(gj, file.name);
+        handleUploadGeoJSON(gj, file.name);
         return;
       }
       if (lower.endsWith('.zip')) {
@@ -301,12 +393,12 @@ export default function LayerWizard({
           }
           gj = { type: 'FeatureCollection', features: all };
         }
-        handleParsedGeoJSON(gj, file.name);
+        handleUploadGeoJSON(gj, file.name);
         return;
       }
       const text = await file.text();
       const parsed = JSON.parse(text);
-      handleParsedGeoJSON(parsed, file.name);
+      handleUploadGeoJSON(parsed, file.name);
     } catch (e) {
       console.error('[LayerWizard] Failed to parse file', e);
       setError(e?.message || "Failed to parse file.");
@@ -348,6 +440,7 @@ export default function LayerWizard({
         const lf = String(form.fileName).toLowerCase();
         if (lf.endsWith('.kml')) sourceType = 'kml';
         else if (lf.endsWith('.zip')) sourceType = 'shp';
+        else if (lf.endsWith('.gpkg')) sourceType = 'gpkg';
         else if (lf.endsWith('.geojson') || lf.endsWith('.json')) sourceType = 'geojson';
       }
 
@@ -426,11 +519,11 @@ export default function LayerWizard({
             onClick={() => document.getElementById("layer-file-input")?.click()}
           >
             <p>Drop a spatial file here or click to select</p>
-            <small>Accepted: .geojson, .json, .kml, .zip (zipped Shapefile with .shp/.dbf/.prj; Polygon/MultiPolygon geometries)</small>
+            <small>Accepted: .geojson, .json, .kml, .zip (zipped Shapefile with .shp/.dbf/.prj; Polygon/MultiPolygon geometries), .gpkg (GeoPackage)</small>
             <input
               id="layer-file-input"
               type="file"
-              accept=".geojson,.json,.kml,.zip"
+              accept=".geojson,.json,.kml,.zip,.gpkg"
               style={{ display: "none" }}
               onChange={(e) => handleFile(e.target.files?.[0])}
             />
@@ -475,10 +568,89 @@ export default function LayerWizard({
               <FiAlertTriangle /> {error}
             </div>
           )}
+          {pendingFeatures.length > 1 && (
+            <div style={{ marginTop: 10 }}>
+              <button type="button" className="pill-btn primary" onClick={() => setFeatureModalOpen(true)}>Choose a Polygon</button>
+            </div>
+          )}
           {wdata.fileName && (
             <div className="info-row" style={{ marginTop: 6 }}>
               <FiInfo /> Loaded: <strong>{data.fileName}</strong>
             </div>
+          )}
+          {featureModalOpen && pendingFeatures.length > 1 && (
+            <Modal
+              open={featureModalOpen}
+              onClose={() => setFeatureModalOpen(false)}
+              title={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}><FiMap /> Choose a Polygon</span>}
+              width={960}
+            >
+              <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 12, minHeight: 420 }}>
+                <div className="org-form" style={{ overflowY: 'auto' }}>
+                  <div className="form-group">
+                    <label>Polygon</label>
+                    <select value={featureSelectedIdx} onChange={(e) => { setFeatureSelectedIdx(Number(e.target.value)); setFeatureMapVersion((v) => v + 1); }}>
+                      {pendingFeatures.map((f, idx) => (
+                        <option key={idx} value={idx}>{guessFeatureLabel(f, idx)}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="info-row"><FiInfo /> The map shows all polygons. The selected one is highlighted.</div>
+                  <div style={{ marginTop: 8 }}>
+                    <button type="button" className="pill-btn primary" onClick={() => chooseFeature(featureSelectedIdx)}>Use this polygon</button>
+                  </div>
+                </div>
+                <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, overflow: 'hidden' }}>
+                  <AppMap view="osm" style={{ height: '100%', width: '100%' }}>
+                    {/* All candidates (light) */}
+                    {pendingFeatures.map((f, idx) => {
+                      let g = null;
+                      try {
+                        const mp = toMultiPolygon(f.geometry);
+                        let srid = null;
+                        if (pendingCrs) {
+                          try { srid = detectEpsg({ crs: pendingCrs }); } catch (_) {}
+                        }
+                        if (srid && srid !== 4326) g = reprojectMultiPolygonTo4326(mp, srid); else g = mp;
+                        if (!srid && !looksLikeDegrees(mp)) g = null;
+                      } catch (_) {}
+                      if (!g) return null;
+                      return (
+                        <GeoJSON key={`cand-${idx}`} data={{ type: 'Feature', geometry: g }} style={{ color: '#9ca3af', weight: 1, fillOpacity: 0.05 }} />
+                      );
+                    })}
+                    {/* Selected (bold) */}
+                    {(() => {
+                      const f = pendingFeatures[featureSelectedIdx];
+                      if (!f) return null;
+                      try {
+                        const mp = toMultiPolygon(f.geometry);
+                        let srid = null;
+                        if (pendingCrs) { try { srid = detectEpsg({ crs: pendingCrs }); } catch (_) {} }
+                        const sel = srid && srid !== 4326 ? reprojectMultiPolygonTo4326(mp, srid) : mp;
+                        if (!srid && !looksLikeDegrees(mp)) return null;
+                        return <GeoJSON key="sel" data={{ type: 'Feature', geometry: sel }} style={{ color: previewColor, weight: 3, fillOpacity: 0.15 }} />;
+                      } catch (_) { return null; }
+                    })()}
+                    {/* Fit bounds to selected */}
+                    {(() => {
+                      const f = pendingFeatures[featureSelectedIdx];
+                      if (!f) return null;
+                      try {
+                        const mp = toMultiPolygon(f.geometry);
+                        let srid = null;
+                        if (pendingCrs) { try { srid = detectEpsg({ crs: pendingCrs }); } catch (_) {} }
+                        const sel = srid && srid !== 4326 ? reprojectMultiPolygonTo4326(mp, srid) : mp;
+                        if (!srid && !looksLikeDegrees(mp)) return null;
+                        const b = boundsFromGeom(sel);
+                        if (!b) return null;
+                        return <MapViewport bounds={b} version={featureMapVersion} />;
+                      } catch (_) { return null; }
+                    })()}
+                  </AppMap>
+                </div>
+              </div>
+            </Modal>
           )}
         </div>
       ),
