@@ -5,25 +5,12 @@ import {
   FiUsers,          // Active Members
   FiDatabase,       // Tests Logged
   FiClipboard,      // Pending Approvals
-  FiActivity,       // Recent Activity header icon
 } from "react-icons/fi";
-import AppMap from "../../components/AppMap";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
-
-/* --- Leaflet default marker fix (keeps OSM markers visible) --- */
-import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
-import markerIcon from "leaflet/dist/images/marker-icon.png";
-import markerShadow from "leaflet/dist/images/marker-shadow.png";
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: markerIcon2x,
-  iconUrl: markerIcon,
-  shadowUrl: markerShadow,
-});
 
 import api from "../../lib/api";
 import kpiCache from '../../lib/kpiCache';
+import DashboardHeader from '../../components/DashboardHeader';
+import { FiUsers as FiUsersIcon } from 'react-icons/fi';
 
 function KpiCard({ title, value, loading, error, icon, to }) {
   const display = loading ? '…' : (error ? '—' : (value ?? '0'));
@@ -72,39 +59,6 @@ function KPIGrid({ stats, refresh, tenantId }) {
    Tests Map
    - Shows only logged test locations (none yet)
    ============================================================ */
-function TestsMap() {
-  return (
-    <div className="map-container" style={{ marginBottom: 16 }}>
-      <AppMap view="osm" style={{ height: "100%", width: "100%" }}>
-        {/*
-          TODO: Once data exists, place markers for this org's logged tests here.
-          e.g. tests.map(t => <Marker position={[t.lat,t.lng]} />)
-        */}
-      </AppMap>
-    </div>
-  );
-}
-
-/* ============================================================
-   Recent Activity (Water Quality Logs only)
-   - Empty list for now
-   ============================================================ */
-function RecentLogs() {
-  return (
-    <div className="dashboard-card">
-      <div className="dashboard-card-header">
-        <div className="dashboard-card-title">
-          <FiActivity /><span>Recent Activity (Water Quality Logs)</span>
-        </div>
-      </div>
-      <div className="dashboard-card-body">
-        <ul className="recent-logs-list">
-          {/* Intentionally empty. Map over this org's recent WQ logs here. */}
-        </ul>
-      </div>
-    </div>
-  );
-}
 
 /* ============================================================
    Page: OrgOverview
@@ -206,9 +160,12 @@ export default function OrgOverview({ tenantId: propTenantId }) {
 
   return (
     <>
+      <DashboardHeader
+        icon={<FiUsersIcon />}
+        title="Organization Dashboard"
+        description="Overview of your organization: active members, tests logged, and pending approvals. Use the links to manage members and review tests."
+      />
       <KPIGrid stats={stats} tenantId={tenantId} />
-      <TestsMap />
-      <RecentLogs />
     </>
   );
 }

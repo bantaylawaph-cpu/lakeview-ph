@@ -3,6 +3,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import api from '../../lib/api';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { FiDatabase, FiUploadCloud, FiPlayCircle, FiStar, FiTrash2 } from 'react-icons/fi';
+import DashboardHeader from '../../components/DashboardHeader';
 import Swal from 'sweetalert2';
 import 'sweetalert2/dist/sweetalert2.min.css';
 
@@ -16,6 +17,7 @@ export default function AdminPopulationData() {
   const [notice, setNotice] = useState('');
   const [year, setYear] = useState(new Date().getFullYear());
   const [notes, setNotes] = useState('');
+  const [link, setLink] = useState('');
   const [yearFilter, setYearFilter] = useState('');
   const [actingIds, setActingIds] = useState({}); // { [id]: 'processing' | 'makingDefault' }
   const pollRef = useRef(null);
@@ -23,7 +25,8 @@ export default function AdminPopulationData() {
 
   // showError: whether errors should be surfaced to the UI (we avoid showing on initial auto-load)
   const load = useCallback(async (showError = false) => {
-    setLoading(true); if (showError) setError('');
+    setLoading(true);
+    if (showError) setError('');
     try {
       const params = {};
       if (yearFilter) params.year = yearFilter;
@@ -37,8 +40,6 @@ export default function AdminPopulationData() {
       setLoading(false);
     }
   }, [yearFilter]);
-
-  useEffect(() => { load(false); }, [load]);
 
   // Lightweight polling while any row is ingesting
   useEffect(() => {
@@ -64,6 +65,7 @@ export default function AdminPopulationData() {
       form.append('year', String(year));
       form.append('raster', file);
       if (notes) form.append('notes', notes);
+  if (link) form.append('link', link);
       const resp = await api.upload('/admin/population-rasters', form);
       const created = resp?.data || null;
       setRows(r => [created, ...r].filter(Boolean));
@@ -80,6 +82,7 @@ export default function AdminPopulationData() {
       });
       fileRef.current.value = '';
       setNotes('');
+  setLink('');
     } catch (e) {
       const msg = e?.response?.data?.message || 'Upload failed';
       Swal.fire({ icon: 'error', title: 'Upload failed', text: msg });
@@ -216,6 +219,19 @@ export default function AdminPopulationData() {
               maxLength={1000}
             />
           </div>
+          <div className="lv-field-row" style={{ display: 'grid', gap: 6 }}>
+            <label htmlFor="pop-link" style={{ fontSize: 12, fontWeight: 600 }}>Link to source (optional)</label>
+            <input
+              id="pop-link"
+              type="url"
+              placeholder="https://example.com/dataset/page"
+              value={link}
+              onChange={(e) => setLink(e.target.value)}
+              style={inputStyle}
+              maxLength={2048}
+            />
+            <div style={{ fontSize: 11, color: '#64748b' }}>Provide a URL to the dataset page or original source.</div>
+          </div>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
             <button
               type="submit"
@@ -258,64 +274,74 @@ export default function AdminPopulationData() {
         )}
         {!loading && rows.length > 0 && (
           <div style={{ overflowX: 'auto' }}>
-            <table className="lv-table" style={{ borderCollapse: 'collapse', minWidth: 880 }}>
+            <table className="lv-table" style={{ borderCollapse: 'collapse', minWidth: 880, width: '100%', tableLayout: 'fixed' }}>
               <thead>
                 <tr>
-                  <th style={th}>ID</th>
-                  <th style={th}>Year</th>
-                  <th style={th}>Original Filename</th>
-                  <th style={th}>Stored Path</th>
-                  <th style={th}>Status</th>
-                  <th style={th}>Actions</th>
-                  <th style={th}>Uploaded</th>
-                  <th style={th}>Notes</th>
+                  <th style={{ ...th, width: '4%', textAlign: 'center' }}>ID</th>
+                  <th style={{ ...th, width: '6%', textAlign: 'center' }}>Year</th>
+                  <th style={{ ...th, width: '18%' }}>Original Filename</th>
+                  <th style={{ ...th, width: '20%' }}>Stored Path</th>
+                  <th style={{ ...th, width: '10%', textAlign: 'center' }}>Status</th>
+                  <th style={{ ...th, width: '12%', textAlign: 'center' }}>Actions</th>
+                  <th style={{ ...th, width: '12%' }}>Uploaded</th>
+                  <th style={{ ...th, width: '18%' }}>Notes</th>
+                  <th style={{ ...th, width: '4%', textAlign: 'center' }}>Link</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.filter(Boolean).map(r => (
                   <tr key={r.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                    <td style={td}>{r.id}</td>
-                    <td style={td}>{r.year}</td>
-                    <td style={td}>{r.filename}</td>
-                    <td style={td}>{r.path}</td>
-                    <td style={td}>{statusPill(r)}</td>
-                    <td style={{ ...td, whiteSpace: 'nowrap', display: 'flex', gap: 6 }}>
-                      {['uploaded','error'].includes(r.status) && (
-                        <button
-                          type="button"
-                          className="pill-btn ghost"
-                          onClick={() => processRaster(r.id, false)}
-                          disabled={!!actingIds[r.id]}
-                          style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                        >
-                          <FiPlayCircle /> {actingIds[r.id] === 'processing' ? 'Queuing…' : 'Process'}
-                        </button>
-                      )}
-                      {r.status === 'ready' && !r.is_default && (
-                        <button
-                          type="button"
-                          className="pill-btn ghost"
-                          onClick={() => makeDefault(r.id)}
-                          disabled={!!actingIds[r.id]}
-                          style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                        >
-                          <FiStar /> {actingIds[r.id] === 'makingDefault' ? 'Setting…' : 'Make Default'}
-                        </button>
-                      )}
-                      {r.status !== 'ingesting' && (
-                        <button
-                          type="button"
-                          className="pill-btn ghost"
-                          onClick={() => deleteRaster(r.id)}
-                          disabled={!!actingIds[r.id]}
-                          style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4, color: '#b91c1c' }}
-                        >
-                          <FiTrash2 /> {actingIds[r.id] === 'deleting' ? 'Deleting…' : 'Delete'}
-                        </button>
+                    <td style={{ ...td, textAlign: 'center' }}>{r.id}</td>
+                    <td style={{ ...td, textAlign: 'center' }}>{r.year}</td>
+                    <td style={{ ...td, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.filename}</td>
+                    <td style={{ ...td, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.path}</td>
+                    <td style={{ ...td, textAlign: 'center' }}>{statusPill(r)}</td>
+                    <td style={{ ...td, whiteSpace: 'nowrap', textAlign: 'center' }}>
+                      <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                        {['uploaded','error'].includes(r.status) && (
+                          <button
+                            type="button"
+                            className="pill-btn ghost"
+                            onClick={() => processRaster(r.id, false)}
+                            disabled={!!actingIds[r.id]}
+                            style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                          >
+                            <FiPlayCircle /> {actingIds[r.id] === 'processing' ? 'Queuing…' : 'Process'}
+                          </button>
+                        )}
+                        {r.status === 'ready' && !r.is_default && (
+                          <button
+                            type="button"
+                            className="pill-btn ghost"
+                            onClick={() => makeDefault(r.id)}
+                            disabled={!!actingIds[r.id]}
+                            style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                          >
+                            <FiStar /> {actingIds[r.id] === 'makingDefault' ? 'Setting…' : 'Make Default'}
+                          </button>
+                        )}
+                        {r.status !== 'ingesting' && (
+                          <button
+                            type="button"
+                            className="pill-btn ghost"
+                            onClick={() => deleteRaster(r.id)}
+                            disabled={!!actingIds[r.id]}
+                            style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4, color: '#b91c1c' }}
+                          >
+                            <FiTrash2 /> {actingIds[r.id] === 'deleting' ? 'Deleting…' : 'Delete'}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                    <td style={{ ...td }}>{new Date(r.created_at).toLocaleString()}</td>
+                    <td style={{ ...td, maxWidth: 1200, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{r.notes}</td>
+                    <td style={{ ...td, textAlign: 'center' }}>
+                      {r.link ? (
+                        <a href={r.link} target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb' }}>Open</a>
+                      ) : (
+                        <span style={{ color: '#64748b' }}>—</span>
                       )}
                     </td>
-                    <td style={td}>{new Date(r.created_at).toLocaleString()}</td>
-                    <td style={{ ...td, maxWidth: 260, whiteSpace: 'pre-wrap' }}>{r.notes}</td>
                   </tr>
                 ))}
               </tbody>
@@ -336,4 +362,4 @@ const inputStyle = {
 };
 
 const th = { textAlign: 'left', padding: '6px 10px', fontSize: 12, fontWeight: 600, color: '#475569', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' };
-const td = { padding: '6px 10px', fontSize: 13 };
+const td = { padding: '6px 10px', fontSize: 13, verticalAlign: 'middle' };

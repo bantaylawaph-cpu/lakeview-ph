@@ -93,11 +93,8 @@ class PopulationController extends Controller
                     'radius_km' => $radiusKm,
                     'layer_id'  => $layerId ? (int)$layerId : null,
                     'estimate'  => (int) round((float)$cache->estimate),
-                    'source'    => 'worldpop',
-                    'product'   => 'counts_1km',
                     'method'    => $method,
                     'cached'    => true,
-                    'status'    => 'ok',
                 ]);
             }
 
@@ -131,11 +128,8 @@ class PopulationController extends Controller
                 'radius_km' => $radiusKm,
                 'layer_id'  => $layerId ? (int)$layerId : null,
                 'estimate'  => $pop,
-                'source'    => 'worldpop',
-                'product'   => 'counts_1km',
                 'method'    => $method,
                 'cached'    => false,
-                'status'    => 'ok',
             ]);
         } catch (\Throwable $e) {
             Log::warning('Population estimate failed (catalog+cache)', [
@@ -356,6 +350,48 @@ class PopulationController extends Controller
         } catch (\Throwable $e) {
             Log::warning('Failed to list population dataset years', ['error' => $e->getMessage()]);
             return response()->json(['years' => []], 500);
+        }
+    }
+
+    /**
+     * GET /api/population/dataset-info?year=YYYY
+     * Returns metadata (notes, source link) for the default dataset of the year.
+     * Response: { year, notes, link }
+     */
+    public function datasetInfo(Request $request)
+    {
+        $year = (int) ($request->query('year') ?? 0);
+        if (!$year) return response()->json(['year' => null, 'notes' => null, 'link' => null], 400);
+        try {
+            // Find the default enabled catalog entry for this year
+            $catalog = DB::selectOne('SELECT id FROM pop_dataset_catalog WHERE year = ? AND is_enabled = TRUE AND is_default = TRUE LIMIT 1', [$year]);
+            if (!$catalog) return response()->json(['year' => $year, 'notes' => null, 'link' => null]);
+
+            // Prefer notes/link stored on the catalog table if present
+            $notes = null; $link = null;
+            try {
+                if (\Illuminate\Support\Facades\Schema::hasColumn('pop_dataset_catalog', 'notes') || \Illuminate\Support\Facades\Schema::hasColumn('pop_dataset_catalog', 'link')) {
+                    $row = DB::selectOne('SELECT ' . (Schema::hasColumn('pop_dataset_catalog', 'notes') ? 'notes' : 'NULL') . ', ' . (Schema::hasColumn('pop_dataset_catalog', 'link') ? 'link' : 'NULL') . ' FROM pop_dataset_catalog WHERE id = ? LIMIT 1', [$catalog->id]);
+                    if ($row) { $notes = $row->notes ?? null; $link = $row->link ?? null; }
+                }
+            } catch (\Throwable $e) {
+                // ignore and fallback
+            }
+
+            // Fallback: try to get latest population_rasters entry that references this catalog id
+            if ($notes === null && $link === null) {
+                try {
+                    $r = DB::selectOne('SELECT notes, link FROM population_rasters WHERE dataset_id = ? ORDER BY created_at DESC LIMIT 1', [$catalog->id]);
+                    if ($r) { $notes = $r->notes ?? null; $link = $r->link ?? null; }
+                } catch (\Throwable $e) {
+                    // ignore - return nulls
+                }
+            }
+
+            return response()->json(['year' => $year, 'notes' => $notes, 'link' => $link]);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to fetch dataset info', ['year' => $year, 'error' => $e->getMessage()]);
+            return response()->json(['year' => $year, 'notes' => null, 'link' => null], 500);
         }
     }
 }

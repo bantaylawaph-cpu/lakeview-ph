@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useRef } from "react";
 import axios from "axios";
 import LoadingSpinner from "../LoadingSpinner";
+import InfoModal from "../common/InfoModal";
+import { FiInfo } from 'react-icons/fi';
 import useDebounce from "../../hooks/useDebounce";
 
 /**
@@ -19,6 +21,9 @@ function HeatmapTab({ lake, onToggleHeatmap, onClearHeatmap, currentLayerId = nu
   const [availableYears, setAvailableYears] = useState([]);
   const [yearsLoading, setYearsLoading] = useState(false);
   const [yearsError, setYearsError] = useState(null);
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [datasetInfo, setDatasetInfo] = useState({ notes: null, link: null });
+  const [helpOpen, setHelpOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const initialLoadedRef = useRef(false);
@@ -27,6 +32,30 @@ function HeatmapTab({ lake, onToggleHeatmap, onClearHeatmap, currentLayerId = nu
   const [heatOn, setHeatOn] = useState(false);
   const estimateAbortRef = useRef(null);
   const [loadingAction, setLoadingAction] = useState(null); // 'show' | 'refresh' | null
+
+  // Compact formatter: use suffixes (k, M) and remove unnecessary trailing zeros.
+  // Rounds to sensible precision:
+  // - >= 1,000,000 -> show in millions with one decimal if needed (e.g., 1.7M)
+  // - >= 100,000  -> show in thousands with no decimals (e.g., 120k)
+  // - >= 1,000    -> show in thousands, allow one decimal for numbers like 1.2k
+  // - < 1,000     -> show as integer
+  const formatRoundedHeadline = (n) => {
+    const num = Number(n || 0);
+    if (num <= 0) return '0';
+    if (num >= 1000000) {
+      const v = Math.round((num / 1000000) * 10) / 10; // one decimal
+      return (v % 1 === 0 ? String(v.toFixed(0)) : String(v)).replace(/\.0$/, '') + 'M';
+    }
+    if (num >= 100000) {
+      const v = Math.round(num / 1000); // nearest thousand
+      return v.toLocaleString() + 'k';
+    }
+    if (num >= 1000) {
+      const v = Math.round((num / 1000) * 10) / 10; // one decimal allowed
+      return (v % 1 === 0 ? String(v.toFixed(0)) : String(v)).replace(/\.0$/, '') + 'k';
+    }
+    return Math.round(num).toLocaleString();
+  };
 
   // Inject lightweight CSS for an indeterminate progress bar once
   useEffect(() => {
@@ -139,6 +168,16 @@ function HeatmapTab({ lake, onToggleHeatmap, onClearHeatmap, currentLayerId = nu
     return () => { active = false; };
   }, []);
 
+  const fetchDatasetInfo = async (y) => {
+    if (!y) return;
+    try {
+      const { data } = await axios.get('/api/population/dataset-info', { params: { year: y } });
+      setDatasetInfo({ notes: data?.notes || null, link: data?.link || null });
+    } catch (e) {
+      setDatasetInfo({ notes: 'Failed to load dataset info', link: null });
+    }
+  };
+
   // When sliders/selects (or lake) change, update the heatmap if it's currently ON
   useEffect(() => {
     if (!heatOn) return;
@@ -197,6 +236,15 @@ function HeatmapTab({ lake, onToggleHeatmap, onClearHeatmap, currentLayerId = nu
         <h3 style={{ margin: 0, fontSize: 16, color: '#fff' }}>Population Density Heatmap</h3>
         <div style={{ fontSize: 13, color: '#ddd' }}>Heatmap of population living around <strong style={{ color: '#fff' }}>{lake?.name}</strong>.</div>
       </div>
+      <button
+        type="button"
+        aria-label="How the heatmap works"
+        title="How the heatmap works"
+        onClick={() => setHelpOpen(true)}
+        style={{ padding: 6, borderRadius: 6, background: 'transparent', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+      >
+        <FiInfo size={16} />
+      </button>
     </div>
 
     <div
@@ -241,6 +289,15 @@ function HeatmapTab({ lake, onToggleHeatmap, onClearHeatmap, currentLayerId = nu
           <option key={y} value={y}>{y}{availableYears[0] === y ? ' (latest)' : ''}</option>
         ))}
       </select>
+      <button
+        type="button"
+        aria-label="Dataset details"
+        title="Dataset details"
+        onClick={async () => { setInfoOpen(true); await fetchDatasetInfo(year); }}
+        style={{ padding: '6px 8px', borderRadius: 6, background: 'transparent', color: '#fff', border: '1px solid rgba(255,255,255,0.08)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+      >
+        <FiInfo size={16} />
+      </button>
     </div>
 
     <div className="insight-card" style={{ padding: 12 }}>
@@ -253,18 +310,26 @@ function HeatmapTab({ lake, onToggleHeatmap, onClearHeatmap, currentLayerId = nu
         ) : estimateError ? (
           <p style={{ margin: 0, color: '#fca5a5' }}>{estimateError}</p>
         ) : (
-          <p style={{ margin: 0, color: '#fff' }}>
-            ~ <strong>{estimatedPop.toLocaleString()}</strong> people within {distance} km of the shoreline
-          </p>
+          <div style={{ color: '#fff' }}>
+            {/* Headline number with rounding rules */}
+            <div style={{ fontSize: 18, marginBottom: 6 }}>
+              <strong>
+                ≈ {formatRoundedHeadline(estimatedPop)} people
+              </strong>
+            </div>
+
+            {/* Context chips */}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+              <div style={{ background: 'rgba(255,255,255,0.06)', padding: '4px 8px', borderRadius: 16, fontSize: 12 }}>[Estimate]</div>
+              <div style={{ background: 'rgba(255,255,255,0.06)', padding: '4px 8px', borderRadius: 16, fontSize: 12 }}>{distance} km ring</div>
+            </div>
+
+            {/* Single-line subtext */}
+            <div style={{ fontSize: 11, color: '#ccc' }}>
+              Model-based gridded estimate within the selected buffer from the shoreline.
+            </div>
+          </div>
         )}
-      </div>
-      <div style={{ fontSize: 11, color: '#bbb', marginTop: 4, lineHeight: 1.4 }}>
-        {distance <= 0 ? 'Set the buffer > 0 km to enable heatmap & estimation.'
-          : !year ? 'Select a dataset year to enable estimation.'
-          : 'Toggle the heatmap to visualize relative population density (higher intensity = more people). Adjust the buffer and year to refine.'}
-      </div>
-      <div style={{ fontSize: 11, color: '#ccc', marginTop: 6 }}>
-        <em>Approximate counts based on gridded population data; relative, not exact.</em>
       </div>
       <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}>
         <button
@@ -333,6 +398,57 @@ function HeatmapTab({ lake, onToggleHeatmap, onClearHeatmap, currentLayerId = nu
         </button>
       </div>
     </div>
+  <InfoModal open={infoOpen} onClose={() => setInfoOpen(false)} title={`Dataset ${year} information`} notes={datasetInfo.notes} link={datasetInfo.link} width={640} />
+  <InfoModal
+    open={helpOpen}
+    onClose={() => setHelpOpen(false)}
+    width={720}
+    title="Population Heatmap — How it works"
+    sections={[
+      {
+        heading: 'What you are seeing',
+        bullets: [
+          'Brighter areas show more people around the lake; dimmer areas show fewer.',
+          'This is a relative view for comparing places around the lake — not exact values for each pixel.'
+        ]
+      },
+      {
+        heading: 'Choose a buffer distance',
+        bullets: [
+          'Set how far from the shoreline to include (e.g., 1–3 km).',
+          'The heatmap and estimates include people within this distance.'
+        ]
+      },
+      {
+        heading: 'Pick a dataset year',
+        bullets: [
+          'Choose which population dataset year to use (e.g., 2025).',
+          'See dataset notes and source via the (i) button beside the year.'
+        ]
+      },
+      {
+        heading: 'Estimated population',
+        bullets: [
+          'The number is an approximate count within the chosen distance.',
+          'It comes from gridded population data and should be treated as approximate.'
+        ]
+      },
+      {
+        heading: 'Disclaimer: Estimates',
+        bullets: [
+          'Reference: model-based gridded population estimates used for comparative analysis.',
+          'When sharing results, cite the dataset year, dataset source, and buffer distance used as the reference.'
+        ]
+      },
+      {
+        heading: 'Tips',
+        bullets: [
+          'If nothing appears, set the buffer above 0 km and choose a year.',
+          'Click “Refresh” after changing options to redraw when needed.'
+        ]
+      }
+    ]}
+  />
   </div>
   );
 }

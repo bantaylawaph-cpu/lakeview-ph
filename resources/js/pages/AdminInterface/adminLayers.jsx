@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import { FiLayers } from "react-icons/fi";
 import LayerWizard from "../../components/layers/LayerWizard";
 import LayerList from "../../components/layers/LayerList";
+import DashboardHeader from '../../components/DashboardHeader';
 import { ROLES } from "../../lib/roles";
 
 const ADMIN_VISIBILITY_OPTIONS = [
@@ -17,14 +18,12 @@ export default function AdminLayers({ currentUserRole = ROLES.SUPERADMIN }) { //
 
   return (
     <div className="admin-layers">
-      {/* Header with right-aligned pill tabs */}
-      <div className="dashboard-card" style={{ marginBottom: 12 }}>
-        <div className="dashboard-card-header">
-          <div className="dashboard-card-title">
-            <FiLayers />
-            <span>Base Layers</span>
-          </div>
-          <div className="org-actions-right">
+      <DashboardHeader
+        icon={<FiLayers />}
+        title="Base Layers"
+        description="Upload and manage base map layers used for map visualizations and body overlays."
+        actions={(
+          <>
             <button
               className={`pill-btn ${activeTab === 'upload' ? 'primary' : ''}`}
               onClick={() => setActiveTab('upload')}
@@ -37,9 +36,9 @@ export default function AdminLayers({ currentUserRole = ROLES.SUPERADMIN }) { //
             >
               View Layers
             </button>
-          </div>
-        </div>
-      </div>
+          </>
+        )}
+      />
 
       {activeTab === 'upload' && (
         <LayerWizard

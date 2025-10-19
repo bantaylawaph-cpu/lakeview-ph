@@ -1,5 +1,5 @@
 // resources/js/components/FilterTray.jsx
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 
 function NumberInput({ label, value, onChange, placeholder }) {
   return (
@@ -37,77 +37,47 @@ export default function FilterTray({ open, onClose, onApply, initial = {} }) {
   const [depthMin, setDepthMin] = useState(initial.mean_depth_min ?? null);
   const [depthMax, setDepthMax] = useState(initial.mean_depth_max ?? null);
 
-  const [classOptions, setClassOptions] = useState([]);
-  const [regionOptions, setRegionOptions] = useState([]);
-  const [provinceOptions, setProvinceOptions] = useState([]);
-  const [municipalityOptions, setMunicipalityOptions] = useState([]);
+  // Dynamic options derived from current selection and lakes dataset
+  const [classOptions, setClassOptions] = useState([]); // [{code,name}]
+  const [regionOptions, setRegionOptions] = useState([]); // [string]
+  const [provinceOptions, setProvinceOptions] = useState([]); // [string]
+  const [municipalityOptions, setMunicipalityOptions] = useState([]); // [string]
 
+  // Reference data
+  const [classAllOptions, setClassAllOptions] = useState([]); // full list from API
+  const [lakes, setLakes] = useState([]); // full lakes dataset for client-side filtering
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+
+  // Load reference data (classes) and lakes dataset for client-side cascading
   useEffect(() => {
-    // load water quality classes for dropdown
+    let alive = true;
     (async () => {
+      setLoading(true); setLoadError("");
       try {
-        const res = await fetch('/api/options/water-quality-classes');
-        const j = await res.json();
-        const rows = (j?.data || j || []).map((r) => ({ code: r.code || r.id || r, name: r.name || r.code || r }));
-        setClassOptions(rows);
-      } catch (e) {}
+        const [classesRes, lakesRes] = await Promise.all([
+          fetch('/api/options/water-quality-classes'),
+          fetch('/api/lakes'),
+        ]);
+        const classesJson = await classesRes.json().catch(() => ([]));
+        const lakesJson = await lakesRes.json().catch(() => ([]));
+
+        if (!alive) return;
+
+        const classesList = (classesJson?.data || classesJson || []).map((r) => ({
+          code: r.code || r.id || r,
+          name: r.name || r.code || r,
+        }));
+        setClassAllOptions(classesList);
+        setLakes(Array.isArray(lakesJson) ? lakesJson : (lakesJson?.data || []));
+      } catch (e) {
+        if (!alive) return;
+        setLoadError('Failed to load filters');
+      } finally {
+        if (alive) setLoading(false);
+      }
     })();
-
-    // load region/province/municipality distinct lists
-    (async () => {
-      const flattenList = (raw) => {
-        const out = [];
-        const pushMany = (arr) => arr.forEach((v) => { if (typeof v === 'string' && v.trim()) out.push(v.trim()); });
-        (raw || []).forEach((item) => {
-          if (!item && item !== 0) return;
-            if (Array.isArray(item)) { pushMany(item); return; }
-            if (typeof item === 'string') {
-              const trimmed = item.trim();
-              if (!trimmed) return;
-              // Try JSON array
-              if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-                try {
-                  const parsed = JSON.parse(trimmed);
-                  if (Array.isArray(parsed)) { pushMany(parsed); return; }
-                } catch (e) { /* fall through */ }
-              }
-              // Split on commas if present
-              if (trimmed.includes(',')) { pushMany(trimmed.split(',').map(s => s.trim())); return; }
-              // As-is fallback
-              out.push(trimmed);
-              return;
-            }
-            // Non-string scalars
-            out.push(String(item));
-        });
-        // De-dupe & sort natural, case-insensitive
-        return Array.from(new Set(out)).sort((a,b) => a.localeCompare(b,'en',{sensitivity:'base'}));
-      };
-
-      // Preferred endpoints that already flatten JSON arrays
-      const endpoints = {
-        regions: ['/api/options/lake-regions','/api/options/regions'], // fall back
-        provinces: ['/api/options/lake-provinces','/api/options/provinces'],
-        municipalities: ['/api/options/lake-municipalities','/api/options/municipalities'],
-      };
-
-      const fetchList = async (list) => {
-        for (const url of list) {
-          try {
-            const res = await fetch(url);
-            if (!res.ok) continue;
-            const j = await res.json();
-            const arr = Array.isArray(j) ? j : (j?.data || []);
-            if (Array.isArray(arr)) return flattenList(arr);
-          } catch (e) { /* try next */ }
-        }
-        return [];
-      };
-
-      try { setRegionOptions(await fetchList(endpoints.regions)); } catch (e) {}
-      try { setProvinceOptions(await fetchList(endpoints.provinces)); } catch (e) {}
-      try { setMunicipalityOptions(await fetchList(endpoints.municipalities)); } catch (e) {}
-    })();
+    return () => { alive = false; };
   }, []);
 
   useEffect(() => {
@@ -137,6 +107,80 @@ export default function FilterTray({ open, onClose, onApply, initial = {} }) {
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [open, onKey]);
+
+  // Helpers to normalize multi-value fields on lakes
+  const normalizeList = (val, fallbackStr) => {
+    if (Array.isArray(val)) return val.filter(Boolean).map((s) => String(s).trim()).filter(Boolean);
+    if (typeof fallbackStr === 'string' && fallbackStr.trim()) {
+      return fallbackStr.split(',').map((s) => s.trim()).filter(Boolean);
+    }
+    return [];
+  };
+
+  const includesValue = (list, value) => {
+    if (!value) return true; // empty filter doesn't restrict
+    const arr = normalizeList(list, list);
+    return arr.includes(value);
+  };
+
+  const sortStrings = (arr) => Array.from(new Set(arr)).sort((a,b) => String(a).localeCompare(String(b), 'en', { sensitivity: 'base' }));
+
+  // Recompute cascading options whenever lakes or a selection changes
+  useEffect(() => {
+    if (!lakes || lakes.length === 0) {
+      // nothing loaded yet
+      return;
+    }
+
+    // Apply current selections to narrow down the dataset
+    const filtered = lakes.filter((row) => {
+      const rList = normalizeList(row.region_list, row.region);
+      const pList = normalizeList(row.province_list, row.province);
+      const mList = normalizeList(row.municipality_list, row.municipality);
+      const cls = row.class_code || row.classCode || null;
+      return (
+        includesValue(rList, region) &&
+        includesValue(pList, province) &&
+        includesValue(mList, municipality) &&
+        (!classCode || (cls === classCode))
+      );
+    });
+
+    // Build option sets from filtered dataset
+    const rOpts = [];
+    const pOpts = [];
+    const mOpts = [];
+    const cSet = new Set();
+    filtered.forEach((row) => {
+      normalizeList(row.region_list, row.region).forEach((v) => rOpts.push(v));
+      normalizeList(row.province_list, row.province).forEach((v) => pOpts.push(v));
+      normalizeList(row.municipality_list, row.municipality).forEach((v) => mOpts.push(v));
+      const code = row.class_code || row.classCode;
+      if (code) cSet.add(code);
+    });
+
+    const nextRegionOptions = sortStrings(rOpts);
+    const nextProvinceOptions = sortStrings(pOpts);
+    const nextMunicipalityOptions = sortStrings(mOpts);
+
+    // Map class codes to names but only those present in filtered results
+    const nextClassOptions = Array.from(cSet).sort((a,b) => String(a).localeCompare(String(b), 'en', { sensitivity: 'base' }))
+      .map((code) => {
+        const meta = classAllOptions.find((c) => (c.code || c.id) === code);
+        return { code, name: meta?.name || code };
+      });
+
+    setRegionOptions(nextRegionOptions);
+    setProvinceOptions(nextProvinceOptions);
+    setMunicipalityOptions(nextMunicipalityOptions);
+    setClassOptions(nextClassOptions);
+
+    // If current selections became invalid, clear them
+    if (region && !nextRegionOptions.includes(region)) setRegion("");
+    if (province && !nextProvinceOptions.includes(province)) setProvince("");
+    if (municipality && !nextMunicipalityOptions.includes(municipality)) setMunicipality("");
+    if (classCode && !nextClassOptions.some((c) => c.code === classCode)) setClassCode("");
+  }, [lakes, classAllOptions, region, province, municipality, classCode]);
 
   const handleApply = () => {
     const payload = {
@@ -175,7 +219,7 @@ export default function FilterTray({ open, onClose, onApply, initial = {} }) {
         <div className="ft-grid">
           <div className="ft-row">
             <label>Region</label>
-            <select aria-label="Region" value={region} onChange={(e) => setRegion(e.target.value)}>
+            <select aria-label="Region" value={region} onChange={(e) => setRegion(e.target.value)} disabled={loading}>
               <option value="">(any)</option>
               {regionOptions.map((r) => (
                 <option key={r} value={r}>{r}</option>
@@ -185,7 +229,7 @@ export default function FilterTray({ open, onClose, onApply, initial = {} }) {
 
           <div className="ft-row">
             <label>Province</label>
-            <select aria-label="Province" value={province} onChange={(e) => setProvince(e.target.value)}>
+            <select aria-label="Province" value={province} onChange={(e) => setProvince(e.target.value)} disabled={loading}>
               <option value="">(any)</option>
               {provinceOptions.map((p) => (
                 <option key={p} value={p}>{p}</option>
@@ -195,7 +239,7 @@ export default function FilterTray({ open, onClose, onApply, initial = {} }) {
 
           <div className="ft-row">
             <label>Municipality</label>
-            <select aria-label="Municipality" value={municipality} onChange={(e) => setMunicipality(e.target.value)}>
+            <select aria-label="Municipality" value={municipality} onChange={(e) => setMunicipality(e.target.value)} disabled={loading}>
               <option value="">(any)</option>
               {municipalityOptions.map((m) => (
                 <option key={m} value={m}>{m}</option>
@@ -205,7 +249,7 @@ export default function FilterTray({ open, onClose, onApply, initial = {} }) {
 
           <div className="ft-row full-row">
             <label>Water Quality Class</label>
-            <select aria-label="Water Quality Class" value={classCode} onChange={(e) => setClassCode(e.target.value)}>
+            <select aria-label="Water Quality Class" value={classCode} onChange={(e) => setClassCode(e.target.value)} disabled={loading}>
               <option value="">(any)</option>
               {classOptions.map((c) => (
                 <option key={c.code || c.name} value={c.code || c.name}>{c.name || c.code}</option>

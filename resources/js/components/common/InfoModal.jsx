@@ -1,7 +1,7 @@
 import React from 'react';
 import Modal from '../Modal';
 
-export default function InfoModal({ open, onClose, title = 'About this chart', sections = [], width = 700 }) {
+export default function InfoModal({ open, onClose, title = 'About this chart', sections = [], width = 700, notes = null, link = null }) {
   return (
     <Modal
       open={open}
@@ -37,6 +37,18 @@ export default function InfoModal({ open, onClose, title = 'About this chart', s
             )}
           </div>
         ))}
+        {notes && (
+          <div>
+            <h5 style={{ margin: '0 0 6px 0', color: '#fff' }}>Notes</h5>
+            <p style={{ margin: 0, color: '#e5e7eb', whiteSpace: 'pre-wrap' }}>{notes}</p>
+          </div>
+        )}
+        {link && (
+          <div>
+            <h5 style={{ margin: '6px 0 6px 0', color: '#fff' }}>Source</h5>
+            <a href={link} target="_blank" rel="noopener noreferrer" style={{ color: '#93c5fd' }}>{link}</a>
+          </div>
+        )}
       </div>
     </Modal>
   );

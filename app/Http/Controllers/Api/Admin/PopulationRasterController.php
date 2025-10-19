@@ -76,6 +76,7 @@ class PopulationRasterController extends Controller
                 . '|mimes:tif,tiff,zip',
             'srid' => 'nullable|integer|min:2000|max:999999',
             'notes' => 'nullable|string|max:1000',
+            'link' => 'nullable|string|max:2048',
         ]);
 
         $file = $request->file('raster');
@@ -102,6 +103,7 @@ class PopulationRasterController extends Controller
                 'uploaded_by' => $user?->id,
                 'status' => 'uploaded',
                 'notes' => $validated['notes'] ?? null,
+                'link' => $validated['link'] ?? null,
                 'error_message' => null,
             ]);
         });

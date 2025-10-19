@@ -116,11 +116,10 @@ function LakeInfoPanel({
   {/* Tabs */}
       <div className="lake-info-tabs">
         <button className={`lake-tab ${activeTab === "overview" ? "active" : ""}`} onClick={() => setActiveTab("overview")}>Overview</button>
-  <button className={`lake-tab ${activeTab === "water" ? "active" : ""}`} onClick={() => setActiveTab("water")}>Water Quality</button>
-  <button className={`lake-tab ${activeTab === "tests" ? "active" : ""}`} onClick={() => setActiveTab("tests")}>Tests</button>
-        {/* <button className={`lake-tab ${activeTab === "population" ? "active" : ""}`} onClick={() => setActiveTab("population")}>Population Density</button> */}
+        <button className={`lake-tab ${activeTab === "water" ? "active" : ""}`} onClick={() => setActiveTab("water")}>Water Quality</button>
+        <button className={`lake-tab ${activeTab === "tests" ? "active" : ""}`} onClick={() => setActiveTab("tests")}>Tests</button>
+        <button className={`lake-tab ${activeTab === "population" ? "active" : ""}`} onClick={() => setActiveTab("population")}>Heatmap</button>
         <button className={`lake-tab ${activeTab === "layers" ? "active" : ""}`} onClick={() => setActiveTab("layers")}>Layers</button>
-        {/* Flows tab removed; flows now in Overview */}
       </div>
 
       {/* Content */}
@@ -132,7 +131,6 @@ function LakeInfoPanel({
             canToggleWatershed={canToggleWatershed}
             onToggleWatershed={onToggleWatershed}
             onOpenFeedback={() => setFeedbackOpen(true)}
-            // Nominatim/OSM outline feature removed
             flows={flows}
             showFlows={showFlows}
             onToggleFlows={onToggleFlows}
@@ -181,7 +179,6 @@ function LakeInfoPanel({
             isAuthenticated={!!authUser}
           />
         )}
-        {/* Flows content removed */}
       </div>
       <LakeFeedbackModal open={feedbackOpen} onClose={() => setFeedbackOpen(false)} lake={lake} />
     </div>

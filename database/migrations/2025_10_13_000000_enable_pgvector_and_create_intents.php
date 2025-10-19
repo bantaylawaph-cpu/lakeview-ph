@@ -6,17 +6,24 @@ use Illuminate\Support\Facades\DB;
 return new class extends Migration {
     public function up(): void
     {
-        // Enable pgvector (PostgreSQL only)
-        try {
-            $driver = DB::getDriverName();
-            if ($driver === 'pgsql') {
-                DB::statement('CREATE EXTENSION IF NOT EXISTS vector');
+        // Only proceed if running on PostgreSQL AND the pgvector extension is already installed.
+        $driver = null; $hasVector = false;
+        try { $driver = DB::getDriverName(); } catch (\Throwable $e) { $driver = null; }
+        if ($driver === 'pgsql') {
+            try {
+                $row = DB::selectOne("SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector') AS installed");
+                $hasVector = (bool) (($row->installed ?? false));
+            } catch (\Throwable $e) {
+                $hasVector = false;
             }
-        } catch (\Throwable $e) {
-            // ignore if not supported (e.g., local sqlite for tests)
         }
 
-        // Create canonical intents table
+        if (! $hasVector) {
+            // Skip semantic_intents when vector extension isn't available.
+            return;
+        }
+
+        // Create canonical intents table (safe when vector extension is present)
         DB::statement(<<<SQL
             CREATE TABLE IF NOT EXISTS semantic_intents (
                 id SERIAL PRIMARY KEY,
@@ -29,12 +36,9 @@ return new class extends Migration {
             );
         SQL);
 
-        // Index for vector search (ivfflat requires row count and ANALYZE; we can start with a simple index later)
-        try {
-            DB::statement('CREATE INDEX IF NOT EXISTS semantic_intents_embedding_idx ON semantic_intents USING ivfflat (embedding vector_cosine_ops)');
-        } catch (\Throwable $e) {
-            // ivfflat may fail if pgvector compiled without ivfflat; fallback: none
-        }
+        // Avoid creating ivfflat index here to prevent transactional failures on hosts without that opclass.
+        // You can add the index manually in environments that support it:
+        // CREATE INDEX semantic_intents_embedding_idx ON semantic_intents USING ivfflat (embedding vector_cosine_ops);
     }
 
     public function down(): void

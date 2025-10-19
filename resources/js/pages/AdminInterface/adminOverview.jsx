@@ -6,21 +6,12 @@ import {
   FiUsers,        // Registered Users
   FiMap,          // Lakes in Database
   FiDroplet,      // Water Quality Reports in Database
-  FiActivity,     // Recent Activity header icon
 } from "react-icons/fi";
-
-import AppMap from "../../components/AppMap";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
-
-import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
-import markerIcon from "leaflet/dist/images/marker-icon.png";
-import markerShadow from "leaflet/dist/images/marker-shadow.png";
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({ iconRetinaUrl: markerIcon2x, iconUrl: markerIcon, shadowUrl: markerShadow });
 
 import api from "../../lib/api";
 import kpiCache from '../../lib/kpiCache';
+import DashboardHeader from '../../components/DashboardHeader';
+import { FiHome } from 'react-icons/fi';
 
 /* KPI Grid */
 function KPIGrid() {
@@ -29,8 +20,8 @@ function KPIGrid() {
     <div className="kpi-grid">
       <KpiCard id="orgs" icon={<FiBriefcase />} title="Organizations" to="/admin-dashboard/organizations" />
       <KpiCard id="users" icon={<FiUsers />} title="Registered Users" to="/admin-dashboard/users" />
-      <KpiCard id="lakes" icon={<FiMap />} title="Lakes in Database" to="/admin-dashboard/lakes" />
-      <KpiCard id="events" icon={<FiDroplet />} title="Water Quality Reports in Database" to="/admin-dashboard/wq-tests" />
+      <KpiCard id="lakes" icon={<FiMap />} title="Lakes" to="/admin-dashboard/lakes" />
+      <KpiCard id="events" icon={<FiDroplet />} title="Water Quality Reports" to="/admin-dashboard/wq-tests" />
     </div>
   );
 }
@@ -80,36 +71,6 @@ function KpiCard({ id, icon, title, to }) {
    Overview Map
    (Basemap only; no markers/features preloaded.)
    ============================================================ */
-function OverviewMap() {
-  return (
-    <div className="map-container">
-      <AppMap view="osm" style={{ height: "100%", width: "100%" }}>
-        {/* Add GeoJSON layers or markers once data is available */}
-      </AppMap>
-    </div>
-  );
-}
-
-/* ============================================================
-   Recent Logs
-   (Empty list; render items when you have data.)
-   ============================================================ */
-function RecentLogs() {
-  return (
-    <div className="dashboard-card" style={{ marginTop: 24 }}>
-      <div className="dashboard-card-title">
-        <FiActivity style={{ marginRight: 8 }} />
-        <span>Recent Activity</span>
-      </div>
-      <div className="dashboard-card-body">
-        <ul className="recent-logs-list">
-          {/* Intentionally empty. Map over recent logs here. */}
-        </ul>
-      </div>
-    </div>
-  );
-}
-
 /* ============================================================
    Page: AdminOverview
    ============================================================ */
@@ -207,9 +168,12 @@ export default function AdminOverview() {
 
   return (
     <>
+      <DashboardHeader
+        icon={<FiHome />}
+        title="Overview"
+        description="Quick operational metrics and recent platform KPIs for administrators."
+      />
       <KPIGrid />
-      <OverviewMap />
-      <RecentLogs />
     </>
   );
 }

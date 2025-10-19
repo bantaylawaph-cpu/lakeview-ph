@@ -6,6 +6,8 @@ import api from "../../lib/api";
 import Swal from "sweetalert2";
 import OrganizationForm from "../../components/OrganizationForm";
 import OrganizationManageModal from "../../components/OrganizationManageModal";
+import DashboardHeader from '../../components/DashboardHeader';
+import { FiBriefcase as FiBriefcaseIcon } from 'react-icons/fi';
 import TableLayout from "../../layouts/TableLayout";
 import { TYPE_OPTIONS } from "../../components/OrganizationForm";
 
@@ -199,20 +201,12 @@ export default function AdminOrganizationsPage() {
 
   return (
     <div className="container" style={{ padding: 16 }}>
-      <div className="dashboard-card" style={{ marginBottom: 16 }}>
-        <div className="dashboard-card-header">
-          <div className="dashboard-card-title">
-            <FiBriefcase />
-            <span>Organizations</span>
-          </div>
-          <div className="org-actions-right">
-            <button className="pill-btn" onClick={openCreate}>+ New Organization</button>
-          </div>
-        </div>
-        <p style={{ marginTop: 8, fontSize: 13, color: "#6b7280" }}>
-          Manage registered organizations and their contact details.
-        </p>
-      </div>
+      <DashboardHeader
+        icon={<FiBriefcaseIcon />}
+        title="Organizations"
+        description="Manage registered organizations and their contact details."
+        actions={<button className="pill-btn" onClick={openCreate}>+ New Organization</button>}
+      />
 
       <div className="card" style={{ padding:12, borderRadius:12, marginBottom:12 }}>
         <TableToolbar

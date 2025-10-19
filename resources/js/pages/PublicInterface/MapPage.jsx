@@ -3,7 +3,7 @@
 // ----------------------------------------------------
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useMap, GeoJSON, Marker, Popup, CircleMarker } from "react-leaflet";
+import { useMap, GeoJSON, Marker, Popup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
@@ -25,7 +25,6 @@ import PublicSettingsModal from "../../components/settings/PublicSettingsModal";
 import FeedbackModal from "../../components/feedback/FeedbackModal";
 import HeatmapLoadingIndicator from "../../components/HeatmapLoadingIndicator";
 import HeatmapLegend from "../../components/HeatmapLegend";
-import BackToDashboardButton from "../../components/BackToDashboardButton";
 import BaseLakesLayer from "../../components/BaseLakesLayer";
 import { useAuthRole } from "./hooks/useAuthRole";
 import { usePublicLakes } from "./hooks/usePublicLakes";
@@ -36,6 +35,22 @@ import { useHotkeys } from "./hooks/useHotkeys";
 import DataPrivacyDisclaimer from "./DataPrivacyDisclaimer";
 import AboutData from "./AboutData";
 import api from "../../lib/api";
+
+// Small helper to create an SVG pin icon as a data URI for a given color
+function createPinIcon(color = '#3388ff') {
+  const svg = `<?xml version='1.0' encoding='UTF-8'?>\n<svg xmlns='http://www.w3.org/2000/svg' width='32' height='41' viewBox='0 0 32 41'>\n  <path d='M16 0C9 0 4 5 4 11c0 9.9 12 24 12 24s12-14.1 12-24c0-6-5-11-12-11z' fill='${color}' stroke='#000' stroke-opacity='0.12'/>\n  <circle cx='16' cy='11' r='4' fill='#fff' opacity='0.95'/>\n</svg>`;
+  const url = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+  return L.icon({
+    iconUrl: url,
+    iconSize: [32, 41],
+    iconAnchor: [16, 41],
+    popupAnchor: [0, -36],
+    className: ''
+  });
+}
+
+const INFLOW_ICON = createPinIcon('#14b8a6');
+const OUTFLOW_ICON = createPinIcon('#7c3aed');
 
 function MapWithContextMenu({ children }) {
   const map = useMap();
@@ -173,6 +188,7 @@ function MapPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const mapRef = useRef(null);
+  const flowsRef = useRef({});
   // ---------------- Auth / route modal (centralized auth state) ----------------
   const { userRole, authUser, authOpen, authMode, openAuth, closeAuth, setAuthMode } = useAuthRole();
 
@@ -297,12 +313,40 @@ function MapPage() {
     return () => { abort = true; };
   }, [selectedLakeId]);
 
+  // Keep flowsRef in sync: remove entries for flows that no longer exist
+  useEffect(() => {
+    if (!flows || !Array.isArray(flows)) { flowsRef.current = {}; return; }
+    const ids = new Set(flows.map(f => String(f.id)));
+    for (const k of Object.keys(flowsRef.current || {})) {
+      if (!ids.has(String(k))) delete flowsRef.current[k];
+    }
+  }, [flows]);
+
   const jumpToFlow = (flow) => {
     if (!flow || !mapRef.current) return;
     if (flow.latitude && flow.longitude) {
       mapRef.current.flyTo([flow.latitude, flow.longitude], 14, { duration: 0.6 });
     }
     if (!showFlows) setShowFlows(true);
+    // Open the popup for this flow marker once it's rendered on the map.
+    // If markers are already visible, try to open immediately; otherwise wait a bit for render.
+    const openPopupForFlow = () => {
+      try {
+        const layer = flowsRef.current?.[flow.id];
+        // react-leaflet ref returns the underlying leaflet element which supports openPopup
+        if (layer && typeof layer.openPopup === 'function') {
+          layer.openPopup();
+        }
+      } catch (err) { /* ignore */ }
+    };
+
+    // If showFlows already true, open immediately; else schedule after short delay to allow render.
+    if (showFlows) {
+      setTimeout(openPopupForFlow, 80);
+    } else {
+      // Give time for the markers to mount after toggling showFlows
+      setTimeout(openPopupForFlow, 300);
+    }
   };
 
   // Dedicated effect for map interaction close logic to avoid stale closures & duplicates
@@ -370,13 +414,18 @@ function MapPage() {
           const lon = Number(f.longitude);
           if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
           const isInflow = f.flow_type === 'inflow';
-          const color = isInflow ? '#14b8a6' : '#7c3aed'; // teal / purple
+          const icon = isInflow ? INFLOW_ICON : OUTFLOW_ICON;
           return (
-            <CircleMarker
+            <Marker
               key={`flow-${f.id}`}
-              center={[lat, lon]}
-              radius={7}
-              pathOptions={{ color: color, fillColor: color, weight: 1, fillOpacity: 0.95 }}
+              position={[lat, lon]}
+              icon={icon}
+              ref={(el) => {
+                try {
+                  if (el) flowsRef.current[String(f.id)] = el;
+                  else delete flowsRef.current[String(f.id)];
+                } catch (err) {}
+              }}
             >
               <Popup>
                 <div style={{ minWidth: 160 }}>
@@ -385,7 +434,7 @@ function MapPage() {
                   <small>Lat: {lat} Lon: {lon}</small>
                 </div>
               </Popup>
-            </CircleMarker>
+            </Marker>
           );
         })}
 
@@ -482,9 +531,6 @@ function MapPage() {
         </div>
       )}
   {hasHeatLayer && !heatLoading && <HeatmapLegend resolution={heatResolution} />}
-      {/* Back to Dashboard */}
-      <BackToDashboardButton role={userRole} />
-
       {/* Settings Modal (public context) */}
       {authUser && (
         <PublicSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />

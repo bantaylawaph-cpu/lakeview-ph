@@ -16,7 +16,7 @@ import {
 } from "react-icons/fi";
 
 import DashboardLayout from "../../layouts/DashboardLayout";
-import AdminOverview from "./AdminOverview";
+import AdminOverview from "./adminOverview";
 import AdminOrganizations from "./adminOrganizations";
 import AdminUsers from "./adminUsers";
 import AdminWaterCat from "./adminWaterCat";

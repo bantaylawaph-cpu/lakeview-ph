@@ -5,6 +5,8 @@ import { FiSliders } from "react-icons/fi";
 import ParametersTab from "./parameters/ParametersTab";
 import StandardsTab from "./parameters/StandardsTab";
 import ThresholdsTab from "./parameters/ThresholdsTab";
+import DashboardHeader from '../../components/DashboardHeader';
+import { FiSliders as FiSlidersIcon } from 'react-icons/fi';
 
 const TABS = [
   { key: "parameters", label: "Parameters" },
@@ -28,12 +30,11 @@ export default function AdminParameters() {
 
   return (
     <div className="admin-parameters">
-      <div className="dashboard-card" style={{ marginBottom: 16 }}>
-        <div className="dashboard-card-header">
-          <div className="dashboard-card-title">
-            <FiSliders />
-            <span>Parameters, Standards, and Thresholds Catalogue</span>
-          </div>
+      <DashboardHeader
+        icon={<FiSlidersIcon />}
+        title="Parameters, Standards, and Thresholds Catalogue"
+        description="Manage parameters, water quality standards, and threshold rules used for automatic evaluations."
+        actions={(
           <div className="org-actions-right">
             {TABS.map((tab) => (
               <button
@@ -46,11 +47,8 @@ export default function AdminParameters() {
               </button>
             ))}
           </div>
-        </div>
-        <p style={{ marginTop: 8, fontSize: 13, color: "#6b7280" }}>
-          Manage parameters, water quality standards, and threshold rules used for automatic evaluations.
-        </p>
-      </div>
+        )}
+      />
 
       {renderTab()}
     </div>

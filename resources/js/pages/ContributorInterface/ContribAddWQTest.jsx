@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from "react";
 import WQTestWizard from "../../components/water-quality-test/WQTestWizard";
 import { FiDroplet } from "react-icons/fi";
+import DashboardHeader from '../../components/DashboardHeader';
 import { api } from "../../lib/api";
 import { alertError, alertSuccess } from "../../lib/alerts";
 
@@ -35,14 +36,7 @@ export default function ContribAddWQTest() {
 
   return (
     <div className="dashboard-content">
-      <div className="dashboard-card" style={{ marginBottom: 12 }}>
-        <div className="dashboard-card-header">
-          <div className="dashboard-card-title">
-            <FiDroplet />
-            <span>Add Water Quality Test </span>
-          </div>
-        </div>
-      </div>
+      <DashboardHeader icon={<FiDroplet />} title="Add Water Quality Test" description="Create a new water quality test record. Contributors cannot publish tests directly." />
 
       <WQTestWizard
         organization={organization}

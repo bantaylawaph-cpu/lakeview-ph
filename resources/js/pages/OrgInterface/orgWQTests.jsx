@@ -2,6 +2,7 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { useLocation } from 'react-router-dom';
 import { FiDroplet } from "react-icons/fi";
+import DashboardHeader from "../../components/DashboardHeader";
 import TableLayout from "../../layouts/TableLayout";
 import TableToolbar from "../../components/table/TableToolbar";
 import FilterPanel from "../../components/table/FilterPanel";
@@ -487,30 +488,26 @@ export default function OrgWQTests({
 
   return (
     <div className="dashboard-content">
-      <div className="dashboard-card">
-        <div className="dashboard-card-header">
-          <div className="dashboard-card-title">
-            <FiDroplet />
-            <span>Water Quality Tests</span>
-          </div>
-        </div>
-        <div className="dashboard-card-body">
-          {toolbarNode}
-          <FilterPanel open={filtersOpen} fields={filterFields} onClearAll={clearAllFilters} />
-          <TableLayout
-            tableId="org-wqtests"
-            columns={displayColumns}
-            data={filtered}
-            pageSize={10}
-            actions={actions}
-            resetSignal={resetSignal}
-            columnPicker={false}
-            loading={loading}
-            loadingLabel={loading ? 'Loading tests…' : null}
-          />
-        </div>
+      <DashboardHeader
+        icon={<FiDroplet />}
+        title="Water Quality Tests"
+        description="Browse, filter, and manage water quality test records for this organization."
+      />
+      <div className="dashboard-card-body">
+        {toolbarNode}
+        <FilterPanel open={filtersOpen} fields={filterFields} onClearAll={clearAllFilters} />
+        <TableLayout
+          tableId="org-wqtests"
+          columns={displayColumns}
+          data={filtered}
+          pageSize={10}
+          actions={actions}
+          resetSignal={resetSignal}
+          columnPicker={false}
+          loading={loading}
+          loadingLabel={loading ? 'Loading tests…' : null}
+        />
       </div>
-
       <OrgWQTestModal
         open={open}
         onClose={() => setOpen(false)}

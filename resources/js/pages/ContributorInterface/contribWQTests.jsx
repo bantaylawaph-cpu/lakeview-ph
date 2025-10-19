@@ -6,6 +6,7 @@ import TableToolbar from "../../components/table/TableToolbar";
 import FilterPanel from "../../components/table/FilterPanel";
 import OrgWQTestModal from "../../components/water-quality-test/OrgWQTestModal";
 import { FiEye, FiEdit2, FiTrash2, FiDroplet } from "react-icons/fi";
+import DashboardHeader from "../../components/DashboardHeader";
 
 import { api } from "../../lib/api";
 import { fetchLakeOptions } from "../../lib/layers";
@@ -369,28 +370,25 @@ export default function ContribWQTests() {
 
   return (
     <div className="dashboard-content">
-      <div className="dashboard-card">
-        <div className="dashboard-card-header">
-          <div className="dashboard-card-title">
-            <FiDroplet />
-            <span>Water Quality Tests </span>
-          </div>
-        </div>
-        <div className="dashboard-card-body">
-          {toolbarNode}
-          <FilterPanel open={filtersOpen} fields={filterFields} onClearAll={clearAllFilters} />
-          <TableLayout
-            tableId="contrib-wqtests"
-            columns={displayColumns}
-            data={filtered}
-            pageSize={10}
-            actions={actions}
-            resetSignal={resetSignal}
-            columnPicker={false}
-            loading={loading}
-            loadingLabel={loading ? 'Loading tests…' : null}
-          />
-        </div>
+      <DashboardHeader
+        icon={<FiDroplet />}
+        title="Water Quality Tests"
+        description="Browse, filter, and manage water quality test records for your organization."
+      />
+      <div className="dashboard-card-body">
+        {toolbarNode}
+        <FilterPanel open={filtersOpen} fields={filterFields} onClearAll={clearAllFilters} />
+        <TableLayout
+          tableId="contrib-wqtests"
+          columns={displayColumns}
+          data={filtered}
+          pageSize={10}
+          actions={actions}
+          resetSignal={resetSignal}
+          columnPicker={false}
+          loading={loading}
+          loadingLabel={loading ? 'Loading tests…' : null}
+        />
       </div>
 
       <OrgWQTestModal

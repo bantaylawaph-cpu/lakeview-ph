@@ -113,6 +113,7 @@ export default function WQTestWizard({
   const [localLakeGeoms, setLocalLakeGeoms] = useState(lakeGeoms || {});
   const [stationModalOpen, setStationModalOpen] = useState(false);
   const [stationEdit, setStationEdit] = useState(null);
+  // coordMode removed: always show manual inputs and allow pin-drop on the map
 
   // Parameter & standards lists (fetch from API if not provided as props)
   const [parametersList, setParametersList] = useState(parameters || []);
@@ -548,7 +549,7 @@ export default function WQTestWizard({
             </FG>
           </FormRow>
 
-          <div className="org-form" style={{ marginTop: 8 }}>
+              <div className="org-form" style={{ marginTop: 8 }}>
             <div className="form-group" style={{ minWidth: 220 }}>
               <label>Mode</label>
               <div className="segmented-pills">
@@ -571,22 +572,41 @@ export default function WQTestWizard({
           </div>
 
           {data.loc_mode === "coord" ? (
-            <FormRow>
-              <FG label="Latitude *">
-                <input
-                  type="number"
-                  value={data.lat}
-                  onChange={(e) => setCoords(data, setData, e.target.value, data.lng)}
-                />
-              </FG>
-              <FG label="Longitude *">
-                <input
-                  type="number"
-                  value={data.lng}
-                  onChange={(e) => setCoords(data, setData, data.lat, e.target.value)}
-                />
-              </FG>
-            </FormRow>
+            <>
+              <FormRow>
+                <FG label="Latitude *">
+                  <input
+                    type="number"
+                    value={data.lat}
+                    onChange={(e) => setCoords(data, setData, e.target.value, data.lng)}
+                  />
+                </FG>
+                <FG label="Longitude *">
+                  <input
+                    type="number"
+                    value={data.lng}
+                    onChange={(e) => setCoords(data, setData, data.lat, e.target.value)}
+                  />
+                </FG>
+              </FormRow>
+
+              <div style={{ marginTop: 8 }}>
+                <div style={{ padding: 12, border: '1px dashed #e5e7eb', borderRadius: 6, background: '#fff' }}>
+                  <div style={{ marginBottom: 8 }}><strong>Pin Drop</strong></div>
+                  <div style={{ marginBottom: 8 }}>You can also click the map below to drop a pin — the selected coordinates will appear above.</div>
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                    <div style={{ minWidth: 220 }}>
+                      <div style={{ fontSize: 12, color: '#6b7280' }}>Selected Latitude</div>
+                      <div style={{ fontWeight: 600 }}>{data.lat !== '' && data.lat !== null ? String(data.lat) : '—'}</div>
+                    </div>
+                    <div style={{ minWidth: 220 }}>
+                      <div style={{ fontSize: 12, color: '#6b7280' }}>Selected Longitude</div>
+                      <div style={{ fontWeight: 600 }}>{data.lng !== '' && data.lng !== null ? String(data.lng) : '—'}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
           ) : (
             <>
               <FormRow>
@@ -982,3 +1002,5 @@ export default function WQTestWizard({
     </div>
   );
 }
+
+// MiniPickMap removed — the wizard now uses the existing AppMap below for pin-drop coordinate selection.

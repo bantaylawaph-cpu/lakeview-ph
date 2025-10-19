@@ -1,6 +1,7 @@
 import React, { useMemo, useEffect, useState } from "react";
-import { FiMap } from 'react-icons/fi';
+import { FiMap, FiInfo } from 'react-icons/fi';
 import LoadingSpinner from "../LoadingSpinner";
+import { api } from "../../lib/api";
 
 const fmtNum = (v, suffix = "", digits = 2) => {
   if (v === null || v === undefined || v === "") return "–";
@@ -68,6 +69,34 @@ function OverviewTab({
   const areaStr      = useMemo(() => fmtNum(lake?.surface_area_km2, " km²", 2), [lake]);
   const elevationStr = useMemo(() => fmtNum(lake?.elevation_m, " m", 1), [lake]);
   const meanDepthStr = useMemo(() => fmtNum(lake?.mean_depth_m, " m", 1), [lake]);
+
+  const [denrClassLabel, setDenrClassLabel] = useState(null);
+
+  useEffect(() => {
+    let mounted = true;
+    if (!lake || !lake.class_code) { setDenrClassLabel(null); return () => { mounted = false; } };
+
+    (async () => {
+      try {
+        // If the lake already includes the relation, use the class name
+        if (lake?.water_quality_class?.name) {
+          if (mounted) setDenrClassLabel(lake.water_quality_class.name);
+          return;
+        }
+
+        const res = await api('/options/water-quality-classes');
+        const list = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+        const found = (list || []).find((c) => String(c.code) === String(lake.class_code) || String(c.id) === String(lake.class_code));
+        if (!mounted) return;
+  if (found) setDenrClassLabel(found.name);
+  else setDenrClassLabel(lake.class_code || null);
+      } catch (e) {
+        if (mounted) setDenrClassLabel(lake.class_code || null);
+      }
+    })();
+
+    return () => { mounted = false; };
+  }, [lake?.class_code, lake?.water_quality_class]);
 
   // Flows tri-state status from API: 'unknown' | 'none' | 'present'
   const flowsStatus = lake?.flows_status || 'unknown';
@@ -165,6 +194,31 @@ function OverviewTab({
 
   <div><strong>Municipality/City:</strong></div>
         <div title={municipalityDisplay || ''}>{municipalityDisplay || '–'}</div>
+
+        <div><strong>Lake DENR Classification:</strong></div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <div title={denrClassLabel || lake?.denr_classification || ''} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{denrClassLabel || lake?.denr_classification || '–'}</div>
+          <a
+            href="https://water.emb.gov.ph/?page_id=849"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="What is Lake Classification?"
+            style={{
+              border: 'none',
+              background: 'transparent',
+              color: '#fff',
+              padding: 6,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              borderRadius: 6,
+              textDecoration: 'none'
+            }}
+          >
+            <FiInfo size={16} />
+          </a>
+        </div>
 
         <div><strong>Surface Area:</strong></div>
         <div>{areaStr}</div>

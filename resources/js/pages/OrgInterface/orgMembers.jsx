@@ -4,6 +4,7 @@ import { useLocation } from 'react-router-dom';
 import Swal from "sweetalert2";
 import "sweetalert2/dist/sweetalert2.min.css";
 import { FiEdit, FiTrash, FiUsers } from 'react-icons/fi';
+import DashboardHeader from '../../components/DashboardHeader';
 import api from "../../lib/api";
 import Modal from "../../components/Modal";
 import TableToolbar from "../../components/table/TableToolbar";
@@ -233,13 +234,12 @@ export default function OrgMembers() {
 
   return (
     <div className="container" style={{ padding: 16 }}>
-      <div className="flex-row" style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
-        <div className="dashboard-card-title">
-                    <FiUsers />
-                    <span>Organizations • Members</span>
-        </div>
-        <button className="pill-btn" onClick={openCreate}>+ New Contributor</button>
-      </div>
+      <DashboardHeader
+        icon={<FiUsers />}
+        title="Organization • Members"
+        description="Manage contributors for your organization. Add, edit, or remove contributors as needed."
+        actions={<button className="pill-btn" onClick={openCreate}>+ New Contributor</button>}
+      />
 
       <div className="card" style={{ padding:12, borderRadius:12, marginBottom:12 }}>
         <TableToolbar

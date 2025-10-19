@@ -1,6 +1,6 @@
 // resources/js/components/AppMap.jsx
 import React from "react";
-import { MapContainer, TileLayer } from "react-leaflet";
+import { MapContainer, TileLayer, useMapEvent, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 
 // No default overlays here; keep AppMap minimal.
@@ -43,6 +43,7 @@ function AppMap({
   noWrap = true,
   tileAttribution = ATTRIBUTION,
   tileUrl, // optional override, else derived from view
+  onClick,
 }) {
   // Prefer explicit tileUrl when provided; otherwise derive from view
   const url = tileUrl || BASEMAPS[view] || BASEMAPS.osm;
@@ -65,11 +66,73 @@ function AppMap({
       style={{ height: "100%", width: "100%", ...(style || {}) }}
       className={className}
     >
+  { /* Map click handler: if parent passes onClick, attach it via a small component */ }
+  {typeof onClick === 'function' ? <MapClickHandler onClick={onClick} /> : null}
+  {typeof disableDrag !== 'undefined' ? <MapInteractionHandler disableDrag={disableDrag} /> : null}
       <TileLayer url={url} attribution={tileAttribution} noWrap={noWrap} />
 
       {children}
     </MapContainer>
   );
+}
+
+function MapClickHandler({ onClick }) {
+  const map = useMap();
+  const startRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (!map) return;
+    const handleDown = (e) => { startRef.current = e.containerPoint; };
+    const handleUp = (e) => {
+      try {
+        const sp = startRef.current;
+        const ep = e.containerPoint;
+        if (!sp || !ep) return;
+        const dx = ep.x - sp.x;
+        const dy = ep.y - sp.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist <= 6) {
+          onClick && onClick(e);
+        }
+      } finally { startRef.current = null; }
+    };
+    const handleClick = (e) => onClick && onClick(e);
+
+    map.on('mousedown', handleDown);
+    map.on('mouseup', handleUp);
+    map.on('click', handleClick);
+
+    return () => {
+      try { map.off('mousedown', handleDown); } catch {}
+      try { map.off('mouseup', handleUp); } catch {}
+      try { map.off('click', handleClick); } catch {}
+    };
+  }, [map, onClick]);
+
+  return null;
+}
+
+function MapInteractionHandler({ disableDrag = false }) {
+  const map = useMap();
+  React.useEffect(() => {
+    if (!map) return;
+    try {
+      if (disableDrag) {
+        if (map.dragging && map.dragging.disable) map.dragging.disable();
+        map.getContainer().style.cursor = 'crosshair';
+      } else {
+        if (map.dragging && map.dragging.enable) map.dragging.enable();
+        map.getContainer().style.cursor = '';
+      }
+    } catch (err) {
+      // ignore
+    }
+    return () => {
+      try { if (map && map.dragging && map.dragging.enable) map.dragging.enable(); } catch {}
+      try { if (map && map.getContainer) map.getContainer().style.cursor = ''; } catch {}
+    };
+  }, [map, disableDrag]);
+  return null;
 }
 
 export default AppMap;

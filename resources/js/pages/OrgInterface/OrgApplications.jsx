@@ -3,6 +3,7 @@ import api from "../../lib/api";
 import TableToolbar from "../../components/table/TableToolbar";
 import TableLayout from "../../layouts/TableLayout";
 import { FiCheck, FiX, FiAlertCircle, FiFileText, FiClipboard } from 'react-icons/fi';
+import DashboardHeader from '../../components/DashboardHeader';
 import KycDocsModal from '../../components/KycDocsModal';
 import Modal from "../../components/Modal";
 
@@ -199,12 +200,11 @@ export default function OrgApplications() {
 
   return (
     <div className="content-page">
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div className="dashboard-card-title">
-                            <FiClipboard />
-                            <span>Applications</span>
-                </div>
-      </div>
+      <DashboardHeader
+        icon={<FiClipboard />}
+        title="Applications"
+        description="Review and manage membership applications for your organization. Approve, request changes, or reject applications."
+      />
 
       <TableToolbar
         tableId="org-applications"

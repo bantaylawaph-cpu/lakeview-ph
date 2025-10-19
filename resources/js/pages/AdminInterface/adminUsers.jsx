@@ -8,6 +8,8 @@ import "sweetalert2/dist/sweetalert2.min.css";
 
 import Modal from "../../components/Modal";
 import AdminUsersForm from "../../components/adminUsersForm";
+import DashboardHeader from '../../components/DashboardHeader';
+import { FiUsers as FiUsersIcon } from 'react-icons/fi';
 import { ROLE_LABEL } from "../../lib/roles";
 import TableLayout from "../../layouts/TableLayout";
 
@@ -270,20 +272,12 @@ export default function AdminUsersPage() {
 
   return (
     <div className="container" style={{ padding: 16 }}>
-      <div className="dashboard-card" style={{ marginBottom: 16 }}>
-        <div className="dashboard-card-header">
-          <div className="dashboard-card-title">
-            <FiUsers />
-            <span>Users</span>
-          </div>
-          <div className="org-actions-right">
-            <button className="pill-btn" onClick={openCreate}>+ New User</button>
-          </div>
-        </div>
-        <p style={{ marginTop: 8, fontSize: 13, color: "#6b7280" }}>
-          Manage user accounts, roles, and access for the system.
-        </p>
-      </div>
+      <DashboardHeader
+        icon={<FiUsersIcon />}
+        title="Users"
+        description="Manage user accounts, roles, and access for the system."
+        actions={<button className="pill-btn" onClick={openCreate}>+ New User</button>}
+      />
 
       <div className="card" style={{ padding: 12, borderRadius: 12, marginBottom: 12 }}>
         <TableToolbar

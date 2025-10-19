@@ -16,5 +16,19 @@ export default function AdminSettingsPage() {
 		return () => window.removeEventListener('lv-user-update', onUpdate);
 	}, [user]);
 	if (!user) return <div className="content-page"><p>Loading account…</p></div>;
-	return <DashboardSettingsPanel />;
+	return (
+		<div className="content-page">
+			<div className="dashboard-card" style={{ marginBottom: 16 }}>
+				<div className="dashboard-card-header">
+					<div className="dashboard-card-title">
+						<span>System Settings</span>
+					</div>
+				</div>
+				<p style={{ marginTop: 8, fontSize: 13, color: '#6b7280' }}>
+					Configure system-level settings, integrations, and global options.
+				</p>
+			</div>
+			<DashboardSettingsPanel />
+		</div>
+	);
 }

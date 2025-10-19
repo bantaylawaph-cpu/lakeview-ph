@@ -5,6 +5,7 @@ import TableToolbar from "../../components/table/TableToolbar";
 import FilterPanel from "../../components/table/FilterPanel";
 import OrgWQTestModal from "../../components/water-quality-test/OrgWQTestModal";
 import { FiEye, FiTrash2, FiDroplet } from "react-icons/fi";
+import DashboardHeader from '../../components/DashboardHeader';
 
 import { api } from "../../lib/api";
 import { fetchLakeOptions } from "../../lib/layers";
@@ -260,28 +261,28 @@ export default function AdminWQTests({ initialLakes = [], initialTests = [], par
 
   return (
     <div className="dashboard-content">
-      <div className="dashboard-card">
-        <div className="dashboard-card-header">
-          <div className="dashboard-card-title"><FiDroplet /><span>Water Quality Tests (Admin)</span></div>
-        </div>
-        <div className="dashboard-card-body">
-          {toolbarNode}
-          <FilterPanel
-            open={filtersOpen}
-            onClearAll={() => { setOrganizationId(''); setLakeId(''); setStatus(''); setYear(''); setQuarter(''); setMonth(''); setDateFrom(''); setDateTo(''); }}
-            fields={[
-              { id: 'organization', label: 'Organization', type: 'select', value: organizationId, onChange: setOrganizationId, options: [{ value: '', label: 'All organizations' }, ...orgs.map((o) => ({ value: String(o.id), label: o.name }))] },
-              { id: 'lake', label: 'Lake', type: 'select', value: lakeId, onChange: setLakeId, options: [{ value: '', label: 'All lakes' }, ...lakes.map((l) => ({ value: String(l.id), label: l.name }))] },
-              { id: 'status', label: 'Status', type: 'select', value: status, onChange: setStatus, options: [{ value: '', label: 'All' }, { value: 'draft', label: 'Draft' }, { value: 'public', label: 'Published' }] },
-              { id: 'year', label: 'Year', type: 'select', value: year, onChange: setYear, options: [{ value: '', label: 'Year' }, ...years.map((y) => ({ value: String(y), label: String(y) }))] },
-              { id: 'quarter', label: 'Quarter', type: 'select', value: quarter, onChange: setQuarter, options: [{ value: '', label: 'Quarter' }, { value: '1', label: 'Q1' }, { value: '2', label: 'Q2' }, { value: '3', label: 'Q3' }, { value: '4', label: 'Q4' }] },
-              { id: 'month', label: 'Month', type: 'select', value: month, onChange: setMonth, options: [{ value: '', label: 'Month' }, ...[1,2,3,4,5,6,7,8,9,10,11,12].map((m) => ({ value: String(m), label: String(m).padStart(2,'0') }))] },
-              { id: 'from', label: 'From', type: 'date', value: dateFrom, onChange: setDateFrom, placeholder: 'From mm/dd/yyyy' },
-              { id: 'to', label: 'To', type: 'date', value: dateTo, onChange: setDateTo, placeholder: 'To mm/dd/yyyy' },
-            ]}
-          />
-          <TableLayout tableId="admin-wqtests" columns={displayColumns} data={filtered} pageSize={10} actions={actions} resetSignal={resetSignal} columnPicker={false} loading={loading} loadingLabel={loading ? 'Loading tests…' : null} />
-        </div>
+      <DashboardHeader
+        icon={<FiDroplet />}
+        title="Water Quality Tests"
+        description="Browse, filter, and manage water quality test records across organizations."
+      />
+      <div className="dashboard-card-body">
+        {toolbarNode}
+        <FilterPanel
+          open={filtersOpen}
+          onClearAll={() => { setOrganizationId(''); setLakeId(''); setStatus(''); setYear(''); setQuarter(''); setMonth(''); setDateFrom(''); setDateTo(''); }}
+          fields={[
+            { id: 'organization', label: 'Organization', type: 'select', value: organizationId, onChange: setOrganizationId, options: [{ value: '', label: 'All organizations' }, ...orgs.map((o) => ({ value: String(o.id), label: o.name }))] },
+            { id: 'lake', label: 'Lake', type: 'select', value: lakeId, onChange: setLakeId, options: [{ value: '', label: 'All lakes' }, ...lakes.map((l) => ({ value: String(l.id), label: l.name }))] },
+            { id: 'status', label: 'Status', type: 'select', value: status, onChange: setStatus, options: [{ value: '', label: 'All' }, { value: 'draft', label: 'Draft' }, { value: 'public', label: 'Published' }] },
+            { id: 'year', label: 'Year', type: 'select', value: year, onChange: setYear, options: [{ value: '', label: 'Year' }, ...years.map((y) => ({ value: String(y), label: String(y) }))] },
+            { id: 'quarter', label: 'Quarter', type: 'select', value: quarter, onChange: setQuarter, options: [{ value: '', label: 'Quarter' }, { value: '1', label: 'Q1' }, { value: '2', label: 'Q2' }, { value: '3', label: 'Q3' }, { value: '4', label: 'Q4' }] },
+            { id: 'month', label: 'Month', type: 'select', value: month, onChange: setMonth, options: [{ value: '', label: 'Month' }, ...[1,2,3,4,5,6,7,8,9,10,11,12].map((m) => ({ value: String(m), label: String(m).padStart(2,'0') }))] },
+            { id: 'from', label: 'From', type: 'date', value: dateFrom, onChange: setDateFrom, placeholder: 'From mm/dd/yyyy' },
+            { id: 'to', label: 'To', type: 'date', value: dateTo, onChange: setDateTo, placeholder: 'To mm/dd/yyyy' },
+          ]}
+        />
+        <TableLayout tableId="admin-wqtests" columns={displayColumns} data={filtered} pageSize={10} actions={actions} resetSignal={resetSignal} columnPicker={false} loading={loading} loadingLabel={loading ? 'Loading tests' : null} />
       </div>
 
       <OrgWQTestModal open={open} onClose={() => setOpen(false)} record={selected} editable={false} parameterCatalog={paramCatalog} canPublish={canPublishAny}

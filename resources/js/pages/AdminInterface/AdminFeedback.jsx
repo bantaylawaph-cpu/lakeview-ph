@@ -4,6 +4,8 @@ import LoadingSpinner from '../../components/LoadingSpinner';
 import Modal from '../../components/Modal';
 import api from '../../lib/api';
 import TableToolbar from '../../components/table/TableToolbar';
+import DashboardHeader from '../../components/DashboardHeader';
+import { FiMessageSquare as FiMessageIcon } from 'react-icons/fi';
 
 const STATUS_ORDER = ['open','in_progress','resolved','wont_fix'];
 const STATUS_LABEL = STATUS_ORDER.reduce((acc, k) => {
@@ -51,6 +53,7 @@ function AttachmentsModal({ open, onClose, item }) {
   const currentIsPdf = isPdfSrc(currentSrc);
   const goPrev = () => setSel((p) => (count === 0 ? 0 : (p - 1 + count) % count));
   const goNext = () => setSel((p) => (count === 0 ? 0 : (p + 1) % count));
+
   return (
     <Modal
       open={open}
@@ -63,7 +66,6 @@ function AttachmentsModal({ open, onClose, item }) {
         <div className="muted">No attachments.</div>
       ) : (
         <div style={{ display: 'grid', gap: 12 }}>
-          {/* Preview area */}
           <div style={{ position: 'relative', background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 8, padding: 8 }}>
             {!currentIsPdf ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 360 }}>
@@ -82,12 +84,13 @@ function AttachmentsModal({ open, onClose, item }) {
                 />
               </div>
             )}
+
             {currentIsPdf && (
               <div className="muted" style={{ position: 'absolute', left: 12, bottom: 10, fontSize: 12, background: '#ffffffcc', padding: '2px 6px', borderRadius: 6, border: '1px solid #e5e7eb' }}>
                 {getFileName(currentSrc)}
               </div>
             )}
-            {/* Controls */}
+
             {count > 1 && (
               <>
                 <button
@@ -108,6 +111,7 @@ function AttachmentsModal({ open, onClose, item }) {
                 </button>
               </>
             )}
+
             <a
               className="pill-btn ghost sm"
               href={currentUrl}
@@ -119,7 +123,7 @@ function AttachmentsModal({ open, onClose, item }) {
               <FiExternalLink /> Open
             </a>
           </div>
-          {/* Thumbnails */}
+
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {imgs.map((raw, idx) => {
               const src = raw && typeof raw === 'string' ? raw : '';
