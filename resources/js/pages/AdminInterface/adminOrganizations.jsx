@@ -127,7 +127,7 @@ export default function AdminOrganizationsPage() {
   const actions = useMemo(() => [
     { label:'Edit', title:'Edit', type:'edit', icon:<FiEdit2 />, onClick: (row) => openEdit(row) },
     { label:'Manage', title:'Manage', icon:<FiBriefcase />, onClick: (row) => openOrgManage(row) },
-    { label:'Delete', title:'Delete', type:'delete', icon:<FiTrash2 />, onClick: (row) => handleDelete(row) },
+    { label:'Force Delete', title:'Force Delete', type:'delete', icon:<FiTrash2 />, onClick: (row) => handleDelete(row, { force: true }) },
   ], []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const advancedFields = [
@@ -172,11 +172,31 @@ export default function AdminOrganizationsPage() {
       Swal.fire('Save failed', e?.response?.data?.message || '', 'error');
     }
   };
-  const handleDelete = async (row) => {
+  const handleDelete = async (row, { force } = { force: false }) => {
     const org = row._raw || row;
-    const { isConfirmed } = await Swal.fire({ title:'Delete organization?', text:`This will permanently delete ${org.name}.`, icon:'warning', showCancelButton:true, confirmButtonText:'Delete', confirmButtonColor:'#dc2626' });
+    const { isConfirmed } = await Swal.fire({ title: force ? 'Force delete organization?' : 'Delete organization?', text: force ? `This will permanently delete ${org.name}. This action cannot be undone.` : `This will delete ${org.name}.`, icon:'warning', showCancelButton:true, confirmButtonText: force ? 'Force Delete' : 'Delete', confirmButtonColor:'#dc2626' });
     if (!isConfirmed) return;
-    try { await api.delete(`/admin/tenants/${org.id}`); Swal.fire('Organization deleted','','success'); const nextPage = rows.length === 1 && page > 1 ? page - 1 : page; fetchOrgs(buildParams({ page: nextPage })); } catch(e){ Swal.fire('Delete failed', e?.response?.data?.message || '', 'error'); }
+    try {
+      const url = force ? `/admin/tenants/${org.id}?force=1` : `/admin/tenants/${org.id}`;
+      await api.delete(url);
+      Swal.fire('Organization deleted','','success');
+      const nextPage = rows.length === 1 && page > 1 ? page - 1 : page;
+      fetchOrgs(buildParams({ page: nextPage }));
+    } catch(e){
+      Swal.fire('Delete failed', e?.response?.data?.message || '', 'error');
+    }
+  };
+
+  // Toggle active/inactive directly from table (optional quick action)
+  const toggleActive = async (row) => {
+    const org = row._raw || row;
+    const next = !row.active;
+    try {
+      await api.put(`/admin/tenants/${org.id}`, { active: next, is_active: next });
+      fetchOrgs(buildParams());
+    } catch (e) {
+      Swal.fire('Update failed', e?.response?.data?.message || '', 'error');
+    }
   };
 
   return (

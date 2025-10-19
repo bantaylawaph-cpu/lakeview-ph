@@ -95,7 +95,9 @@ function MapPage() {
   const [searchResults, setSearchResults] = useState([]);
   const [lastQuery, setLastQuery] = useState("");
 
-  const handleSearch = async (query) => {
+  const handleSearch = async (arg) => {
+    const query = typeof arg === 'string' ? arg : (arg?.query ?? '');
+    const entity = typeof arg === 'object' ? (arg?.entity || undefined) : undefined;
     setSearchOpen(true);
     setSearchMode('results');
     setSearchLoading(true);
@@ -107,7 +109,8 @@ function MapPage() {
       setLastQuery(q);
     }
     try {
-      const res = await api.post('/search', { query });
+      const body = entity ? { query, entity } : { query };
+      const res = await api.post('/search', body);
       const rows = (res && (res.data || res.rows || res.results)) || [];
       setSearchResults(Array.isArray(rows) ? rows : []);
     } catch (e) {
@@ -170,7 +173,51 @@ function MapPage() {
             if (b?.isValid?.() && mapRef.current) {
               mapRef.current.flyToBounds(b, { padding: [24,24], maxZoom: 13, duration: 0.8, easeLinearity: 0.25 });
             }
+            // Open Lake Panel after selecting a lake
+            setLakePanelOpen(true);
           } catch {}
+        }
+      } else if (entity === 'watersheds') {
+        // If result has an associated lake name, try to select it, then ensure watershed overlay shows
+        const lakeName = (item.attributes && (item.attributes.lake_name || item.attributes.name)) || '';
+        if (lakeName && publicFC?.features?.length) {
+          const lower = String(lakeName).toLowerCase();
+          const ft = publicFC.features.find(f => String(f?.properties?.name || '').toLowerCase() === lower);
+          if (ft) {
+            try {
+              const gj = L.geoJSON(ft); const b = gj.getBounds();
+              if (b?.isValid?.() && mapRef.current) mapRef.current.flyToBounds(b, { padding: [24,24], maxZoom: 13 });
+              setLakePanelOpen(true);
+            } catch {}
+          }
+        }
+        // Toggle watershed overlay if we have selectedLake and watershed layer available (handled via panel toggle)
+        try {
+          // best-effort: if panel is open, user can toggle; otherwise nothing else to do here
+        } catch {}
+      } else if (entity === 'lake_flows') {
+        // Ensure the flows markers are shown on the map and center to it
+        if (!showFlows) setShowFlows(true);
+        // Try to select the lake this flow belongs to for context/panel
+        const flowLakeId = item.lake_id || item.attributes?.lake_id || null;
+        const flowLakeName = item.attributes?.lake_name || null;
+        if (publicFC?.features?.length) {
+          let ft = null;
+          if (flowLakeId != null) {
+            const getId = (x) => x?.id ?? x?.properties?.id ?? x?.properties?.lake_id ?? null;
+            ft = publicFC.features.find(f => getId(f) != null && String(getId(f)) === String(flowLakeId));
+          }
+          if (!ft && flowLakeName) {
+            const nmLower = String(flowLakeName).toLowerCase();
+            ft = publicFC.features.find(f => String(f?.properties?.name || '').toLowerCase() === nmLower);
+          }
+          if (ft) {
+            try {
+              const gj = L.geoJSON(ft); const b = gj.getBounds();
+              if (b?.isValid?.() && mapRef.current) mapRef.current.flyToBounds(b, { padding: [24,24], maxZoom: 13 });
+              setLakePanelOpen(true);
+            } catch {}
+          }
         }
       }
     } catch {}
@@ -225,8 +272,15 @@ function MapPage() {
   // Route-based auth/privacy handling
   useEffect(() => {
     const p = location.pathname;
-    if (p === '/login') { setAuthMode('login'); openAuth('login'); }
-    if (p === '/register') { setAuthMode('register'); openAuth('register'); }
+    if (p === '/login') {
+      // Always reset to login mode when hitting /login to avoid lingering verify/reset states
+      setAuthMode('login');
+      openAuth('login');
+    }
+    if (p === '/register') {
+      setAuthMode('register');
+      openAuth('register');
+    }
     if (p === '/data/privacy') { setPrivacyOpen(true); }
     if (p === '/data') { setAboutDataOpenModal(true); }
   }, [location.pathname, openAuth, setAuthMode]);
@@ -496,7 +550,7 @@ function MapPage() {
         onFilterClick={() => setFilterTrayOpen((v) => !v)}
         onSearch={handleSearch}
         onClear={handleClearSearch}
-        onTyping={(val) => { setSearchMode('suggest'); if (val && val.length >= 2) { setSearchOpen(false); } }}
+        onTyping={(val) => { if (val && val.length >= 2) { setSearchMode('suggest'); setSearchOpen(false); } }}
         mode={searchMode}
       />
       <SearchResultsPopover

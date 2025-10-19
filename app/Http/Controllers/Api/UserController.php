@@ -24,6 +24,8 @@ class UserController extends Controller
         $fName        = trim((string) $request->query('name', ''));
         $fEmail       = trim((string) $request->query('email', ''));
         $fRole        = trim((string) $request->query('role', ''));
+        $tenantId     = $request->query('tenant_id');
+        $tenantNull   = $request->query('tenant_null'); // truthy means filter tenant_id IS NULL
         $createdFrom  = $request->query('created_from'); // expect YYYY-MM-DD
         $createdTo    = $request->query('created_to');   // expect YYYY-MM-DD
         $updatedFrom  = $request->query('updated_from');
@@ -49,6 +51,12 @@ class UserController extends Controller
                 $w->whereHas('role', function ($r) use ($fRole) {
                     $r->where('name', $fRole);
                 });
+            })
+            ->when(is_numeric($tenantId), function ($w) use ($tenantId) {
+                $w->where('tenant_id', (int)$tenantId);
+            })
+            ->when($tenantNull !== null && filter_var($tenantNull, FILTER_VALIDATE_BOOLEAN), function ($w) {
+                $w->whereNull('tenant_id');
             })
             // Date range filters (inclusive). Using whereDate for simplicity.
             ->when($createdFrom, function ($w) use ($createdFrom) {

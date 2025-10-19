@@ -29,11 +29,11 @@ LEFT JOIN layers ly ON ly.body_type='lake' AND ly.body_id=l.id AND ly.is_active=
 WHERE (
     l.name ILIKE :kwName OR
     l.alt_name ILIKE :kwName OR
-    (:useRegionMatch = 1 AND ((l.region::text) ILIKE :kw OR (l.province::text) ILIKE :kw))
+    (:useRegionMatch = 1 AND ((l.region::text) ILIKE :kw OR (l.province::text) ILIKE :kw OR (l.municipality::text) ILIKE :kw))
 )
 SQL;
                 if ($place) {
-                    $sql .= "\nAND ((l.region::text) ILIKE :place OR (l.province::text) ILIKE :place)";
+                    $sql .= "\nAND ((l.region::text) ILIKE :place OR (l.province::text) ILIKE :place OR (l.municipality::text) ILIKE :place)";
                 }
                 $sql .= "\nORDER BY name ASC\nLIMIT :limit";
                 $params = [
@@ -47,14 +47,14 @@ SQL;
             } elseif ($entity === 'watersheds') {
                 $sql = <<<SQL
 SELECT w.id,
-       COALESCE(w.name, COALESCE(ly.layer_name, ly.name)) AS name,
+       COALESCE(w.name, ly.name) AS name,
        CASE WHEN ly.geom IS NOT NULL THEN ST_AsGeoJSON(ly.geom) ELSE NULL END AS geom
 FROM watersheds w
 LEFT JOIN layers ly ON ly.body_type='watershed' AND ly.body_id=w.id AND ly.is_active=true AND ly.visibility='public'
 WHERE (
     w.name ILIKE :kw OR
     COALESCE(w.description,'') ILIKE :kw OR
-    COALESCE(ly.layer_name, ly.name) ILIKE :kw
+    COALESCE(ly.name, ly.name) ILIKE :kw
 )
 SQL;
                 if ($place) {
@@ -67,12 +67,12 @@ SQL;
             } elseif ($entity === 'layers') {
                 $sql = <<<SQL
 SELECT ly.id,
-       COALESCE(ly.layer_name, ly.name) AS name,
+       ly.name AS name,
        ly.category, ly.description, ly.source,
        CASE WHEN ly.geom IS NOT NULL THEN ST_AsGeoJSON(ly.geom) ELSE NULL END AS geom
 FROM layers ly
 WHERE (
-    COALESCE(ly.layer_name, ly.name) ILIKE :kw OR
+    ly.name ILIKE :kw OR
     ly.category ILIKE :kw OR
     ly.description ILIKE :kw OR
     ly.source ILIKE :kw
@@ -120,27 +120,30 @@ SQL;
                 $rows = DB::select($sql, $params);
                 return $this->mapper->mapRows($rows, 'parameters', null, $place);
             } elseif ($entity === 'lake_flows') {
+                // Make plural "flows" also match singular word parts like inflow/outflow
+                $kw2 = '%' . preg_replace('/flows/i', 'flow', trim($q)) . '%';
                 $sql = <<<SQL
 SELECT f.id,
        COALESCE(NULLIF(f.name,''), NULLIF(f.alt_name,''), CONCAT(f.flow_type, ' flow')) AS name,
        f.flow_type,
        f.source,
+    f.lake_id,
        l.name AS lake_name,
        ST_AsGeoJSON(f.coordinates) AS coordinates_geojson,
        f.latitude, f.longitude
 FROM lake_flows f
 LEFT JOIN lakes l ON l.id = f.lake_id
 WHERE (
-    COALESCE(f.name, '') ILIKE :kw OR
-    COALESCE(f.alt_name, '') ILIKE :kw OR
-    COALESCE(f.source, '') ILIKE :kw OR
-    f.flow_type ILIKE :kw OR
-    COALESCE(l.name,'') ILIKE :kw
+    COALESCE(f.name, '') ILIKE :kw OR COALESCE(f.name,'') ILIKE :kw2 OR
+    COALESCE(f.alt_name, '') ILIKE :kw OR COALESCE(f.alt_name,'') ILIKE :kw2 OR
+    COALESCE(f.source, '') ILIKE :kw OR COALESCE(f.source,'') ILIKE :kw2 OR
+    f.flow_type ILIKE :kw OR f.flow_type ILIKE :kw2 OR
+    COALESCE(l.name,'') ILIKE :kw OR COALESCE(l.name,'') ILIKE :kw2
 )
 ORDER BY name ASC
 LIMIT :limit
 SQL;
-                $params = ['kw' => $kw, 'limit' => $limit];
+                $params = ['kw' => $kw, 'kw2' => $kw2, 'limit' => $limit];
                 $rows = DB::select($sql, $params);
                 return $this->mapper->mapRows($rows, 'lake_flows', null, $place);
             }

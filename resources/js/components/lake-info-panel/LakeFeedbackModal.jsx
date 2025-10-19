@@ -10,7 +10,6 @@ import LoadingSpinner from '../../components/LoadingSpinner';
 const TYPES = [
   'Missing information',
   'Incorrect data',
-  'Add photo',
   'Other',
 ];
 

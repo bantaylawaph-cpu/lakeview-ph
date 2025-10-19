@@ -32,7 +32,11 @@ export function useAuthRole() {
     };
     refresh();
     const onUserUpdate = (e) => { const u = e.detail || getCurrentUser(); setUserRole(deriveRole(u)); setAuthUser(u); };
-    const onAuthChange = () => refresh();
+    const onAuthChange = () => {
+      // Always close auth modal on login/logout or token changes to avoid OTP lingering
+      try { setAuthOpen(false); } catch {}
+      refresh();
+    };
     window.addEventListener('lv-user-update', onUserUpdate);
     window.addEventListener('lv-auth-change', onAuthChange);
     return () => {

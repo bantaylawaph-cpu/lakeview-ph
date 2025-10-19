@@ -24,6 +24,14 @@ class TenantController extends Controller
         $q            = trim((string) $request->query('q', ''));
         $perPage      = max(1, min((int) $request->query('per_page', 15), 200));
         $withDeleted  = (bool) $request->query('with_deleted', false);
+        // Active filter (supports either 'active' or 'is_active')
+        $activeParam  = $request->query('active');
+        if ($activeParam === null) { $activeParam = $request->query('is_active'); }
+        $activeFilter = null;
+        if ($activeParam !== null) {
+            // Accept true/false, '1'/'0', 'true'/'false'
+            $activeFilter = filter_var($activeParam, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+        }
 
         // Advanced filter params (mirroring adminUsers pattern)
         $fName        = trim((string) $request->query('name', ''));
@@ -38,6 +46,7 @@ class TenantController extends Controller
 
         $qb = Tenant::query()
             ->when($withDeleted, fn($w) => $w->withTrashed())
+            ->when($activeFilter !== null, fn($w) => $w->where('active', $activeFilter))
             // Global free-text q across name/slug
             ->when($q !== '', function ($w) use ($q) {
                 $p = "%{$q}%";
@@ -121,12 +130,19 @@ class TenantController extends Controller
     public function destroy(Request $request, Tenant $tenant)
     {
         $this->requireSuperAdmin($request);
-        // Decide cascade handling: we prevent delete if users still attached
+        $force = (bool) $request->query('force', false);
+        // Always block delete when users still attached (safer by default)
         $usersCount = $tenant->users()->count();
         if ($usersCount > 0) {
-            throw ValidationException::withMessages(['tenant' => ['Cannot delete a tenant while users still belong to it. Move or delete users first.']]);
+            throw ValidationException::withMessages(['tenant' => ['Cannot delete: users still belong to this organization. Detach users first.']]);
         }
-        $tenant->delete();
+        if ($force) {
+            // Hard delete (bypass soft delete) as requested for admin Force Delete
+            $tenant->forceDelete();
+        } else {
+            // Soft-delete fallback (not exposed in UI but kept for safety)
+            $tenant->delete();
+        }
         return response()->json([], 204);
     }
 

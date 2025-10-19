@@ -12,7 +12,7 @@ class SearchResultMapper
         return array_map(function ($r) use ($table, $attributeUsed) {
             $row = is_array($r) ? $r : (array) $r;
             $id = $row['id'] ?? ($row['lake_id'] ?? ($row['layer_id'] ?? ($row['parameter_id'] ?? null)));
-            $name = $row['name'] ?? ($row['lake_name'] ?? ($row['watershed_name'] ?? ($row['layer_name'] ?? ($row['parameter_name'] ?? null))));
+            $name = $row['name'] ?? ($row['lake_name'] ?? ($row['watershed_name'] ?? ($row['parameter_name'] ?? null)));
             $geom = $row['geom'] ?? ($row['coordinates_geojson'] ?? null);
 
             if ($table === 'lakes') {

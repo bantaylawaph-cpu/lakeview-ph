@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Services\Semantic\SemanticSearch;
 use App\Services\Search\AnalyticalSearchService;
 use App\Services\Search\AttributeSearchService;
-use App\Services\Search\SuggestSearchService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -16,7 +15,7 @@ class SearchController extends Controller
         private SemanticSearch $search,
         private AnalyticalSearchService $analytical,
         private AttributeSearchService $attribute,
-        private SuggestSearchService $suggestService,
+        
     ) {}
 
     public function query(Request $request)
@@ -41,12 +40,23 @@ class SearchController extends Controller
         };
         $place = $extractPlace($q);
 
-        // Detect entity/table
+        // Detect entity/table with optional override
+        $requestedEntity = strtolower(trim((string) $request->input('entity', '')));
         $entity = 'lakes';
-        if (str_contains($qlc, 'watershed')) $entity = 'watersheds';
-        elseif (str_contains($qlc, 'parameter')) $entity = 'parameters';
-        elseif (str_contains($qlc, 'layer')) $entity = 'layers';
-        elseif (str_contains($qlc, 'flow')) $entity = 'lake_flows';
+        if (in_array($requestedEntity, ['lakes','watersheds','parameters','layers','lake_flows','municipalities'], true)) {
+            $entity = $requestedEntity;
+        } else {
+            if (str_contains($qlc, 'watershed')) $entity = 'watersheds';
+            elseif (str_contains($qlc, 'parameter')) $entity = 'parameters';
+            elseif (str_contains($qlc, 'layer')) $entity = 'layers';
+            elseif (str_contains($qlc, 'inflow') || str_contains($qlc, 'outflow') || str_contains($qlc, 'flow')) $entity = 'lake_flows';
+        }
+
+        // Treat municipality as lakes search constrained by place
+        if ($entity === 'municipalities') {
+            if (!$place) { $place = $q; }
+            $entity = 'lakes';
+        }
 
         // Analytical keywords & top-N
         $hasLargest  = str_contains($qlc, 'largest') || str_contains($qlc, 'biggest') || str_contains($qlc, 'top');
@@ -176,7 +186,7 @@ class SearchController extends Controller
     $kw = '%' . trim($q) . '%';
     $hasLakeKeyword = (bool) preg_match('/\blakes?\b/i', $q);
         // Attribute/fuzzy search via service
-        $data = $this->attribute->search($entity, $q, $place, $limit);
+    $data = $this->attribute->search($entity, $q, $place, $limit);
         if (!empty($data)) {
             return response()->json([
                 'data' => $data,
@@ -210,18 +220,5 @@ class SearchController extends Controller
         ]);
     }
 
-    /**
-     * Lightweight suggestions for typeahead. Mixed entities, minimal fields.
-     * GET /api/search/suggest?q=...&limit=8
-     */
-    public function suggest(Request $request)
-    {
-        $q = (string) $request->query('q', '');
-        $q = trim($q);
-        if ($q === '' || mb_strlen($q) < 2) return response()->json(['data' => []]);
-        $limitParam = (int) $request->query('limit', 8);
-        $limit = max(1, min(20, $limitParam));
-        $results = $this->suggestService->suggest($q, $limit);
-        return response()->json(['data' => $results]);
-    }
+    
 }

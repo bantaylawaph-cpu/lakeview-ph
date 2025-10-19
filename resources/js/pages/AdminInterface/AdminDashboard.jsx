@@ -49,7 +49,7 @@ export default function AdminDashboard() {
   // Water Quality Tests
   { path: "/admin-dashboard/wq-tests", label: "WQ Tests", icon: <FiFileText /> },
       // Population Rasters
-  { path: "/admin-dashboard/population-data", label: "Population Data", icon: <FiDatabase /> },
+  // { path: "/admin-dashboard/population-data", label: "Population Data", icon: <FiDatabase /> },
     // System Feedback
     { path: "/admin-dashboard/feedback", label: "System Feedback", icon: <FiClipboard /> },
     // Audit Logs

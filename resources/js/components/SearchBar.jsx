@@ -2,7 +2,7 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import { FiMenu, FiSearch, FiFilter } from "react-icons/fi";
 import { MdLightbulbOutline } from "react-icons/md";
-import api from "../lib/api";
+// no dynamic suggestions; only static tips
 
 function SearchBar({ onMenuClick, onFilterClick, onSearch, onClear, onTyping, mode = 'suggest' }) {
   const [text, setText] = useState("");
@@ -15,17 +15,19 @@ function SearchBar({ onMenuClick, onFilterClick, onSearch, onClear, onTyping, mo
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const abortRef = useRef(null);
-  const suggCacheRef = useRef(new Map()); // key: q, value: { ts, rows }
+  const suggCacheRef = useRef(new Map()); // retained but unused (tips only)
   const defaultTopics = [
     { label: 'Lake names', subtitle: 'e.g., Taal Lake, Laguna de Bay' },
+    { label: 'Watersheds', subtitle: 'e.g., Taal watershed' },
+    { label: 'Flows', subtitle: 'e.g., inflow, outflow, river source' },
     { label: 'Analytical queries', subtitle: 'e.g., largest lake, deepest lake' },
-    { label: 'Regions or provinces', subtitle: 'e.g., lakes in Laguna' }
+    { label: 'Location', subtitle: 'e.g., regions, provinces, municipality' }
   ];
 
   const triggerSearch = useCallback(() => {
     const q = (text || "").trim();
     if (!q) return;
-    if (typeof onSearch === "function") onSearch(q);
+    if (typeof onSearch === "function") onSearch({ query: q });
   }, [text, onSearch]);
 
   const onKeyDown = (e) => {
@@ -44,12 +46,13 @@ function SearchBar({ onMenuClick, onFilterClick, onSearch, onClear, onTyping, mo
       e.preventDefault();
       if (openSuggest && activeIndex >= 0 && activeIndex < (suggestions?.length ?? 0)) {
         const s = suggestions[activeIndex];
-        if (s?.label) {
+        // Only treat as a real suggestion when entity exists (tips have no entity)
+        if (s?.label && s?.entity) {
           // Fill input with suggestion label
           setText(s.label);
           setOpenSuggest(false);
           setActiveIndex(-1);
-          if (typeof onSearch === "function") onSearch(s.label);
+          if (typeof onSearch === "function") onSearch({ query: s.label, entity: s.entity });
           return;
         }
       }
@@ -66,53 +69,12 @@ function SearchBar({ onMenuClick, onFilterClick, onSearch, onClear, onTyping, mo
     setActiveIndex(-1);
   };
 
-  // Debounced suggest fetch & default topics
+  // Static search tips only (no dynamic suggestions)
   useEffect(() => {
-    const q = (text || "").trim();
-  // Only drive suggestions when mode allows and panel is explicitly open
-  if (mode !== 'suggest' || !openSuggest) { setSuggestions([]); setSuggestionsLoading(false); return; }
-    // If no or short query, show default topics immediately
-    if (q.length < 2) {
-      setSuggestions(defaultTopics);
-      setSuggestionsLoading(false);
-      return;
-    }
-    // Panel is already open due to user interaction
-    setSuggestionsLoading(true);
-    // Cache check (short TTL)
-    const cache = suggCacheRef.current;
-    const cached = cache.get(q);
-    const now = Date.now();
-    if (cached && (now - cached.ts) < 20000) {
-      setSuggestions(cached.rows || []);
-      setSuggestionsLoading(false);
-      setActiveIndex(-1);
-      return;
-    }
-      const handle = setTimeout(async () => {
-      try {
-        if (abortRef.current) { try { abortRef.current.abort(); } catch {} }
-        const controller = new AbortController();
-        abortRef.current = controller;
-        const res = await api.get(`/search/suggest?q=${encodeURIComponent(q)}&limit=6`, { signal: controller.signal });
-        const rows = res?.data ?? [];
-        setSuggestions(Array.isArray(rows) ? rows : []);
-        setActiveIndex(-1);
-        setSuggestionsLoading(false);
-        cache.set(q, { ts: Date.now(), rows: Array.isArray(rows) ? rows : [] });
-      } catch (e) {
-        // Don't close on aborts triggered by rapid typing
-        if (e?.cause?.name === 'AbortError') {
-          // keep panel open and keep loading state; the next request will settle it
-          return;
-        }
-        // For real errors, stop loading and keep the panel open with no suggestions
-        setSuggestions([]);
-        setSuggestionsLoading(false);
-            // keep panel state as-is
-      }
-    }, 100);
-    return () => clearTimeout(handle);
+    if (mode !== 'suggest' || !openSuggest) { setSuggestions([]); setSuggestionsLoading(false); return; }
+    setSuggestions(defaultTopics);
+    setSuggestionsLoading(false);
+    setActiveIndex(-1);
   }, [text, mode, openSuggest]);
 
   // Open suggestions only when the user interacts (focus/click) with the input
@@ -161,7 +123,7 @@ function SearchBar({ onMenuClick, onFilterClick, onSearch, onClear, onTyping, mo
     setText(label);
     setOpenSuggest(false);
     setActiveIndex(-1);
-    if (typeof onSearch === "function") onSearch(label);
+    if (typeof onSearch === "function") onSearch({ query: label, entity: s.entity });
   };
 
   return (

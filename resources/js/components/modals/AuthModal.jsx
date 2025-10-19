@@ -88,6 +88,13 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
 
       // reset visibility toggles
       setShowPwd({ login: false, reg1: false, reg2: false, reset1: false, reset2: false });
+
+      // critical: reset mode back to initial when modal is closed so next open starts clean
+      setMode(initialMode || "login");
+    } else {
+      // when opening, ensure we begin from the requested mode (usually 'login')
+      setMode(initialMode || "login");
+      setErr("");
     }
   }, [open]);
 
@@ -240,7 +247,7 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
         if (out?.token) setToken(out.token, { remember });
   const me = await api("/auth/me");
   if (me) setCurrentUser(me?.data || me);
-        alertSuccess("Registered & verified", "Welcome to LakeView PH!");
+  alertSuccess("Registered", "Welcome to LakeView PH!");
         // Do not redirect after registration verify; keep user on the current page
         onClose?.();
 
