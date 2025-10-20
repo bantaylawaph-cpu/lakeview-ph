@@ -322,6 +322,16 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
     }
   }, [compareValue, secondaryOrganizationId]);
 
+  // Defensive: if compare lake becomes the same as primary, clear it
+  useEffect(() => {
+    const isLake = compareValue && String(compareValue).startsWith('lake:');
+    const other = isLake ? String(compareValue).split(':')[1] : '';
+    if (isLake && other && String(other) === String(lakeId)) {
+      setCompareValue('');
+      setSecondaryOrganizationId('');
+    }
+  }, [lakeId, compareValue]);
+
   useEffect(() => { if (result) setResult(null); }, [debouncedYearFrom, debouncedYearTo]);
 
   // Clear advisories whenever primary UI selections or framing change
@@ -712,7 +722,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
           <option value="">Compare (Class or Lake)</option>
           {classes.map(c => <option key={`class-${c.code}`} value={`class:${c.code}`}>{`Class ${c.code}`}</option>)}
           <optgroup label="Lakes">
-            {lakes.map(l => <option key={`lake-${l.id}`} value={`lake:${l.id}`}>{l.name || `Lake ${l.id}`}</option>)}
+            {lakes.filter(l => String(l.id) !== String(lakeId)).map(l => <option key={`lake-${l.id}`} value={`lake:${l.id}`}>{l.name || `Lake ${l.id}`}</option>)}
           </optgroup>
         </select>
       </div>
