@@ -23,6 +23,12 @@ export default function ElevationProfileTool({ active, onClose }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const containerCursor = useRef("");
+  const [paused, setPaused] = useState(false);
+  const [hoverPoint, setHoverPoint] = useState(null); // Leaflet LatLng
+  const chartRef = useRef(null);
+  const latestProfileRef = useRef(null);
+
+  useEffect(() => { latestProfileRef.current = profile; }, [profile]);
 
   // Reset on toggle
   useEffect(() => {
@@ -32,6 +38,13 @@ export default function ElevationProfileTool({ active, onClose }) {
       setProfile(null);
       setError(null);
       setLoading(false);
+      setPaused(false);
+      // Ensure cursor returns to default when deactivated
+      try {
+        const container = map?.getContainer?.();
+        if (container) container.style.cursor = "";
+      } catch {}
+      containerCursor.current = "";
     }
   }, [active]);
 
@@ -40,18 +53,36 @@ export default function ElevationProfileTool({ active, onClose }) {
     if (!map || !active) return;
     const container = map.getContainer();
     if (!containerCursor.current) containerCursor.current = container.style.cursor || "";
-    container.style.cursor = "crosshair";
+    container.style.cursor = paused ? (containerCursor.current || "") : "crosshair";
 
     const onClick = (e) => {
+      if (paused) return;
       setPoints((prev) => [...prev, e.latlng]);
     };
-    const onMouseMove = (e) => setMousePos(e.latlng);
+    const onMouseMove = (e) => {
+      if (!paused) setMousePos(e.latlng);
+    };
     const onKey = (e) => {
       const k = e.key?.toLowerCase?.();
       if (k === "escape") {
         e.preventDefault();
-        cleanup();
-        onClose?.();
+        if (!paused) {
+          // First ESC: pause drawing and hide trailing line
+          setPaused(true);
+          setMousePos(null);
+        } else {
+          // Second ESC: close tool
+          try {
+            map.off("click", onClick);
+            map.off("mousemove", onMouseMove);
+            window.removeEventListener("keydown", onKey, true);
+          } catch {}
+          try { container.style.cursor = ""; } catch {}
+          setPoints([]);
+          setProfile(null);
+          setError(null);
+          onClose?.();
+        }
       }
       if (k === "enter") {
         e.preventDefault();
@@ -63,15 +94,25 @@ export default function ElevationProfileTool({ active, onClose }) {
     map.on("mousemove", onMouseMove);
     window.addEventListener("keydown", onKey, true);
 
-    const cleanup = () => {
+    return () => {
       try { map.off("click", onClick); } catch {}
       try { map.off("mousemove", onMouseMove); } catch {}
       try { window.removeEventListener("keydown", onKey, true); } catch {}
-      try { container.style.cursor = containerCursor.current || ""; } catch {}
+      try { container.style.cursor = ""; } catch {}
     };
+  }, [map, active, paused, points.length]);
 
-    return cleanup;
-  }, [map, active, points]);
+  // Keep cursor in sync with paused state even when no listeners update
+  useEffect(() => {
+    if (!map) return;
+    const container = map.getContainer();
+    if (!containerCursor.current) containerCursor.current = container.style.cursor || "";
+    if (active && !paused) container.style.cursor = "crosshair";
+    else container.style.cursor = "";
+    return () => {
+      try { container.style.cursor = ""; } catch {}
+    };
+  }, [map, active, paused]);
 
   const requestProfile = async () => {
     if (!points || points.length < 2) return;
@@ -101,9 +142,9 @@ export default function ElevationProfileTool({ active, onClose }) {
   const line = useMemo(() => {
     if (!points.length) return null;
     const arr = [...points];
-    if (mousePos) arr.push(mousePos);
+    if (!paused && mousePos) arr.push(mousePos);
     return arr;
-  }, [points, mousePos]);
+  }, [points, mousePos, paused]);
 
   const chartData = useMemo(() => {
     if (!profile || !Array.isArray(profile.points)) return null;
@@ -115,8 +156,9 @@ export default function ElevationProfileTool({ active, onClose }) {
         {
           label: "Elevation (m)",
           data,
-          borderColor: "#1976d2",
-          backgroundColor: "rgba(25,118,210,0.2)",
+          // Match WaterQualityTab primary series coloring
+          borderColor: "rgba(59,130,246,1)",
+          backgroundColor: "rgba(59,130,246,0.2)",
           spanGaps: false,
           pointRadius: 0,
           borderWidth: 2,
@@ -129,26 +171,54 @@ export default function ElevationProfileTool({ active, onClose }) {
     animation: false,
     responsive: true,
     maintainAspectRatio: false,
-    scales: {
-      x: { title: { display: true, text: "Distance (km)" }, ticks: { maxTicksLimit: 8 } },
-      y: { title: { display: true, text: "Elevation (m)" }, beginAtZero: false },
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: false },
+      tooltip: { intersect: false, mode: "index" },
     },
-    plugins: { legend: { display: false }, tooltip: { intersect: false, mode: "index" } },
+    onHover: (event, elements, chart) => {
+      try {
+        const p = latestProfileRef.current;
+        if (!p || !Array.isArray(p.points)) { setHoverPoint(null); return; }
+        let idx = null;
+        if (elements && elements.length > 0 && typeof elements[0].index === 'number') {
+          idx = elements[0].index;
+        } else if (chart && chart.tooltip && chart.tooltip.dataPoints && chart.tooltip.dataPoints.length > 0) {
+          idx = chart.tooltip.dataPoints[0].dataIndex;
+        }
+        if (idx != null) {
+          const pt = p.points[idx];
+          if (pt && pt.lat != null && pt.lon != null) {
+            setHoverPoint(L.latLng(Number(pt.lat), Number(pt.lon)));
+            return;
+          }
+        }
+        setHoverPoint(null);
+      } catch { setHoverPoint(null); }
+    },
+    // Match WaterQualityTab dark theme axes
+    scales: {
+      x: {
+        title: { display: true, text: "Distance (km)", color: "#fff" },
+        ticks: { color: "#fff", maxRotation: 0, autoSkip: true, maxTicksLimit: 8 },
+        grid: { color: "rgba(255,255,255,0.15)" },
+      },
+      y: {
+        title: { display: true, text: "Elevation (m)", color: "#fff" },
+        beginAtZero: false,
+        ticks: { color: "#fff" },
+        grid: { color: "rgba(255,255,255,0.15)" },
+      },
+    },
   }), []);
 
-  const glass = {
+  // Container style to position the card over the map while using the same card look
+  const cardWrap = {
     position: "absolute",
     left: 12,
     right: 12,
     bottom: 12,
-    height: 180,
     zIndex: 1200,
-    background: "rgba(255,255,255,0.85)",
-    backdropFilter: "blur(6px)",
-    borderRadius: 10,
-    border: "1px solid rgba(0,0,0,0.08)",
-    boxShadow: "0 6px 24px rgba(0,0,0,0.15)",
-    padding: 10,
   };
 
   return active ? (
@@ -166,40 +236,69 @@ export default function ElevationProfileTool({ active, onClose }) {
               const ll = e.target.getLatLng();
               setPoints((prev) => prev.map((pp, idx) => (idx === i ? ll : pp)));
             },
+            contextmenu: () => {
+              setPoints((prev) => prev.filter((_, idx) => idx !== i));
+            },
           }}
           icon={new L.DivIcon({ className: "", html: '<div style="width:10px;height:10px;background:#1976d2;border:2px solid #fff;border-radius:50%"></div>', iconSize: [12, 12], iconAnchor: [6, 6] })}
         />
       ))}
-      {/* Bottom glass panel with actions and chart */}
-      <div style={glass} className="glass-panel">
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-          <strong style={{ flex: 1 }}>Elevation Profile</strong>
-          <button onClick={() => setPoints([])} className="btn btn-xs">Clear</button>
-          <button onClick={() => requestProfile()} className="btn btn-xs" disabled={points.length < 2 || loading}>
-            {loading ? "Sampling…" : "Compute"}
-          </button>
-          <button onClick={() => { setPoints([]); setProfile(null); onClose?.(); }} className="btn btn-xs">
-            Close
-          </button>
-        </div>
-        {error && <div style={{ color: "#b91c1c", fontSize: 12, marginBottom: 6 }}>{error}</div>}
-        {profile && (
-          <div style={{ display: "flex", gap: 8, fontSize: 12, marginBottom: 6 }}>
-            <div>Len: {(profile.summary.length_m/1000).toFixed(2)} km</div>
-            <div>Min: {profile.summary.min_elev_m?.toFixed?.(1)} m</div>
-            <div>Max: {profile.summary.max_elev_m?.toFixed?.(1)} m</div>
-            <div>Asc: {profile.summary.total_ascent_m?.toFixed?.(0)} m</div>
-            <div>Des: {profile.summary.total_descent_m?.toFixed?.(0)} m</div>
+      {/* Bottom panel with actions and chart, matching WaterQualityTab/LakeInfoPanel styling */}
+      <div style={cardWrap}>
+        <div className="insight-card" style={{ backgroundColor: '#0f172a' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 6 }}>
+            <h4 style={{ margin: 0, color: '#fff' }}>Elevation Profile</h4>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button onClick={() => setPoints([])} className="pill-btn liquid" style={{ padding: '4px 6px' }}>Clear</button>
+              <button onClick={() => requestProfile()} className="pill-btn liquid" style={{ padding: '4px 6px' }} disabled={points.length < 2 || loading}>
+                {loading ? 'Sampling…' : 'Compute'}
+              </button>
+              <button onClick={() => { try { const c = map?.getContainer?.(); if (c) c.style.cursor = ""; } catch {}; setPoints([]); setProfile(null); setPaused(false); setMousePos(null); onClose?.(); }} className="pill-btn liquid" style={{ padding: '4px 6px' }}>
+                Close
+              </button>
+            </div>
           </div>
-        )}
-        <div style={{ position: "relative", width: "100%", height: 120 }}>
-          {chartData ? <Line data={chartData} options={chartOptions} /> : (
-            <div style={{ fontSize: 12, color: "#334155", opacity: 0.8, display: "grid", placeItems: "center", height: "100%" }}>
-              {points.length < 2 ? "Click to add points on the map, then press Compute or Enter." : (loading ? "Computing…" : "Press Compute to get profile.")}
+          {error && <div style={{ color: "#fca5a5", fontSize: 12, marginBottom: 6 }}>{error}</div>}
+          {profile && (
+            <div style={{ display: 'flex', gap: 12, fontSize: 12, marginBottom: 6, color: '#fff' }}>
+              <div>Len: {(profile.summary.length_m/1000).toFixed(2)} km</div>
+              <div>Min: {profile.summary.min_elev_m?.toFixed?.(1)} m</div>
+              <div>Max: {profile.summary.max_elev_m?.toFixed?.(1)} m</div>
+              <div>Asc: {profile.summary.total_ascent_m?.toFixed?.(0)} m</div>
+              <div>Des: {profile.summary.total_descent_m?.toFixed?.(0)} m</div>
             </div>
           )}
+          <div className="wq-chart" style={{ height: 160 }}>
+            {chartData ? (
+              <Line
+                ref={chartRef}
+                data={chartData}
+                options={chartOptions}
+                onMouseLeave={() => setHoverPoint(null)}
+              />
+            ) : (
+              <div style={{ fontSize: 12, color: '#bbb', opacity: 0.9, display: 'grid', placeItems: 'center', height: '100%' }}>
+                {points.length < 2 ? 'Click to add points on the map, then press Compute or Enter.' : (loading ? 'Computing…' : 'Press Compute to get profile.')}
+              </div>
+            )}
+          </div>
         </div>
       </div>
+      {/* Hover marker synchronized with chart position */}
+      {hoverPoint && (
+        <Pane name="elev-hover" style={{ zIndex: 1300 }}>
+          <Marker
+            position={hoverPoint}
+            interactive={false}
+            icon={new L.DivIcon({
+              className: "",
+              html: '<div style="width:12px;height:12px;background:#f59e0b;border:2px solid #fff;border-radius:50%;box-shadow:0 0 6px 3px rgba(245,158,11,0.5)"></div>',
+              iconSize: [14, 14],
+              iconAnchor: [7, 7],
+            })}
+          />
+        </Pane>
+      )}
     </>
   ) : null;
 }
