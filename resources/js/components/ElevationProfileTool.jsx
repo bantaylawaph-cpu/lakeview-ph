@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Polyline, Marker, Pane, useMap } from "react-leaflet";
 import L from "leaflet";
 import { Line } from "react-chartjs-2";
+import LoadingSpinner from "./LoadingSpinner";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -278,7 +279,11 @@ export default function ElevationProfileTool({ active, onClose }) {
               />
             ) : (
               <div style={{ fontSize: 12, color: '#bbb', opacity: 0.9, display: 'grid', placeItems: 'center', height: '100%' }}>
-                {points.length < 2 ? 'Click to add points on the map, then press Compute or Enter.' : (loading ? 'Computing…' : 'Press Compute to get profile.')}
+                {points.length < 2
+                  ? 'Click to add points on the map, then press Compute or Enter.'
+                  : (loading
+                      ? <LoadingSpinner label="Computing profile..." color="#fff" />
+                      : 'Press Compute to get profile.')}
               </div>
             )}
           </div>

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { Marker, Tooltip } from "react-leaflet";
-import { FaRuler, FaDrawPolygon, FaMapMarkerAlt, FaCopy } from "react-icons/fa";
+import { FaRuler, FaDrawPolygon, FaMapMarkerAlt, FaCopy, FaMountain } from "react-icons/fa";
 import L from "leaflet";
 import ReactDOMServer from "react-dom/server";
 import { alertError, alertSuccess } from "../lib/alerts";
@@ -140,7 +140,7 @@ const ContextMenu = ({ map, onMeasureDistance, onMeasureArea, onElevationProfile
               setPosition(null);
             }}
           >
-            <FaRuler className="context-icon" /> Elevation Profile
+            <FaMountain className="context-icon" /> Elevation Profile
           </li>
           <li className="context-item" onClick={handlePlacePin}>
             <FaMapMarkerAlt className="context-icon" /> Place pin here
