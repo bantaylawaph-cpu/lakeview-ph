@@ -313,6 +313,15 @@ export default function SingleLake({
             <select className="pill-btn" value={chartType} onChange={(e) => {
               const next = e.target.value;
               setChartType(next);
+              // clear year/range selections when leaving depth to avoid leftover selectors
+              if (next !== 'depth') {
+                try {
+                  setSelectedYears([]);
+                  setDateFrom('');
+                  setDateTo('');
+                  setTimeRange('all');
+                } catch (err) { /* ignore if setters not in scope */ }
+              }
               if (next === 'correlation') {
                 if (!paramX && selectedParam) setParamX(selectedParam);
                 if (!paramY) {
