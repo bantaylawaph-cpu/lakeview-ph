@@ -96,6 +96,10 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
     setDateFrom("");
     setDateTo("");
     setTimeRange("all");
+    // Reset bucket, class and compare param selections
+    setBucket('month');
+    setSelectedClass('C');
+    setCompareSelectedParam('');
   };
 
   const handleExport = () => {

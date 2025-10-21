@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState, useRef, useImperativeHandle } from "react";
-import { Line } from "react-chartjs-2";
-import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend } from "chart.js";
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
+import { Line, Bar } from "react-chartjs-2";
+import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, BarElement } from "chart.js";
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, BarElement);
 import TimeBucketRange from "../controls/TimeBucketRange";
 import StatsSidebar from "./StatsSidebar";
 import { FiMenu, FiX } from 'react-icons/fi';
@@ -9,7 +9,7 @@ import { fetchParameters } from "./data/fetchers";
 import InfoModal from "../common/InfoModal";
 import { buildGraphExplanation } from "../utils/graphExplain";
 import { eventStationName } from "./utils/dataUtils";
-import { lakeName, lakeClass, baseLineChartOptions, normalizeDepthDatasets } from "./utils/shared";
+import { lakeName, lakeClass, baseLineChartOptions } from "./utils/shared";
 import useAnchoredTimeRange from "./hooks/useAnchoredTimeRange";
 import useStationsCache from "./hooks/useStationsCache";
 import StationPicker from "./ui/StationPicker";
@@ -18,7 +18,7 @@ import GraphInfoButton from "./ui/GraphInfoButton";
 import useSummaryStats from "./hooks/useSummaryStats";
 import useSampleEvents from "./hooks/useSampleEvents";
 import useCompareTimeSeriesData from "./hooks/useCompareTimeSeriesData";
-import useCompareDepthProfileData from "./hooks/useCompareDepthProfileData";
+import useCompareBarData from "./hooks/useCompareBarData";
 
 function CompareLake({
   lakeOptions = [],
@@ -62,6 +62,8 @@ function CompareLake({
   const summaryB = useSummaryStats({ applied, events: eventsB, selectedStations: selectedStationsB, selectedParam });
   const [chartType, setChartType] = useState('time'); // 'time'
   const [seriesMode, setSeriesMode] = useState('avg'); // 'avg' | 'per-station'
+  const [selectedYears, setSelectedYears] = useState([]);
+  const [depthSelection, setDepthSelection] = useState('0');
   const [infoOpen, setInfoOpen] = useState(false);
   const [infoContent, setInfoContent] = useState({ title: '', sections: [] });
 
@@ -213,6 +215,11 @@ function CompareLake({
 
   useEffect(() => { setApplied(false); }, [lakeA, lakeB, selectedOrgA, selectedOrgB, selectedStationsA, selectedStationsB, selectedParam, timeRange, dateFrom, dateTo, bucket]);
 
+  // Reset depth selection to surface when the parameter changes
+  useEffect(() => {
+    setDepthSelection('0');
+  }, [selectedParam]);
+
 
   const eventsAFiltered = useAnchoredTimeRange(eventsA, timeRange, dateFrom, dateTo);
   const eventsBFiltered = useAnchoredTimeRange(eventsB, timeRange, dateFrom, dateTo);
@@ -234,6 +241,50 @@ function CompareLake({
     pushYears(eventsB);
     return Array.from(years).sort((a, b) => b - a);
   }, [eventsA, eventsB]);
+
+  // derive depth options for selectedParam from events (union of both lakes)
+  const depthOptions = useMemo(() => {
+    const depths = new Set();
+
+    const matchParam = (r) => {
+      if (!r) return false;
+      const sel = String(selectedParam || '');
+      // check nested parameter object
+      if (r.parameter) {
+        if (typeof r.parameter === 'string') {
+          if (sel === String(r.parameter)) return true;
+        } else if (typeof r.parameter === 'object') {
+          if (r.parameter.code && sel === String(r.parameter.code)) return true;
+          if (r.parameter.key && sel === String(r.parameter.key)) return true;
+          if (r.parameter.id && sel === String(r.parameter.id)) return true;
+        }
+      }
+      // check flat parameter fields
+      if (r.parameter_code && sel === String(r.parameter_code)) return true;
+      if (r.parameter_key && sel === String(r.parameter_key)) return true;
+      if (r.parameter_id && sel === String(r.parameter_id)) return true;
+      return false;
+    };
+
+    const pushDepths = (arr) => {
+      if (!Array.isArray(arr)) return;
+      arr.forEach((ev) => {
+        (ev.results || []).forEach((r) => {
+          if (!selectedParam) return;
+          if (!matchParam(r)) return;
+          const d = r.depth_m == null ? '0' : String(r.depth_m);
+          depths.add(d);
+        });
+      });
+    };
+
+    pushDepths(eventsAFiltered);
+    pushDepths(eventsBFiltered);
+    const arr = Array.from(depths).sort((a,b)=>Number(a)-Number(b));
+    // ensure surface (0) is present
+    if (!arr.includes('0')) arr.unshift('0');
+    return arr;
+  }, [eventsAFiltered, eventsBFiltered, selectedParam]);
 
   const chartData = useCompareTimeSeriesData({
     eventsA: eventsAFiltered,
@@ -260,32 +311,26 @@ function CompareLake({
       setSelectedStationsB([]);
       setSelectedParam('');
       setApplied(false);
+      // also clear compare-specific selections
+      setSelectedYears([]);
+      setDepthSelection('0');
     }
   }));
 
   const compareChartOptions = useMemo(() => baseLineChartOptions(), []);
 
-  const depthProfile = useCompareDepthProfileData({
-    eventsA: eventsAFiltered,
-    eventsB: eventsBFiltered,
-    lakeA,
-    lakeB,
-    selectedParam,
-    selectedStationsA,
-    selectedStationsB,
-    selectedOrgA,
-    selectedOrgB,
-    bucket,
-    lakeOptions,
-  });
+  const barData = useCompareBarData({ eventsA: eventsAFiltered, eventsB: eventsBFiltered, bucket, selectedYears, depth: depthSelection, selectedParam, lakeA, lakeB, lakeOptions });
 
   const canShowInfo = useMemo(() => {
     if (!applied) return false;
     if (chartType === 'time') {
       try { return Boolean(chartData && Array.isArray(chartData.datasets) && chartData.datasets.length); } catch { return false; }
     }
-    try { return Boolean(depthProfile && Array.isArray(depthProfile.datasets) && depthProfile.datasets.length); } catch { return false; }
-  }, [applied, chartType, chartData, depthProfile]);
+    if (chartType === 'bar') {
+      try { return Boolean(barData && Array.isArray(barData.datasets) && barData.datasets.length); } catch { return false; }
+    }
+    return false;
+  }, [applied, chartType, chartData, barData]);
 
   return (
     <div className="insight-card" style={{ backgroundColor: '#0f172a' }}>
@@ -352,7 +397,7 @@ function CompareLake({
   <StatsSidebar isOpen={sidebarOpen} width={sidebarWidth} usePortal top={72} side="left" zIndex={10000}>
           <div style={{ fontSize: 12, opacity: 0.85 }}>Lake A</div>
           <div style={{ display: 'grid', gap: 6 }}>
-            <select className="pill-btn" value={lakeA} onChange={(e) => { setLakeA(e.target.value); setSelectedOrgA(""); setSelectedStationsA([]); setSelectedParam(""); }} style={{ width: '100%' }}>
+            <select className="pill-btn" value={lakeA} onChange={(e) => { setLakeA(e.target.value); setSelectedOrgA(""); setSelectedStationsA([]); setSelectedParam(""); setSelectedYears([]); }} style={{ width: '100%' }}>
               <option value="">Lake A</option>
               {lakeOptionsForA.map((l) => {
                 const raw = l.class_code || l.classification || l.class || '';
@@ -379,7 +424,7 @@ function CompareLake({
 
           <div style={{ fontSize: 12, opacity: 0.85 }}>Lake B</div>
           <div style={{ display: 'grid', gap: 6 }}>
-            <select className="pill-btn" value={lakeB} onChange={(e) => { setLakeB(e.target.value); setSelectedOrgB(""); setSelectedStationsB([]); setSelectedParam(""); }} style={{ width: '100%' }}>
+            <select className="pill-btn" value={lakeB} onChange={(e) => { setLakeB(e.target.value); setSelectedOrgB(""); setSelectedStationsB([]); setSelectedParam(""); setSelectedYears([]); }} style={{ width: '100%' }}>
               <option value="">Lake B</option>
               {lakeOptionsForB.map((l) => {
                 const raw = l.class_code || l.classification || l.class || '';
@@ -408,7 +453,7 @@ function CompareLake({
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Chart Type</div>
             <select className="pill-btn" value={chartType} onChange={(e) => { setChartType(e.target.value); setApplied(false); }} style={{ width: '100%' }}>
               <option value="time">Time series</option>
-              <option value="bar">Bar (Stations)</option>
+              <option value="bar">Bar</option>
             </select>
             {chartType === 'time' && (
               <TimeBucketRange
@@ -422,6 +467,23 @@ function CompareLake({
                 setDateTo={setDateTo}
               />
             )}
+            {chartType === 'bar' && (
+              <TimeBucketRange
+                bucket={bucket}
+                setBucket={setBucket}
+                timeRange={timeRange}
+                setTimeRange={setTimeRange}
+                dateFrom={dateFrom}
+                setDateFrom={setDateFrom}
+                dateTo={dateTo}
+                setDateTo={setDateTo}
+                allowedBuckets={['year','quarter','month']}
+                rangeMode={'year-multi'}
+                availableYears={availableYears}
+                selectedYears={selectedYears}
+                setSelectedYears={setSelectedYears}
+              />
+            )}
           </div>
 
           <div>
@@ -431,6 +493,24 @@ function CompareLake({
               {paramList.map((p) => (<option key={p.key || p.id || p.code} value={p.key || p.id || p.code}>{p.label || p.name || p.code}</option>))}
             </select>
           </div>
+
+          {chartType === 'bar' && (
+            <div>
+              <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Depth</div>
+              <select
+                className="pill-btn"
+                value={depthSelection}
+                onChange={(e) => setDepthSelection(e.target.value)}
+                disabled={!selectedParam || !(depthOptions && depthOptions.length)}
+                style={{ width: '100%' }}
+              >
+                {(depthOptions && depthOptions.length ? depthOptions : ['0']).map((d) => {
+                  const label = d === '0' ? 'Surface (0 m)' : `${d} m`;
+                  return (<option key={String(d)} value={String(d)}>{label}</option>);
+                })}
+              </select>
+            </div>
+          )}
 
           {chartType === 'time' && (
             <div>
@@ -448,10 +528,29 @@ function CompareLake({
           {/* Summary panels removed per design: Samples / Mean / Median are not shown in CompareLake */}
 
   <div className="wq-chart" style={{ height: 300, borderRadius: 8, background: 'transparent', border: '1px solid rgba(255,255,255,0.06)', padding: 8 }}>
-        {applied && chartData && Array.isArray(chartData.datasets) && chartData.datasets.length ? (
+        {applied && chartType === 'time' && chartData && Array.isArray(chartData.datasets) && chartData.datasets.length ? (
           (() => {
             const cd = { ...chartData, datasets: colorizeDatasets(chartData.datasets) };
             return <Line key={`time-${selectedParam}-${lakeA}-${lakeB}-${seriesMode}`} ref={chartRef} data={cd} options={compareChartOptions} />;
+          })()
+        ) : applied && chartType === 'bar' && barData && Array.isArray(barData.datasets) && barData.datasets.length ? (
+          (() => {
+            const bd = { ...barData, datasets: colorizeDatasets(barData.datasets) };
+            const paramMeta = (paramList || []).find(p => String(p.key || p.id || p.code) === String(selectedParam));
+            const unit = paramMeta?.unit || '';
+            const title = paramMeta ? `${paramMeta.label || paramMeta.name || paramMeta.code}` : 'Value';
+            const options = {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: { legend: { position: 'top' }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.formattedValue}${unit ? ` ${unit}` : ''}` } } },
+              indexAxis: 'x',
+              datasets: { bar: { categoryPercentage: 0.75, barPercentage: 0.9 } },
+              scales: {
+                x: { stacked: false, ticks: { color: '#fff' }, grid: { display: false } },
+                y: { stacked: false, ticks: { color: '#fff' }, title: { display: true, text: `${title}${unit ? ` (${unit})` : ''}`, color: '#fff' }, grid: { color: 'rgba(255,255,255,0.08)' } },
+              },
+            };
+            return <Bar key={`bar-${selectedParam}-${lakeA}-${lakeB}-${seriesMode}`} ref={chartRef} data={bd} options={options} />;
           })()
         ) : (
           <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

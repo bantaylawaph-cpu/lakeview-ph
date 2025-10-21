@@ -1,4 +1,5 @@
 import React from 'react';
+import Popover from '../common/Popover';
 
 export default function TimeBucketRange({
   bucket = 'month',
@@ -15,6 +16,9 @@ export default function TimeBucketRange({
   // New: switch range UI to a specific year dropdown fed by availableYears
   rangeMode = 'presets', // 'presets' | 'year-list'
   availableYears = [], // e.g., [2024, 2023, 2022]
+  // For multi-year selection (bar chart): selectedYears and setter
+  selectedYears = [],
+  setSelectedYears = () => {},
 }) {
   const fmtIso = (d) => {
     if (!d) return '';
@@ -68,6 +72,8 @@ export default function TimeBucketRange({
   };
 
   const currentYear = (referenceDate ? new Date(referenceDate) : new Date()).getFullYear();
+  const yearBtnRef = React.useRef(null);
+  const [showYearPopover, setShowYearPopover] = React.useState(false);
 
   return (
     <div>
@@ -93,7 +99,6 @@ export default function TimeBucketRange({
         <select
           className="pill-btn"
           value={(() => {
-            // Derive current value from dateFrom/dateTo if custom, else empty for All Time
             if (timeRange === 'custom' && dateFrom && dateTo && String(dateFrom).length >= 4) {
               return String(dateFrom).slice(0, 4);
             }
@@ -102,26 +107,52 @@ export default function TimeBucketRange({
           onChange={(e) => {
             const y = e.target.value;
             if (!y) {
-              // All Years
-              setTimeRange('all');
-              setDateFrom('');
-              setDateTo('');
+              setTimeRange('all'); setDateFrom(''); setDateTo('');
             } else {
-              const yf = String(y).padStart(4, '0');
-              setDateFrom(`${yf}-01-01`);
-              setDateTo(`${yf}-12-31`);
-              setTimeRange('custom');
+              const yf = String(y).padStart(4, '0'); setDateFrom(`${yf}-01-01`); setDateTo(`${yf}-12-31`); setTimeRange('custom');
             }
           }}
           style={{ width: '100%', marginBottom: 6 }}
         >
           <option value="">All Years</option>
-          {Array.isArray(availableYears) && availableYears.length
-            ? availableYears.map((y) => (
-                <option key={String(y)} value={String(y)}>{String(y)}</option>
-              ))
-            : null}
+          {Array.isArray(availableYears) && availableYears.length ? availableYears.map((y) => (
+            <option key={String(y)} value={String(y)}>{String(y)}</option>
+          )) : null}
         </select>
+      ) : rangeMode === 'year-multi' ? (
+        <div>
+          <button ref={yearBtnRef} type="button" className="pill-btn" onClick={() => setShowYearPopover((s) => !s)} style={{ width: '100%', display: 'inline-flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            {selectedYears && selectedYears.length ? `${selectedYears.length} selected` : 'Select years'}
+            <span style={{ opacity: 0.7 }}>{selectedYears && selectedYears.length ? selectedYears.join(', ') : ''}</span>
+          </button>
+          <Popover anchorRef={yearBtnRef} open={showYearPopover} onClose={() => setShowYearPopover(false)} minWidth={220}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, color: '#fff' }}>
+              <div style={{ fontSize: 12, opacity: 0.9 }}>Choose up to 6 years</div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                {(Array.isArray(availableYears) ? availableYears : []).map((y) => {
+                  const selected = (selectedYears || []).includes(String(y));
+                  return (
+                    <label key={y} style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#fff' }}>
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={(e) => {
+                          const next = new Set(selectedYears || []);
+                          if (e.target.checked) {
+                            if ((next.size || 0) >= 6) return; // guard to 6
+                            next.add(String(y));
+                          } else next.delete(String(y));
+                          setSelectedYears(Array.from(next).sort((a,b)=>b-a));
+                        }}
+                      />
+                      <span>{String(y)}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          </Popover>
+        </div>
       ) : (
         <select className="pill-btn" value={timeRange} onChange={(e) => handleRangeChange(e.target.value)} style={{ width: '100%', marginBottom: 6 }}>
           <option value="all">All Time</option>
