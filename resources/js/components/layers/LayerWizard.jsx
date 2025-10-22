@@ -485,6 +485,7 @@ export default function LayerWizard({
                   type="text"
                   value={geocodeQuery}
                   onChange={(e) => setGeocodeQuery(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') searchPlace(); }}
                   placeholder="Search place name (e.g., 'Laguna de Bay')"
                   style={{ flex: 1 }}
                 />
@@ -509,11 +510,6 @@ export default function LayerWizard({
           </div>
           )}
 
-          {error && (
-            <div className="alert-note" style={{ marginTop: 8 }}>
-              <FiAlertTriangle /> {error}
-            </div>
-          )}
           {pendingFeatures.length > 1 && (
             <div style={{ marginTop: 10 }}>
               <button type="button" className="pill-btn primary" onClick={() => setFeatureModalOpen(true)}>Choose a Polygon</button>

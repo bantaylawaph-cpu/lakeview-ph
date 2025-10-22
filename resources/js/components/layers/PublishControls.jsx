@@ -18,31 +18,25 @@ export default function PublishControls({ visibilityOptions, value, onChange, al
       {allowSetActive && (
         <div className="form-group">
           <label>Default Layer</label>
-          <div>
-            <button
-              type="button"
-              className={`pill-btn ${isActive ? 'primary' : 'ghost'}`}
-              onClick={onToggleActive}
-              title="Toggle default layer"
-            >
-              {isActive ? 'Default Enabled' : 'Set as Default'}
-            </button>
-          </div>
+          <select
+            value={isActive ? 'default' : 'not_default'}
+            onChange={(e) => { if ((e.target.value === 'default') !== isActive) onToggleActive?.(); }}
+          >
+            <option value="not_default">Not Default</option>
+            <option value="default">Default</option>
+          </select>
         </div>
       )}
 
       <div className="form-group">
         <label>Downloadable</label>
-        <div>
-          <button
-            type="button"
-            className={`pill-btn ${isDownloadable ? 'primary' : 'ghost'}`}
-            onClick={onToggleDownloadable}
-            title="Toggle whether this layer can be downloaded"
-          >
-            {isDownloadable ? 'Download Enabled' : 'Allow Download'}
-          </button>
-        </div>
+        <select
+          value={isDownloadable ? 'downloadable' : 'not_downloadable'}
+          onChange={(e) => { if ((e.target.value === 'downloadable') !== isDownloadable) onToggleDownloadable?.(); }}
+        >
+          <option value="not_downloadable">Not Downloadable</option>
+          <option value="downloadable">Downloadable</option>
+        </select>
       </div>
     </div>
   );

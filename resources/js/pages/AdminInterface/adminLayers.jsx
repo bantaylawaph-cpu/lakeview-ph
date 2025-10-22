@@ -15,6 +15,7 @@ export default function AdminLayers({ currentUserRole = ROLES.SUPERADMIN }) { //
   // After a successful publish, remember which body was used
   const [lastBody, setLastBody] = useState({ type: "lake", id: "" });
   const [activeTab, setActiveTab] = useState("upload"); // 'upload' | 'view'
+  const [initialSearch, setInitialSearch] = useState("");
 
   return (
     <div className="admin-layers">
@@ -53,6 +54,8 @@ export default function AdminLayers({ currentUserRole = ROLES.SUPERADMIN }) { //
             if (r.body_type && r.body_id) {
               setLastBody({ type: r.body_type, id: r.body_id });
             }
+            // After upload, prefill search with layer name
+            if (r.name) setInitialSearch(String(r.name));
             // Switch to the View tab after a successful publish
             setActiveTab('view');
             console.log("Layer published:", res);
@@ -64,6 +67,7 @@ export default function AdminLayers({ currentUserRole = ROLES.SUPERADMIN }) { //
         <LayerList
           initialBodyType={lastBody.type || "lake"}
           initialBodyId={lastBody.id || ""}
+          initialSearch={initialSearch}
           allowActivate
           allowToggleVisibility
           allowDelete
