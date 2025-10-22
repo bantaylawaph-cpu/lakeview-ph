@@ -9,8 +9,6 @@ export default function useCompareTimeSeriesData({
   lakeA,
   lakeB,
   selectedParam,
-  selectedStationsA = [],
-  selectedStationsB = [],
   selectedOrgA,
   selectedOrgB,
   bucket,
@@ -34,11 +32,10 @@ export default function useCompareTimeSeriesData({
       if (!inner.has(stdKey)) inner.set(stdKey, { stdLabel: stdLabel || `Standard ${stdKey}`, min: null, max: null, buckets: new Set() });
       return inner.get(stdKey);
     };
-    const process = (lakeId, arr, stationsSel, orgSel) => {
+    const process = (lakeId, arr, orgSel) => {
       for (const ev of arr||[]) {
         const oidEv = ev.organization_id ?? ev.organization?.id ?? null;
         if (orgSel && oidEv && String(oidEv) !== String(orgSel)) continue;
-        if (stationsSel && stationsSel.length) { const nm = eventStationName(ev) || ''; if (!stationsSel.includes(nm)) continue; }
         const d = parseDate(ev.sampled_at); const bk=bucketKey(d,bucket); if(!bk) continue;
         const results = Array.isArray(ev?.results)?ev.results:[];
         for (const r of results) {
@@ -70,15 +67,15 @@ export default function useCompareTimeSeriesData({
     };
 
     // We expect caller to pre-filter arrays by time range anchoring
-    process(lakeA, eventsA, selectedStationsA, selectedOrgA);
-    process(lakeB, eventsB, selectedStationsB, selectedOrgB);
+    process(lakeA, eventsA, selectedOrgA);
+    process(lakeB, eventsB, selectedOrgB);
 
     const labelSet=new Set(); for(const m of lakeMaps.values()) for(const k of m.keys()) labelSet.add(k);
     const labels=Array.from(labelSet).sort((a,b)=>bucketSortKey(a)-bucketSortKey(b));
     const datasets=[];
 
     const depthBandsByLake = new Map();
-    const collectDepthsFor = (lakeId, arr, stationsSel, orgSel) => {
+    const collectDepthsFor = (lakeId, arr, orgSel) => {
       if (!lakeId) return;
       const lkKey = String(lakeId);
       if (!depthBandsByLake.has(lkKey)) depthBandsByLake.set(lkKey, new Map());
@@ -86,8 +83,6 @@ export default function useCompareTimeSeriesData({
       for (const ev of arr||[]) {
         const oidEv = ev.organization_id ?? ev.organization?.id ?? null;
         if (orgSel && oidEv && String(oidEv) !== String(orgSel)) continue;
-        const sName = eventStationName(ev) || '';
-        if (stationsSel && stationsSel.length && !stationsSel.includes(sName)) continue;
         const d = parseDate(ev.sampled_at); const bk=bucketKey(d,bucket); if(!bk) continue;
         const results = Array.isArray(ev?.results)?ev.results:[];
         for (const r of results) {
@@ -104,8 +99,8 @@ export default function useCompareTimeSeriesData({
         }
       }
     };
-    collectDepthsFor(lakeA, eventsA, selectedStationsA, selectedOrgA);
-    collectDepthsFor(lakeB, eventsB, selectedStationsB, selectedOrgB);
+    collectDepthsFor(lakeA, eventsA, selectedOrgA);
+    collectDepthsFor(lakeB, eventsB, selectedOrgB);
     const ensureZeroDepthIfMissing = (lk) => {
       if (!lk) return;
       const lkKey = String(lk);
@@ -218,5 +213,5 @@ export default function useCompareTimeSeriesData({
     });
 
     return { labels, datasets };
-  }, [eventsA, eventsB, lakeA, lakeB, selectedStationsA, selectedStationsB, selectedOrgA, selectedOrgB, selectedParam, bucket, lakeOptions, seriesMode]);
+  }, [eventsA, eventsB, lakeA, lakeB, selectedOrgA, selectedOrgB, selectedParam, bucket, lakeOptions, seriesMode]);
 }

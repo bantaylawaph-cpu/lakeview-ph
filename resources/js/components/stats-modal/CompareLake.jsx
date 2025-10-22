@@ -11,8 +11,6 @@ import { eventStationName } from "./utils/dataUtils";
 import { lakeName, lakeClass, baseLineChartOptions } from "./utils/shared";
 import useAnchoredTimeRange from "./hooks/useAnchoredTimeRange";
 import useStationsCache from "./hooks/useStationsCache";
-import StationPicker from "./ui/StationPicker";
-import { SeriesModeToggle } from "./ui/Toggles";
 import GraphInfoButton from "./ui/GraphInfoButton";
 import useSampleEvents from "./hooks/useSampleEvents";
 import useCompareTimeSeriesData from "./hooks/useCompareTimeSeriesData";
@@ -42,13 +40,7 @@ function CompareLake({
   const [lakeB, setLakeB] = useState("");
   const [selectedOrgA, setSelectedOrgA] = useState("");
   const [selectedOrgB, setSelectedOrgB] = useState("");
-  const [selectedStationsA, setSelectedStationsA] = useState([]);
-  const [selectedStationsB, setSelectedStationsB] = useState([]);
   const [selectedParam, setSelectedParam] = useState("");
-  const [stationsOpenA, setStationsOpenA] = useState(false);
-  const [stationsOpenB, setStationsOpenB] = useState(false);
-  const stationBtnARef = useRef(null);
-  const stationBtnBRef = useRef(null);
   const { events: eventsA, loading: loadingA } = useSampleEvents(lakeA, selectedOrgA, timeRange, dateFrom, dateTo);
   const { events: eventsB, loading: loadingB } = useSampleEvents(lakeB, selectedOrgB, timeRange, dateFrom, dateTo);
   const loading = loadingA || loadingB;
@@ -61,7 +53,6 @@ function CompareLake({
   const summaryA = null;
   const summaryB = null;
   const [chartType, setChartType] = useState('time'); // 'time'
-  const [seriesMode, setSeriesMode] = useState('avg'); // 'avg' | 'per-station'
   const [selectedYears, setSelectedYears] = useState([]);
   const [depthSelection, setDepthSelection] = useState('0');
   const [infoOpen, setInfoOpen] = useState(false);
@@ -143,31 +134,29 @@ function CompareLake({
   const isComplete = useMemo(() => {
     const hasLake = Boolean(lakeA || lakeB);
     const hasParam = Boolean(selectedParam);
-    const hasStations = (!lakeA || (selectedStationsA && selectedStationsA.length)) && (!lakeB || (selectedStationsB && selectedStationsB.length));
-    return hasLake && hasParam && hasStations;
-  }, [lakeA, lakeB, selectedParam, selectedStationsA, selectedStationsB]);
+    const hasOrgs = (!lakeA || selectedOrgA) && (!lakeB || selectedOrgB);
+    return hasLake && hasParam && hasOrgs;
+  }, [lakeA, lakeB, selectedParam, selectedOrgA, selectedOrgB]);
 
   const canChooseParam = useMemo(() => {
-    const lakes = [ { lake: lakeA, org: selectedOrgA, stations: selectedStationsA }, { lake: lakeB, org: selectedOrgB, stations: selectedStationsB } ];
+    const lakes = [ { lake: lakeA, org: selectedOrgA }, { lake: lakeB, org: selectedOrgB } ];
     if (!lakes.some(l => l.lake)) return false;
     for (const l of lakes) {
       if (!l.lake) continue; // lake not selected -> skip
       if (!l.org) return false; // dataset source required
-      if (!Array.isArray(l.stations) || l.stations.length === 0) return false; // require at least one station
     }
     return true;
-  }, [lakeA, lakeB, selectedOrgA, selectedOrgB, selectedStationsA, selectedStationsB]);
+  }, [lakeA, lakeB, selectedOrgA, selectedOrgB]);
 
   const computeMissingFields = () => {
     const missing = [];
     if (!lakeA && !lakeB) { missing.push('Select at least one lake (Lake A or Lake B)'); return missing; }
-    const check = (label, lake, org, stations) => {
+    const check = (label, lake, org) => {
       if (!lake) return;
       if (!org) missing.push(`${label}: Dataset source`);
-      if (!stations || stations.length === 0) missing.push(`${label}: Locations`);
     };
-    check('Lake A', lakeA, selectedOrgA, selectedStationsA);
-    check('Lake B', lakeB, selectedOrgB, selectedStationsB);
+    check('Lake A', lakeA, selectedOrgA);
+    check('Lake B', lakeB, selectedOrgB);
     if (!selectedParam) missing.push('Parameter');
     return missing;
   };
@@ -194,7 +183,6 @@ function CompareLake({
 
       const mapToken = (tok) => {
         if (/dataset source/i.test(tok)) return 'a dataset source';
-        if (/locations?/i.test(tok)) return 'at least one location';
         return tok.toLowerCase();
       };
 
@@ -213,7 +201,7 @@ function CompareLake({
     setApplied(true);
   };
 
-  useEffect(() => { setApplied(false); }, [lakeA, lakeB, selectedOrgA, selectedOrgB, selectedStationsA, selectedStationsB, selectedParam, timeRange, dateFrom, dateTo, bucket]);
+  useEffect(() => { setApplied(false); }, [lakeA, lakeB, selectedOrgA, selectedOrgB, selectedParam, timeRange, dateFrom, dateTo, bucket]);
 
   // Reset depth selection to surface when the parameter changes
   useEffect(() => {
@@ -292,13 +280,11 @@ function CompareLake({
     lakeA,
     lakeB,
     selectedParam,
-    selectedStationsA,
-    selectedStationsB,
     selectedOrgA,
     selectedOrgB,
     bucket,
     lakeOptions,
-    seriesMode,
+    seriesMode: 'avg',
   });
 
   useImperativeHandle(ref, () => ({
@@ -307,8 +293,6 @@ function CompareLake({
       setLakeB('');
       setSelectedOrgA('');
       setSelectedOrgB('');
-      setSelectedStationsA([]);
-      setSelectedStationsB([]);
       setSelectedParam('');
       setApplied(false);
       // also clear compare-specific selections
@@ -381,7 +365,7 @@ function CompareLake({
             const ctx = {
               chartType: chartType === 'depth' ? 'depth' : (chartType === 'bar' ? 'bar' : 'time'),
               param: pMeta,
-              seriesMode,
+              seriesMode: 'avg',
               bucket,
               standards,
               compareMode: true,
@@ -402,7 +386,7 @@ function CompareLake({
   <StatsSidebar isOpen={sidebarOpen && isModalOpen} width={sidebarWidth} usePortal top={72} side="left" zIndex={10000} onToggle={toggleSidebar}>
           <div style={{ fontSize: 12, opacity: 0.85 }}>Lake A</div>
           <div style={{ display: 'grid', gap: 6 }}>
-            <select className="pill-btn" value={lakeA} onChange={(e) => { setLakeA(e.target.value); setSelectedOrgA(""); setSelectedStationsA([]); setSelectedParam(""); setSelectedYears([]); }} style={{ width: '100%' }}>
+            <select className="pill-btn" value={lakeA} onChange={(e) => { setLakeA(e.target.value); setSelectedOrgA(""); setSelectedParam(""); setSelectedYears([]); }} style={{ width: '100%' }}>
               <option value="">Lake A</option>
               {lakeOptionsForA.map((l) => {
                 const raw = l.class_code || l.classification || l.class || '';
@@ -411,25 +395,17 @@ function CompareLake({
                 return (<option key={l.id} value={String(l.id)}>{l.name}{suffix}</option>);
               })}
             </select>
-            <select className="pill-btn" value={selectedOrgA} onChange={(e) => { setSelectedOrgA(e.target.value); setSelectedStationsA([]); setSelectedParam(""); }} disabled={!lakeA} style={{ width: '100%' }}>
+            <select className="pill-btn" value={selectedOrgA} onChange={(e) => { setSelectedOrgA(e.target.value); setSelectedParam(""); }} disabled={!lakeA} style={{ width: '100%' }}>
               <option value="">Select a dataset source</option>
               {derivedOrgOptionsA.map((o) => (<option key={o.id} value={o.id}>{o.name}</option>))}
             </select>
-            {true ? (
-              <div style={{ position: 'relative' }}>
-                <button ref={stationBtnARef} type="button" className="pill-btn" disabled={!lakeA || !selectedOrgA} onClick={() => setStationsOpenA((v) => !v)} aria-label="Select locations for Lake A" title="Select locations" style={{ width: '100%' }}>
-                  {selectedStationsA.length ? `${selectedStationsA.length} selected` : 'Select locations'}
-                </button>
-                <StationPicker anchorRef={stationBtnARef} open={stationsOpenA} onClose={() => setStationsOpenA(false)} stations={stationsA} value={selectedStationsA} onChange={(next) => { setSelectedStationsA(next); setSelectedParam(""); }} />
-              </div>
-            ) : null}
           </div>
 
           <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '8px 0' }} />
 
           <div style={{ fontSize: 12, opacity: 0.85 }}>Lake B</div>
           <div style={{ display: 'grid', gap: 6 }}>
-            <select className="pill-btn" value={lakeB} onChange={(e) => { setLakeB(e.target.value); setSelectedOrgB(""); setSelectedStationsB([]); setSelectedParam(""); setSelectedYears([]); }} style={{ width: '100%' }}>
+            <select className="pill-btn" value={lakeB} onChange={(e) => { setLakeB(e.target.value); setSelectedOrgB(""); setSelectedParam(""); setSelectedYears([]); }} style={{ width: '100%' }}>
               <option value="">Lake B</option>
               {lakeOptionsForB.map((l) => {
                 const raw = l.class_code || l.classification || l.class || '';
@@ -438,18 +414,10 @@ function CompareLake({
                 return (<option key={l.id} value={String(l.id)}>{l.name}{suffix}</option>);
               })}
             </select>
-            <select className="pill-btn" value={selectedOrgB} onChange={(e) => { setSelectedOrgB(e.target.value); setSelectedStationsB([]); setSelectedParam(""); }} disabled={!lakeB} style={{ width: '100%' }}>
+            <select className="pill-btn" value={selectedOrgB} onChange={(e) => { setSelectedOrgB(e.target.value); setSelectedParam(""); }} disabled={!lakeB} style={{ width: '100%' }}>
               <option value="">Select a dataset source</option>
               {derivedOrgOptionsB.map((o) => (<option key={o.id} value={o.id}>{o.name}</option>))}
             </select>
-            {true ? (
-              <div style={{ position: 'relative' }}>
-                <button ref={stationBtnBRef} type="button" className="pill-btn" disabled={!lakeB || !selectedOrgB} onClick={() => setStationsOpenB((v) => !v)} aria-label="Select locations for Lake B" title="Select locations" style={{ width: '100%' }}>
-                  {selectedStationsB.length ? `${selectedStationsB.length} selected` : 'Select locations'}
-                </button>
-                <StationPicker anchorRef={stationBtnBRef} open={stationsOpenB} onClose={() => setStationsOpenB(false)} stations={stationsB} value={selectedStationsB} onChange={(next) => { setSelectedStationsB(next); setSelectedParam(""); }} />
-              </div>
-            ) : null}
           </div>
 
           <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '8px 0' }} />
@@ -517,13 +485,6 @@ function CompareLake({
             </div>
           )}
 
-          {chartType === 'time' && (
-            <div>
-              <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Series Mode</div>
-              <SeriesModeToggle mode={seriesMode} onChange={setSeriesMode} />
-            </div>
-          )}
-
           <div>
             <button type="button" className="pill-btn liquid" onClick={handleApply} style={{ width: '100%' }}>Apply</button>
           </div>
@@ -536,7 +497,7 @@ function CompareLake({
         {applied && chartType === 'time' && chartData && Array.isArray(chartData.datasets) && chartData.datasets.length ? (
           (() => {
             const cd = { ...chartData, datasets: colorizeDatasets(chartData.datasets) };
-            return <Line key={`time-${selectedParam}-${lakeA}-${lakeB}-${seriesMode}`} ref={chartRef} data={cd} options={compareChartOptions} />;
+            return <Line key={`time-${selectedParam}-${lakeA}-${lakeB}`} ref={chartRef} data={cd} options={compareChartOptions} />;
           })()
         ) : applied && chartType === 'bar' && barData && Array.isArray(barData.datasets) && barData.datasets.length ? (
           (() => {
@@ -555,7 +516,7 @@ function CompareLake({
                 y: { stacked: false, ticks: { color: '#fff' }, title: { display: true, text: `${title}${unit ? ` (${unit})` : ''}`, color: '#fff' }, grid: { color: 'rgba(255,255,255,0.08)' } },
               },
             };
-            return <Bar key={`bar-${selectedParam}-${lakeA}-${lakeB}-${seriesMode}`} ref={chartRef} data={bd} options={options} />;
+            return <Bar key={`bar-${selectedParam}-${lakeA}-${lakeB}`} ref={chartRef} data={bd} options={options} />;
           })()
         ) : (
           <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
