@@ -20,6 +20,14 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
     border: "1px solid rgba(255,255,255,0.25)",
   };
 
+  const [isModalOpen, setIsModalOpen] = useState(open);
+  useEffect(() => setIsModalOpen(open), [open]);
+
+  const handleClose = () => {
+    setIsModalOpen(false);
+    setTimeout(() => onClose(), 300); // Allow fade out
+  };
+
   const [activeTab, setActiveTab] = useState("single");
   const [bucket, setBucket] = useState("month");
 
@@ -252,8 +260,8 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
 
   return (
     <Modal
-      open={open}
-      onClose={onClose}
+      open={isModalOpen}
+      onClose={handleClose}
       title={<span style={{ color: '#fff' }}>{title}</span>}
       ariaLabel="Lake statistics modal"
       width={1100}
@@ -338,6 +346,7 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
             setTimeRange={setTimeRange}
             setDateFrom={setDateFrom}
             setDateTo={setDateTo}
+            isModalOpen={isModalOpen}
           />
         )}
 
@@ -357,6 +366,7 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
             setDateFrom={setDateFrom}
             setDateTo={setDateTo}
             onParamChange={setCompareSelectedParam}
+            isModalOpen={isModalOpen}
           />
         )}
 

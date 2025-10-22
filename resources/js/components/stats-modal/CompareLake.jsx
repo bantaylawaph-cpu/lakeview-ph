@@ -31,6 +31,7 @@ function CompareLake({
   setDateFrom = () => {},
   setDateTo = () => {},
   onParamChange = () => {},
+  isModalOpen = true,
 }, ref) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const sidebarWidth = 340;
@@ -398,7 +399,7 @@ function CompareLake({
       </div>
   <div style={{ display: 'flex', gap: 16 }}>
         {/* Sidebar (extracted) */}
-  <StatsSidebar isOpen={sidebarOpen} width={sidebarWidth} usePortal top={72} side="left" zIndex={10000} onToggle={toggleSidebar}>
+  <StatsSidebar isOpen={sidebarOpen && isModalOpen} width={sidebarWidth} usePortal top={72} side="left" zIndex={10000} onToggle={toggleSidebar}>
           <div style={{ fontSize: 12, opacity: 0.85 }}>Lake A</div>
           <div style={{ display: 'grid', gap: 6 }}>
             <select className="pill-btn" value={lakeA} onChange={(e) => { setLakeA(e.target.value); setSelectedOrgA(""); setSelectedStationsA([]); setSelectedParam(""); setSelectedYears([]); }} style={{ width: '100%' }}>
@@ -411,7 +412,7 @@ function CompareLake({
               })}
             </select>
             <select className="pill-btn" value={selectedOrgA} onChange={(e) => { setSelectedOrgA(e.target.value); setSelectedStationsA([]); setSelectedParam(""); }} disabled={!lakeA} style={{ width: '100%' }}>
-              <option value="">All dataset sources</option>
+              <option value="">Select a dataset source</option>
               {derivedOrgOptionsA.map((o) => (<option key={o.id} value={o.id}>{o.name}</option>))}
             </select>
             {true ? (
@@ -438,7 +439,7 @@ function CompareLake({
               })}
             </select>
             <select className="pill-btn" value={selectedOrgB} onChange={(e) => { setSelectedOrgB(e.target.value); setSelectedStationsB([]); setSelectedParam(""); }} disabled={!lakeB} style={{ width: '100%' }}>
-              <option value="">All dataset sources</option>
+              <option value="">Select a dataset source</option>
               {derivedOrgOptionsB.map((o) => (<option key={o.id} value={o.id}>{o.name}</option>))}
             </select>
             {true ? (

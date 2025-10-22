@@ -42,6 +42,7 @@ export default function SingleLake({
   setDateFrom = () => {},
   setDateTo = () => {},
   setBucket = () => {},
+  isModalOpen = true,
 }) {
   const [stationsOpen, setStationsOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -255,7 +256,7 @@ export default function SingleLake({
       </div>
   <div style={{ display: 'flex', gap: 16 }}>
         {/* Sidebar (extracted) */}
-  <StatsSidebar isOpen={sidebarOpen} width={sidebarWidth} usePortal top={72} side="left" zIndex={10000} onToggle={toggleSidebar}>
+  <StatsSidebar isOpen={sidebarOpen && isModalOpen} width={sidebarWidth} usePortal top={72} side="left" zIndex={10000} onToggle={toggleSidebar}>
           <div>
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Lake</div>
             <select className="pill-btn" value={selectedLake} onChange={(e) => { onLakeChange(e.target.value); setApplied(false); setSelectedYears([]); setDepthSelection('0'); }} style={{ width: '100%' }}>
@@ -272,7 +273,7 @@ export default function SingleLake({
           <div>
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Dataset source</div>
             <select className="pill-btn" value={selectedOrg} onChange={(e) => { onOrgChange(e.target.value); onStationsChange([]); setApplied(false); }} disabled={!selectedLake} style={{ width: '100%' }}>
-              <option value="">All dataset sources</option>
+              <option value="">Select a dataset source</option>
               {orgOptions.map((o) => (
                 <option key={o.id} value={o.id}>{o.name}</option>
               ))}

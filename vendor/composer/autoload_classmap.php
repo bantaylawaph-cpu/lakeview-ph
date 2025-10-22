@@ -77,7 +77,6 @@ return array(
     'App\\Models\\Layer' => $baseDir . '/app/Models/Layer.php',
     'App\\Models\\OrgApplication' => $baseDir . '/app/Models/OrgApplication.php',
     'App\\Models\\Parameter' => $baseDir . '/app/Models/Parameter.php',
-    'App\\Models\\ParameterAlias' => $baseDir . '/app/Models/ParameterAlias.php',
     'App\\Models\\ParameterThreshold' => $baseDir . '/app/Models/ParameterThreshold.php',
     'App\\Models\\PopulationRaster' => $baseDir . '/app/Models/PopulationRaster.php',
     'App\\Models\\Role' => $baseDir . '/app/Models/Role.php',

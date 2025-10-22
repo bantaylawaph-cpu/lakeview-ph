@@ -94,7 +94,7 @@ export default function PublicWQTestModal({ open, onClose, record, basePath = "/
     name: r?.parameter?.name ?? r?.name ?? r?.parameter_name ?? '',
     unit: r?.unit ?? r?.parameter?.unit ?? '',
     value: r?.value ?? null,
-    depth_m: r?.depth_m ?? null,
+    depth_m: r?.depth_m ?? 0,
     pass_fail: r?.pass_fail ?? null,
     remarks: r?.remarks ?? '',
     threshold: r?.threshold ?? null,
@@ -107,28 +107,6 @@ export default function PublicWQTestModal({ open, onClose, record, basePath = "/
         ? sampleEvent.measurement
         : [];
   const rows = Array.isArray(rawRows) ? rawRows.map(normalizeRow) : [];
-
-  const exportCsv = () => {
-    try {
-      const header = ['Parameter Code','Parameter Name','Value','Unit','Depth (m)','Pass/Fail','Remarks'];
-      const lines = [header.join(',')];
-      rows.forEach((r) => {
-        const rec = [r.code || '', r.name || '', r.value ?? '', r.unit || '', r.depth_m ?? '', r.pass_fail || '', r.remarks || ''];
-        const esc = rec.map((v) => {
-          const s = String(v ?? '');
-          return (s.includes(',') || s.includes('"') || s.includes('\n')) ? `"${s.replace(/"/g,'""')}"` : s;
-        });
-        lines.push(esc.join(','));
-      });
-      const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-  const name = `test-${sampleEvent.id || 'export'}.csv`;
-      a.href = url; a.download = name; a.style.display = 'none';
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch {}
-  };
 
   return (
     <Modal
@@ -151,16 +129,6 @@ export default function PublicWQTestModal({ open, onClose, record, basePath = "/
           <div style={{ fontWeight: 700, fontSize: 16, color: '#fff' }}>{headerDate}</div>
           <div style={{ opacity: 0.95, fontSize: 12, color: '#fff' }}>{stationName}</div>
           <div style={{ opacity: 0.85, fontSize: 12, color: '#fff' }}>{orgName}{lakeName && lakeName !== '—' ? ` • ${lakeName}` : ''}</div>
-        </div>
-      }
-      footer={
-        <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="pill-btn" onClick={exportCsv}>Export CSV</button>
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="pill-btn ghost" onClick={onClose}>Close</button>
-          </div>
         </div>
       }
     >
@@ -226,7 +194,7 @@ export default function PublicWQTestModal({ open, onClose, record, basePath = "/
                         <td style={{ background: 'transparent', color: '#fff' }}>{r.code ? `${r.code} — ${r.name || ''}` : (r.name || '—')}</td>
                         <td style={{ background: 'transparent', color: '#fff' }}>{r.value ?? '—'}</td>
                         <td style={{ background: 'transparent', color: '#fff' }}>{r.unit || '—'}</td>
-                        <td style={{ background: 'transparent', color: '#fff' }}>{r.depth_m ?? '—'}</td>
+                        <td style={{ background: 'transparent', color: '#fff' }}>{r.depth_m ?? 0}</td>
                         <td style={{ background: 'transparent', color: '#fff' }}>{(r.pass_fail ?? '').toString().toUpperCase() || '—'}</td>
                         <td style={{ background: 'transparent', color: '#fff' }}>{r.remarks || '—'}</td>
                       </tr>

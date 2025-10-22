@@ -183,7 +183,7 @@ function LayersTab({
                           whiteSpace: "nowrap",
                         }}
                       >
-                        Active
+                        Default
                       </span>
                     ) : null}
                   </div>

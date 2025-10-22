@@ -28,7 +28,7 @@ import LoadingSpinner from "../LoadingSpinner";
 function WaterQualityTab({ lake }) {
   const lakeId = lake?.id ?? null;
   const [orgs, setOrgs] = useState([]); // {id,name}
-  const [orgId, setOrgId] = useState("");
+  const [orgId, setOrgId] = useState(null);
   const [stations, setStations] = useState([]); // [name]
   const [station, setStation] = useState(""); // station name; empty = All
   const [tests, setTests] = useState([]); // last 10 published tests for lake (optionally filtered by org)
@@ -82,6 +82,10 @@ function WaterQualityTab({ lake }) {
           if (oid && name && !uniq.has(String(oid))) uniq.set(String(oid), { id: oid, name });
         });
         setOrgs(Array.from(uniq.values()));
+        // Set default to first org if not set
+        if (Array.from(uniq.values()).length > 0 && orgId === null) {
+          setOrgId(String(Array.from(uniq.values())[0].id));
+        }
       }
     } catch (e) {
       console.error("[WaterQualityTab] Failed to load tests", e);
@@ -134,7 +138,7 @@ function WaterQualityTab({ lake }) {
 
   // Reset on lake change and fetch
   useEffect(() => {
-    setOrgId("");
+    setOrgId(null);
     setStation("");
     setTests([]);
     setOrgs([]);
@@ -558,8 +562,7 @@ function WaterQualityTab({ lake }) {
         {/* Dataset Source */}
         <div className="form-group" style={{ minWidth: 0 }}>
           <label style={{ marginBottom: 2, fontSize: 11, color: '#fff' }}>Dataset Source</label>
-          <select value={orgId} onChange={(e) => setOrgId(e.target.value)} style={{ padding: '6px 8px' }}>
-            <option value="">All dataset sources</option>
+          <select value={orgId || (orgs.length > 0 ? String(orgs[0].id) : "")} onChange={(e) => setOrgId(e.target.value)} style={{ padding: '6px 8px' }}>
             {orgs.map((o) => (
               <option key={o.id} value={String(o.id)}>{o.name}</option>
             ))}

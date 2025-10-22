@@ -42,7 +42,6 @@ const emptyForm = {
   unit: "",
   category: "",
   group: "",
-  data_type: "",
   evaluation_type: "",
   notes: "",
 };
@@ -125,13 +124,12 @@ function ParametersTab() {
       category: p.category || "",
       group: p.group || "",
       unit: p.unit || "",
-      data_type: p.data_type || "",
       evaluation_type: p.evaluation_type || "",
       notes: p.notes || "",
       __id: p.id,
     }));
     // New rows should appear at the beginning (first page)
-    const newRowObjects = newRows.map((rid) => ({ id: rid, code: "", name: "", category: "", group: "", unit: "", data_type: "", evaluation_type: "", notes: "", __id: null }));
+    const newRowObjects = newRows.map((rid) => ({ id: rid, code: "", name: "", category: "", group: "", unit: "", evaluation_type: "", notes: "", __id: null }));
     const rows = [...newRowObjects, ...existing];
     return rows.map((r) => ({ ...r, ...(gridEdits[r.id] || {}) }));
   }, [filtered, newRows, gridEdits]);
@@ -152,7 +150,6 @@ function ParametersTab() {
       unit: effectiveRow.unit || null,
       category: effectiveRow.category || null,
       group: effectiveRow.group || null,
-      data_type: effectiveRow.data_type || null,
       evaluation_type: effectiveRow.evaluation_type || null,
       notes: (effectiveRow.notes || "").trim() || null,
       // aliases removed from UI; backend may still accept aliases if needed
@@ -206,7 +203,7 @@ function ParametersTab() {
   };
 
   const gridColumns = useMemo(() => [
-    { id: "code", header: "Code", width: 120, render: (row) => {
+    { id: "code", header: "Code", width: 120, sortValue: (row) => row.code || "", render: (row) => {
       const key = row.id;
       const wrapper = { ...row, ...(gridEdits[key] || {}) };
       return (
@@ -214,7 +211,7 @@ function ParametersTab() {
           onChange={(e) => updateGridCell(key, "code", e.target.value)} style={{ width: "100%" }} />
       );
     }},
-    { id: "name", header: "Name", width: 200, render: (row) => {
+    { id: "name", header: "Name", width: 200, sortValue: (row) => row.name || "", render: (row) => {
       const key = row.id;
       const wrapper = { ...row, ...(gridEdits[key] || {}) };
       return (
@@ -222,7 +219,7 @@ function ParametersTab() {
           onChange={(e) => updateGridCell(key, "name", e.target.value)} style={{ width: "100%" }} />
       );
     }},
-    { id: "category", header: "Category", width: 160, render: (row) => {
+    { id: "category", header: "Category", width: 160, sortValue: (row) => row.category || "", render: (row) => {
       const key = row.id;
       const wrapper = { ...row, ...(gridEdits[key] || {}) };
       return (
@@ -234,7 +231,7 @@ function ParametersTab() {
         </select>
       );
     }},
-    { id: "group", header: "Group", width: 200, render: (row) => {
+    { id: "group", header: "Group", width: 200, sortValue: (row) => row.group || "", render: (row) => {
       const key = row.id;
       const wrapper = { ...row, ...(gridEdits[key] || {}) };
       return (
@@ -246,7 +243,7 @@ function ParametersTab() {
         </select>
       );
     }},
-    { id: "unit", header: "Unit", width: 120, render: (row) => {
+    { id: "unit", header: "Unit", width: 120, sortValue: (row) => row.unit || "", render: (row) => {
       const key = row.id;
       const wrapper = { ...row, ...(gridEdits[key] || {}) };
       return (
@@ -258,19 +255,7 @@ function ParametersTab() {
         </select>
       );
     }},
-    { id: "data_type", header: "Data Type", width: 140, render: (row) => {
-      const key = row.id;
-      const wrapper = { ...row, ...(gridEdits[key] || {}) };
-      return (
-        <select value={wrapper.data_type ?? ""} onChange={(e) => updateGridCell(key, "data_type", e.target.value)} style={{ width: "100%" }}>
-          <option value="">Select data type</option>
-          <option value="Numeric">Numeric</option>
-          <option value="Range">Range</option>
-          <option value="Categorical">Categorical</option>
-        </select>
-      );
-    }},
-    { id: "evaluation_type", header: "Evaluation", width: 160, render: (row) => {
+    { id: "evaluation_type", header: "Evaluation", width: 160, sortValue: (row) => row.evaluation_type || "", render: (row) => {
       const key = row.id;
       const wrapper = { ...row, ...(gridEdits[key] || {}) };
       return (
@@ -321,24 +306,6 @@ function ParametersTab() {
     ];
   }, [params]);
 
-  const dataTypeFilterOptions = useMemo(() => {
-    const values = new Set();
-    params.forEach((item) => {
-      if (item.data_type) values.add(item.data_type);
-    });
-    const ordered = ["Numeric", "Range", "Categorical"];
-    const deduped = [];
-    ordered.forEach((value) => {
-      if (values.has(value)) deduped.push(value);
-    });
-    values.forEach((value) => {
-      if (!ordered.includes(value)) deduped.push(value);
-    });
-    return [
-      { value: "", label: "All data types" },
-      ...deduped.map((value) => ({ value, label: value })),
-    ];
-  }, [params]);
 
   const evaluationFilterOptions = useMemo(() => {
     const values = new Set();
@@ -372,7 +339,6 @@ function ParametersTab() {
             unit: row.unit || "",
             category: row.category || "",
             group: row.group || "",
-            data_type: row.data_type || "",
             evaluation_type: row.evaluation_type || "",
             notes: row.notes || "",
             __id: row.id,
@@ -423,7 +389,6 @@ function ParametersTab() {
         unit: form.unit || null,
         category: form.category || null,
         group: form.group || null,
-        data_type: form.data_type || null,
         evaluation_type: form.evaluation_type || null,
         notes: form.notes.trim() || null,
       };

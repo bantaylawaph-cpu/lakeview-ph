@@ -17,7 +17,6 @@ class Parameter extends Model
         'unit',
         'category',
         'group',
-        'data_type',
         'evaluation_type',
         'is_active',
         'notes',

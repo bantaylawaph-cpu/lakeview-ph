@@ -93,7 +93,7 @@ export default function OrgWQTestModal({
                 name: source.name ?? r.name ?? "",
                 unit: r.unit ?? source.unit ?? "",
                 value: r.value ?? null,
-                depth_m: r.depth_m ?? null,
+                depth_m: r.depth_m ?? 0,
                 pass_fail: r.pass_fail ?? null,
                 remarks: r.remarks ?? "",
               };
@@ -180,7 +180,7 @@ export default function OrgWQTestModal({
           name: firstParam.name ?? "",
           unit: firstParam.unit ?? "",
           value: "",
-          depth_m: "",
+          depth_m: 0,
           remarks: "",
         },
       ],
@@ -207,7 +207,7 @@ export default function OrgWQTestModal({
             parameter_id: r.parameter_id ?? null,
             value: r.value ?? null,
             unit: r.unit ?? null,
-            depth_m: r.depth_m ?? null,
+            depth_m: r.depth_m ?? 0,
             remarks: r.remarks ?? null,
             id: r.id ?? undefined,
           })),
@@ -402,28 +402,19 @@ export default function OrgWQTestModal({
                         )}
                       </td>
                       <td>
-                        {editable ? (
-                          <div className="form-group" style={{ margin: 0, minWidth: 0 }}>
-                            <input
-                              value={r.unit ?? ""}
-                              onChange={(e) => updateRow(i, { unit: e.target.value })}
-                            />
-                          </div>
-                        ) : (
-                          <>{r.unit || "—"}</>
-                        )}
+                        <>{r.unit || "—"}</>
                       </td>
                       <td>
                         {editable ? (
                           <div className="form-group" style={{ margin: 0, minWidth: 0 }}>
                             <input
                               type="number"
-                              value={r.depth_m ?? ""}
+                              value={r.depth_m ?? 0}
                               onChange={(e) => updateRow(i, { depth_m: e.target.value })}
                             />
                           </div>
                         ) : (
-                          <>{r.depth_m ?? "—"}</>
+                          <>{r.depth_m ?? 0}</>
                         )}
                       </td>
                       <td>{pfLabel(r.pass_fail)}</td>

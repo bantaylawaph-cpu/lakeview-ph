@@ -615,7 +615,6 @@ class ComposerStaticInitc514d8f7b9fc5970bdd94287905ef584
         'App\\Models\\Layer' => __DIR__ . '/../..' . '/app/Models/Layer.php',
         'App\\Models\\OrgApplication' => __DIR__ . '/../..' . '/app/Models/OrgApplication.php',
         'App\\Models\\Parameter' => __DIR__ . '/../..' . '/app/Models/Parameter.php',
-        'App\\Models\\ParameterAlias' => __DIR__ . '/../..' . '/app/Models/ParameterAlias.php',
         'App\\Models\\ParameterThreshold' => __DIR__ . '/../..' . '/app/Models/ParameterThreshold.php',
         'App\\Models\\PopulationRaster' => __DIR__ . '/../..' . '/app/Models/PopulationRaster.php',
         'App\\Models\\Role' => __DIR__ . '/../..' . '/app/Models/Role.php',

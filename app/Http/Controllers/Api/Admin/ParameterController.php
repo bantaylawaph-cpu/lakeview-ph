@@ -106,7 +106,6 @@ class ParameterController extends Controller
             'unit' => ['nullable', 'string', 'max:255'],
             'category' => ['nullable', 'string', 'max:255'],
             'group' => ['nullable', 'string', 'max:255'],
-            'data_type' => ['nullable', 'string', 'max:255'],
             'evaluation_type' => ['nullable', Rule::in(['Max (≤)', 'Min (≥)', 'Range'])],
             'is_active' => ['sometimes', 'boolean'],
             'notes' => ['nullable', 'string'],
