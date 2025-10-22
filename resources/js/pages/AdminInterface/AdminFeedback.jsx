@@ -359,7 +359,7 @@ export default function AdminFeedback() {
   const [bulkApplying, setBulkApplying] = useState(false);
   const [docsOpen, setDocsOpen] = useState(false);
   const [docsItem, setDocsItem] = useState(null);
-  const [showFilters, setShowFilters] = useState(true);
+  const [showFilters, setShowFilters] = useState(false);
 
   // Column picker wiring
   const COLUMNS = useMemo(() => ([
@@ -507,9 +507,6 @@ export default function AdminFeedback() {
             <FiMessageSquare />
             <span>System Feedback</span>
           </div>
-          <div className="org-actions-right">
-            <button className="pill-btn ghost sm" onClick={() => fetchData({ page: 1 })} disabled={loading}><FiRefreshCw size={14}/> Refresh</button>
-          </div>
         </div>
         <p className="muted" style={{ marginTop:4 }}>Review, search, categorize, and resolve user-submitted feedback.</p>
       </div>
@@ -528,7 +525,6 @@ export default function AdminFeedback() {
           <strong>Filters</strong>
           <div style={{ display:'flex', gap:8 }}>
             <button className="pill-btn ghost sm" onClick={() => { setSearch(''); setStatus(''); setCategory(''); setRoleFilter(''); setSearchScope('name'); fetchData({ page:1 }); }} disabled={loading}>Reset</button>
-            <button className="pill-btn ghost sm" onClick={() => fetchData({ page:1 })} disabled={loading}><FiRefreshCw size={14}/> Refresh</button>
           </div>
         </div>
         {/* Dedicated search row */}
