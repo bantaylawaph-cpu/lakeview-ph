@@ -65,10 +65,8 @@ export default function LakeForm({
   }, []);
 
   useEffect(() => {
-    // Normalize any legacy 'present' value to 'unknown' so the "Exists" option
-    // is not selectable in the UI while preserving user data shape.
+    // Normalize initial value
     const normalized = { ...EMPTY, ...initialValue };
-    if (normalized.flows_status === 'present') normalized.flows_status = 'unknown';
     setForm(normalized);
   }, [initialValue, open]);
 
@@ -178,8 +176,9 @@ export default function LakeForm({
             // "Not yet recorded" by default.
             value={(form.flows_status || "unknown")}
             onChange={(e) => setForm({ ...form, flows_status: e.target.value })}
+            disabled={form.flows_status === 'present'}
           >
-            {/* Removed 'Exists' option per request; default is 'Not yet recorded' */}
+            <option value="present">Exists</option>
             <option value="none">None</option>
             <option value="unknown">Not yet recorded</option>
           </select>

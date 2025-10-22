@@ -70,6 +70,7 @@ class LakeFlowController extends Controller
     public function update(Request $req, LakeFlow $flow)
     {
         $data = $req->validate([
+            'lake_id' => ['required','exists:lakes,id'],
             'flow_type' => ['required','in:inflow,outflow'],
             'name' => ['required','string','max:255'],
             'alt_name' => ['nullable','string','max:255'],
