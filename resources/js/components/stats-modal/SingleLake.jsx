@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import TimeBucketRange from "../controls/TimeBucketRange";
 import StatsSidebar from "./StatsSidebar";
-import { FiMenu, FiX } from 'react-icons/fi';
 import { Line, Scatter, Bar } from "react-chartjs-2";
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, BarElement } from "chart.js";
 import InfoModal from "../common/InfoModal";
@@ -196,14 +195,6 @@ export default function SingleLake({
     <div className="insight-card" style={{ backgroundColor: '#0f172a' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button
-            type="button"
-            aria-label={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
-            onClick={toggleSidebar}
-            style={{ background: 'transparent', border: 'none', color: 'white', padding: 6, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-          >
-            {sidebarOpen ? <FiX size={18} /> : <FiMenu size={18} />}
-          </button>
           <h4 style={{ margin: 0 }}>Single Lake</h4>
         </div>
         <GraphInfoButton
@@ -264,7 +255,7 @@ export default function SingleLake({
       </div>
   <div style={{ display: 'flex', gap: 16 }}>
         {/* Sidebar (extracted) */}
-  <StatsSidebar isOpen={sidebarOpen} width={sidebarWidth} usePortal top={72} side="left" zIndex={10000}>
+  <StatsSidebar isOpen={sidebarOpen} width={sidebarWidth} usePortal top={72} side="left" zIndex={10000} onToggle={toggleSidebar}>
           <div>
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Lake</div>
             <select className="pill-btn" value={selectedLake} onChange={(e) => { onLakeChange(e.target.value); setApplied(false); setSelectedYears([]); setDepthSelection('0'); }} style={{ width: '100%' }}>
