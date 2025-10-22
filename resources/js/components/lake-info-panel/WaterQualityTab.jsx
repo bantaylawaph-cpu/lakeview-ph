@@ -6,18 +6,18 @@ import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
-  BarElement,
   PointElement,
   LineElement,
   Tooltip,
   Legend,
 } from "chart.js";
 import { Line } from "react-chartjs-2";
-import { FiActivity, FiBarChart2, FiInfo } from "react-icons/fi";
+import { FiInfo } from "react-icons/fi";
 import InfoModal from "../common/InfoModal";
 import { buildGraphExplanation } from "../utils/graphExplain";
+import useMultiParamTimeSeriesData from "../stats-modal/hooks/useMultiParamTimeSeriesData";
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, Tooltip, Legend);
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
 import LoadingSpinner from "../LoadingSpinner";
 
@@ -42,19 +42,20 @@ function WaterQualityTab({ lake }) {
   const [infoOpen, setInfoOpen] = useState(false);
   const [infoContent, setInfoContent] = useState({ title: '', sections: [] });
 
+  // Apply range helper same as StatsModal
+  const fmtIso = (d) => {
+    if (!d) return "";
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${dd}`;
+  };
+
   // Load org options for this lake based on tests seen (client-side pass 1)
   const fetchTests = async (org = "") => {
     if (!lakeId) return;
     setLoading(true);
     try {
-      // Determine effective date range and sensible limits similar to StatsModal
-      const fmtIso = (d) => {
-        if (!d) return "";
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, "0");
-        const dd = String(d.getDate()).padStart(2, "0");
-        return `${y}-${m}-${dd}`;
-      };
       // Use the most recent test date as the reference 'today' when available, otherwise use actual today
       const today = latestTestDate || new Date();
       const lim = (timeRange === "all" || timeRange === "custom") ? 5000 : 1000;
@@ -113,14 +114,6 @@ function WaterQualityTab({ lake }) {
     return max;
   }, [tests]);
 
-  // Apply range helper same as StatsModal
-  const fmtIso = (d) => {
-    if (!d) return "";
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${dd}`;
-  };
   const applyRange = (key) => {
     const today = latestTestDate || new Date();
     let from = "";
@@ -143,7 +136,6 @@ function WaterQualityTab({ lake }) {
     setTests([]);
     setOrgs([]);
     setStations([]);
-    // prepare initial-loading for this lake
     initialLoadedRef.current = false;
     if (!lakeId) {
       setInitialLoading(false);
@@ -181,8 +173,6 @@ function WaterQualityTab({ lake }) {
     return () => { mounted = false; };
   }, [lakeId, dateFrom, dateTo, timeRange, orgId, station]);
 
-  // Stations are required; coordinate-only records are not supported
-
   // Resolve station name for an event (consistent with fetchers)
   const eventStationName = (ev) => ev?.station?.name || ev?.station_name || null;
   const visibleTests = useMemo(() => {
@@ -208,314 +198,7 @@ function WaterQualityTab({ lake }) {
     } catch {}
   }, [visibleTests]);
 
-  // Informational hint for users
-  // This is UI-only text shown at the top of the tab content area if desired.
-
-  // Helpers for time bucketing
-  const parseDate = (iso) => { try { return new Date(iso); } catch { return null; } };
-  const bucketKey = (d, mode) => {
-    if (!d) return null;
-    const y = d.getFullYear();
-    const m = d.getMonth() + 1; // 1..12
-    const q = Math.floor((m - 1) / 3) + 1;
-    if (mode === 'year') return `${y}`;
-    if (mode === 'quarter') return `${y}-Q${q}`;
-    return `${y}-${String(m).padStart(2,'0')}`; // month
-  };
-  const bucketSortKey = (k) => {
-    // keys like YYYY, YYYY-Qn, YYYY-MM
-    if (!k) return 0;
-    const m = /^([0-9]{4})(?:-(?:Q([1-4])|([0-9]{2})))?$/.exec(k);
-    if (!m) return 0;
-    const y = Number(m[1]);
-    const q = m[2] ? (Number(m[2]) * 3) : 0;
-    const mo = m[3] ? Number(m[3]) : 0;
-    return y * 12 + (q || mo);
-  };
-
-  // Build per-parameter time series for primary group
-  const seriesByParameter = useMemo(() => {
-    if (!visibleTests || visibleTests.length === 0) return [];
-    const byParam = new Map(); // paramId -> { code,name,unit, threshold:{min,max}, hasDepth:boolean, buckets: Map(timeKey -> { sum, cnt, min, max }), depthBands: Map(depthKey -> Map(timeKey -> { sum,cnt,min,max })) }
-
-    const depthBandKey = (raw) => {
-      const n = Number(raw);
-      if (!Number.isFinite(n)) return 'NA';
-      // Use 1 m bands for clarity in time-series
-      return String(Math.round(n));
-    };
-
-    for (const ev of visibleTests) {
-      const d = parseDate(ev.sampled_at);
-      const key = bucketKey(d, bucket);
-      const results = Array.isArray(ev?.results) ? ev.results : [];
-      for (const r of results) {
-        const p = r?.parameter;
-        if (!p) continue;
-        const group = String(p.group || p.param_group || '').toLowerCase();
-        if (group !== 'primary') continue;
-        if (r.value == null) continue;
-        const pid = r.parameter_id || p.id;
-        if (!byParam.has(pid)) {
-          byParam.set(pid, {
-            id: pid,
-            code: p.code || String(pid),
-            name: p.name || p.code || String(pid),
-            unit: p.unit || '',
-            threshold: { min: r?.threshold?.min_value ?? null, max: r?.threshold?.max_value ?? null },
-            hasDepth: false,
-            buckets: new Map(),
-            depthBands: new Map(),
-          });
-        }
-        const entry = byParam.get(pid);
-        if (entry && entry.threshold) {
-          // Prefer a non-null threshold if earlier was null
-          if (entry.threshold.min == null && r?.threshold?.min_value != null) entry.threshold.min = r.threshold.min_value;
-          if (entry.threshold.max == null && r?.threshold?.max_value != null) entry.threshold.max = r.threshold.max_value;
-        }
-  // mark depth availability
-  if (r?.depth_m != null) entry.hasDepth = true;
-  if (!key) continue;
-        const v = Number(r.value);
-        if (!Number.isFinite(v)) continue;
-        const b = entry.buckets.get(key) || { sum: 0, cnt: 0, min: v, max: v };
-        b.sum += v; b.cnt += 1; b.min = Math.min(b.min, v); b.max = Math.max(b.max, v);
-        entry.buckets.set(key, b);
-
-        // also aggregate by depth band when available
-        if (r?.depth_m != null) {
-          const dKey = depthBandKey(r.depth_m);
-          const band = entry.depthBands.get(dKey) || new Map();
-          const agg = band.get(key) || { sum: 0, cnt: 0, min: v, max: v };
-          agg.sum += v; agg.cnt += 1; agg.min = Math.min(agg.min, v); agg.max = Math.max(agg.max, v);
-          band.set(key, agg);
-          entry.depthBands.set(dKey, band);
-        }
-      }
-    }
-
-    // Convert to array and sort buckets chronologically
-    const out = [];
-    for (const entry of byParam.values()) {
-      const labels = Array.from(entry.buckets.keys()).sort((a,b) => bucketSortKey(a) - bucketSortKey(b));
-      const stats = labels.map((k) => entry.buckets.get(k));
-      const avg = stats.map((s) => (s && s.cnt ? s.sum / s.cnt : null));
-
-      // Build depth series per time label (if any depth present)
-      const depthKeys = Array.from(entry.depthBands.keys())
-        .filter((k) => k !== 'NA')
-        .sort((a,b) => Number(a) - Number(b));
-      const depthSeries = depthKeys.map((dk) => ({
-        depth: dk,
-        values: labels.map((lb) => {
-          const agg = entry.depthBands.get(dk)?.get(lb);
-          return agg && agg.cnt ? (agg.sum / agg.cnt) : null;
-        }),
-      }));
-
-      out.push({
-        ...entry,
-        labels,
-        avg,
-        stats, // for tooltip: {sum,cnt,min,max}
-        depthSeries,
-      });
-    }
-    // Sort parameters by name (fallback to code)
-    out.sort((a,b) => String(a.name || a.code).localeCompare(String(b.name || b.code)));
-    return out;
-  }, [visibleTests, bucket]);
-
-  // Build depth profiles per-parameter (points grouped by month -> {x:value, y:depth}), used when toggled
-  const depthProfilesByParameter = useMemo(() => {
-    if (!visibleTests || visibleTests.length === 0) return new Map();
-    const map = new Map(); // pid -> { unit, groups: Map(groupLabel -> Map(depthKey -> {sum,cnt})) }
-
-    const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-    const groupLabel = (d) => {
-      if (bucket === 'year') return String(d.getFullYear());
-      if (bucket === 'quarter') return `Q${Math.floor(d.getMonth() / 3) + 1}`;
-      return monthNames[d.getMonth()]; // month
-    };
-    const depthKey = (raw) => {
-      const n = Number(raw);
-      if (!Number.isFinite(n)) return null;
-      // bucket to 0.5m to reduce noise
-      return (Math.round(n * 2) / 2).toFixed(1);
-    };
-
-    for (const ev of visibleTests) {
-      const d = parseDate(ev.sampled_at);
-      if (!d) continue;
-      const gLabel = groupLabel(d);
-      const results = Array.isArray(ev?.results) ? ev.results : [];
-      for (const r of results) {
-        const p = r?.parameter;
-        if (!p) continue;
-        const group = String(p.group || p.param_group || '').toLowerCase();
-        if (group !== 'primary') continue;
-        if (r?.value == null || r?.depth_m == null) continue;
-        const pid = r.parameter_id || p.id;
-        if (!map.has(pid)) map.set(pid, { unit: p.unit || '', groups: new Map() });
-        const entry = map.get(pid);
-        if (!entry.groups.has(gLabel)) entry.groups.set(gLabel, new Map());
-        const depths = entry.groups.get(gLabel);
-        const dKey = depthKey(r.depth_m);
-        if (!dKey) continue;
-        const val = Number(r.value);
-        if (!Number.isFinite(val)) continue;
-        const agg = depths.get(dKey) || { sum: 0, cnt: 0 };
-        agg.sum += val; agg.cnt += 1;
-        depths.set(dKey, agg);
-      }
-    }
-
-    // Convert to datasets consumable by Chart.js
-    const out = new Map();
-    for (const [pid, info] of map.entries()) {
-      const datasets = [];
-      // color palette per group (lighter tones for contrast on dark background)
-      const monthColors = {
-        Jan: '#93C5FD', // light blue
-        Feb: '#C4B5FD', // light purple
-        Mar: '#BFDBFE', // pale sky
-        Apr: '#86EFAC', // mint
-        May: '#FDE68A', // warm yellow
-        Jun: '#E6EEF8', // very light blue
-        Jul: '#CBD5E1', // soft gray-blue
-        Aug: '#FBCFE8', // pink
-        Sep: '#E9E7EF', // light neutral
-        Oct: '#A7F3D0', // light teal
-        Nov: '#FECACA', // soft red/pink
-        Dec: '#93C5FD', // repeat light blue
-      };
-      const quarterColors = { Q1: '#BFDBFE', Q2: '#BBF7D0', Q3: '#FDE68A', Q4: '#FECACA' };
-      const colorFor = (label, idx) => {
-        if (bucket === 'month') return monthColors[label] || '#BFDBFE';
-        if (bucket === 'quarter') return quarterColors[label] || '#BFDBFE';
-        // year: generate a light HSL color by index for stability (higher lightness)
-        const hues = [200, 160, 40, 0, 280, 100, 20, 340, 220, 180, 140, 60];
-        const h = hues[idx % hues.length];
-        return `hsl(${h} 80% 65%)`;
-      };
-      let maxDepth = 0;
-      // prepare ordered labels for groups
-      let orderedGroupLabels = [];
-      if (bucket === 'month') orderedGroupLabels = monthNames.filter((m) => info.groups.has(m));
-      else if (bucket === 'quarter') orderedGroupLabels = ['Q1', 'Q2', 'Q3', 'Q4'].filter((q) => info.groups.has(q));
-      else {
-        orderedGroupLabels = Array.from(info.groups.keys()).sort((a,b) => Number(a) - Number(b));
-      }
-
-      orderedGroupLabels.forEach((gLabel, idx) => {
-        const depths = info.groups.get(gLabel);
-        const points = Array.from(depths.entries())
-          .map(([dk, agg]) => ({ y: Number(dk), x: agg.sum / agg.cnt }))
-          .sort((a, b) => a.y - b.y);
-        if (!points.length) return;
-        maxDepth = Math.max(maxDepth, points[points.length - 1].y || 0);
-        datasets.push({
-          label: gLabel,
-          data: points,
-          parsing: false,
-          showLine: true,
-          borderColor: colorFor(gLabel, idx),
-          backgroundColor: 'transparent',
-          pointRadius: 3,
-          pointHoverRadius: 4,
-          tension: 0.1,
-        });
-      });
-      out.set(pid, { datasets, unit: info.unit, maxDepth });
-    }
-    return out;
-  }, [visibleTests, bucket]);
-
-  // Per-parameter view toggle: 'time' | 'depth'
-  const [viewByParam, setViewByParam] = useState({});
-  const getView = (pid) => (viewByParam?.[pid] || 'time');
-  const toggleView = (pid) => setViewByParam((s) => ({ ...s, [pid]: getView(pid) === 'time' ? 'depth' : 'time' }));
-
-  const buildChart = (ev) => {
-    const results = Array.isArray(ev?.results) ? ev.results : [];
-    const filtered = results.filter((r) => r && r.parameter && String(r.parameter.group || r.parameter.param_group || "").toLowerCase() === "primary" && r.value != null);
-    if (!filtered.length) return null;
-    const labels = filtered.map((r) => r.parameter?.code || r.parameter?.name || String(r.parameter_id));
-    const units = filtered.map((r) => r.parameter?.unit || "");
-
-    const values = filtered.map((r) => (r.value == null ? null : Number(r.value)));
-    const mins = filtered.map((r) => (r?.threshold?.min_value != null ? Number(r.threshold.min_value) : null));
-    const maxs = filtered.map((r) => (r?.threshold?.max_value != null ? Number(r.threshold.max_value) : null));
-
-    const data = {
-      labels,
-      datasets: [
-        {
-          type: "bar",
-          label: "Measured",
-          data: values,
-          backgroundColor: "rgba(59,130,246,0.6)",
-          borderColor: "rgba(59,130,246,1)",
-          borderWidth: 1,
-          barThickness: 18,
-        },
-        {
-          type: "line",
-          label: "Threshold Min",
-          data: mins,
-          spanGaps: true,
-          borderColor: "rgba(16,185,129,1)",
-          backgroundColor: "rgba(16,185,129,0.2)",
-          pointRadius: 2,
-          pointHoverRadius: 3,
-          borderDash: [4, 4],
-          tension: 0,
-        },
-        {
-          type: "line",
-          label: "Threshold Max",
-          data: maxs,
-          spanGaps: true,
-          borderColor: "rgba(239,68,68,1)",
-          backgroundColor: "rgba(239,68,68,0.2)",
-          pointRadius: 2,
-          pointHoverRadius: 3,
-          borderDash: [4, 4],
-          tension: 0,
-        },
-      ],
-    };
-
-    const fmtTooltip = (ctx) => {
-      const unit = units?.[ctx.dataIndex] || "";
-      return `${ctx.dataset.label}: ${ctx.formattedValue}${unit ? ` ${unit}` : ""}`;
-    };
-
-    const options = {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: true, labels: { color: "#fff", boxWidth: 10 } },
-        tooltip: {
-          callbacks: {
-            label: fmtTooltip,
-          },
-        },
-      },
-      scales: {
-        x: {
-          ticks: { color: "#fff", maxRotation: 0, autoSkip: true },
-          grid: { color: "rgba(255,255,255,0.2)" },
-        },
-        y: {
-          ticks: { color: "#fff" },
-          grid: { color: "rgba(255,255,255,0.2)" },
-        },
-      },
-    };
-    return { data, options };
-  };
+  const seriesByParameter = useMultiParamTimeSeriesData({ events: visibleTests, bucket });
 
   if (initialLoading) {
     return (
@@ -593,51 +276,6 @@ function WaterQualityTab({ lake }) {
   <div style={{ display: "grid", gap: 6, overflowX: 'hidden' }}>
           {seriesByParameter.map((p) => {
             const title = `${p.name || p.code}${p.unit ? ` (${p.unit})` : ''}`;
-            // Build chart config for this parameter
-            // Use lighter / pastel colors for depth series so they contrast on the dark background
-            const depthColors = ['#93C5FD', '#86EFAC', '#FDBA74', '#FCA5A5', '#C4B5FD', '#7DD3FC', '#FDE68A', '#E6EEF8', '#FBCFE8', '#99F6E4', '#FEF08A', '#BFDBFE'];
-            const hasDepthLines = p.depthSeries && p.depthSeries.length > 0;
-            const depthDatasets = hasDepthLines ? p.depthSeries.map((ds, idx) => ({
-              label: `${ds.depth} m`,
-              data: ds.values,
-              borderColor: depthColors[idx % depthColors.length],
-              backgroundColor: 'transparent',
-              pointRadius: 3,
-              pointHoverRadius: 4,
-              tension: 0.2,
-            })) : [];
-
-            const timeData = {
-              labels: p.labels,
-              datasets: [
-                ...depthDatasets,
-                ...(!hasDepthLines ? [{
-                  label: 'Avg',
-                  data: p.avg,
-                  borderColor: 'rgba(59,130,246,1)',
-                  backgroundColor: 'rgba(59,130,246,0.2)',
-                  pointRadius: 3,
-                  pointHoverRadius: 4,
-                  tension: 0.2,
-                }] : []),
-                p.threshold.min != null ? {
-                  label: 'Min Threshold (time)',
-                  data: p.labels.map(() => Number(p.threshold.min)),
-                  borderColor: 'rgba(16,185,129,1)',
-                  backgroundColor: 'rgba(16,185,129,0.15)',
-                  pointRadius: 0,
-                  borderDash: [4,4],
-                } : null,
-                p.threshold.max != null ? {
-                  label: 'Max Threshold (time)',
-                  data: p.labels.map(() => Number(p.threshold.max)),
-                  borderColor: 'rgba(239,68,68,1)',
-                  backgroundColor: 'rgba(239,68,68,0.15)',
-                  pointRadius: 0,
-                  borderDash: [4,4],
-                } : null,
-              ].filter(Boolean),
-            };
             const timeOptions = {
               responsive: true,
               maintainAspectRatio: false,
@@ -662,102 +300,13 @@ function WaterQualityTab({ lake }) {
               },
             };
 
-            // Depth profile chart config if applicable and toggled
-            const view = getView(p.id);
-            const profile = depthProfilesByParameter.get(p.id);
-            const hasProfile = p.hasDepth && profile && profile.datasets && profile.datasets.length > 0;
-            let depthData = null;
-            if (hasProfile) {
-              // Clone profile datasets so we can append threshold lines without mutating source
-              const depthDatasets = (profile.datasets || []).slice();
-              const maxDepth = profile.maxDepth || 0;
-              // Add vertical threshold lines (as two-point line datasets) if threshold values exist for this parameter
-                  if (p.threshold?.min != null) {
-                const minVal = Number(p.threshold.min);
-                if (Number.isFinite(minVal)) {
-                  depthDatasets.push({
-                    label: 'Min Threshold (depth)',
-                    data: [{ x: minVal, y: 0 }, { x: minVal, y: maxDepth }],
-                    borderColor: 'rgba(16,185,129,1)',
-                    backgroundColor: 'transparent',
-                    pointRadius: 0,
-                    borderDash: [4, 4],
-                    tension: 0,
-                    spanGaps: true,
-                    // ensure it's drawn as a line
-                    showLine: true,
-                    parsing: false,
-                  });
-                }
-              }
-              if (p.threshold?.max != null) {
-                const maxVal = Number(p.threshold.max);
-                if (Number.isFinite(maxVal)) {
-                  depthDatasets.push({
-                    label: 'Max Threshold (depth)',
-                    data: [{ x: maxVal, y: 0 }, { x: maxVal, y: maxDepth }],
-                    borderColor: 'rgba(239,68,68,1)',
-                    backgroundColor: 'transparent',
-                    pointRadius: 0,
-                    borderDash: [4, 4],
-                    tension: 0,
-                    spanGaps: true,
-                    showLine: true,
-                    parsing: false,
-                  });
-                }
-              }
-              depthData = { datasets: depthDatasets };
-            }
-            const depthOptions = hasProfile ? {
-              responsive: true,
-              maintainAspectRatio: false,
-              plugins: {
-                legend: { display: true, position: 'bottom', labels: { color: '#fff', boxWidth: 8, font: { size: 10 } } },
-                tooltip: {
-                  callbacks: {
-                    label: (ctx) => {
-                      const v = ctx.parsed?.x ?? ctx.raw?.x;
-                      const d = ctx.parsed?.y ?? ctx.raw?.y;
-                      return `${ctx.dataset.label}: ${Number(v).toFixed(2)}${p.unit ? ` ${p.unit}` : ''} at ${d} m`;
-                    },
-                  },
-                },
-              },
-              scales: {
-                x: {
-                  type: 'linear',
-                  title: { display: true, text: `${p.name || p.code}${p.unit ? ` (${p.unit})` : ''}`, color: '#fff' },
-                  ticks: { color: '#fff', font: { size: 10 } },
-                  grid: { color: 'rgba(255,255,255,0.15)' },
-                },
-                y: {
-                  type: 'linear',
-                  reverse: true, // depth increases downward
-                  title: { display: true, text: 'Depth (m)', color: '#fff' },
-                  min: 0,
-                  suggestedMax: Math.max(5, profile.maxDepth || 0),
-                  ticks: { color: '#fff', font: { size: 10 } },
-                  grid: { color: 'rgba(255,255,255,0.15)' },
-                },
-              },
-            } : null;
+
             return (
               <div className="insight-card" style={{ backgroundColor: '#0f172a' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                   <h4 style={{ margin: 0 }}>{title}</h4>
                   <div style={{ display: 'flex', gap: 6 }}>
-                    {hasProfile && (
-                      <button
-                        type="button"
-                        className="pill-btn liquid"
-                        onClick={() => toggleView(p.id)}
-                        title={view === 'time' ? 'Show depth profile' : 'Show time series'}
-                        style={{ padding: '4px 6px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                      >
-                        {view === 'time' ? <FiActivity size={14} /> : <FiBarChart2 size={14} />}
-                      </button>
-                    )}
+
                     <button
                       type="button"
                       className="pill-btn liquid"
@@ -766,9 +315,9 @@ function WaterQualityTab({ lake }) {
                         const standards = [];
                         if (p?.threshold) standards.push({ code: 'Active standard', min: p.threshold.min, max: p.threshold.max });
                         const ctx = {
-                          chartType: view === 'depth' ? 'depth' : 'time',
+                          chartType: 'time',
                           param: { code: p.code, name: p.name, unit: p.unit },
-                          seriesMode: hasProfile ? 'avg' : 'avg',
+                          seriesMode: 'avg',
                           bucket,
                           standards,
                           compareMode: false,
@@ -786,11 +335,7 @@ function WaterQualityTab({ lake }) {
                   </div>
                 </div>
                 <div className="wq-chart" style={{ height: 160 }}>
-                  {view === 'depth' && hasProfile ? (
-                    <Line data={depthData} options={depthOptions} />
-                  ) : (
-                    <Line data={timeData} options={timeOptions} />
-                  )}
+                  <Line data={p.chartData} options={timeOptions} />
                 </div>
               </div>
             );

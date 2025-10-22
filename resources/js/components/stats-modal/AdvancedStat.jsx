@@ -756,9 +756,6 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
     </div>
 
       <div style={{ marginTop:10, display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}>
-      <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-        <div style={{ fontSize:12, opacity:0.8 }}>Lake-to-lake comparisons request per-lake aggregates (server-side means); client does not aggregate station measurements.</div>
-      </div>
       <div style={{ display:'flex', gap:8 }}>
         <button className={flagProblems ? 'pill-btn danger' : 'pill-btn'} onClick={() => setFlagProblems(f => !f)} style={{ padding:'6px 10px', fontSize:12 }} title={flagProblems ? 'Problem framing active: alternatives target exceedances' : 'Compliance framing: alternatives target meeting standards'} disabled={inferredTest==='two-sample'}>
           {flagProblems ? 'Flag Problems' : 'Compliance'}
