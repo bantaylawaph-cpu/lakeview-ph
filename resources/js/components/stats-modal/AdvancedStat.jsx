@@ -34,7 +34,6 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
   const [debouncedYearFrom, setDebouncedYearFrom] = useState('');
   const [debouncedYearTo, setDebouncedYearTo] = useState('');
   const [advisories, setAdvisories] = useState([]);
-  const [flagProblems, setFlagProblems] = useState(false);
   const paramOptions = (parentParamOptions && parentParamOptions.length ? parentParamOptions : (params || []));
   const [standards, setStandards] = useState([]);
   const [classes, setClasses] = useState([]);
@@ -213,15 +212,15 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
     setYearError(err);
   }, [yearFrom, yearTo]);
 
-  // Populate dataset source options for primary lake when lake or (debounced) date range changes
+  // Populate dataset source options for primary lake when lake or date range changes
   useEffect(() => {
     let mounted = true;
     (async () => {
       if (!lakeId) { if (mounted) setOrgOptions([]); return; }
       try {
         const lim = 500;
-        const fromEff = debouncedYearFrom ? `${debouncedYearFrom}-01-01` : undefined;
-        const toEff = debouncedYearTo ? `${debouncedYearTo}-12-31` : undefined;
+        const fromEff = yearFrom ? `${yearFrom}-01-01` : undefined;
+        const toEff = yearTo ? `${yearTo}-12-31` : undefined;
         const recs = await fetchSampleEvents({ lakeId: Number(lakeId), from: fromEff, to: toEff, limit: lim });
         if (!mounted) return;
         const derived = deriveOrgOptions(recs || []);
@@ -232,9 +231,9 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
       }
     })();
     return () => { mounted = false; };
-  }, [lakeId, debouncedYearFrom, debouncedYearTo]);
+  }, [lakeId, yearFrom, yearTo]);
 
-  // Populate secondary dataset source options when comparing to another lake (debounced years)
+  // Populate secondary dataset source options when comparing to another lake (years)
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -243,8 +242,8 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
       if (!otherLakeId) { if (mounted) setSecondaryOrgOptions([]); return; }
       try {
         const lim = 500;
-        const fromEff = debouncedYearFrom ? `${debouncedYearFrom}-01-01` : undefined;
-        const toEff = debouncedYearTo ? `${debouncedYearTo}-12-31` : undefined;
+        const fromEff = yearFrom ? `${yearFrom}-01-01` : undefined;
+        const toEff = yearTo ? `${yearTo}-12-31` : undefined;
         const recs = await fetchSampleEvents({ lakeId: otherLakeId, from: fromEff, to: toEff, limit: lim });
         if (!mounted) return;
         const derived = deriveOrgOptions(recs || []);
@@ -255,7 +254,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
       }
     })();
     return () => { mounted = false; };
-  }, [compareValue, debouncedYearFrom, debouncedYearTo]);
+  }, [compareValue, yearFrom, yearTo]);
 
   // Disable run based on required selections
   const runDisabled = React.useMemo(() => {
@@ -299,21 +298,21 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
     return () => { abort = true; };
   }, [paramCode, lakeId, compareValue, debouncedYearFrom, debouncedYearTo, organizationId, secondaryOrganizationId, inferredTest, depthMode, stationId]);
 
-  // Fetch stations when parameter, lake, debounced date range or organization changes (one-sample vs class)
+  // Fetch stations when lake, date range or organization changes (one-sample vs class)
   useEffect(() => {
-    if (!paramCode || !lakeId || !organizationId || inferredTest !== 'one-sample' || !compareValue || !compareValue.startsWith('class:')) {
+    if (!lakeId || !organizationId || inferredTest !== 'one-sample') {
       setStationOptions([]);
       return;
     }
     const fetchStations = async () => {
       try {
         const params = new URLSearchParams({
-          parameter_code: paramCode,
           lake_id: lakeId,
           organization_id: organizationId,
-          date_from: debouncedYearFrom ? `${debouncedYearFrom}-01-01` : '',
-          date_to: debouncedYearTo ? `${debouncedYearTo}-12-31` : '',
+          date_from: yearFrom ? `${yearFrom}-01-01` : '',
+          date_to: yearTo ? `${yearTo}-12-31` : '',
         });
+        if (paramCode) params.append('parameter_code', paramCode);
         const res = await apiPublic(`/stats/stations?${params}`);
         setStationOptions(res.stations || []);
       } catch (e) {
@@ -322,7 +321,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
       }
     };
     fetchStations();
-  }, [paramCode, lakeId, organizationId, debouncedYearFrom, debouncedYearTo, inferredTest, compareValue]);
+  }, [lakeId, organizationId, paramCode, yearFrom, yearTo, inferredTest]);
 
   // Clear TOST selection if it becomes invalid (e.g., user changed to a non-range param or switched to two-sample)
   useEffect(() => {
@@ -354,7 +353,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
   useEffect(() => {
     // Any UI toggle that meaningfully changes the context should clear previously computed advisories
     setAdvisories([]);
-  }, [inferredTest, compareValue, selectedTest, lakeId, classCode, organizationId, secondaryOrganizationId, depthMode, depthValue, flagProblems, debouncedYearFrom, debouncedYearTo, paramCode, appliedStandardId]);
+  }, [inferredTest, compareValue, selectedTest, lakeId, classCode, organizationId, secondaryOrganizationId, depthMode, depthValue, debouncedYearFrom, debouncedYearTo, paramCode, appliedStandardId]);
 
   useEffect(() => {
     fetchThreshold();
@@ -363,16 +362,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
   const run = async () => {
     setLoading(true); setError(null); setResult(null); setShowExactP(false); setAdvisories([]);
     // Check for missing required fields and show popups
-    if (!appliedStandardId) {
-      alertError('Missing Applied Standard', 'Please select an Applied Standard before running the test.');
-      setLoading(false);
-      return;
-    }
-    if (!paramCode) {
-      alertError('Missing Parameter', 'Please select a Parameter before running the test.');
-      setLoading(false);
-      return;
-    }
+    // Primary lake first (user flow)
     if (!lakeId) {
       alertError('Missing Lake', 'Please select a Primary Lake before running the test.');
       setLoading(false);
@@ -380,6 +370,16 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
     }
     if (!organizationId) {
       alertError('Missing Dataset Source', 'Please select a Dataset Source before running the test.');
+      setLoading(false);
+      return;
+    }
+    if (!appliedStandardId) {
+      alertError('Missing Applied Standard', 'Please select an Applied Standard before running the test.');
+      setLoading(false);
+      return;
+    }
+    if (!paramCode) {
+      alertError('Missing Parameter', 'Please select a Parameter before running the test.');
       setLoading(false);
       return;
     }
@@ -485,10 +485,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
           } else {
             mu0 = null;
           }
-          if (flagProblems && (alt === 'greater' || alt === 'less')) {
-            // invert direction for problem framing
-            alt = alt === 'greater' ? 'less' : 'greater';
-          }
+          // Compliance framing only: keep one-sided direction aligned with threshold type
           computed = await runOneSample({ selectedTest, values, mu0, alpha, evalType, thrMin, thrMax, alt });
         }
         // One-sample advisories
@@ -627,7 +624,10 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
         await alertError('Sign in required', 'You must be a registered user to export results.');
         return;
       }
-      if (!result) return;
+      if (!result) {
+        await alertError('No results to export', 'Please run a test before exporting results to PDF.');
+        return;
+      }
       const title = `Advanced statistics - ${paramCode || ''}`;
       const style = `body { font-family: Arial, Helvetica, sans-serif; color: #111; padding: 18px; } h1 { font-size: 18px; } table { border-collapse: collapse; width: 100%; } th, td { border: 1px solid #ddd; padding: 6px; }`;
         const testNames = {
@@ -671,7 +671,6 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
         const summaryRows = [];
         if (result) {
           summaryRows.push(`<tr><th>Test</th><td>${findTestLabel(result)}</td></tr>`);
-          summaryRows.push(`<tr><th>Framing</th><td>${flagProblems ? 'Problem (exceedance)' : 'Compliance (meeting standard)'}</td></tr>`);
           if (result.alternative) summaryRows.push(`<tr><th>Alternative</th><td>${result.alternative}</td></tr>`);
           if (result.p_value != null) summaryRows.push(`<tr><th>p-value</th><td>${fmtP(result.p_value)}</td></tr>`);
           if (result.p_lower != null && result.p_upper != null) summaryRows.push(`<tr><th>TOST p (lower/upper)</th><td>${fmtP(result.p_lower)} / ${fmtP(result.p_upper)}</td></tr>`);
@@ -739,7 +738,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
         className="pill-btn liquid"
         title="Explain this tool"
         onClick={() => setInfoOpen(true)}
-        style={{ padding:'4px 6px', display:'inline-flex', alignItems:'center', justifyContent:'center' }}
+        style={{ width:32, height:32, padding:0, borderRadius:'50%', display:'inline-flex', alignItems:'center', justifyContent:'center' }}
       >
         <FiInfo size={14} />
       </button>
@@ -793,17 +792,13 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
             {secondaryOrgOptions.map(o => <option key={`org2-${o.id}`} value={o.id}>{o.name || o.id}</option>)}
           </select>
         </div>
-      ) : compareValue && String(compareValue).startsWith('class:') ? (
+      ) : (
         <div style={{ gridColumn: '4 / span 1', minWidth:0 }}>
-          <select className="pill-btn" value={stationId} onChange={e=>{ setStationId(e.target.value); setResult(null); }} style={{ width:'100%', minWidth:0, boxSizing:'border-box', padding:'10px 12px', height:40, lineHeight:'20px' }} disabled={!organizationId}>
+          <select className="pill-btn" value={stationId} onChange={e=>{ setStationId(e.target.value); setResult(null); }} style={{ width:'100%', minWidth:0, boxSizing:'border-box', padding:'10px 12px', height:40, lineHeight:'20px' }} disabled={!organizationId || !compareValue || !String(compareValue).startsWith('class:')}>
             <option value="">Select a station</option>
             <option value="all">All Stations</option>
             {stationOptions.map(s => <option key={`station-${s.id}`} value={s.id}>{s.name}</option>)}
           </select>
-        </div>
-      ) : (
-        <div style={{ gridColumn: '4 / span 1', display:'flex', gap:8, minWidth:0 }}>
-          <div style={{ width: '100%' }} />
         </div>
       )}
 
@@ -827,24 +822,22 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
             ) : null}
           </select>
           {/* Depth selector (one-sample or lake vs lake two-sample) */}
-          <div style={{ width: paramCode && (inferredTest==='one-sample' || (inferredTest==='two-sample' && compareValue && String(compareValue).startsWith('lake:'))) ? 150 : 0, transition:'width 0.2s ease', overflow:'hidden' }}>
-            {paramCode && (inferredTest==='one-sample' || (inferredTest==='two-sample' && compareValue && String(compareValue).startsWith('lake:'))) ? (
-              <select className="pill-btn" value={depthMode === 'all' ? 'all' : (depthValue || '')} onChange={e=>{
-                const v = e.target.value;
-                if (v === 'all') { setDepthMode('all'); setDepthValue(''); }
-                else { setDepthMode('single'); setDepthValue(v); }
-                setResult(null);
-              }} style={{ width:'100%', padding:'10px 12px', height:40 }}>
-                <option value="all">All depths (mean)</option>
-                {availableDepths.map(d => (<option key={`depth-${d}`} value={d}>{d} m</option>))}
-              </select>
-            ) : null}
+          <div style={{ width: 150, transition:'width 0.2s ease', overflow:'hidden' }}>
+            <select className="pill-btn" value={depthMode === 'all' ? 'all' : (depthValue || '')} onChange={e=>{
+              const v = e.target.value;
+              if (v === 'all') { setDepthMode('all'); setDepthValue(''); }
+              else { setDepthMode('single'); setDepthValue(v); }
+              setResult(null);
+            }} style={{ width:'100%', padding:'10px 12px', height:40 }} disabled={!paramCode || !(inferredTest==='one-sample' || (inferredTest==='two-sample' && compareValue && String(compareValue).startsWith('lake:')))}>
+              <option value="all">All depths (mean)</option>
+              {availableDepths.map(d => (<option key={`depth-${d}`} value={d}>{d} m</option>))}
+            </select>
           </div>
         </div>
       </div>
       <div style={{ gridColumn: '3 / span 2', display:'flex', justifyContent:'flex-end', minWidth:0 }}>
         <div style={{ display:'flex', gap:8, width:'100%' }}>
-            <select className="pill-btn" value={selectedTest} onChange={e=>{setSelectedTest(e.target.value); setResult(null);}} style={{ flex:1, minWidth:0, boxSizing:'border-box', padding:'8px 10px', fontSize:12, height:36, lineHeight:'18px' }}>
+            <select className="pill-btn" value={selectedTest} onChange={e=>{setSelectedTest(e.target.value); setResult(null);}} style={{ flex:1, minWidth:0, boxSizing:'border-box', padding:'10px 12px', fontSize:12, height:40, lineHeight:'20px' }}>
                 <option value="" disabled>Select test</option>
                 <option value="shapiro_wilk" disabled={inferredTest!=='one-sample'}>Shapiro–Wilk</option>
                 <option value="levene" disabled={inferredTest!=='two-sample'}>Levene variance test</option>
@@ -864,9 +857,6 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
 
       <div style={{ marginTop:10, display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}>
       <div style={{ display:'flex', gap:8 }}>
-        <button className={flagProblems ? 'pill-btn danger' : 'pill-btn'} onClick={() => setFlagProblems(f => !f)} style={{ padding:'6px 10px', fontSize:12 }} title={flagProblems ? 'Problem framing active: alternatives target exceedances' : 'Compliance framing: alternatives target meeting standards'} disabled={inferredTest==='two-sample'}>
-          {flagProblems ? 'Flag Problems' : 'Compliance'}
-        </button>
         <button ref={gearBtnRef} aria-label="Advanced options" title="Advanced options" className="pill-btn" onClick={() => setShowGearPopover(s => !s)} style={{ padding:'6px 10px', display:'inline-flex', alignItems:'center', justifyContent:'center' }}>
           <FiSettings size={16} />
         </button>

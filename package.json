@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "postinstall": "node tools/postinstall.cjs"
+    "postinstall": "node tools/postinstall.cjs",
+    "stats:test": "node tools/stats-tests.mjs"
   },
   "dependencies": {
     "4": "^0.0.0",

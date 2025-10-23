@@ -91,17 +91,12 @@ class StatsController extends Controller
     public function stations(Request $request)
     {
         $data = $request->validate([
-            'parameter_code' => 'required|string',
+            'parameter_code' => 'nullable|string',
             'lake_id' => 'nullable|integer',
             'organization_id' => 'nullable|integer',
             'date_from' => 'nullable|date',
             'date_to' => 'nullable|date',
         ]);
-
-        $param = \DB::table('parameters')
-            ->whereRaw('LOWER(code) = ?', [strtolower($data['parameter_code'])])
-            ->first(['id']);
-        if (!$param) return response()->json(['stations' => []]);
 
         $from = isset($data['date_from']) ? Carbon::parse($data['date_from'])->startOfDay() : null;
         $to = isset($data['date_to']) ? Carbon::parse($data['date_to'])->endOfDay() : null;
@@ -109,11 +104,15 @@ class StatsController extends Controller
         $q = \DB::table('sample_results as sr')
             ->join('sampling_events as se', 'sr.sampling_event_id', '=', 'se.id')
             ->join('stations as st', 'se.station_id', '=', 'st.id')
-            ->join('parameters as p', 'sr.parameter_id', '=', 'p.id')
-            ->where('p.code', '=', $data['parameter_code'])
             ->whereNotNull('sr.value')
             ->select('st.id', 'st.name')
             ->distinct();
+
+        // If a parameter_code was provided, restrict to that parameter
+        if (!empty($data['parameter_code'])) {
+            $q->join('parameters as p', 'sr.parameter_id', '=', 'p.id')
+              ->where('p.code', '=', $data['parameter_code']);
+        }
 
         if (!empty($data['lake_id'])) {
             $q->where('se.lake_id', (int)$data['lake_id']);
