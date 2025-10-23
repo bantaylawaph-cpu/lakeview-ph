@@ -85,17 +85,57 @@ export default function useSingleBarData({ events = [], bucket = 'year', selecte
     };
     uniqueKeys.sort((a, b) => orderValue(a) - orderValue(b));
 
-    const palette = ['rgba(54,162,235,0.85)', 'rgba(255,99,132,0.85)', 'rgba(75,192,192,0.85)', 'rgba(255,159,64,0.85)'];
+    // Year-based palette: assign one hue per year; months/quarters vary by lightness
+    const baseHues = [210, 0, 160, 120, 28, 280, 190, 340, 45, 200]; // blues, reds, purples, greens, ambers
+    const yearsFromKeys = Array.from(new Set(uniqueKeys.map((pk) => {
+      if (/^\d{4}$/.test(pk)) return pk;
+      const mq = pk.match(/^(\d{4})-Q(\d)$/); if (mq) return mq[1];
+      const mm = pk.match(/^(\d{4})-(\d{2})$/); if (mm) return mm[1];
+      return '0000';
+    })));
+    yearsFromKeys.sort((a, b) => Number(a) - Number(b));
+    const yearHue = new Map(yearsFromKeys.map((y, i) => [String(y), baseHues[i % baseHues.length]]));
+    const withinCountForBucket = bucket === 'year' ? 1 : (bucket === 'quarter' ? 4 : 12);
+    const withinIndexFromPk = (pk) => {
+      if (bucket === 'year') return 0;
+      const mq = pk.match(/^(\d{4})-Q(\d)$/); if (mq) return Number(mq[2]) - 1;
+      const mm = pk.match(/^(\d{4})-(\d{2})$/); if (mm) return Number(mm[2]) - 1;
+      return 0;
+    };
+    const yearFromPk = (pk) => {
+      if (/^\d{4}$/.test(pk)) return String(pk);
+      const mq = pk.match(/^(\d{4})-Q(\d)$/); if (mq) return mq[1];
+      const mm = pk.match(/^(\d{4})-(\d{2})$/); if (mm) return mm[1];
+      return '0000';
+    };
+    const colorFor = (pk) => {
+      const y = yearFromPk(pk);
+      const hue = yearHue.get(String(y)) ?? 200;
+      const idx = withinIndexFromPk(pk);
+      const t = withinCountForBucket > 1 ? (idx / (withinCountForBucket - 1)) : 0.5; // 0..1
+      const light = 45 + Math.round(t * 25); // 45%..70%
+      const borderLight = Math.max(30, light - 10);
+      return {
+        bg: `hsla(${hue}, 70%, ${light}%, 0.85)`,
+        stroke: `hsla(${hue}, 70%, ${borderLight}%, 1)`,
+        year: String(y),
+      };
+    };
 
     const datasets = [];
     let labels = [];
+    const periodInfo = [];
+    const yearIndexMap = new Map(); // year -> [datasetIndex]
 
     if (seriesMode === 'avg') {
       // labels is single lake label; datasets per period (periods -> values for lake)
       labels = [labelForLake];
       uniqueKeys.forEach((pk, idx) => {
         const val = meanForPeriod(pk);
-        datasets.push({ label: humanLabelFor(pk), data: [val], backgroundColor: palette[idx % palette.length], borderColor: palette[idx % palette.length].replace(/0\.85\)/, '1)'), borderWidth: 1 });
+        const c = colorFor(pk);
+        datasets.push({ label: humanLabelFor(pk), data: [val], backgroundColor: c.bg, borderColor: c.stroke, borderWidth: 1 });
+        periodInfo.push({ key: pk, year: c.year, month: withinCountForBucket === 12 ? withinIndexFromPk(pk) + 1 : null, quarter: withinCountForBucket === 4 ? withinIndexFromPk(pk) + 1 : null, index: datasets.length - 1 });
+        const arr = yearIndexMap.get(c.year) || []; arr.push(datasets.length - 1); yearIndexMap.set(c.year, arr);
       });
     } else {
       // per-station: labels are station names (selectedStations), datasets per period with value per station
@@ -120,7 +160,10 @@ export default function useSingleBarData({ events = [], bucket = 'year', selecte
           const actual = stationKeyFor[st];
           return actual ? meanForPeriod(pk, actual) : null;
         });
-        datasets.push({ label: humanLabelFor(pk), data, backgroundColor: palette[idx % palette.length], borderColor: palette[idx % palette.length].replace(/0\.85\)/, '1)'), borderWidth: 1 });
+        const c = colorFor(pk);
+        datasets.push({ label: humanLabelFor(pk), data, backgroundColor: c.bg, borderColor: c.stroke, borderWidth: 1 });
+        periodInfo.push({ key: pk, year: c.year, month: withinCountForBucket === 12 ? withinIndexFromPk(pk) + 1 : null, quarter: withinCountForBucket === 4 ? withinIndexFromPk(pk) + 1 : null, index: datasets.length - 1 });
+        const arr = yearIndexMap.get(c.year) || []; arr.push(datasets.length - 1); yearIndexMap.set(c.year, arr);
       });
     }
 
@@ -154,8 +197,8 @@ export default function useSingleBarData({ events = [], bucket = 'year', selecte
       const right = Math.max(0, labels.length - 0.5);
       return { label, data: [{ x: left, y: value }, { x: right, y: value }], parsing: false, type: 'line', borderColor: color, backgroundColor: `${color}33`, borderDash: [4,4], pointRadius: 0, tension: 0, fill: false, spanGaps: true, borderWidth: 2, order: 100 };
     };
-    if (std.min != null) datasets.push(makeLine(`${std.stdLabel || std.stdKey || 'Standard'} – Min (${labelForLake})`, std.min, '#16a34a'));
-    if (std.max != null) datasets.push(makeLine(`${std.stdLabel || std.stdKey || 'Standard'} – Max (${labelForLake})`, std.max, '#ef4444'));
+  if (std.min != null) datasets.push(makeLine(`${std.stdLabel || std.stdKey || 'Standard'} – Min (${labelForLake})`, std.min, '#16a34a'));
+  if (std.max != null) datasets.push(makeLine(`${std.stdLabel || std.stdKey || 'Standard'} – Max (${labelForLake})`, std.max, '#ef4444'));
 
     // Local-only debug logs to help diagnose empty per-station datasets
     try {
@@ -175,6 +218,17 @@ export default function useSingleBarData({ events = [], bucket = 'year', selecte
       standards.push({ code: std.stdLabel || std.stdKey, min: std.min != null ? std.min : null, max: std.max != null ? std.max : null });
     }
 
-    return { labels: labels.map(humanLabelFor), datasets, meta: { years, standards } };
+    // Build simple color map for years (use middle lightness for swatch)
+    const yearColors = {};
+    yearsFromKeys.forEach((y) => {
+      const hue = yearHue.get(String(y)) ?? 200;
+      yearColors[String(y)] = `hsla(${hue}, 70%, 55%, 0.9)`;
+    });
+
+    // expose grouping info to consumers for custom legends
+    const yearIndexObj = {};
+    Array.from(yearIndexMap.entries()).forEach(([y, idxs]) => { yearIndexObj[y] = idxs; });
+
+    return { labels: labels.map(humanLabelFor), datasets, meta: { years, standards, bucket, periodInfo, yearIndexMap: yearIndexObj, yearColors, yearOrder: yearsFromKeys } };
   }, [events, bucket, selectedYears, depth, selectedParam, lake, lakeOptions, seriesMode, selectedStations]);
 }

@@ -283,6 +283,7 @@ export default function SingleLake({
                   onClose={() => setStationsOpen(false)}
                   stations={stationsList}
                   value={selectedStations}
+                  maxSelected={3}
                   onChange={(next) => { onStationsChange(next); onParamChange(""); setApplied(false); }}
                 />
               </div>
@@ -504,10 +505,46 @@ export default function SingleLake({
             barData && Array.isArray(barData.datasets) && barData.datasets.length ? (
               (() => {
                 const bd = { ...barData, datasets: barData.datasets };
+                const yearIndexMap = (barData?.meta?.yearIndexMap) || {};
+                const yearOrder = (barData?.meta?.yearOrder) || Object.keys(yearIndexMap);
+                const yearColors = (barData?.meta?.yearColors) || {};
                 const options = {
                   responsive: true,
                   maintainAspectRatio: false,
-                  plugins: { legend: { position: 'top' }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.formattedValue}` } } },
+                  plugins: {
+                    legend: {
+                      position: 'top',
+                      labels: {
+                        usePointStyle: true,
+                        generateLabels: (chart) => {
+                          try {
+                            const items = [];
+                            (yearOrder || []).forEach((y) => {
+                              const idxs = yearIndexMap[String(y)] || [];
+                              if (!idxs.length) return;
+                              const firstIdx = idxs[0];
+                              const hidden = idxs.every((i) => chart.getDatasetMeta(i)?.hidden);
+                              const color = yearColors[String(y)] || 'rgba(200,200,200,0.9)';
+                              items.push({ text: String(y), fillStyle: color, strokeStyle: color, hidden, datasetIndex: firstIdx, year: String(y) });
+                            });
+                            return items;
+                          } catch { return []; }
+                        },
+                      },
+                      onClick: (e, legendItem, legend) => {
+                        try {
+                          const chart = legend.chart;
+                          const y = legendItem?.year;
+                          const idxs = yearIndexMap[String(y)] || [];
+                          if (!idxs.length) return;
+                          const anyVisible = idxs.some((i) => !chart.getDatasetMeta(i)?.hidden);
+                          idxs.forEach((i) => chart.setDatasetVisibility(i, anyVisible ? false : true));
+                          chart.update();
+                        } catch {}
+                      },
+                    },
+                    tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.formattedValue}` } },
+                  },
                   indexAxis: 'x',
                   datasets: { bar: { categoryPercentage: 0.75, barPercentage: 0.9 } },
                   scales: { x: { ticks: { color: '#fff' }, grid: { display: false } }, y: { ticks: { color: '#fff' }, title: { display: true, text: 'Value', color: '#fff' }, grid: { color: 'rgba(255,255,255,0.08)' } } },

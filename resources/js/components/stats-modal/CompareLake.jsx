@@ -486,7 +486,44 @@ function CompareLake({
             const options = {
               responsive: true,
               maintainAspectRatio: false,
-              plugins: { legend: { position: 'top' }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.formattedValue}${unit ? ` ${unit}` : ''}` } } },
+              plugins: {
+                legend: {
+                  position: 'top',
+                  labels: {
+                    usePointStyle: true,
+                    generateLabels: (chart) => {
+                      try {
+                        const yearIndexMap = bd?.meta?.yearIndexMap || {};
+                        const yearOrder = bd?.meta?.yearOrder || Object.keys(yearIndexMap);
+                        const yearColors = bd?.meta?.yearColors || {};
+                        const items = [];
+                        (yearOrder || []).forEach((y) => {
+                          const idxs = yearIndexMap[String(y)] || [];
+                          if (!idxs.length) return;
+                          const firstIdx = idxs[0];
+                          const hidden = idxs.every((i) => chart.getDatasetMeta(i)?.hidden);
+                          const color = yearColors[String(y)] || 'rgba(200,200,200,0.9)';
+                          items.push({ text: String(y), fillStyle: color, strokeStyle: color, hidden, datasetIndex: firstIdx, year: String(y) });
+                        });
+                        return items;
+                      } catch { return []; }
+                    },
+                  },
+                  onClick: (e, legendItem, legend) => {
+                    try {
+                      const chart = legend.chart;
+                      const y = legendItem?.year;
+                      const yearIndexMap = bd?.meta?.yearIndexMap || {};
+                      const idxs = yearIndexMap[String(y)] || [];
+                      if (!idxs.length) return;
+                      const anyVisible = idxs.some((i) => !chart.getDatasetMeta(i)?.hidden);
+                      idxs.forEach((i) => chart.setDatasetVisibility(i, anyVisible ? false : true));
+                      chart.update();
+                    } catch {}
+                  },
+                },
+                tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.formattedValue}${unit ? ` ${unit}` : ''}` } },
+              },
               indexAxis: 'x',
               datasets: { bar: { categoryPercentage: 0.75, barPercentage: 0.9 } },
               scales: {
