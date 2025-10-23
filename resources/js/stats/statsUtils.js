@@ -242,10 +242,9 @@ export async function mannWhitneyAsync(x, y, alpha=0.05, alt='two-sided'){
   if (!F) {
     try { const mod = await import('@stdlib/stats-base-dists-normal-cdf'); F = mod?.default || mod; _normalCdf = F; } catch { F = null; }
   }
-  if (!F) {
-    const msg = 'Stats: @stdlib/stats-base-dists-normal-cdf is not available. Mann-Whitney test cannot compute tail probabilities.';
-    if (typeof window !== 'undefined' && typeof window.alert === 'function') window.alert(msg);
-    throw new Error(msg);
+  if (!F || isNaN(F(0))) {
+    // Fallback to local approximation if stdlib fails or returns NaN
+    F = normalCdf;
   }
   const pTwo = 2*(1 - F(Math.abs(z)));
   p = (alt==='two-sided') ? pTwo : (1 - F(z));
