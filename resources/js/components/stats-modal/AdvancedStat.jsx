@@ -40,6 +40,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
   const [classes, setClasses] = useState([]);
   const [orgOptions, setOrgOptions] = useState([]);
   const [secondaryOrgOptions, setSecondaryOrgOptions] = useState([]);
+  const [paramEvaluationType, setParamEvaluationType] = useState(null);
 
   const containerRef = useRef(null);
   const gearBtnRef = useRef(null);
@@ -169,10 +170,8 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
   }, [compareValue]);
 
   const paramHasRange = React.useMemo(() => {
-    if (!paramCode) return false;
-    const st = staticThresholds?.[paramCode];
-    return !!(st && st.type === 'range');
-  }, [paramCode, staticThresholds]);
+    return paramEvaluationType === 'range';
+  }, [paramEvaluationType]);
 
   const allowedTests = React.useMemo(() => {
     if (inferredTest === 'one-sample') {
@@ -339,6 +338,10 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
     // Any UI toggle that meaningfully changes the context should clear previously computed advisories
     setAdvisories([]);
   }, [inferredTest, compareValue, selectedTest, lakeId, classCode, organizationId, secondaryOrganizationId, depthMode, depthValue, flagProblems, debouncedYearFrom, debouncedYearTo, paramCode, appliedStandardId]);
+
+  useEffect(() => {
+    fetchThreshold();
+  }, [inferredTest, lakeId, paramCode, appliedStandardId]);
 
   const run = async () => {
     setLoading(true); setError(null); setResult(null); setShowExactP(false); setAdvisories([]);
@@ -519,6 +522,25 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
     setShowAllValues(false);
   setShowExactP(false);
     setAdvisories([]);
+    setParamEvaluationType(null);
+  };
+
+  const fetchThreshold = async () => {
+    if (inferredTest !== 'one-sample' || !lakeId || !paramCode) {
+      setParamEvaluationType(null);
+      return;
+    }
+    try {
+      const data = {
+        parameter_code: paramCode,
+        lake_id: Number(lakeId),
+        applied_standard_id: appliedStandardId || undefined,
+      };
+      const res = await apiPublic('/stats/series', { method: 'POST', body: data });
+      setParamEvaluationType(res?.evaluation_type || null);
+    } catch (e) {
+      setParamEvaluationType(null);
+    }
   };
 
   const exportPdf = async () => {
