@@ -5,7 +5,6 @@ export function buildInterpretation({
   paramCode,
   paramOptions = [],
   classCode,
-  staticThresholds = {},
   lakes = [],
   cl = '0.95',
   fmt,
@@ -65,23 +64,6 @@ export function buildInterpretation({
     if (minVal != null && maxVal != null) return { type: 'range', min: minVal, max: maxVal };
     if (minVal != null) return { type: 'min', value: minVal };
     if (maxVal != null) return { type: 'max', value: maxVal };
-    // static fallback
-    const entry = staticThresholds?.[paramCode];
-    if (entry) {
-      if (entry.type === 'range') {
-        const arr = entry[classCode];
-        if (Array.isArray(arr) && arr.length >= 2) {
-          const a = toNum(arr[0]); const b = toNum(arr[1]);
-          if (a != null && b != null) return { type: 'range', min: a, max: b };
-        }
-      }
-      const val = toNum(entry[classCode]);
-      if (val != null) {
-        if (entry.type === 'min') return { type: 'min', value: val };
-        if (entry.type === 'max') return { type: 'max', value: val };
-        return { type: 'value', value: val };
-      }
-    }
     if (result.mu0 != null && result.mu0 !== '') {
       const mu = toNum(result.mu0);
       if (mu != null) {

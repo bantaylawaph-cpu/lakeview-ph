@@ -6,6 +6,8 @@ import useStationsCache from './hooks/useStationsCache';
 import useSampleEvents from './hooks/useSampleEvents';
 import LoadingSpinner from '../LoadingSpinner';
 import api, { getToken } from '../../lib/api';
+import LakeSelect from './ui/LakeSelect';
+import OrgSelect from './ui/OrgSelect';
 
 function getThresholdClass(value, threshold) {
   const num = Number(value);
@@ -457,23 +459,12 @@ export default function DataSummaryTable({ open, onClose, initialLake = '', init
         <div className="ds-controls-row">
           <div className="ds-field lake">
             <div className="ds-label">Lake</div>
-            <select className="pill-btn" value={lakeId} onChange={(e) => { setLakeId(e.target.value); setOrgId(''); }}>
-              <option value="">Select lake</option>
-              {lakeOptions.map(l => {
-                const raw = l.class_code || l.classification || l.class || '';
-                const code = raw ? String(raw).replace(/^class\s*/i, '') : '';
-                const suffix = code ? ` (Class ${code})` : '';
-                return (<option key={l.id} value={l.id}>{l.name}{suffix}</option>);
-              })}
-            </select>
+            <LakeSelect lakes={lakeOptions} value={lakeId} onChange={(e) => { setLakeId(e.target.value); setOrgId(''); }} />
           </div>
 
           <div className="ds-field org">
             <div className="ds-label">Dataset source</div>
-            <select className="pill-btn" value={orgId} onChange={(e) => setOrgId(e.target.value)} disabled={!lakeId}>
-              <option value="">All dataset sources</option>
-              { (orgOptions || []).map(o => (<option key={o.id} value={o.id}>{o.name}</option>)) }
-            </select>
+            <OrgSelect options={orgOptions || []} value={orgId} onChange={(e) => setOrgId(e.target.value)} disabled={!lakeId} required={false} placeholder="All dataset sources" />
           </div>
 
               <div className="ds-field year">

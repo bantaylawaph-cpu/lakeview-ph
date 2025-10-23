@@ -15,6 +15,9 @@ import GraphInfoButton from "./ui/GraphInfoButton";
 import useSampleEvents from "./hooks/useSampleEvents";
 import useCompareTimeSeriesData from "./hooks/useCompareTimeSeriesData";
 import useCompareBarData from "./hooks/useCompareBarData";
+import LakeSelect from './ui/LakeSelect';
+import OrgSelect from './ui/OrgSelect';
+import ParamSelect from './ui/ParamSelect';
 
 function CompareLake({
   lakeOptions = [],
@@ -386,38 +389,16 @@ function CompareLake({
   <StatsSidebar isOpen={sidebarOpen && isModalOpen} width={sidebarWidth} usePortal top={72} side="left" zIndex={10000} onToggle={toggleSidebar}>
           <div style={{ fontSize: 12, opacity: 0.85 }}>Lake A</div>
           <div style={{ display: 'grid', gap: 6 }}>
-            <select className="pill-btn" value={lakeA} onChange={(e) => { setLakeA(e.target.value); setSelectedOrgA(""); setSelectedParam(""); setSelectedYears([]); }} style={{ width: '100%' }}>
-              <option value="">Lake A</option>
-              {lakeOptionsForA.map((l) => {
-                const raw = l.class_code || l.classification || l.class || '';
-                const code = raw ? String(raw).replace(/^class\s*/i, '') : '';
-                const suffix = code ? ` (Class ${code})` : '';
-                return (<option key={l.id} value={String(l.id)}>{l.name}{suffix}</option>);
-              })}
-            </select>
-            <select className="pill-btn" value={selectedOrgA} onChange={(e) => { setSelectedOrgA(e.target.value); setSelectedParam(""); }} disabled={!lakeA} style={{ width: '100%' }}>
-              <option value="">Select a dataset source</option>
-              {derivedOrgOptionsA.map((o) => (<option key={o.id} value={o.id}>{o.name}</option>))}
-            </select>
+            <LakeSelect lakes={lakeOptionsForA} value={lakeA} onChange={(e) => { setLakeA(e.target.value); setSelectedOrgA(""); setSelectedParam(""); setSelectedYears([]); }} />
+            <OrgSelect options={derivedOrgOptionsA} value={selectedOrgA} onChange={(e) => { setSelectedOrgA(e.target.value); setSelectedParam(""); }} required={false} placeholder="Select a dataset source" style={{ width:'100%' }} />
           </div>
 
           <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '8px 0' }} />
 
           <div style={{ fontSize: 12, opacity: 0.85 }}>Lake B</div>
           <div style={{ display: 'grid', gap: 6 }}>
-            <select className="pill-btn" value={lakeB} onChange={(e) => { setLakeB(e.target.value); setSelectedOrgB(""); setSelectedParam(""); setSelectedYears([]); }} style={{ width: '100%' }}>
-              <option value="">Lake B</option>
-              {lakeOptionsForB.map((l) => {
-                const raw = l.class_code || l.classification || l.class || '';
-                const code = raw ? String(raw).replace(/^class\s*/i, '') : '';
-                const suffix = code ? ` (Class ${code})` : '';
-                return (<option key={l.id} value={String(l.id)}>{l.name}{suffix}</option>);
-              })}
-            </select>
-            <select className="pill-btn" value={selectedOrgB} onChange={(e) => { setSelectedOrgB(e.target.value); setSelectedParam(""); }} disabled={!lakeB} style={{ width: '100%' }}>
-              <option value="">Select a dataset source</option>
-              {derivedOrgOptionsB.map((o) => (<option key={o.id} value={o.id}>{o.name}</option>))}
-            </select>
+            <LakeSelect lakes={lakeOptionsForB} value={lakeB} onChange={(e) => { setLakeB(e.target.value); setSelectedOrgB(""); setSelectedParam(""); setSelectedYears([]); }} />
+            <OrgSelect options={derivedOrgOptionsB} value={selectedOrgB} onChange={(e) => { setSelectedOrgB(e.target.value); setSelectedParam(""); }} required={false} placeholder="Select a dataset source" style={{ width:'100%' }} />
           </div>
 
           <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '8px 0' }} />
@@ -461,10 +442,7 @@ function CompareLake({
 
           <div>
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Parameter</div>
-            <select className="pill-btn" value={selectedParam} onChange={(e) => { setSelectedParam(e.target.value); onParamChange?.(e.target.value); }} disabled={!paramList?.length || !canChooseParam} style={{ width: '100%' }}>
-              <option value="">Select parameter</option>
-              {paramList.map((p) => (<option key={p.key || p.id || p.code} value={p.key || p.id || p.code}>{p.label || p.name || p.code}</option>))}
-            </select>
+            <ParamSelect options={paramList} value={selectedParam} onChange={(e) => { setSelectedParam(e.target.value); onParamChange?.(e.target.value); }} placeholder="Select parameter" style={{ width:'100%' }} />
           </div>
 
           {chartType === 'bar' && (

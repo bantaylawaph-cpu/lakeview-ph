@@ -16,6 +16,8 @@ import { FiInfo } from "react-icons/fi";
 import InfoModal from "../common/InfoModal";
 import { buildGraphExplanation } from "../utils/graphExplain";
 import useMultiParamTimeSeriesData from "../stats-modal/hooks/useMultiParamTimeSeriesData";
+import OrgSelect from '../stats-modal/ui/OrgSelect';
+import StationSelect from '../stats-modal/ui/StationSelect';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
@@ -28,7 +30,7 @@ import LoadingSpinner from "../LoadingSpinner";
 function WaterQualityTab({ lake }) {
   const lakeId = lake?.id ?? null;
   const [orgs, setOrgs] = useState([]); // {id,name}
-  const [orgId, setOrgId] = useState(null);
+  const [orgId, setOrgId] = useState("");
   const [stations, setStations] = useState([]); // [name]
   const [station, setStation] = useState(""); // station name; empty = All
   const [tests, setTests] = useState([]); // last 10 published tests for lake (optionally filtered by org)
@@ -83,10 +85,6 @@ function WaterQualityTab({ lake }) {
           if (oid && name && !uniq.has(String(oid))) uniq.set(String(oid), { id: oid, name });
         });
         setOrgs(Array.from(uniq.values()));
-        // Set default to first org if not set
-        if (Array.from(uniq.values()).length > 0 && orgId === null) {
-          setOrgId(String(Array.from(uniq.values())[0].id));
-        }
       }
     } catch (e) {
       console.error("[WaterQualityTab] Failed to load tests", e);
@@ -131,7 +129,7 @@ function WaterQualityTab({ lake }) {
 
   // Reset on lake change and fetch
   useEffect(() => {
-    setOrgId(null);
+    setOrgId("");
     setStation("");
     setTests([]);
     setOrgs([]);
@@ -160,10 +158,10 @@ function WaterQualityTab({ lake }) {
         else if (!dateFrom && !dateTo) { const d = new Date(today); d.setFullYear(d.getFullYear() - 5); fromEff = fmtIso(d); toEff = fmtIso(today); }
         else { fromEff = dateFrom || undefined; toEff = dateTo || undefined; }
         const list = await fetchStationsForLake({ lakeId, from: fromEff, to: toEff, limit: lim, organizationId: orgId });
-        if (mounted) setStations(Array.isArray(list) ? list : []);
+        if (mounted) setStations(Array.isArray(list) ? list.map(s => ({id: s, name: s})) : []);
         // If the currently selected station is no longer in the list, clear it
         if (mounted) {
-          const has = Array.isArray(list) ? list.includes(station) : false;
+          const has = stations.some(s => s.id === station);
           if (!has) setStation("");
         }
       } catch {
@@ -222,7 +220,6 @@ function WaterQualityTab({ lake }) {
               <option value="3y">3 Yr</option>
               <option value="1y">1 Yr</option>
               <option value="6mo">6 Mo</option>
-              <option value="custom">Custom</option>
             </select>
             {timeRange === 'custom' && (
               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -245,22 +242,14 @@ function WaterQualityTab({ lake }) {
         {/* Dataset Source */}
         <div className="form-group" style={{ minWidth: 0 }}>
           <label style={{ marginBottom: 2, fontSize: 11, color: '#fff' }}>Dataset Source</label>
-          <select value={orgId || (orgs.length > 0 ? String(orgs[0].id) : "")} onChange={(e) => setOrgId(e.target.value)} style={{ padding: '6px 8px' }}>
-            {orgs.map((o) => (
-              <option key={o.id} value={String(o.id)}>{o.name}</option>
-            ))}
-          </select>
+          <OrgSelect options={orgs} value={orgId} onChange={(e) => setOrgId(e.target.value)} placeholder="All dataset sources" style={{ padding: '6px 8px', height: 'auto' }} />
         </div>
         {/* Station selector */}
         <div className="form-group" style={{ minWidth: 0 }}>
           <label style={{ marginBottom: 2, fontSize: 11, color: '#fff' }}>Station</label>
-          <select value={station} onChange={(e) => setStation(e.target.value)} style={{ padding: '6px 8px' }}>
-            <option value="">All</option>
-            {stations.map((s) => (<option key={s} value={s}>{s}</option>))}
-          </select>
+          <StationSelect options={stations} value={station} onChange={(e) => setStation(e.target.value)} includeAllOption={true} allValue="" allLabel="All" placeholder="Select a station" style={{ padding: '6px 8px', height: 'auto' }} />
         </div>
       </div>
-  <div style={{ fontSize: 11, color: '#bbb', marginBottom: 6 }}>(Dates shown in local time)</div>
       {loading && (
         <div style={{ margin: '2px 0 8px 0' }}>
           <LoadingSpinner label="Loading data..." color="#fff" />
@@ -284,12 +273,15 @@ function WaterQualityTab({ lake }) {
                 tooltip: {
                   callbacks: {
                     label: (ctx) => {
-                      const isAvg = ctx.dataset.label === 'Avg';
-                      if (!isAvg) return `${ctx.dataset.label}: ${ctx.formattedValue}${p.unit ? ` ${p.unit}` : ''}`;
-                      const s = p.stats?.[ctx.dataIndex];
                       const v = ctx.formattedValue;
-                      if (s && s.cnt) return `Avg: ${v}${p.unit ? ` ${p.unit}` : ''} (n=${s.cnt}, min=${s.min}, max=${s.max})`;
-                      return `Avg: ${v}${p.unit ? ` ${p.unit}` : ''}`;
+                      const unit = p.unit ? ` ${p.unit}` : '';
+                      // Prefer per-dataset stats when available (depth lines)
+                      const s = Array.isArray(ctx.dataset?.metaStats)
+                        ? ctx.dataset.metaStats[ctx.dataIndex]
+                        : (ctx.dataset.label === 'Avg' ? (p.stats?.[ctx.dataIndex] || null) : null);
+                      let base = `${ctx.dataset.label}: ${v}${unit}`;
+                      if (s && s.cnt) base += ` (n=${s.cnt}, min=${s.min}, max=${s.max})`;
+                      return base;
                     },
                   },
                 },

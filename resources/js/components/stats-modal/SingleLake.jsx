@@ -17,6 +17,9 @@ import useSingleBarData from "./hooks/useSingleBarData";
 import GraphInfoButton from "./ui/GraphInfoButton";
 import StationPicker from "./ui/StationPicker";
 import { SeriesModeToggle } from "./ui/Toggles";
+import LakeSelect from './ui/LakeSelect';
+import OrgSelect from './ui/OrgSelect';
+import ParamSelect from './ui/ParamSelect';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, BarElement);
 
@@ -259,25 +262,12 @@ export default function SingleLake({
   <StatsSidebar isOpen={sidebarOpen && isModalOpen} width={sidebarWidth} usePortal top={72} side="left" zIndex={10000} onToggle={toggleSidebar}>
           <div>
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Lake</div>
-            <select className="pill-btn" value={selectedLake} onChange={(e) => { onLakeChange(e.target.value); setApplied(false); setSelectedYears([]); setDepthSelection('0'); }} style={{ width: '100%' }}>
-              <option value="">Select lake</option>
-              {lakeOptions.map((l) => {
-                const raw = l.class_code || l.classification || l.class || '';
-                const code = raw ? String(raw).replace(/^class\s*/i, '') : '';
-                const suffix = code ? ` (Class ${code})` : '';
-                return (<option key={l.id} value={l.id}>{l.name}{suffix}</option>);
-              })}
-            </select>
+            <LakeSelect lakes={lakeOptions} value={selectedLake} onChange={(e) => { onLakeChange(e.target.value); setApplied(false); setSelectedYears([]); setDepthSelection('0'); }} />
           </div>
 
           <div>
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Dataset source</div>
-            <select className="pill-btn" value={selectedOrg} onChange={(e) => { onOrgChange(e.target.value); onStationsChange([]); setApplied(false); }} disabled={!selectedLake} style={{ width: '100%' }}>
-              <option value="">Select a dataset source</option>
-              {orgOptions.map((o) => (
-                <option key={o.id} value={o.id}>{o.name}</option>
-              ))}
-            </select>
+            <OrgSelect options={orgOptions} value={selectedOrg} onChange={(e) => { onOrgChange(e.target.value); onStationsChange([]); setApplied(false); }} disabled={!selectedLake} required={false} placeholder="Select a dataset source" style={{ width: '100%' }} />
           </div>
 
           {true ? (
@@ -398,12 +388,7 @@ export default function SingleLake({
           {chartType !== 'correlation' ? (
             <div>
               <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Parameter</div>
-              <select className="pill-btn" value={selectedParam} onChange={(e) => { onParamChange(e.target.value); setApplied(false); setDepthSelection('0'); }} disabled={!canChooseParam} style={{ width: '100%' }}>
-                <option value="">Select parameter</option>
-                {paramOptions.map((p) => (
-                  <option key={p.key || p.id || p.code} value={p.key || p.id || p.code}>{p.label || p.name || p.code}</option>
-                ))}
-              </select>
+              <ParamSelect options={paramOptions} value={selectedParam} onChange={(e) => { onParamChange(e.target.value); setApplied(false); setDepthSelection('0'); }} disabled={!canChooseParam} placeholder="Select parameter" style={{ width: '100%' }} />
               {chartType === 'bar' && depthOptions && depthOptions.length >= 1 && (
                 <div>
                   <div style={{ fontSize: 12, opacity: 0.8, marginTop: 8, marginBottom: 4 }}>Depth</div>
@@ -420,21 +405,11 @@ export default function SingleLake({
             <>
               <div>
                 <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Parameter X</div>
-                <select className="pill-btn" value={paramX} onChange={(e) => { setParamX(e.target.value); setApplied(false); }} disabled={!canChooseParam} style={{ width: '100%' }}>
-                  <option value="">Select parameter X</option>
-                  {paramOptions.map((p) => (
-                    <option key={p.key || p.id || p.code} value={p.key || p.id || p.code}>{p.label || p.name || p.code}</option>
-                  ))}
-                </select>
+                <ParamSelect options={paramOptions} value={paramX} onChange={(e) => { setParamX(e.target.value); setApplied(false); }} disabled={!canChooseParam} placeholder="Select parameter X" style={{ width: '100%' }} />
               </div>
               <div>
                 <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Parameter Y</div>
-                <select className="pill-btn" value={paramY} onChange={(e) => { setParamY(e.target.value); setApplied(false); }} disabled={!canChooseParam} style={{ width: '100%' }}>
-                  <option value="">Select parameter Y</option>
-                  {paramOptions.map((p) => (
-                    <option key={p.key || p.id || p.code} value={p.key || p.id || p.code}>{p.label || p.name || p.code}</option>
-                  ))}
-                </select>
+                <ParamSelect options={paramOptions} value={paramY} onChange={(e) => { setParamY(e.target.value); setApplied(false); }} disabled={!canChooseParam} placeholder="Select parameter Y" style={{ width: '100%' }} />
               </div>
             </>
           )}

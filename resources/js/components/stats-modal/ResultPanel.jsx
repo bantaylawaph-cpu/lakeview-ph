@@ -2,33 +2,16 @@ import React from 'react';
 import ValuesTable from './ValuesTable';
 import buildInterpretation from './interpretation';
 import { fmt, sci } from './formatters';
+import { testLabelFromResult } from './utils/testLabels';
 import { FiEye, FiEyeOff } from 'react-icons/fi';
 
-export default function ResultPanel({ result, paramCode, paramOptions, classCode, staticThresholds, lakes, cl, lakeId, compareValue, showAllValues, setShowAllValues, showExactP, setShowExactP }) {
+export default function ResultPanel({ result, paramCode, paramOptions, classCode, lakes, cl, lakeId, compareValue, showAllValues, setShowAllValues, showExactP, setShowExactP }) {
   if (!result) return null;
 
   const gridItems = [];
   const push = (k,v)=>gridItems.push({k,v});
 
-  const labelMap = {
-    'one-sample':'One-sample t-test',
-    'one-sample-nonparam':'Wilcoxon signed-rank',
-    'levene':'Levene (Brown–Forsythe) variance test',
-    'two-sample-welch':'Two-sample Welch t-test',
-  // Generic two-sample nonparametric placeholder (will be overridden by specific test_used when available)
-  'two-sample-nonparam':'Two-sample nonparametric test',
-    'tost':'Equivalence TOST',
-    't_one_sample':'One-sample t-test',
-    'wilcoxon_signed_rank':'Wilcoxon signed-rank',
-    'sign_test':'Sign test',
-    't_student':'Student t-test (equal var)',
-    't_welch':'Welch t-test (unequal var)',
-    'mann_whitney':'Mann–Whitney U',
-    'mood_median_test':'Mood’s median test',
-    'shapiro_wilk':'Shapiro–Wilk normality test',
-    'tost_wilcoxon':'Equivalence TOST (Wilcoxon)'
-  };
-  const testLabel = labelMap[result.test_used] || labelMap[result.type] || result.test_used || result.type;
+  const testLabel = testLabelFromResult(result) || result.test_used || result.type;
   push('Test Selected', testLabel);
 
   const basicStats = (arr) => {
@@ -178,7 +161,7 @@ export default function ResultPanel({ result, paramCode, paramOptions, classCode
   if (result.standard_fallback) push('Std Fallback', 'Yes');
   if (result.class_fallback) push('Class Fallback', 'Yes');
 
-  const finalInterpretation = buildInterpretation({ result, paramCode, paramOptions, classCode, staticThresholds, lakes, cl, fmt, sci, lakeId, compareValue });
+  const finalInterpretation = buildInterpretation({ result, paramCode, paramOptions, classCode, lakes, cl, fmt, sci, lakeId, compareValue });
   const ciLine = (r) => (r.ci_lower != null && r.ci_upper != null ? <div>CI ({Math.round((r.ci_level||0)*100)}%): [{fmt(r.ci_lower)}, {fmt(r.ci_upper)}]</div> : null);
 
   return (

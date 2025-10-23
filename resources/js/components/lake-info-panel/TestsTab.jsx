@@ -4,6 +4,8 @@ import { apiPublic, buildQuery } from '../../lib/api';
 import { alertError } from '../../lib/alerts';
 import PublicWQTestModal from '../modals/PublicWQTestModal';
 import LoadingSpinner from '../LoadingSpinner';
+import OrgSelect from '../stats-modal/ui/OrgSelect';
+import StationSelect from '../stats-modal/ui/StationSelect';
 
 export default function TestsTab({ lake, onJumpToStation }) {
   const lakeId = lake?.id ?? null;
@@ -166,17 +168,11 @@ export default function TestsTab({ lake, onJumpToStation }) {
           <div style={{ display: 'flex', gap: 8, alignItems: 'end', marginBottom: 6 }}>
             <div className="form-group" style={{ flex: 1, minWidth: 0 }}>
               <label style={{ fontSize: 11, marginBottom: 2, color: '#fff' }}>Dataset Source</label>
-              <select value={orgId} onChange={(e) => setOrgId(e.target.value)} style={{ padding: '6px 8px' }}>
-                <option value="">All dataset sources</option>
-                {orgs.map((o) => (<option key={o.id} value={String(o.id)}>{o.name}</option>))}
-              </select>
+              <OrgSelect options={orgs} value={orgId} onChange={(e) => setOrgId(e.target.value)} placeholder="All dataset sources" style={{ padding: '6px 8px', height: 'auto' }} />
             </div>
             <div className="form-group" style={{ flex: 1, minWidth: 0 }}>
               <label style={{ fontSize: 11, marginBottom: 2, color: '#fff' }}>Station</label>
-              <select value={stationId} onChange={(e) => setStationId(e.target.value)} style={{ padding: '6px 8px' }}>
-                <option value="">All</option>
-                {stations.map((s) => (<option key={s.id} value={String(s.id)}>{s.name}</option>))}
-              </select>
+              <StationSelect options={stations} value={stationId} onChange={(e) => setStationId(e.target.value)} includeAllOption={true} allValue="" allLabel="All" placeholder="Select a station" style={{ padding: '6px 8px', height: 'auto' }} />
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'end' }}>
               <div className="form-group" style={{ minWidth: 0 }}>
