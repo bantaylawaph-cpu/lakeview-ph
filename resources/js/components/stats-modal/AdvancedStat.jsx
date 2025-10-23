@@ -259,20 +259,8 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
 
   // Disable run based on required selections
   const runDisabled = React.useMemo(() => {
-    if (loading) return true;
-    if (!paramCode || !lakeId || !selectedTest) return true;
-    // require applied standard and primary organization to avoid mixing datasets
-    if (!appliedStandardId) return true;
-    if (!organizationId) return true;
-    if (!allowedTests.includes(selectedTest)) return true;
-    if (inferredTest === 'two-sample') {
-      if (!compareValue || !String(compareValue).startsWith('lake:')) return true; // require a second lake for two-sample
-      // when comparing two lakes, require secondary organization selection to avoid implicit mixing
-      if (!secondaryOrganizationId) return true;
-    }
-    if (yearError) return true;
-    return false;
-  }, [loading, paramCode, lakeId, selectedTest, inferredTest, compareValue, allowedTests, yearError, appliedStandardId, organizationId, secondaryOrganizationId]);
+    return false; // Always enable to show popups on missing fields
+  }, []);
   
 
   // Fetch depths when parameter, lake(s), debounced date range or organization changes (one-sample or lake-vs-lake two-sample)
@@ -374,6 +362,65 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
 
   const run = async () => {
     setLoading(true); setError(null); setResult(null); setShowExactP(false); setAdvisories([]);
+    // Check for missing required fields and show popups
+    if (!appliedStandardId) {
+      alertError('Missing Applied Standard', 'Please select an Applied Standard before running the test.');
+      setLoading(false);
+      return;
+    }
+    if (!paramCode) {
+      alertError('Missing Parameter', 'Please select a Parameter before running the test.');
+      setLoading(false);
+      return;
+    }
+    if (!lakeId) {
+      alertError('Missing Lake', 'Please select a Primary Lake before running the test.');
+      setLoading(false);
+      return;
+    }
+    if (!organizationId) {
+      alertError('Missing Dataset Source', 'Please select a Dataset Source before running the test.');
+      setLoading(false);
+      return;
+    }
+    if (!selectedTest) {
+      alertError('Missing Test', 'Please select a Test before running the test.');
+      setLoading(false);
+      return;
+    }
+    if (!allowedTests.includes(selectedTest)) {
+      alertError('Invalid Test Selection', 'The selected test is not applicable for the current comparison mode.');
+      setLoading(false);
+      return;
+    }
+    if (inferredTest === 'two-sample') {
+      if (!compareValue || !String(compareValue).startsWith('lake:')) {
+        alertError('Missing Comparison Lake', 'For two-sample tests, please select a lake to compare against.');
+        setLoading(false);
+        return;
+      }
+      if (!secondaryOrganizationId) {
+        alertError('Missing Secondary Dataset Source', 'Please select a Secondary Dataset Source for the comparison lake.');
+        setLoading(false);
+        return;
+      }
+    } else if (inferredTest === 'one-sample') {
+      if (!compareValue) {
+        alertError('Missing Comparison', 'Please select a Class or Lake to compare against.');
+        setLoading(false);
+        return;
+      }
+      if (String(compareValue).startsWith('class:') && stationId === "") {
+        alertError('Missing Station Selection', 'Please select a station or "All Stations" for lake vs class threshold tests.');
+        setLoading(false);
+        return;
+      }
+    }
+    if (yearError) {
+      alertError('Invalid Year Range', yearError);
+      setLoading(false);
+      return;
+    }
     try {
       // 1. Build request body for series endpoint
       const body = {
@@ -388,10 +435,12 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
       }
       if (organizationId) body.organization_id = organizationId;
       if (stationId && stationId !== "all") body.station_id = Number(stationId);
+
+      const otherLake = (compareValue && String(compareValue).startsWith('lake:')) ? Number(String(compareValue).split(':')[1]) : undefined;
+
       if (inferredTest === 'one-sample') {
         body.lake_id = Number(lakeId);
       } else {
-        const otherLake = (compareValue && String(compareValue).startsWith('lake:')) ? Number(String(compareValue).split(':')[1]) : undefined;
         const lakeIds = [Number(lakeId), otherLake].filter(Boolean);
         body.lake_ids = lakeIds;
         const orgIds = [organizationId || null, secondaryOrganizationId || null];
@@ -404,7 +453,8 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
       const evalType = series?.evaluation_type;
       const alpha = 1 - Number(cl || '0.95');
 
-      if (!paramCode) throw new Error('Parameter not selected');
+      const primaryName = lakes.find(l => String(l.id) === String(lakeId))?.name || `Lake ${lakeId}`;
+      const secondaryName = otherLake ? (lakes.find(l => String(l.id) === String(otherLake))?.name || `Lake ${otherLake}`) : '';
 
       let computed;
       if (inferredTest === 'one-sample') {
@@ -412,12 +462,6 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
         if (values.length < 2) {
           alertError('Not enough data', `Not enough samples to run the test: found ${values.length}, need at least 2.`);
           setResult(null); setLoading(false); return;
-        }
-        if (evalType === 'range' || paramHasRange) {
-          if (!(['tost','tost_wilcoxon','shapiro_wilk'].includes(selectedTest))) {
-            alertError('Range threshold requires TOST', 'Select Equivalence TOST (t) or Equivalence TOST (Wilcoxon), or run Shapiro–Wilk separately.');
-            setLoading(false); return;
-          }
         }
 
         let mu0 = null;
@@ -479,7 +523,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
         const x = (series?.sample1_values || []).map(Number).filter(Number.isFinite);
         const y = (series?.sample2_values || []).map(Number).filter(Number.isFinite);
         if (x.length < 2 || y.length < 2) {
-          alertError('Not enough data', `Not enough samples: group 1 has ${x.length}, group 2 has ${y.length}; need at least 2 each.`);
+          alertError('Not enough data', `Not enough samples: ${primaryName} has ${x.length}, ${secondaryName} has ${y.length}; need at least 2 each.`);
           setResult(null); setLoading(false); return;
         }
         computed = await runTwoSample({ selectedTest, sample1: x, sample2: y, alpha, evalType });
@@ -826,7 +870,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
         <button ref={gearBtnRef} aria-label="Advanced options" title="Advanced options" className="pill-btn" onClick={() => setShowGearPopover(s => !s)} style={{ padding:'6px 10px', display:'inline-flex', alignItems:'center', justifyContent:'center' }}>
           <FiSettings size={16} />
         </button>
-  <button className="pill-btn liquid" disabled={runDisabled} onClick={run} style={{ padding:'6px 10px' }}>{loading ? 'Running...' : 'Run Test'}</button>
+  <button className="pill-btn liquid" onClick={run} style={{ padding:'6px 10px' }}>{loading ? 'Running...' : 'Run Test'}</button>
       </div>
     </div>
 
