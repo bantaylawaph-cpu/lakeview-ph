@@ -714,7 +714,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
       } else if (Array.isArray(result?.sample1_values) || Array.isArray(result?.sample2_values)) {
         const a = (result.sample1_values || []).slice(0,1000).join(', ');
         const b = (result.sample2_values || []).slice(0,1000).join(', ');
-        valuesSection = `<h3>Group values</h3><div>Group 1: ${a}</div><div style="margin-top:8px">Group 2: ${b}</div>`;
+        valuesSection = `<h3>Group values</h3><div>x: ${a}</div><div style="margin-top:8px">y: ${b}</div>`;
       }
 
       const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>${style}</style></head><body><h1>${title}</h1><table>${summaryRows.join('')}</table>${valuesSection}</body></html>`;
@@ -746,61 +746,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
     </div>
   <div>
   <div style={{ display:'grid', gridTemplateColumns:'1fr 2fr 1fr 1fr', gridTemplateRows:'repeat(2, auto)', gap:10, alignItems:'start', fontSize:13, minWidth:0 }}>
-      {/* Row 1: Applied Standard, Parameter, Confidence Level (compact) */}
-      <div style={{ gridColumn: '1 / span 1', minWidth:0 }}>
-        <select required className="pill-btn" value={appliedStandardId} onChange={e=>{setAppliedStandardId(e.target.value); setResult(null);}} style={{ width:'100%', minWidth:0, boxSizing:'border-box', padding:'10px 12px', height:40, lineHeight:'20px' }}>
-          <option value="">Select Applied Standard</option>
-          {standards.map(s => <option key={s.id} value={s.id}>{s.code || s.name || s.id}</option>)}
-        </select>
-      </div>
-      <div style={{ gridColumn: '2 / span 1', minWidth:0 }}>
-        <div style={{ display:'flex', gap:6 }}>
-          <select className="pill-btn" value={paramCode} onChange={e=>{setParamCode(e.target.value); setResult(null);}} style={{ flex:1, minWidth:0, boxSizing:'border-box', padding:'10px 12px', height:40, lineHeight:'20px' }}>
-            <option value="">Select parameter</option>
-            {paramOptions.length ? (
-              paramOptions.map(p => (
-                <option key={p.key || p.id || p.code} value={p.code}>
-                  {p.label || p.name || p.code}
-                </option>
-              ))
-            ) : null}
-          </select>
-          {/* Depth selector (one-sample or lake vs lake two-sample) */}
-          <div style={{ width: paramCode && (inferredTest==='one-sample' || (inferredTest==='two-sample' && compareValue && String(compareValue).startsWith('lake:'))) ? 150 : 0, transition:'width 0.2s ease', overflow:'hidden' }}>
-            {paramCode && (inferredTest==='one-sample' || (inferredTest==='two-sample' && compareValue && String(compareValue).startsWith('lake:'))) ? (
-              <select className="pill-btn" value={depthMode === 'all' ? 'all' : (depthValue || '')} onChange={e=>{
-                const v = e.target.value;
-                if (v === 'all') { setDepthMode('all'); setDepthValue(''); }
-                else { setDepthMode('single'); setDepthValue(v); }
-                setResult(null);
-              }} style={{ width:'100%', padding:'10px 12px', height:40 }}>
-                <option value="all">All depths (mean)</option>
-                {availableDepths.map(d => (<option key={`depth-${d}`} value={d}>{d} m</option>))}
-              </select>
-            ) : null}
-          </div>
-        </div>
-      </div>
-      <div style={{ gridColumn: '3 / span 2', display:'flex', justifyContent:'flex-end', minWidth:0 }}>
-        <div style={{ display:'flex', gap:8, width:'100%' }}>
-            <select className="pill-btn" value={selectedTest} onChange={e=>{setSelectedTest(e.target.value); setResult(null);}} style={{ flex:1, minWidth:0, boxSizing:'border-box', padding:'8px 10px', fontSize:12, height:36, lineHeight:'18px' }}>
-                <option value="" disabled>Select test</option>
-                <option value="shapiro_wilk" disabled={inferredTest!=='one-sample'}>Shapiro–Wilk</option>
-                <option value="levene" disabled={inferredTest!=='two-sample'}>Levene variance test</option>
-                <option value="t_one_sample" disabled={inferredTest!=='one-sample' || paramHasRange}>One-sample t-test</option>
-                <option value="wilcoxon_signed_rank" disabled={inferredTest!=='one-sample' || paramHasRange}>Wilcoxon signed-rank</option>
-                <option value="sign_test" disabled={inferredTest!=='one-sample' || paramHasRange}>Sign test</option>
-                <option value="tost" disabled={inferredTest!=='one-sample' || !paramHasRange}>Equivalence TOST t</option>
-                <option value="tost_wilcoxon" disabled={inferredTest!=='one-sample' || !paramHasRange}>Equivalence TOST Wilcoxon</option>
-                <option value="t_student" disabled={inferredTest!=='two-sample'}>Student t-test</option>
-                <option value="t_welch" disabled={inferredTest!=='two-sample'}>Welch t-test</option>
-                <option value="mann_whitney" disabled={inferredTest!=='two-sample'}>Mann–Whitney U</option>
-                <option value="mood_median_test" disabled={inferredTest!=='two-sample'}>Mood median test</option>
-              </select>
-        </div>
-      </div>
-
-      {/* Row 2: Lake | Class (header + selector) | Compare Lake | Years */}
+      {/* Row 1: Lake | Class (header + selector) | Compare Lake | Years */}
       <div style={{ gridColumn: '1 / span 1', minWidth:0 }}>
         <select className="pill-btn" value={lakeId} onChange={e=>{setLakeId(e.target.value); setResult(null);}} style={{ width:'100%', minWidth:0, boxSizing:'border-box', padding:'10px 12px', height:40, lineHeight:'20px' }}>
           <option value="">Primary Lake</option>
@@ -860,6 +806,60 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
           <div style={{ width: '100%' }} />
         </div>
       )}
+
+      {/* Row 2: Applied Standard, Parameter, Confidence Level (compact) */}
+      <div style={{ gridColumn: '1 / span 1', minWidth:0 }}>
+        <select required className="pill-btn" value={appliedStandardId} onChange={e=>{setAppliedStandardId(e.target.value); setResult(null);}} style={{ width:'100%', minWidth:0, boxSizing:'border-box', padding:'10px 12px', height:40, lineHeight:'20px' }}>
+          <option value="">Select Applied Standard</option>
+          {standards.map(s => <option key={s.id} value={s.id}>{s.code || s.name || s.id}</option>)}
+        </select>
+      </div>
+      <div style={{ gridColumn: '2 / span 1', minWidth:0 }}>
+        <div style={{ display:'flex', gap:6 }}>
+          <select className="pill-btn" value={paramCode} onChange={e=>{setParamCode(e.target.value); setResult(null);}} style={{ flex:1, minWidth:0, boxSizing:'border-box', padding:'10px 12px', height:40, lineHeight:'20px' }}>
+            <option value="">Select parameter</option>
+            {paramOptions.length ? (
+              paramOptions.map(p => (
+                <option key={p.key || p.id || p.code} value={p.code}>
+                  {p.label || p.name || p.code}
+                </option>
+              ))
+            ) : null}
+          </select>
+          {/* Depth selector (one-sample or lake vs lake two-sample) */}
+          <div style={{ width: paramCode && (inferredTest==='one-sample' || (inferredTest==='two-sample' && compareValue && String(compareValue).startsWith('lake:'))) ? 150 : 0, transition:'width 0.2s ease', overflow:'hidden' }}>
+            {paramCode && (inferredTest==='one-sample' || (inferredTest==='two-sample' && compareValue && String(compareValue).startsWith('lake:'))) ? (
+              <select className="pill-btn" value={depthMode === 'all' ? 'all' : (depthValue || '')} onChange={e=>{
+                const v = e.target.value;
+                if (v === 'all') { setDepthMode('all'); setDepthValue(''); }
+                else { setDepthMode('single'); setDepthValue(v); }
+                setResult(null);
+              }} style={{ width:'100%', padding:'10px 12px', height:40 }}>
+                <option value="all">All depths (mean)</option>
+                {availableDepths.map(d => (<option key={`depth-${d}`} value={d}>{d} m</option>))}
+              </select>
+            ) : null}
+          </div>
+        </div>
+      </div>
+      <div style={{ gridColumn: '3 / span 2', display:'flex', justifyContent:'flex-end', minWidth:0 }}>
+        <div style={{ display:'flex', gap:8, width:'100%' }}>
+            <select className="pill-btn" value={selectedTest} onChange={e=>{setSelectedTest(e.target.value); setResult(null);}} style={{ flex:1, minWidth:0, boxSizing:'border-box', padding:'8px 10px', fontSize:12, height:36, lineHeight:'18px' }}>
+                <option value="" disabled>Select test</option>
+                <option value="shapiro_wilk" disabled={inferredTest!=='one-sample'}>Shapiro–Wilk</option>
+                <option value="levene" disabled={inferredTest!=='two-sample'}>Levene variance test</option>
+                <option value="t_one_sample" disabled={inferredTest!=='one-sample' || paramHasRange}>One-sample t-test</option>
+                <option value="wilcoxon_signed_rank" disabled={inferredTest!=='one-sample' || paramHasRange}>Wilcoxon signed-rank</option>
+                <option value="sign_test" disabled={inferredTest!=='one-sample' || paramHasRange}>Sign test</option>
+                <option value="tost" disabled={inferredTest!=='one-sample' || !paramHasRange}>Equivalence TOST t</option>
+                <option value="tost_wilcoxon" disabled={inferredTest!=='one-sample' || !paramHasRange}>Equivalence TOST Wilcoxon</option>
+                <option value="t_student" disabled={inferredTest!=='two-sample'}>Student t-test</option>
+                <option value="t_welch" disabled={inferredTest!=='two-sample'}>Welch t-test</option>
+                <option value="mann_whitney" disabled={inferredTest!=='two-sample'}>Mann–Whitney U</option>
+                <option value="mood_median_test" disabled={inferredTest!=='two-sample'}>Mood median test</option>
+              </select>
+        </div>
+      </div>
     </div>
 
       <div style={{ marginTop:10, display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}>
