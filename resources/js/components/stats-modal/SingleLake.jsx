@@ -13,6 +13,7 @@ import useStationsCache from "./hooks/useStationsCache";
 import useTimeSeriesData from "./hooks/useTimeSeriesData";
 import useDepthProfileData from "./hooks/useDepthProfileData";
 import useSingleBarData from "./hooks/useSingleBarData";
+import useSeasonalMK from "./hooks/useSeasonalMK";
 import GraphInfoButton from "./ui/GraphInfoButton";
 import StationPicker from "./ui/StationPicker";
 import { SeriesModeToggle } from "./ui/Toggles";
@@ -60,6 +61,9 @@ export default function SingleLake({
   const [infoContent, setInfoContent] = useState({ title: '', sections: [] });
   const [selectedYears, setSelectedYears] = useState([]);
   const [depthSelection, setDepthSelection] = useState('0');
+  // Trend analysis (SMK)
+  const [trendEnabled, setTrendEnabled] = useState(false);
+  const trendAlpha = 0.05;
   // Correlation removed
   const { events, loading } = useSampleEvents(selectedLake, selectedOrg, timeRange, dateFrom, dateTo);
   // Also fetch unfiltered events (all time) to derive available years without being affected
@@ -151,6 +155,21 @@ export default function SingleLake({
     if (!selectedLake || !selectedOrg) return false;
     return Array.isArray(selectedStations) && selectedStations.length > 0;
   }, [selectedLake, selectedOrg, selectedStations]);
+
+  // Seasonal MK overlay (only for time-series)
+  const chartLabels = chartData?.labels || [];
+  const { result: smk, loading: smkLoading } = useSeasonalMK({
+    events,
+    selectedParam,
+    selectedStations,
+    bucket,
+    timeRange,
+    dateFrom,
+    dateTo,
+    labels: chartLabels,
+    alpha: trendAlpha,
+    enabled: trendEnabled && chartType === 'time' && applied && !!selectedParam,
+  });
 
   const computeMissingFields = () => {
     const missing = [];
@@ -293,6 +312,10 @@ export default function SingleLake({
               compareMode: false,
               summary: null,
               inferredType: inferred,
+              // include trend context so the explanation can show the SMK description and result
+              trendEnabled,
+              trend: smk,
+              alpha: trendAlpha,
             };
             const content = buildGraphExplanation(ctx);
             setInfoContent(content);
@@ -371,6 +394,20 @@ export default function SingleLake({
               dateTo={dateTo}
               setDateTo={setDateTo}
             />
+          )}
+
+          {/* Trend analysis toggle and hidden controls */}
+          {chartType === 'time' && (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <div style={{ fontSize: 12, opacity: 0.8 }}>Trend analysis (Seasonal MK)</div>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <input type="checkbox" checked={trendEnabled} onChange={(e)=>{ setTrendEnabled(e.target.checked); setApplied(false); }} />
+                  <span style={{ fontSize: 12, opacity: 0.9 }}>Enable</span>
+                </label>
+              </div>
+              {/* Season scheme selector removed — PAGASA Wet/Dry is the default and only scheme for now */}
+            </div>
           )}
 
           {/* Bucket & Year controls for Depth Profile */}
@@ -515,7 +552,26 @@ export default function SingleLake({
             )
           ) : chartType === 'time' ? (
             chartData && chartData.datasets && chartData.datasets.length ? (
-              <Line key={`time-${selectedParam}-${selectedLake}-${seriesMode}`} ref={chartRef} data={chartData} options={singleChartOptions} />
+              (() => {
+                // Merge overlay when available
+                let datasets = chartData.datasets.slice();
+                if (smk && Array.isArray(smk.overlay)){
+                  datasets = datasets.concat([
+                    {
+                      label: `Sen’s slope (SMK)`,
+                      data: smk.overlay,
+                      borderColor: '#f2c94c',
+                      backgroundColor: 'transparent',
+                      borderDash: [6,4],
+                      pointRadius: 0,
+                      tension: 0,
+                      spanGaps: true,
+                    }
+                  ]);
+                }
+                const data = { labels: chartData.labels, datasets };
+                return <Line key={`time-${selectedParam}-${selectedLake}-${seriesMode}-${trendEnabled? 'trend': 'plain'}`} ref={chartRef} data={data} options={singleChartOptions} />;
+              })()
             ) : (
               <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <span style={{ opacity: 0.9 }}>No time-series data available for this selection.</span>
@@ -570,6 +626,27 @@ export default function SingleLake({
       </div>
       </div>
       </div>
+      {/* Trend result badge */}
+      {chartType === 'time' && trendEnabled && applied && smk && (
+        <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ padding: '4px 8px', borderRadius: 999, background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', fontSize: 12 }}>
+            {smk.status} {` `}
+            <span style={{ opacity: 0.8 }}>
+              {`(p ${smk.mk?.p_value < 0.01 ? '<0.01' : '= ' + smk.mk?.p_value?.toFixed(3)})`}
+            </span>
+          </span>
+          {Number.isFinite(smk?.sen?.slope) && (
+            <span style={{ fontSize: 12, opacity: 0.9 }}>
+              Sen’s slope ≈ {Number(smk.sen.slope).toPrecision(3)} per year
+            </span>
+          )}
+          {(smk?.mk?.notes || []).length ? (
+            <span style={{ fontSize: 11, opacity: 0.7 }}>
+              {smk.mk.notes.join('; ')}
+            </span>
+          ) : null}
+        </div>
+      )}
       <InfoModal open={infoOpen} onClose={() => setInfoOpen(false)} title={infoContent.title} sections={infoContent.sections} />
     </div>
   );

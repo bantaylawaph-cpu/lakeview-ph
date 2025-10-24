@@ -113,6 +113,37 @@ export function buildGraphExplanation(ctx) {
     if (typeTime === 'max') hintTime = 'Lower is better. Values above the maximum are of concern.';
     if (typeTime === 'range') hintTime = 'Best when values are inside the acceptable range; outside means exceedance.';
     if (hintTime) sections.push({ heading: 'How to read a time-series', text: hintTime });
+    // Trend analysis (simple user-facing phrasing)
+    if (ctx && (ctx.trendEnabled || ctx.trend)) {
+      sections.push({
+        heading: 'Trend analysis',
+        text: 'Shows whether the parameter is Increasing, Decreasing, or has No clear trend using the Seasonal Mann–Kendall test. Values are aggregated by Wet/Dry season (season medians). A dashed line (Sen’s slope) shows the change per year.'
+      });
+
+      // If a computed result was provided, explain it plainly for the end user
+      const tr = ctx.trend || {};
+      const mk = tr.mk || null;
+      const sen = tr.sen || null;
+      if (mk || sen) {
+        const p = mk?.p_value;
+        let pLabel = 'p unknown';
+        if (typeof p === 'number' && Number.isFinite(p)) pLabel = (p < 0.01) ? 'p < 0.01' : `p = ${p.toFixed(3)}`;
+        const slope = sen && typeof sen.slope === 'number' && Number.isFinite(sen.slope) ? Number(sen.slope).toPrecision(3) : null;
+        const alpha = (ctx && ctx.alpha != null) ? ctx.alpha : 0.05;
+        const status = tr.status || (mk ? (mk.p_value != null && mk.p_value < alpha ? (mk.Z > 0 ? 'Increasing' : (mk.Z < 0 ? 'Decreasing' : 'No clear trend')) : 'No clear trend') : 'No clear trend');
+        const notes = (mk && mk.notes) ? mk.notes.join('; ') : (tr.notes || '');
+
+        let text = '';
+        if (status === 'Increasing') text += `Result: Increasing (${pLabel}). This means values show a statistically significant upward trend.`;
+        else if (status === 'Decreasing') text += `Result: Decreasing (${pLabel}). This means values show a statistically significant downward trend.`;
+        else text += `Result: No clear trend (${pLabel}). The test did not find a consistent increase or decrease.`;
+
+        if (slope != null) text += ` Sen’s slope ≈ ${slope} per year (that is, the typical yearly change).`;
+        if (notes) text += ` Note: ${notes}.`;
+
+        sections.push({ heading: 'Trend result', text });
+      }
+    }
   }
 
   return { title, sections };

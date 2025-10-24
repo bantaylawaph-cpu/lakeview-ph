@@ -17,6 +17,8 @@ import {
   leveneTwoSampleAsync
 } from '../resources/js/stats/statsUtils.js';
 
+import { computeSMKFromSeasonSeries } from '../resources/js/stats/seasonalMK.js';
+
 const conf_level = 0.95;
 const alpha = 1 - conf_level; // 0.05
 
@@ -160,4 +162,37 @@ async function safeRun(title, fn) {
   }
 
   console.log('\nDone.');
+})();
+
+// ----------------------- Seasonal MK quick checks ---------------------------
+// Synthetic season-series to sanity-check SMK direction and p-values roughly.
+(async function seasonalChecks(){
+  const header = (t)=> console.log(`\n=== Seasonal MK – ${t} ===`);
+  // Build increasing trend: Wet values grow by 1 each year, Dry values grow by 0.5
+  const years = [2016,2017,2018,2019,2020,2021,2022];
+  const wet = years.map((y,i)=>({ year:y, value: 10 + i*1 }));
+  const dry = years.map((y,i)=>({ year:y, value:  8 + i*0.5 }));
+  header('increasing');
+  try {
+    const res = await computeSMKFromSeasonSeries({ wet, dry });
+    console.log(`Z=${res.Z?.toFixed(3)} p=${res.p_value?.toFixed(6)} dir=${res.direction}`);
+  } catch(e){ console.log('SKIPPED seasonal increasing:', e?.message||String(e)); }
+
+  // Decreasing trend
+  const wetD = years.map((y,i)=>({ year:y, value: 10 - i*1 }));
+  const dryD = years.map((y,i)=>({ year:y, value:  8 - i*0.5 }));
+  header('decreasing');
+  try {
+    const res = await computeSMKFromSeasonSeries({ wet: wetD, dry: dryD });
+    console.log(`Z=${res.Z?.toFixed(3)} p=${res.p_value?.toFixed(6)} dir=${res.direction}`);
+  } catch(e){ console.log('SKIPPED seasonal decreasing:', e?.message||String(e)); }
+
+  // Flat (no trend)
+  const wetF = years.map((y)=>({ year:y, value: 5 }));
+  const dryF = years.map((y)=>({ year:y, value: 5 }));
+  header('no-trend');
+  try {
+    const res = await computeSMKFromSeasonSeries({ wet: wetF, dry: dryF });
+    console.log(`Z=${res.Z?.toFixed(3)} p=${res.p_value?.toFixed(6)} dir=${res.direction}`);
+  } catch(e){ console.log('SKIPPED seasonal no-trend:', e?.message||String(e)); }
 })();
