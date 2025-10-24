@@ -21,12 +21,7 @@ class SearchController extends Controller
     public function query(Request $request)
     {
         $q = (string) $request->input('query', '');
-        $requestedEntity = strtolower(trim((string) $request->input('entity', '')));
-        // Allow empty query for some entities (e.g., organizations) to list all
-        $allowEmpty = in_array($requestedEntity, ['organizations'], true);
-        if (trim($q) === '' && !$allowEmpty) {
-            return response()->json(['error' => 'query is required'], 422);
-        }
+        if (trim($q) === '') return response()->json(['error' => 'query is required'], 422);
 
         // Normalize & options
         $limitParam = (int) $request->input('limit', 20);
@@ -46,6 +41,7 @@ class SearchController extends Controller
         $place = $extractPlace($q);
 
         // Detect entity/table with optional override
+        $requestedEntity = strtolower(trim((string) $request->input('entity', '')));
         $entity = 'lakes';
         if (in_array($requestedEntity, ['lakes','watersheds','parameters','layers','lake_flows','municipalities','organizations'], true)) {
             $entity = $requestedEntity;
