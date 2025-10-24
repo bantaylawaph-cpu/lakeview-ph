@@ -130,8 +130,33 @@ export default function useSingleBarData({ events = [], bucket = 'year', selecte
     if (seriesMode === 'avg') {
       // labels is single lake label; datasets per period (periods -> values for lake)
       labels = [labelForLake];
+
+      // If specific stations are selected, average ONLY over those stations.
+      const requested = Array.isArray(selectedStations) ? selectedStations.map(String) : [];
+      const actualKeys = Array.from(stationMaps.keys());
+      const normalize = (s) => String(s || '').trim().toLowerCase();
+      const stationKeyFor = {};
+      requested.forEach((req) => {
+        const nreq = normalize(req);
+        let found = actualKeys.find((k) => normalize(k) === nreq);
+        if (!found) found = actualKeys.find((k) => normalize(k).includes(nreq) || nreq.includes(normalize(k)));
+        stationKeyFor[req] = found || null;
+      });
+      const selectedActualKeys = requested.length ? requested.map((st) => stationKeyFor[st]).filter(Boolean) : [];
+
+      const meanForSelected = (pk) => {
+        if (!selectedActualKeys.length) return meanForPeriod(pk); // fallback to overall
+        let sum = 0, cnt = 0;
+        for (const key of selectedActualKeys) {
+          const sm = stationMaps.get(String(key)) || new Map();
+          const agg = sm.get(pk);
+          if (agg && agg.cnt) { sum += agg.sum; cnt += agg.cnt; }
+        }
+        return cnt ? (sum / cnt) : null;
+      };
+
       uniqueKeys.forEach((pk, idx) => {
-        const val = meanForPeriod(pk);
+        const val = meanForSelected(pk);
         const c = colorFor(pk);
         datasets.push({ label: humanLabelFor(pk), data: [val], backgroundColor: c.bg, borderColor: c.stroke, borderWidth: 1 });
         periodInfo.push({ key: pk, year: c.year, month: withinCountForBucket === 12 ? withinIndexFromPk(pk) + 1 : null, quarter: withinCountForBucket === 4 ? withinIndexFromPk(pk) + 1 : null, index: datasets.length - 1 });

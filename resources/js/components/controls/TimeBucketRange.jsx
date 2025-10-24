@@ -10,13 +10,10 @@ export default function TimeBucketRange({
   setDateFrom = () => {},
   dateTo = '',
   setDateTo = () => {},
-  referenceDate = null, // optional Date used for presets (e.g., latestTestDate)
-  // New: restrict bucket options (e.g., ['month','quarter'])
+  referenceDate = null, 
   allowedBuckets = null,
-  // New: switch range UI to a specific year dropdown fed by availableYears
-  rangeMode = 'presets', // 'presets' | 'year-list'
-  availableYears = [], // e.g., [2024, 2023, 2022]
-  // For multi-year selection (bar chart): selectedYears and setter
+  rangeMode = 'presets', 
+  availableYears = [],
   selectedYears = [],
   setSelectedYears = () => {},
 }) {
@@ -53,12 +50,10 @@ export default function TimeBucketRange({
     setTimeRange(key);
   };
 
-  // For custom, we show year-only inputs but we surface full ISO start/end-of-year
   const yearFrom = dateFrom ? String(dateFrom).slice(0,4) : '';
   const yearTo = dateTo ? String(dateTo).slice(0,4) : '';
 
   const handleCustomYearFrom = (y) => {
-    // Allow clearing
     if (!y) {
       setDateFrom('');
       setTimeRange('custom');
@@ -66,7 +61,6 @@ export default function TimeBucketRange({
     }
     const yf = String(y).slice(0, 4).padStart(4, '0');
     const toY = dateTo ? String(dateTo).slice(0, 4) : '';
-    // Enforce Start <= End: if selecting a start after the current end, snap end to start
     if (toY && Number(yf) > Number(toY)) {
       setDateTo(`${yf}-12-31`);
     } else if (!dateTo) {
@@ -76,7 +70,6 @@ export default function TimeBucketRange({
     setTimeRange('custom');
   };
   const handleCustomYearTo = (y) => {
-    // Allow clearing
     if (!y) {
       setDateTo('');
       setTimeRange('custom');
@@ -84,7 +77,6 @@ export default function TimeBucketRange({
     }
     const yt = String(y).slice(0, 4).padStart(4, '0');
     const fromY = dateFrom ? String(dateFrom).slice(0, 4) : '';
-    // Enforce Start <= End: if selecting an end before the current start, snap start to end
     if (fromY && Number(fromY) > Number(yt)) {
       setDateFrom(`${yt}-01-01`);
     } else if (!dateFrom) {
@@ -106,7 +98,6 @@ export default function TimeBucketRange({
           const opts = Array.isArray(allowedBuckets) && allowedBuckets.length
             ? allowedBuckets
             : ['year', 'quarter', 'month'];
-          // Preserve original order preference: year, quarter, month
           const order = ['year', 'quarter', 'month'];
           const final = order.filter((k) => opts.includes(k));
           return final.map((k) => (
