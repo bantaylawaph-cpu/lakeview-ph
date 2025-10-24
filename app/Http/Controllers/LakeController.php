@@ -209,6 +209,15 @@ class LakeController extends Controller
                       ->where('ly.visibility', 'public');
                 })
                 ->leftJoin('watersheds as w', 'w.id', '=', 'l.watershed_id')
+                // Any PUBLIC layer uploader tenant (for org filtering), independent of active layer
+                ->leftJoin('layers as lypub', function ($j) {
+                    $j->on('lypub.body_id', '=', 'l.id')
+                      ->where('lypub.body_type', 'lake')
+                      ->where('lypub.visibility', 'public');
+                })
+                ->leftJoin('users as upub', 'upub.id', '=', 'lypub.uploaded_by')
+                ->leftJoin('roles as rpub', 'rpub.id', '=', 'upub.role_id')
+                ->leftJoin('tenants as tpub', 'tpub.id', '=', 'upub.tenant_id')
                 ->select(
                     'l.id','l.name','l.alt_name','l.region','l.province','l.municipality',
                     'l.surface_area_km2','l.elevation_m','l.mean_depth_m','l.class_code',
@@ -291,6 +300,15 @@ class LakeController extends Controller
             }
             if (is_numeric($depth_max)) {
                 $q->where('l.mean_depth_m', '<=', (float)$depth_max);
+            }
+
+            // Optional: filter by organization/tenant handling the active public layer
+            $tenantId = request()->query('tenant_id');
+            $orgName = request()->query('org');
+            if (is_numeric($tenantId)) {
+                $q->where('tpub.id', (int)$tenantId);
+            } elseif ($orgName) {
+                $q->where('tpub.name', 'ILIKE', '%' . $orgName . '%');
             }
 
             $rows = $q->get();

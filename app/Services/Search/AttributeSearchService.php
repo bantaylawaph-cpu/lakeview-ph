@@ -147,6 +147,51 @@ SQL;
                 return $this->mapper->mapRows($rows, 'lake_flows', null, $place);
             }
 
+            // New: organizations (tenants)
+            if ($entity === 'organizations') {
+                $qtrim = trim((string)$q);
+                $isGeneric = ($qtrim === '' || preg_match('/^org(anization)?s?$/i', $qtrim));
+                // Be permissive about visibility: include tenants even if active is NULL; exclude soft-deleted only
+                if ($isGeneric) {
+                    $sql = <<<SQL
+SELECT t.id, t.name, t.slug, t.contact_email
+FROM tenants t
+WHERE t.deleted_at IS NULL AND COALESCE(t.active, TRUE) = TRUE
+ORDER BY t.name ASC
+LIMIT :limit
+SQL;
+                    $params = ['limit' => $limit];
+                } else {
+                    $sql = <<<SQL
+SELECT t.id, t.name, t.slug, t.contact_email
+FROM tenants t
+WHERE t.deleted_at IS NULL AND COALESCE(t.active, TRUE) = TRUE AND (
+    t.name ILIKE :kw OR COALESCE(t.slug,'') ILIKE :kw OR COALESCE(t.contact_email,'') ILIKE :kw
+)
+ORDER BY t.name ASC
+LIMIT :limit
+SQL;
+                    $params = ['kw' => $kw, 'limit' => $limit];
+                }
+                $rows = DB::select($sql, $params);
+                // Fallback: if nothing found for a specific name, list any tenants that have public layers
+                if (!$isGeneric && empty($rows)) {
+                    $sql2 = <<<SQL
+SELECT DISTINCT t.id, t.name, t.slug, t.contact_email
+FROM tenants t
+JOIN users u ON u.tenant_id = t.id
+JOIN layers ly ON ly.uploaded_by = u.id AND ly.visibility = 'public'
+WHERE t.deleted_at IS NULL AND (
+    t.name ILIKE :kw OR COALESCE(t.slug,'') ILIKE :kw OR COALESCE(t.contact_email,'') ILIKE :kw
+)
+ORDER BY t.name ASC
+LIMIT :limit
+SQL;
+                    $rows = DB::select($sql2, ['kw' => $kw, 'limit' => $limit]);
+                }
+                return $this->mapper->mapRows($rows, 'organizations', null, null);
+            }
+
             return [];
         });
     }

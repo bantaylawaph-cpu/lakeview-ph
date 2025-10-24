@@ -20,6 +20,7 @@ function SearchBar({ onMenuClick, onFilterClick, onSearch, onClear, onTyping, mo
     { label: 'Lake names', subtitle: 'e.g., Taal Lake, Laguna de Bay' },
     { label: 'Watersheds', subtitle: 'e.g., Taal watershed' },
     { label: 'Flows', subtitle: 'e.g., inflow, outflow, river source' },
+    { label: 'Organizations', subtitle: 'You can search for the Organizations to view their data' },
     { label: 'Analytical queries', subtitle: 'e.g., largest lake, deepest lake' },
     { label: 'Location', subtitle: 'e.g., regions, provinces, municipality' }
   ];

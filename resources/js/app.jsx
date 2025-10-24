@@ -4,10 +4,10 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 
 // 🌍 Public Pages
 // AboutData is displayed as a modal from MapPage
-import AboutPage from "./pages/PublicInterface/AboutPage";
+// AboutPage is displayed as a modal from MapPage
 import MapPage from "./pages/PublicInterface/MapPage";
 import KycPage from "./pages/PublicInterface/KycPage";
-import UserManual from "./pages/PublicInterface/UserManual";
+// UserManual is displayed as a modal from MapPage
 // DataPrivacyDisclaimer is now a modal inside MapPage
 // KYC page is available as a dedicated route as well
 
@@ -32,8 +32,8 @@ function App() {
       <Routes>
         {/* 🌍 Public routes */}
         <Route path="/" element={<MapPage />} />
-        <Route path="/about" element={<AboutPage />} />
-        <Route path="/manual" element={<UserManual />} />
+  <Route path="/about" element={<MapPage />} />
+  <Route path="/manual" element={<MapPage />} />
   {/** /data now opens modal via MapPage; no standalone route */}
     {/* Visiting /data/privacy keeps user on MapPage; modal opens from MapPage by path */}
     <Route path="/data/privacy" element={<MapPage />} />

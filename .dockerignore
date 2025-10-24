@@ -1,0 +1,32 @@
+# Ignore VCS and local artifacts
+.git
+.gitignore
+
+# Node
+node_modules
+npm-debug.log*
+yarn.lock
+pnpm-lock.yaml
+
+# PHP / Composer
+vendor
+composer.lock
+composer.phar
+
+# Build and IDE
+.DS_Store
+Thumbs.db
+.vscode
+.idea
+
+# Runtime caches/logs (mounted/persistent in production)
+storage/logs/*
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/testing/*
+
+# Docker
+Dockerfile
+.dockerignore
+
+docker-compose.yml

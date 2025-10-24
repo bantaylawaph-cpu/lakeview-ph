@@ -59,7 +59,23 @@ export function useLakeSelection({ publicFC, mapRef, setPanelOpen, setFilterWate
     } catch (e) { console.warn('[useLakeSelection] overlay fetch failed', e); }
   }, [mapRef]);
 
-  const selectLakeFeature = useCallback((feat, layer) => {
+  // Fast-path overlay: draw a watershed outline directly from provided geometry (GeoJSON or string)
+  const applyWatershedGeometry = useCallback((geometry, { name = 'Watershed', layer_id = null } = {}, { fit = true } = {}) => {
+    if (!geometry) return;
+    let geomObj = geometry;
+    try {
+      if (typeof geometry === 'string') {
+        geomObj = JSON.parse(geometry);
+      }
+    } catch (_) { return; }
+    const feature = { type: 'Feature', properties: { layer_id, body_type: 'watershed', name }, geometry: geomObj };
+    setWatershedOverlayFeature(feature);
+    if (fit && mapRef?.current) {
+      try { const gj = L.geoJSON(feature); const b = gj.getBounds(); if (b?.isValid?.()) mapRef.current.fitBounds(b, { padding: [24,24], maxZoom: 13 }); } catch {}
+    }
+  }, [mapRef]);
+
+  const selectLakeFeature = useCallback((feat, layer, opts = {}) => {
     const p = feat?.properties || {};
     let lakeId = getLakeIdFromFeature(feat) ?? (p && (p.lake_id ?? p.lakeId ?? p.id)) ?? null;
     setWatershedToggleOn(false);
@@ -80,7 +96,9 @@ export function useLakeSelection({ publicFC, mapRef, setPanelOpen, setFilterWate
     });
     setSelectedLakeId(lakeId);
     setSelectedLakeName(p?.name || null);
-    setPanelOpen?.(true);
+    if (opts.openPanel !== false) {
+      setPanelOpen?.(true);
+    }
 
     (async () => {
       if (lakeId == null && p?.name) {
@@ -182,6 +200,7 @@ export function useLakeSelection({ publicFC, mapRef, setPanelOpen, setFilterWate
     // Nominatim/OSM outline feature removed; keep other actions below
     // actions
     selectLakeFeature, applyOverlayByLayerId, handlePanelToggleWatershed, resetToActive,
+    applyWatershedGeometry,
     // (setNominatimEnabled removed)
   };
 }

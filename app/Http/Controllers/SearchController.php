@@ -43,13 +43,14 @@ class SearchController extends Controller
         // Detect entity/table with optional override
         $requestedEntity = strtolower(trim((string) $request->input('entity', '')));
         $entity = 'lakes';
-        if (in_array($requestedEntity, ['lakes','watersheds','parameters','layers','lake_flows','municipalities'], true)) {
+        if (in_array($requestedEntity, ['lakes','watersheds','parameters','layers','lake_flows','municipalities','organizations'], true)) {
             $entity = $requestedEntity;
         } else {
             if (str_contains($qlc, 'watershed')) $entity = 'watersheds';
             elseif (str_contains($qlc, 'parameter')) $entity = 'parameters';
             elseif (str_contains($qlc, 'layer')) $entity = 'layers';
             elseif (str_contains($qlc, 'inflow') || str_contains($qlc, 'outflow') || str_contains($qlc, 'flow')) $entity = 'lake_flows';
+            elseif (str_contains($qlc, 'organization') || str_contains($qlc, 'organisation') || preg_match('/\borgs?\b/i', $q)) $entity = 'organizations';
         }
 
         // Treat municipality as lakes search constrained by place
