@@ -10,6 +10,10 @@ WORKDIR /app
 
 # Install deps
 COPY package.json package-lock.json* ./
+# Avoid failing dependency postinstall scripts during smoke test
+ENV NPM_CONFIG_FUND=false \
+   NPM_CONFIG_AUDIT=false \
+   NPM_CONFIG_IGNORE_SCRIPTS=true
 RUN npm ci || npm i
 
 # Copy source required for Vite build
@@ -44,15 +48,17 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 # Leverage build cache for composer deps
 COPY composer.json composer.lock* ./
-RUN composer install --no-dev --no-interaction --no-progress --prefer-dist --optimize-autoloader
+# Skip composer scripts during build to avoid running artisan before code is copied
+RUN composer install --no-dev --no-interaction --no-progress --prefer-dist --optimize-autoloader --no-scripts
 
 # Copy application source
 COPY . .
 
-# Bring in built frontend assets and wasm/js copied during postinstall
+# Bring in built frontend assets
 COPY --from=nodebuild /app/public/build /var/www/html/public/build
-COPY --from=nodebuild /app/public/geopackage.min.js /var/www/html/public/geopackage.min.js
-COPY --from=nodebuild /app/public/sql-wasm.wasm /var/www/html/public/sql-wasm.wasm
+# Copy GeoPackage assets directly from node_modules (postinstall may be skipped)
+COPY --from=nodebuild /app/node_modules/@ngageoint/geopackage/dist/geopackage.min.js /var/www/html/public/geopackage.min.js
+COPY --from=nodebuild /app/node_modules/@ngageoint/geopackage/dist/sql-wasm.wasm /var/www/html/public/sql-wasm.wasm
 
 # Ensure writable dirs
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
