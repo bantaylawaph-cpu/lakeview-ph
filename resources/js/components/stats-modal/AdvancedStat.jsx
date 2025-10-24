@@ -63,10 +63,12 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
   const debouncedYearFrom = useDebounce(yearFrom);
   const debouncedYearTo = useDebounce(yearTo);
   const { events: primaryEvents } = useSampleEvents(lakeId, null, 'custom', yearFrom, yearTo);
+  // Unbounded events for deriving stable org options and year dropdowns
+  const { events: primaryAllEvents } = useSampleEvents(lakeId, null, 'all', '', '');
   const otherLakeId = compareValue && String(compareValue).startsWith('lake:') ? Number(String(compareValue).split(':')[1]) : null;
   const { events: secondaryEvents } = useSampleEvents(otherLakeId, null, 'custom', yearFrom, yearTo);
 
-  const orgOptions = React.useMemo(() => deriveOrgOptions(primaryEvents), [primaryEvents]);
+  const orgOptions = React.useMemo(() => deriveOrgOptions(primaryAllEvents), [primaryAllEvents]);
   const secondaryOrgOptions = React.useMemo(() => deriveOrgOptions(secondaryEvents), [secondaryEvents]);
   const inferredTest = React.useMemo(() => {
     if (!compareValue) return 'one-sample';
@@ -114,6 +116,25 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
   }, [availableDepths, depthMode, depthValue]);
 
   const stationOptions = useStationsForLakeClass({ lakeId, organizationId, paramCode, yearFrom, yearTo, enabled: inferredTest === 'one-sample' }) || [];
+
+  // Derive available years from the currently selected dataset (primary lake + selected organization)
+  const availableYears = React.useMemo(() => {
+    const events = Array.isArray(primaryAllEvents) ? primaryAllEvents : [];
+    const filtered = organizationId
+      ? events.filter(ev => {
+          const oid = ev.organization_id ?? ev.organization?.id ?? null;
+          return String(oid || '') === String(organizationId || '');
+        })
+      : events;
+    const set = new Set();
+    for (const ev of filtered) {
+      const dstr = ev.sampled_at || ev.date;
+      if (!dstr) continue;
+      const y = new Date(dstr).getFullYear();
+      if (!Number.isNaN(y)) set.add(String(y));
+    }
+    return Array.from(set).sort((a,b)=> Number(b) - Number(a));
+  }, [primaryAllEvents, organizationId]);
 
   useEffect(() => {
     if ((selectedTest === 'tost' || selectedTest === 'tost_wilcoxon') && (!paramHasRange || inferredTest !== 'one-sample')) {
@@ -338,6 +359,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
         yearTo={yearTo}
         cl={cl}
         yearError={yearError}
+        availableYears={availableYears}
         onChangeYearFrom={(v)=>setYearFrom(v)}
         onChangeYearTo={(v)=>setYearTo(v)}
         onChangeCl={(v)=>{ setCl(v); setResult(null); }}

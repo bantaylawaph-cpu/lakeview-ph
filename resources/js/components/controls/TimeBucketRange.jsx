@@ -58,16 +58,39 @@ export default function TimeBucketRange({
   const yearTo = dateTo ? String(dateTo).slice(0,4) : '';
 
   const handleCustomYearFrom = (y) => {
-    const yf = String(y).padStart(4, '0');
+    // Allow clearing
+    if (!y) {
+      setDateFrom('');
+      setTimeRange('custom');
+      return;
+    }
+    const yf = String(y).slice(0, 4).padStart(4, '0');
+    const toY = dateTo ? String(dateTo).slice(0, 4) : '';
+    // Enforce Start <= End: if selecting a start after the current end, snap end to start
+    if (toY && Number(yf) > Number(toY)) {
+      setDateTo(`${yf}-12-31`);
+    } else if (!dateTo) {
+      setDateTo(`${yf}-12-31`);
+    }
     setDateFrom(`${yf}-01-01`);
-    // if to not set, set to end of same year
-    if (!dateTo) setDateTo(`${yf}-12-31`);
     setTimeRange('custom');
   };
   const handleCustomYearTo = (y) => {
-    const yt = String(y).padStart(4, '0');
+    // Allow clearing
+    if (!y) {
+      setDateTo('');
+      setTimeRange('custom');
+      return;
+    }
+    const yt = String(y).slice(0, 4).padStart(4, '0');
+    const fromY = dateFrom ? String(dateFrom).slice(0, 4) : '';
+    // Enforce Start <= End: if selecting an end before the current start, snap start to end
+    if (fromY && Number(fromY) > Number(yt)) {
+      setDateFrom(`${yt}-01-01`);
+    } else if (!dateFrom) {
+      setDateFrom(`${yt}-01-01`);
+    }
     setDateTo(`${yt}-12-31`);
-    if (!dateFrom) setDateFrom(`${yt}-01-01`);
     setTimeRange('custom');
   };
 
@@ -166,9 +189,29 @@ export default function TimeBucketRange({
 
       {rangeMode !== 'year-list' && timeRange === 'custom' && (
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <input type="number" min={1900} max={currentYear} className="pill-btn" value={yearFrom} onChange={(e) => handleCustomYearFrom(e.target.value)} style={{ flex: '1 1 auto' }} />
+          <select
+            className="pill-btn"
+            value={yearFrom}
+            onChange={(e) => handleCustomYearFrom(e.target.value)}
+            style={{ flex: '1 1 auto' }}
+          >
+            <option value="">Start year</option>
+            {(Array.isArray(availableYears) ? availableYears : []).map((y) => (
+              <option key={`yf-${String(y)}`} value={String(y)}>{String(y)}</option>
+            ))}
+          </select>
           <span>to</span>
-          <input type="number" min={1900} max={currentYear} className="pill-btn" value={yearTo} onChange={(e) => handleCustomYearTo(e.target.value)} style={{ flex: '1 1 auto' }} />
+          <select
+            className="pill-btn"
+            value={yearTo}
+            onChange={(e) => handleCustomYearTo(e.target.value)}
+            style={{ flex: '1 1 auto' }}
+          >
+            <option value="">End year</option>
+            {(Array.isArray(availableYears) ? availableYears : []).map((y) => (
+              <option key={`yt-${String(y)}`} value={String(y)}>{String(y)}</option>
+            ))}
+          </select>
         </div>
       )}
     </div>

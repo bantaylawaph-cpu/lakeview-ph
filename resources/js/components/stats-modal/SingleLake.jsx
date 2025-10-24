@@ -73,9 +73,52 @@ export default function SingleLake({
   const hasStationIds = true;
   const { orgOptions: orgOptionsLocal, stationsByOrg, allStations } = useStationsCache(selectedLake);
   const stationsList = useMemo(() => (!selectedOrg ? (allStations || []) : (stationsByOrg?.[String(selectedOrg)] || [])), [selectedOrg, allStations, stationsByOrg]);
+  // remember last selections per lake to reduce reselection when switching back and forth
+  const lastSelections = React.useRef(new Map());
   useEffect(() => {
     setApplied(false);
   }, [selectedLake, selectedOrg, selectedParam, JSON.stringify(selectedStations), timeRange, dateFrom, dateTo, bucket, chartType]);
+
+  // Try to restore previous selections when switching back to a lake
+  useEffect(() => {
+    if (!selectedLake) return;
+    try {
+      const saved = lastSelections.current.get(String(selectedLake));
+      if (!saved) return;
+      // Restore org if still available
+      if (saved.org && Array.isArray(orgOptionsLocal) && orgOptionsLocal.some(o => String(o.id) === String(saved.org))) {
+        onOrgChange(saved.org);
+      }
+      // Restore stations by intersecting with stationsList for this lake/org
+      if (Array.isArray(saved.stations) && saved.stations.length && Array.isArray(stationsList)) {
+        const keyOf = (it) => {
+          if (!it) return '';
+          if (typeof it === 'string') return String(it);
+          return String(it.id ?? it.station_id ?? it.name ?? it.station_name ?? it.label ?? '');
+        };
+        const availableKeys = new Set(stationsList.map(keyOf));
+        const kept = saved.stations.filter((s) => availableKeys.has(keyOf(s)));
+        if (kept.length) onStationsChange(kept);
+      }
+      // Restore parameter if still present
+      if (saved.param && Array.isArray(paramOptions) && paramOptions.some(p => String(p.key || p.id || p.code) === String(saved.param))) {
+        onParamChange(saved.param);
+      }
+      // Restore years (only keep those available)
+      if (Array.isArray(saved.years) && saved.years.length && Array.isArray(availableYears)) {
+        const keep = saved.years.filter((y) => availableYears.includes(y));
+        if (keep.length) setSelectedYears(keep);
+      }
+      // Restore depth if still valid
+      if (saved.depth && Array.isArray(depthOptions) && depthOptions.includes(String(saved.depth))) {
+        setDepthSelection(String(saved.depth));
+      }
+      // remove stored entry after restoring
+      lastSelections.current.delete(String(selectedLake));
+    } catch (err) {
+      // ignore restore errors
+    }
+  }, [selectedLake, orgOptionsLocal, stationsList, paramOptions, availableYears, depthOptions]);
 
   // Available years for the selected lake/org based on events
   const availableYears = useMemo(() => {
@@ -328,12 +371,58 @@ export default function SingleLake({
   <StatsSidebar isOpen={sidebarOpen && isModalOpen} width={sidebarWidth} usePortal top={72} side="left" zIndex={10000} onToggle={toggleSidebar}>
           <div>
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Lake</div>
-            <LakeSelect lakes={lakeOptions} value={selectedLake} onChange={(e) => { onLakeChange(e.target.value); setApplied(false); setSelectedYears([]); setDepthSelection('0'); }} />
+            <LakeSelect lakes={lakeOptions} value={selectedLake} onChange={(e) => {
+              const nextLake = e.target.value;
+              // persist current selections for the current lake before switching
+              try {
+                if (selectedLake) {
+                  lastSelections.current.set(String(selectedLake), {
+                    org: selectedOrg,
+                    stations: selectedStations,
+                    param: selectedParam,
+                    years: selectedYears,
+                    depth: depthSelection,
+                  });
+                }
+              } catch (err) { /* ignore persistence errors */ }
+              onLakeChange(nextLake);
+              setApplied(false);
+              setSelectedYears([]);
+              setDepthSelection('0');
+            }} />
           </div>
 
           <div>
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Dataset source</div>
-            <OrgSelect options={orgOptions} value={selectedOrg} onChange={(e) => { onOrgChange(e.target.value); onStationsChange([]); setApplied(false); }} disabled={!selectedLake} required={false} placeholder="Select a dataset source" style={{ width: '100%' }} />
+            <OrgSelect
+              options={orgOptions}
+              value={selectedOrg}
+              onChange={(e) => {
+                const nextOrg = e.target.value;
+                // Try to preserve previously-selected stations when switching orgs by taking the intersection
+                try {
+                  const newStationsList = stationsByOrg?.[String(nextOrg)] || [];
+                  const keyOf = (it) => {
+                    if (!it) return '';
+                    if (typeof it === 'string') return String(it);
+                    return String(it.id ?? it.station_id ?? it.name ?? it.station_name ?? it.label ?? '');
+                  };
+                  const newKeys = new Set((Array.isArray(newStationsList) ? newStationsList : []).map(keyOf));
+                  const kept = (Array.isArray(selectedStations) ? selectedStations : []).filter((s) => newKeys.has(keyOf(s)));
+                  onOrgChange(nextOrg);
+                  onStationsChange(kept);
+                } catch (err) {
+                  // Fallback: clear stations if anything goes wrong
+                  onOrgChange(nextOrg);
+                  onStationsChange([]);
+                }
+                setApplied(false);
+              }}
+              disabled={!selectedLake}
+              required={false}
+              placeholder="Select a dataset source"
+              style={{ width: '100%' }}
+            />
           </div>
 
           {true ? (
@@ -393,21 +482,8 @@ export default function SingleLake({
               setDateFrom={setDateFrom}
               dateTo={dateTo}
               setDateTo={setDateTo}
+              availableYears={availableYears}
             />
-          )}
-
-          {/* Trend analysis toggle and hidden controls */}
-          {chartType === 'time' && (
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                <div style={{ fontSize: 12, opacity: 0.8 }}>Trend analysis (Seasonal MK)</div>
-                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  <input type="checkbox" checked={trendEnabled} onChange={(e)=>{ setTrendEnabled(e.target.checked); setApplied(false); }} />
-                  <span style={{ fontSize: 12, opacity: 0.9 }}>Enable</span>
-                </label>
-              </div>
-              {/* Season scheme selector removed — PAGASA Wet/Dry is the default and only scheme for now */}
-            </div>
           )}
 
           {/* Bucket & Year controls for Depth Profile */}
@@ -471,6 +547,20 @@ export default function SingleLake({
               </div>
             )}
           </div>
+
+          {/* Trend analysis toggle and hidden controls */}
+          {chartType === 'time' && (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <div style={{ fontSize: 12, opacity: 0.8 }}>Trend analysis (Seasonal MK)</div>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <input type="checkbox" checked={trendEnabled} onChange={(e)=>{ setTrendEnabled(e.target.checked); setApplied(false); }} />
+                  <span style={{ fontSize: 12, opacity: 0.9 }}>Enable</span>
+                </label>
+              </div>
+              {/* Season scheme selector removed — PAGASA Wet/Dry is the default and only scheme for now */}
+            </div>
+          )}
 
           <div>
             <button type="button" className="pill-btn liquid" onClick={handleApply} style={{ width: '100%' }}>Apply</button>

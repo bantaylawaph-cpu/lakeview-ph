@@ -431,6 +431,7 @@ function CompareLake({
                 setDateFrom={setDateFrom}
                 dateTo={dateTo}
                 setDateTo={setDateTo}
+                availableYears={availableYears}
               />
             )}
             {chartType === 'bar' && (

@@ -11,6 +11,7 @@ export default function YearClPopover({
   onChangeYearTo,
   onChangeCl,
   onClose,
+  availableYears = [],
 }) {
   return (
     <div>
@@ -21,8 +22,18 @@ export default function YearClPopover({
         </button>
       </div>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-        <input className="pill-btn" type="number" placeholder="Year from" value={yearFrom} onChange={(e)=>onChangeYearFrom(e.target.value)} style={{ width:'100%', boxSizing:'border-box', padding:'8px 10px', height:36 }} />
-        <input className="pill-btn" type="number" placeholder="Year to" value={yearTo} onChange={(e)=>onChangeYearTo(e.target.value)} style={{ width:'100%', boxSizing:'border-box', padding:'8px 10px', height:36 }} />
+        <select className="pill-btn" value={yearFrom} onChange={(e)=>onChangeYearFrom(e.target.value)} style={{ width:'100%', boxSizing:'border-box', padding:'8px 10px', height:36 }}>
+          <option value="">Start year</option>
+          {availableYears.map((y)=> (
+            <option key={`yf-${y}`} value={y}>{y}</option>
+          ))}
+        </select>
+        <select className="pill-btn" value={yearTo} onChange={(e)=>onChangeYearTo(e.target.value)} style={{ width:'100%', boxSizing:'border-box', padding:'8px 10px', height:36 }}>
+          <option value="">End year</option>
+          {availableYears.map((y)=> (
+            <option key={`yt-${y}`} value={y}>{y}</option>
+          ))}
+        </select>
         <select className="pill-btn" value={cl} onChange={(e)=>onChangeCl(e.target.value)} style={{ gridColumn: '1 / span 2', width:'100%', boxSizing:'border-box', padding:'8px 10px', height:36 }}>
           <option value="0.9">90% CL</option>
           <option value="0.95">95% CL</option>
