@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\DB;
 // use Illuminate\Support\Facades\DB;
 
 use App\Http\Controllers\AuthController;
@@ -374,3 +375,26 @@ Route::get('/contours/labels', [TileController::class, 'contourLabels']);
 
 // Elevation profile (public)
 Route::post('/elevation/profile', [ElevationController::class, 'profile']);
+
+/*
+|--------------------------------------------------------------------------
+| Simple DB health check (public)
+|--------------------------------------------------------------------------
+| Returns DB connectivity and migrations count for quick smoke tests.
+*/
+Route::get('/healthz/db', function () {
+    try {
+        $one = DB::select('select 1 as ok');
+        $migrations = DB::select('select count(*) as cnt from migrations');
+        return response()->json([
+            'ok' => true,
+            'db' => ($one[0]->ok ?? 0) == 1,
+            'migrations' => (int) ($migrations[0]->cnt ?? 0),
+        ]);
+    } catch (\Throwable $e) {
+        return response()->json([
+            'ok' => false,
+            'error' => $e->getMessage(),
+        ], 500);
+    }
+});

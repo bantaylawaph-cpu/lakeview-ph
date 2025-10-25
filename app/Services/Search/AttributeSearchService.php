@@ -15,14 +15,18 @@ class AttributeSearchService
         $cacheKey = sprintf('attr:%s:%s:%s:%d', $entity, md5($q), md5((string)$place), $limit);
         return Cache::remember($cacheKey, now()->addMinutes(2), function () use ($entity, $q, $place, $limit) {
             $kw = '%' . trim($q) . '%';
+            $hasLayerGeom = Schema::hasColumn('layers', 'geom');
             $rows = [];
             if ($entity === 'lakes') {
                 $hasLakeKeyword = (bool)preg_match('/\blakes?\b/i', $q);
+                $areaExpr = $hasLayerGeom
+                    ? "(CASE WHEN ly.geom IS NOT NULL THEN ST_Area(ly.geom::geography)/1000000.0 ELSE NULL END)"
+                    : "NULL::double precision";
                 $sql = <<<SQL
 SELECT l.id,
        COALESCE(NULLIF(l.name, ''), NULLIF(l.alt_name, ''), 'Lake') AS name,
        l.class_code, l.region, l.province,
-       (CASE WHEN ly.geom IS NOT NULL THEN ST_Area(ly.geom::geography)/1000000.0 ELSE NULL END) AS area_km2_from_layer,
+       {$areaExpr} AS area_km2_from_layer,
        ST_AsGeoJSON(l.coordinates) AS coordinates_geojson
 FROM lakes l
 LEFT JOIN layers ly ON ly.body_type='lake' AND ly.body_id=l.id AND ly.is_active=true AND ly.visibility='public'
@@ -45,10 +49,13 @@ SQL;
                 $rows = DB::select($sql, $params);
                 return $this->mapper->mapRows($rows, 'lakes', null, $place);
             } elseif ($entity === 'watersheds') {
+                $geomExpr = $hasLayerGeom
+                    ? "CASE WHEN ly.geom IS NOT NULL THEN ST_AsGeoJSON(ly.geom) ELSE NULL END"
+                    : "NULL::text";
                 $sql = <<<SQL
 SELECT w.id,
        COALESCE(w.name, ly.name) AS name,
-       CASE WHEN ly.geom IS NOT NULL THEN ST_AsGeoJSON(ly.geom) ELSE NULL END AS geom
+       {$geomExpr} AS geom
 FROM watersheds w
 LEFT JOIN layers ly ON ly.body_type='watershed' AND ly.body_id=w.id AND ly.is_active=true AND ly.visibility='public'
 WHERE (
@@ -65,11 +72,14 @@ SQL;
                 $rows = DB::select($sql, $params);
                 return $this->mapper->mapRows($rows, 'watersheds', null, $place);
             } elseif ($entity === 'layers') {
+                $geomExpr2 = $hasLayerGeom
+                    ? "CASE WHEN ly.geom IS NOT NULL THEN ST_AsGeoJSON(ly.geom) ELSE NULL END"
+                    : "NULL::text";
                 $sql = <<<SQL
 SELECT ly.id,
        ly.name AS name,
        ly.description, ly.source,
-       CASE WHEN ly.geom IS NOT NULL THEN ST_AsGeoJSON(ly.geom) ELSE NULL END AS geom
+       {$geomExpr2} AS geom
 FROM layers ly
 WHERE (
     ly.name ILIKE :kw OR
