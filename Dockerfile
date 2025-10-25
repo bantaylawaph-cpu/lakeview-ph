@@ -63,7 +63,12 @@ COPY --from=nodebuild /app/node_modules/@ngageoint/geopackage/dist/sql-wasm.wasm
 # Ensure writable dirs
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
+# Startup script to run migrations on container start (for Render Free, no Pre-Deploy)
+COPY docker/start.sh /usr/local/bin/start.sh
+RUN chmod +x /usr/local/bin/start.sh
+
 # Expose 80 (default for Apache)
 EXPOSE 80
 
-# Default command (provided by base image): apache2-foreground
+# Default command: run migrations then start Apache
+CMD ["start.sh"]
