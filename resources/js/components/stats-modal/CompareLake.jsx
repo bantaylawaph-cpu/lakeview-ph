@@ -61,6 +61,8 @@ function CompareLake({
   const [chartType, setChartType] = useState('time'); // 'time'
   const [selectedYears, setSelectedYears] = useState([]);
   const [depthSelection, setDepthSelection] = useState('0');
+  // Time-series depth selector: 'all' shows each depth as separate series, otherwise filters to a single depth band
+  const [selectedDepth, setSelectedDepth] = useState('all');
   const [infoOpen, setInfoOpen] = useState(false);
   const [infoContent, setInfoContent] = useState({ title: '', sections: [] });
 
@@ -137,6 +139,28 @@ function CompareLake({
     }
   }, [lakeA, lakeB]);
 
+  // If lake changes and the previously selected org is no longer valid, clear it (A)
+  useEffect(() => {
+    try {
+      if (!lakeA) return;
+      const opts = Array.isArray(derivedOrgOptionsA) ? derivedOrgOptionsA : [];
+      if (selectedOrgA && !opts.some(o => String(o.value) === String(selectedOrgA))) {
+        setSelectedOrgA('');
+      }
+    } catch {}
+  }, [lakeA, derivedOrgOptionsA]);
+
+  // If lake changes and the previously selected org is no longer valid, clear it (B)
+  useEffect(() => {
+    try {
+      if (!lakeB) return;
+      const opts = Array.isArray(derivedOrgOptionsB) ? derivedOrgOptionsB : [];
+      if (selectedOrgB && !opts.some(o => String(o.value) === String(selectedOrgB))) {
+        setSelectedOrgB('');
+      }
+    } catch {}
+  }, [lakeB, derivedOrgOptionsB]);
+
   const isComplete = useMemo(() => {
     const hasLake = Boolean(lakeA || lakeB);
     const hasParam = Boolean(selectedParam);
@@ -207,11 +231,12 @@ function CompareLake({
     setApplied(true);
   };
 
-  useEffect(() => { setApplied(false); }, [lakeA, lakeB, selectedOrgA, selectedOrgB, selectedParam, timeRange, dateFrom, dateTo, bucket]);
+  useEffect(() => { setApplied(false); }, [lakeA, lakeB, selectedOrgA, selectedOrgB, selectedParam, timeRange, dateFrom, dateTo, bucket, selectedDepth]);
 
   // Reset depth selection to surface when the parameter changes
   useEffect(() => {
     setDepthSelection('0');
+    setSelectedDepth('all');
   }, [selectedParam]);
 
 
@@ -291,6 +316,7 @@ function CompareLake({
     bucket,
     lakeOptions,
     seriesMode: 'avg',
+    depthSelection: selectedDepth,
   });
 
   useImperativeHandle(ref, () => ({
@@ -304,6 +330,7 @@ function CompareLake({
       // also clear compare-specific selections
       setSelectedYears([]);
       setDepthSelection('0');
+      setSelectedDepth('all');
     }
   }));
 
@@ -401,16 +428,16 @@ function CompareLake({
   <StatsSidebar isOpen={sidebarOpen && isModalOpen} width={sidebarWidth} usePortal top={72} side="left" zIndex={10000} onToggle={toggleSidebar}>
           <div style={{ fontSize: 12, opacity: 0.85 }}>Lake A</div>
           <div style={{ display: 'grid', gap: 6 }}>
-            <LakeSelect lakes={lakeOptionsForA} value={lakeA} onChange={(e) => { setLakeA(e.target.value); setSelectedOrgA(""); setSelectedParam(""); setSelectedYears([]); }} />
-            <OrgSelect options={derivedOrgOptionsA} value={selectedOrgA} onChange={(e) => { setSelectedOrgA(e.target.value); setSelectedParam(""); }} required={false} placeholder="Select a dataset source" style={{ width:'100%' }} />
+            <LakeSelect lakes={lakeOptionsForA} value={lakeA} onChange={(e) => { setLakeA(e.target.value); /* keep org if still valid; effect below will clear if invalid */ setApplied(false); setSelectedYears([]); }} />
+            <OrgSelect options={derivedOrgOptionsA} value={selectedOrgA} onChange={(e) => { setSelectedOrgA(e.target.value); /* keep param */ }} required={false} placeholder="Select a dataset source" style={{ width:'100%' }} />
           </div>
 
           <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '8px 0' }} />
 
           <div style={{ fontSize: 12, opacity: 0.85 }}>Lake B</div>
           <div style={{ display: 'grid', gap: 6 }}>
-            <LakeSelect lakes={lakeOptionsForB} value={lakeB} onChange={(e) => { setLakeB(e.target.value); setSelectedOrgB(""); setSelectedParam(""); setSelectedYears([]); }} />
-            <OrgSelect options={derivedOrgOptionsB} value={selectedOrgB} onChange={(e) => { setSelectedOrgB(e.target.value); setSelectedParam(""); }} required={false} placeholder="Select a dataset source" style={{ width:'100%' }} />
+            <LakeSelect lakes={lakeOptionsForB} value={lakeB} onChange={(e) => { setLakeB(e.target.value); /* keep org if still valid; effect below will clear if invalid */ setApplied(false); setSelectedYears([]); }} />
+            <OrgSelect options={derivedOrgOptionsB} value={selectedOrgB} onChange={(e) => { setSelectedOrgB(e.target.value); /* keep param */ }} required={false} placeholder="Select a dataset source" style={{ width:'100%' }} />
           </div>
 
           <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '8px 0' }} />
@@ -431,6 +458,7 @@ function CompareLake({
                 setDateFrom={setDateFrom}
                 dateTo={dateTo}
                 setDateTo={setDateTo}
+                availableYears={availableYears}
               />
             )}
             {chartType === 'bar' && (
@@ -456,6 +484,20 @@ function CompareLake({
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Parameter</div>
             <ParamSelect options={paramList} value={selectedParam} onChange={(e) => { setSelectedParam(e.target.value); onParamChange?.(e.target.value); }} placeholder="Select parameter" style={{ width:'100%' }} />
           </div>
+
+          {/* Time-series depth selector: show either all depths (each as a series) or pick a specific depth band */}
+          {chartType === 'time' && depthOptions && depthOptions.length >= 1 && (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Depth</div>
+              <select className="pill-btn" value={selectedDepth} onChange={(e) => { setSelectedDepth(e.target.value); setApplied(false); }} disabled={!selectedParam} style={{ width: '100%' }}>
+                <option value="all">All depths (separate lines)</option>
+                {(depthOptions && depthOptions.length ? depthOptions : ['0']).map((d) => {
+                  const label = d === '0' ? 'Surface (0 m)' : `${d} m`;
+                  return (<option key={`d-${String(d)}`} value={String(d)}>{label}</option>);
+                })}
+              </select>
+            </div>
+          )}
 
           {chartType === 'bar' && (
             <div>

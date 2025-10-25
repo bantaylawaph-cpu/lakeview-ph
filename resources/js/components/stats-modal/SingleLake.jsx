@@ -61,6 +61,8 @@ export default function SingleLake({
   const [infoContent, setInfoContent] = useState({ title: '', sections: [] });
   const [selectedYears, setSelectedYears] = useState([]);
   const [depthSelection, setDepthSelection] = useState('0');
+  // Time-series depth selector: 'all' shows each depth as separate series, otherwise filters to a single depth band
+  const [selectedDepth, setSelectedDepth] = useState('all');
   // Trend analysis (SMK)
   const [trendEnabled, setTrendEnabled] = useState(false);
   const trendAlpha = 0.05;
@@ -75,7 +77,7 @@ export default function SingleLake({
   const stationsList = useMemo(() => (!selectedOrg ? (allStations || []) : (stationsByOrg?.[String(selectedOrg)] || [])), [selectedOrg, allStations, stationsByOrg]);
   useEffect(() => {
     setApplied(false);
-  }, [selectedLake, selectedOrg, selectedParam, JSON.stringify(selectedStations), timeRange, dateFrom, dateTo, bucket, chartType]);
+  }, [selectedLake, selectedOrg, selectedParam, JSON.stringify(selectedStations), timeRange, dateFrom, dateTo, bucket, chartType, selectedDepth]);
 
   // Available years for the selected lake/org based on events
   const availableYears = useMemo(() => {
@@ -96,7 +98,7 @@ export default function SingleLake({
   const summaryStats = null;
   const nameForSelectedLake = useMemo(() => lakeName(lakeOptions, selectedLake) || String(selectedLake || '') || '', [lakeOptions, selectedLake]);
   const classForSelectedLake = useMemo(() => lakeClass(lakeOptions, selectedLake) || selectedClass || '', [lakeOptions, selectedLake, selectedClass]);
-  const chartData = useTimeSeriesData({ events, selectedParam, selectedStations, bucket, timeRange, dateFrom, dateTo, seriesMode, classForSelectedLake });
+  const chartData = useTimeSeriesData({ events, selectedParam, selectedStations, bucket, timeRange, dateFrom, dateTo, seriesMode, classForSelectedLake, depthSelection: selectedDepth });
   const depthProfile = useDepthProfileData({ events, selectedParam, selectedStations, bucket });
   // Correlation removed
   // derive depth options for selectedParam from events
@@ -130,6 +132,18 @@ export default function SingleLake({
     if (!arr.includes('0')) arr.unshift('0');
     return arr;
   }, [events, selectedParam]);
+
+  // If user switches to per-station series mode, disallow 'all' depth selection.
+  useEffect(() => {
+    try {
+      if (seriesMode === 'per-station' && selectedDepth === 'all') {
+        // choose a sensible default depth (surface if available)
+        const def = (depthOptions && depthOptions.length) ? String(depthOptions[0]) : '0';
+        setSelectedDepth(def);
+        setApplied(false);
+      }
+    } catch (e) { /* noop */ }
+  }, [seriesMode, depthOptions]);
 
   const barData = useSingleBarData({ events, bucket, selectedYears, depth: depthSelection, selectedParam, lake: selectedLake, lakeOptions, seriesMode, selectedStations });
 
@@ -169,7 +183,9 @@ export default function SingleLake({
     labels: chartLabels,
     alpha: trendAlpha,
     enabled: trendEnabled && chartType === 'time' && applied && !!selectedParam,
+    depthSelection: selectedDepth,
   });
+  
 
   const computeMissingFields = () => {
     const missing = [];
@@ -215,6 +231,17 @@ export default function SingleLake({
     if (chartType === 'bar') {
       if (!selectedYears || !selectedYears.length) {
         const sentence = `Please select at least one year.`;
+        try {
+          const Swal = (await import('sweetalert2')).default;
+          Swal.fire({ icon: 'warning', title: 'Missing fields', html: `<div style="text-align:left; white-space:normal; word-break:break-word; font-size:13px">${sentence}</div>`, width: 560, showCloseButton: true });
+        } catch (e) { window.alert(sentence); }
+        return;
+      }
+    }
+    // Depth profile requires a single year to be selected (no 'All years')
+    if (chartType === 'depth') {
+      if (!dateFrom || !dateTo) {
+        const sentence = `Please select a year.`;
         try {
           const Swal = (await import('sweetalert2')).default;
           Swal.fire({ icon: 'warning', title: 'Missing fields', html: `<div style="text-align:left; white-space:normal; word-break:break-word; font-size:13px">${sentence}</div>`, width: 560, showCloseButton: true });
@@ -328,12 +355,23 @@ export default function SingleLake({
   <StatsSidebar isOpen={sidebarOpen && isModalOpen} width={sidebarWidth} usePortal top={72} side="left" zIndex={10000} onToggle={toggleSidebar}>
           <div>
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Lake</div>
-            <LakeSelect lakes={lakeOptions} value={selectedLake} onChange={(e) => { onLakeChange(e.target.value); setApplied(false); setSelectedYears([]); setDepthSelection('0'); }} />
+            <LakeSelect lakes={lakeOptions} value={selectedLake} onChange={(e) => { onLakeChange(e.target.value); setApplied(false); setSelectedYears([]); }} />
           </div>
 
           <div>
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Dataset source</div>
-            <OrgSelect options={orgOptions} value={selectedOrg} onChange={(e) => { onOrgChange(e.target.value); onStationsChange([]); setApplied(false); }} disabled={!selectedLake} required={false} placeholder="Select a dataset source" style={{ width: '100%' }} />
+            <OrgSelect options={orgOptions} value={selectedOrg} onChange={(e) => {
+              const nextOrg = e.target.value;
+              // prune stations to those available in the new org instead of clearing all
+              try {
+                const list = !nextOrg ? (allStations || []) : (stationsByOrg?.[String(nextOrg)] || []);
+                const names = new Set((list || []).map((s) => String(s?.name || s?.station_name || s?.code || '')));
+                const pruned = (selectedStations || []).filter((n) => names.has(String(n)));
+                onStationsChange(pruned);
+              } catch {}
+              onOrgChange(nextOrg);
+              setApplied(false);
+            }} disabled={!selectedLake} required={false} placeholder="Select a dataset source" style={{ width: '100%' }} />
           </div>
 
           {true ? (
@@ -352,7 +390,7 @@ export default function SingleLake({
                   // allow selecting all stations in time-series mode
                   maxSelected={chartType === 'time' ? (stationsList?.length || 9999) : 3}
                   showLimitLabel={chartType !== 'time'}
-                  onChange={(next) => { onStationsChange(next); onParamChange(""); setApplied(false); }}
+                  onChange={(next) => { onStationsChange(next); setApplied(false); }}
                 />
               </div>
             </div>
@@ -364,15 +402,7 @@ export default function SingleLake({
             <select className="pill-btn" value={chartType} onChange={(e) => {
               const next = e.target.value;
               setChartType(next);
-              // clear year/range selections when leaving depth to avoid leftover selectors
-              if (next !== 'depth') {
-                try {
-                  setSelectedYears([]);
-                  setDateFrom('');
-                  setDateTo('');
-                  setTimeRange('all');
-                } catch (err) { /* ignore if setters not in scope */ }
-              }
+              // preserve existing time selections across chart types
               setApplied(false);
             }} style={{ width: '100%' }}>
               <option value="time">Time series</option>
@@ -393,21 +423,8 @@ export default function SingleLake({
               setDateFrom={setDateFrom}
               dateTo={dateTo}
               setDateTo={setDateTo}
+              availableYears={availableYears}
             />
-          )}
-
-          {/* Trend analysis toggle and hidden controls */}
-          {chartType === 'time' && (
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                <div style={{ fontSize: 12, opacity: 0.8 }}>Trend analysis (Seasonal MK)</div>
-                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  <input type="checkbox" checked={trendEnabled} onChange={(e)=>{ setTrendEnabled(e.target.checked); setApplied(false); }} />
-                  <span style={{ fontSize: 12, opacity: 0.9 }}>Enable</span>
-                </label>
-              </div>
-              {/* Season scheme selector removed — PAGASA Wet/Dry is the default and only scheme for now */}
-            </div>
           )}
 
           {/* Bucket & Year controls for Depth Profile */}
@@ -470,7 +487,34 @@ export default function SingleLake({
                 </select>
               </div>
             )}
+            {/* Time-series depth selector: show either all depths (each as a series) or pick a specific depth band */}
+            {chartType === 'time' && depthOptions && depthOptions.length >= 1 && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Depth</div>
+                <select className="pill-btn" value={selectedDepth} onChange={(e) => { setSelectedDepth(e.target.value); setApplied(false); }} disabled={!selectedParam} style={{ width: '100%' }}>
+                  {seriesMode !== 'per-station' ? <option value="all">All depths (separate lines)</option> : null}
+                  {depthOptions.map((d) => {
+                    const label = d === '0' ? 'Surface (0 m)' : `${d} m`;
+                    return (<option key={`d-${String(d)}`} value={String(d)}>{label}</option>);
+                  })}
+                </select>
+              </div>
+            )}
           </div>
+
+          {/* Trend analysis toggle and hidden controls */}
+          {chartType === 'time' && (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <div style={{ fontSize: 12, opacity: 0.8 }}>Trend analysis (Seasonal MK)</div>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <input type="checkbox" checked={trendEnabled} onChange={(e)=>{ setTrendEnabled(e.target.checked); setApplied(false); }} />
+                  <span style={{ fontSize: 12, opacity: 0.9 }}>Enable</span>
+                </label>
+              </div>
+              {/* Season scheme selector removed — PAGASA Wet/Dry is the default and only scheme for now */}
+            </div>
+          )}
 
           <div>
             <button type="button" className="pill-btn liquid" onClick={handleApply} style={{ width: '100%' }}>Apply</button>

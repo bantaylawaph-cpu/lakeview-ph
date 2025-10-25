@@ -14,6 +14,7 @@ export default function useCompareTimeSeriesData({
   bucket,
   lakeOptions = [],
   seriesMode = 'avg',
+  depthSelection = 'all',
 }) {
   return useMemo(() => {
     const selected = selectedParam;
@@ -43,6 +44,11 @@ export default function useCompareTimeSeriesData({
           const match=(String(p.code)===String(selected))||(String(p.id)===String(selected))||(String(r.parameter_id)===String(selected));
           if(!match) continue;
           const v=Number(r.value); if(!Number.isFinite(v)) continue;
+          // depth filtering: if user selected a specific depth, skip results that don't match
+          const dkForResult = (r?.depth_m != null) ? String(depthBandKeyInt(r.depth_m)) : 'NA';
+          if (depthSelection && String(depthSelection) !== 'all' && String(depthSelection) !== dkForResult) {
+            continue;
+          }
           const key=String(lakeId); if(!lakeMaps.has(key)) lakeMaps.set(key,new Map());
           const m=lakeMaps.get(key); const agg=m.get(bk)||{sum:0,cnt:0}; agg.sum+=v; agg.cnt+=1; m.set(bk,agg);
           try {
@@ -213,5 +219,5 @@ export default function useCompareTimeSeriesData({
     });
 
     return { labels, datasets };
-  }, [eventsA, eventsB, lakeA, lakeB, selectedOrgA, selectedOrgB, selectedParam, bucket, lakeOptions, seriesMode]);
+  }, [eventsA, eventsB, lakeA, lakeB, selectedOrgA, selectedOrgB, selectedParam, bucket, lakeOptions, seriesMode, depthSelection]);
 }

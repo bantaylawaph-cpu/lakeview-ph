@@ -4,7 +4,8 @@ import { bucketKey as makeBucketKey, bucketSortKey as sortBucketKey } from '../u
 
 // Build Chart.js line datasets for single-lake time series
 // Props: { events, selectedParam, selectedStations, bucket, timeRange, dateFrom, dateTo, seriesMode, classForSelectedLake }
-export default function useTimeSeriesData({ events, selectedParam, selectedStations = [], bucket, timeRange, dateFrom, dateTo, seriesMode = 'avg', classForSelectedLake }) {
+// depthSelection: 'all' (default) or a depth band key (string) to filter results to a single depth
+export default function useTimeSeriesData({ events, selectedParam, selectedStations = [], bucket, timeRange, dateFrom, dateTo, seriesMode = 'avg', classForSelectedLake, depthSelection = 'all' }) {
   const chartData = useMemo(() => {
     if (!selectedParam) return null;
     const parseDate = parseIsoDate;
@@ -30,6 +31,7 @@ export default function useTimeSeriesData({ events, selectedParam, selectedStati
 
     const overall = new Map(); // bucket -> {sum,cnt}
     const stationMaps = new Map(); // stationName -> Map(bucket -> {sum,cnt})
+  const perStationDepthBands = new Map(); // stationName -> Map(depthKey -> Map(bucket -> {sum,cnt}))
     const depthBands = new Map(); // depthKey -> Map(bucket -> {sum,cnt})
     const depthBandKey = depthBandKeyInt;
     const thByStandard = new Map(); // stdKey -> { stdLabel, min, max, buckets: Set<string> }
@@ -52,16 +54,33 @@ export default function useTimeSeriesData({ events, selectedParam, selectedStati
         if (!match) continue;
         const v = Number(r.value);
         if (!Number.isFinite(v)) continue;
+        // If a specific depth is selected, only include results matching that depth band
+        const dkForResult = (r?.depth_m != null) ? String(depthBandKey(r.depth_m)) : 'NA';
+        if (depthSelection && String(depthSelection) !== 'all' && String(depthSelection) !== dkForResult) {
+          // skip this result because it doesn't match the user's selected depth
+          continue;
+        }
         const aggO = overall.get(bk) || { sum: 0, cnt: 0 };
         aggO.sum += v; aggO.cnt += 1; overall.set(bk, aggO);
         const st = stationMaps.get(sName) || new Map();
         const aggS = st.get(bk) || { sum: 0, cnt: 0 };
         aggS.sum += v; aggS.cnt += 1; st.set(bk, aggS); stationMaps.set(sName, st);
+        // still collect depth-bands for the "all" option (and for display when depthSelection==='all')
         if (r?.depth_m != null) {
           const dk = depthBandKey(r.depth_m);
           const band = depthBands.get(dk) || new Map();
           const agg = band.get(bk) || { sum: 0, cnt: 0 };
           agg.sum += v; agg.cnt += 1; band.set(bk, agg); depthBands.set(dk, band);
+
+          // also collect per-station per-depth aggregates so we can emit separate series
+          try {
+            const byStation = perStationDepthBands.get(sName) || new Map();
+            const bandForStation = byStation.get(dk) || new Map();
+            const aggPS = bandForStation.get(bk) || { sum: 0, cnt: 0 };
+            aggPS.sum += v; aggPS.cnt += 1; bandForStation.set(bk, aggPS); byStation.set(dk, bandForStation); perStationDepthBands.set(sName, byStation);
+          } catch (e) {
+            // noop - defensive
+          }
         }
         const stdId = r?.threshold?.standard_id ?? ev?.applied_standard_id ?? null;
         const stdKey = r?.threshold?.standard?.code || r?.threshold?.standard?.name || (stdId != null ? String(stdId) : null);
@@ -92,10 +111,25 @@ export default function useTimeSeriesData({ events, selectedParam, selectedStati
       if (seriesMode === 'per-station') {
         const colorFor = (i) => `hsl(${(i*40)%360} 80% 60%)`;
         let i = 0;
-        for (const s of selectedStations) {
-          const map = stationMaps.get(s) || new Map();
-          const data = labels.map((lb) => { const agg = map.get(lb); return agg && agg.cnt ? (agg.sum/agg.cnt) : null; });
-          datasets.push({ label: s, data, borderColor: colorFor(i++), backgroundColor: 'transparent', pointRadius: 2, pointHoverRadius: 4, tension: 0.15, spanGaps: true });
+        // If depth bands exist and the user requested 'all' depths, emit a series per station per depth band
+        if (depthKeys.length && String(depthSelection) === 'all') {
+          for (const s of selectedStations) {
+            const byStation = perStationDepthBands.get(s) || new Map();
+            let si = 0;
+            for (const dk of depthKeys) {
+              const bandMap = byStation.get(dk) || new Map();
+              const data = labels.map((lb) => { const agg = bandMap.get(lb); return agg && agg.cnt ? (agg.sum/agg.cnt) : null; });
+              datasets.push({ label: `${s} — ${dk} m`, data, borderColor: colorFor(i++), backgroundColor: 'transparent', pointRadius: 2, pointHoverRadius: 4, tension: 0.15, spanGaps: true });
+              si++;
+            }
+          }
+        } else {
+          // single series per station (aggregated across depths unless depthSelection is a specific band)
+          for (const s of selectedStations) {
+            const map = stationMaps.get(s) || new Map();
+            const data = labels.map((lb) => { const agg = map.get(lb); return agg && agg.cnt ? (agg.sum/agg.cnt) : null; });
+            datasets.push({ label: s, data, borderColor: colorFor(i++), backgroundColor: 'transparent', pointRadius: 2, pointHoverRadius: 4, tension: 0.15, spanGaps: true });
+          }
         }
       } else {
         const data = labels.map((lb) => { const agg=overall.get(lb); return agg && agg.cnt ? (agg.sum/agg.cnt) : null; });
@@ -119,7 +153,7 @@ export default function useTimeSeriesData({ events, selectedParam, selectedStati
     });
 
     return { labels, datasets };
-  }, [events, selectedParam, JSON.stringify(selectedStations), bucket, timeRange, dateFrom, dateTo, seriesMode, classForSelectedLake]);
+  }, [events, selectedParam, JSON.stringify(selectedStations), bucket, timeRange, dateFrom, dateTo, seriesMode, classForSelectedLake, depthSelection]);
 
   return chartData;
 }
