@@ -34,6 +34,26 @@ export function buildInterpretation({
     if (!Number.isFinite(pv)) return '';
     return pv < 0.001 ? 'p < 0.001' : `p = ${sciFmt(pv)}`;
   };
+  // Format p-value compared to alpha (always show comparison when possible)
+  const formatPvA = (pv, a) => {
+    if (!Number.isFinite(pv)) return '';
+    const pStr = pv < 0.001 ? 'p < 0.001' : `p = ${sciFmt(pv)}`;
+    const aStr = Number.isFinite(a) ? `α = ${sciFmt(a)}` : null;
+    let cmp = '';
+    if (Number.isFinite(a)) {
+      if (pv < a) cmp = '(p < α)';
+      else if (pv > a) cmp = '(p > α)';
+      else cmp = '(p = α)';
+    }
+    return aStr ? `${pStr} vs ${aStr} ${cmp}` : pStr;
+  };
+  // Build a parenthetical method + significance string with graceful fallback
+  const methodWithSig = (methodLabel, pv, a) => {
+    const sig = formatPvA(pv, a);
+    if (sig) return `(${methodLabel}, ${sig})`;
+    // If p is unavailable, avoid dangling comma
+    return methodLabel ? `(${methodLabel})` : '';
+  };
   const join = (parts) => parts.filter(Boolean).map(s => s.trim()).filter(Boolean).map(s => /[.!?]$/.test(s)? s : s + '.').join(' ');
   const normBool = (v) => (v === true || v === false) ? v : (v === 1 || v === '1') ? true : (v === 0 || v === '0') ? false : null;
   const toNum = (x) => (x != null && x !== '' && !Number.isNaN(Number(x)) ? Number(x) : null);
@@ -211,7 +231,7 @@ export function buildInterpretation({
             : 'Parametric tests are reasonable (t‑tests, Welch, TOST).'
         );
     return join([
-      `${paramLabel} in ${lake1Name} ${follows} a normal distribution (Shapiro–Wilk, ${formatP(p)}).`,
+      `${paramLabel} in ${lake1Name} ${follows} a normal distribution (Shapiro–Wilk, ${formatPvA(p, alpha)}).`,
       guidance,
       borderlineNote,
       smallSampleCaveat()
@@ -229,7 +249,7 @@ export function buildInterpretation({
       ? 'Prefer Welch’s t‑test; if data is not normal, use Mann–Whitney or Mood’s median.'
       : 'Student’s t‑test is acceptable if normal; otherwise use non‑parametric tests.';
     return join([
-      `For ${paramLabel}, variances between ${lake1Name} and ${lake2Name} ${differ} (Levene, ${formatP(p)}).`,
+      `For ${paramLabel}, variances between ${lake1Name} and ${lake2Name} ${differ} (Levene, ${formatPvA(p, alpha)}).`,
       advice,
       borderlineNote,
       smallSampleCaveat()
@@ -252,13 +272,23 @@ export function buildInterpretation({
     if (/tost/.test(testKey)) {
       const eq = !!result.equivalent;
       const method = /wilcoxon/.test(testKey) ? 'TOST (Wilcoxon)' : 'TOST';
+      // Derive a single TOST p-value: standard practice is max of the two one-sided p-values
+      const pTost = (() => {
+        const pDirect = toNum(result.pTOST ?? result.p_tost ?? result.p_tost_value);
+        if (Number.isFinite(pDirect)) return pDirect;
+        const pl = toNum(result.p_lower ?? result.p1 ?? result.p_left ?? result.p_low);
+        const pu = toNum(result.p_upper ?? result.p2 ?? result.p_right ?? result.p_high);
+        if (Number.isFinite(pl) && Number.isFinite(pu)) return Math.max(pl, pu);
+        return toNum(result.p_value);
+      })();
       const bounds = thr && thr.type === 'range'
         ? `${safeFmt(thr.min)}–${safeFmt(thr.max)}`
         : `${safeFmt(result.lower ?? result.threshold_min)}–${safeFmt(result.upper ?? result.threshold_max)}`;
       const classTxt = classCode ? ` for Class ${classCode} waters` : '';
       const withinTxt = `The ${paramLabel} values in ${lake1Name} fall within the acceptable range of ${bounds}${classTxt}.`;
-      const supportedTxt = `The equivalence test shows that the lake’s ${paramLabel} stays inside this range, and the result is statistically supported (${method}, ${formatP(p)}).`;
-      const notEstablishedTxt = `Equivalence was not established; the data do not support that values stay inside this range (${method}${Number.isFinite(p)?`, ${formatP(p)}`:''}).`;
+      const tostParen = methodWithSig(method, pTost, alpha);
+      const supportedTxt = `The equivalence test indicates there is enough statistical evidence to suggest that the lake’s ${paramLabel} stays inside this range ${tostParen}.`;
+      const notEstablishedTxt = `Equivalence was not established; there is not enough statistical evidence that values stay inside this range ${tostParen}.`;
       return join([
         withinTxt,
         eq ? supportedTxt : notEstablishedTxt,
@@ -291,7 +321,16 @@ export function buildInterpretation({
       return `reference value ${safeFmt(thr.value)}`;
     })();
     const centralValPhrase = centralValue != null ? `${centralLabel} is ${safeFmt(centralValue)}` : `${centralLabel} unavailable`;
-    const sigPart = Number.isFinite(p) ? `${reject ? 'Difference is statistically significant' : 'No statistically significant difference'} (${testLabel}, ${formatP(p)}).` : 'Significance could not be evaluated.';
+    // New significance language with explicit evidence framing and alpha comparison
+    const sigTxt = (() => {
+      if (!Number.isFinite(p)) return 'Significance could not be evaluated.';
+      const pvAlpha = formatPvA(p, alpha);
+      const relativeTo = thr ? `relative to the ${thresholdPhrase}` : 'in this assessment';
+      if (reject) {
+        return `Based on ${testLabel} (${pvAlpha}), there is enough statistical evidence to suggest that the observed difference ${relativeTo} is not due to random variation.`;
+      }
+      return `Based on ${testLabel} (${pvAlpha}), there is not enough statistical evidence to conclude a real difference ${relativeTo}; the observed difference could be due to random variation.`;
+    })();
 
     // Human-readable, threshold-focused narrative
     const classTxt = classCode ? ` for Class ${classCode}` : '';
@@ -319,14 +358,6 @@ export function buildInterpretation({
     const compliantTxt = (/compliant|within_range/.test(comp.status || ''))
       ? `This means the lake is currently within the allowable guideline for ${paramLabel}.`
       : (comp.status ? `This means the lake is not compliant with the guideline for ${paramLabel}.` : null);
-
-    const sigTxt = (() => {
-      if (!Number.isFinite(p)) return 'Significance could not be evaluated.';
-      const pv = formatP(p);
-      return reject
-        ? `The ${pv} shows that this difference is statistically significant, meaning the result is real and not due to random variation.`
-        : `The ${pv} indicates the difference is not statistically significant; the observed difference could be due to random variation.`;
-    })();
 
     return join([
       `The ${centralLabel} ${paramLabel} level in ${lake1Name} is ${safeFmt(centralValue)}${whereTxt ? `, ${whereTxt}` : ''}`,
@@ -365,10 +396,10 @@ export function buildInterpretation({
 
     const significanceSentence = (() => {
       if (!Number.isFinite(p)) return 'Significance could not be determined.';
-      const pv = formatP(p);
+      const pvAlpha = formatPvA(p, alpha);
       return reject
-        ? `Since ${pv}, the difference is statistically significant, meaning this gap is unlikely due to chance.`
-        : `Since ${pv}, the difference is not statistically significant; the observed gap could be due to chance.`;
+        ? `Based on ${testLabelTwoSample} (${pvAlpha}), there is enough statistical evidence to suggest that the difference between ${lake1Name} and ${lake2Name} is not due to random variation.`
+        : `Based on ${testLabelTwoSample} (${pvAlpha}), there is not enough statistical evidence to conclude a real difference between ${lake1Name} and ${lake2Name}; the observed gap could be due to random variation.`;
     })();
 
     const qualitySentence = (() => {
