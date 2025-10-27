@@ -30,10 +30,6 @@ export function buildInterpretation({
     if (!Number.isFinite(num)) return String(v);
     try { return sci ? sci(num) : String(num); } catch { return String(num); }
   };
-  const formatP = (pv) => {
-    if (!Number.isFinite(pv)) return '';
-    return pv < 0.001 ? 'p < 0.001' : `p = ${sciFmt(pv)}`;
-  };
   // Format p-value compared to alpha (always show comparison when possible)
   const formatPvA = (pv, a) => {
     if (!Number.isFinite(pv)) return '';
@@ -55,7 +51,6 @@ export function buildInterpretation({
     return methodLabel ? `(${methodLabel})` : '';
   };
   const join = (parts) => parts.filter(Boolean).map(s => s.trim()).filter(Boolean).map(s => /[.!?]$/.test(s)? s : s + '.').join(' ');
-  const normBool = (v) => (v === true || v === false) ? v : (v === 1 || v === '1') ? true : (v === 0 || v === '0') ? false : null;
   const toNum = (x) => (x != null && x !== '' && !Number.isNaN(Number(x)) ? Number(x) : null);
 
   const pMeta = (paramOptions || []).find(pp => [pp.code, pp.key, pp.id].some(x => String(x) === String(paramCode)));
@@ -102,15 +97,6 @@ export function buildInterpretation({
     return null;
   };
   const thr = resolveThreshold();
-
-  const thresholdSummary = (t) => {
-    if (!t) return 'no authoritative threshold';
-    if (t.type === 'range') return `acceptable range ${safeFmt(t.min)}–${safeFmt(t.max)}`;
-    if (t.type === 'min') return `minimum ≥ ${safeFmt(t.value)}`;
-    if (t.type === 'max') return `maximum ≤ ${safeFmt(t.value)}`;
-    if (t.type === 'value') return `reference value ${safeFmt(t.value)}`;
-    return 'threshold';
-  };
 
   const alpha = Number(result.alpha != null ? result.alpha : (1 - Number(cl || '0.95')));
   const p = toNum(result.p_value);
@@ -175,30 +161,6 @@ export function buildInterpretation({
   };
 
   const comp = classifyCompliance(centralValue, thr);
-  const harmfulDeviation = (st) => {
-    if (!thr) return false;
-    if (thr.type === 'range') {
-      if (st === 'above_range') return higherIsWorse === true ? true : (higherIsWorse === null ? true : false);
-      if (st === 'below_range') return higherIsWorse === false ? true : (higherIsWorse === null ? true : false);
-      return false;
-    }
-    if (thr.type === 'max' && st === 'above_max') return true;
-    if (thr.type === 'min' && st === 'below_min') return true;
-    return false;
-  };
-  const beneficialDeviation = (st) => {
-    if (!thr) return false;
-    if (thr.type === 'range') {
-      if (st === 'above_range') return higherIsWorse === false;
-      if (st === 'below_range') return higherIsWorse === true;
-      return false;
-    }
-    if (thr.type === 'max' && st === 'above_max') return false; // harmful already
-    if (thr.type === 'min' && st === 'below_min') return false;
-    if (thr.type === 'max' && st === 'compliant' && higherIsWorse === true && centralValue < thr.value) return true;
-    if (thr.type === 'min' && st === 'compliant' && higherIsWorse === false && centralValue > thr.value) return true;
-    return false;
-  };
 
   const smallSampleCaveat = () => {
     if (twoSample) {
@@ -266,7 +228,6 @@ export function buildInterpretation({
   if (isOneSample) {
     const n = result.n || statsOne?.n;
     const centralLabel = centralMetric === 'mean' ? 'mean' : 'median';
-    const thrSummary = thresholdSummary(thr);
 
     // Equivalence (TOST)
     if (/tost/.test(testKey)) {
@@ -320,7 +281,6 @@ export function buildInterpretation({
       if (thr.type === 'max') return `maximum threshold ${safeFmt(thr.value)}`;
       return `reference value ${safeFmt(thr.value)}`;
     })();
-    const centralValPhrase = centralValue != null ? `${centralLabel} is ${safeFmt(centralValue)}` : `${centralLabel} unavailable`;
     // New significance language with explicit evidence framing and alpha comparison
     const sigTxt = (() => {
       if (!Number.isFinite(p)) return 'Significance could not be evaluated.';
