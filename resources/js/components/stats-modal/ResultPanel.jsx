@@ -191,11 +191,12 @@ export default function ResultPanel({ result, paramCode, paramOptions, classCode
 
   return (
     <div className="stat-box">
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:8 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 2fr', gap:8 }}>
         {gridItems.map((it,i)=>(
           <React.Fragment key={i}>
-            <div title={it.tip || undefined} style={{ fontSize:12, opacity:0.85, padding:6, borderBottom:'1px solid rgba(255,255,255,0.03)' }}>{it.k}</div>
+            <div style={{ fontSize:12, opacity:0.85, padding:6, borderBottom:'1px solid rgba(255,255,255,0.03)' }}>{it.k}</div>
             <div style={{ fontSize:13, padding:6, borderBottom:'1px solid rgba(255,255,255,0.03)' }}>{(typeof it.v === 'string' || typeof it.v === 'number') ? String(it.v) : it.v}</div>
+            <div style={{ fontSize:12, opacity:0.8, padding:6, borderBottom:'1px solid rgba(255,255,255,0.03)' }}>{(typeof it.tip === 'string' || typeof it.tip === 'number') ? (it.tip ? String(it.tip) : '') : (it.tip || '')}</div>
           </React.Fragment>
         ))}
       </div>
