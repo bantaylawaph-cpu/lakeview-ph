@@ -30,6 +30,7 @@ const UNIT_OPTIONS = [
   { value: "°C", label: "°C" },
   { value: "MPN/100mL", label: "MPN/100mL" },
   { value: "TCU", label: "TCU" },
+  { value: "µg/L", label: "µg/L" },
 ];
 
 const EVALUATION_LABELS = {
