@@ -84,7 +84,12 @@ function WaterQualityTab({ lake }) {
           const name = r.organization_name ?? r.organization?.name;
           if (oid && name && !uniq.has(String(oid))) uniq.set(String(oid), { id: oid, name });
         });
-        setOrgs(Array.from(uniq.values()));
+        const list = Array.from(uniq.values());
+        setOrgs(list);
+        // Default to first organization when none selected
+        if ((!orgId || !list.some(o => String(o.id) === String(orgId))) && list.length > 0) {
+          setOrgId(String(list[0].id));
+        }
       }
     } catch (e) {
       console.error("[WaterQualityTab] Failed to load tests", e);
@@ -242,12 +247,12 @@ function WaterQualityTab({ lake }) {
         {/* Dataset Source */}
         <div className="form-group" style={{ minWidth: 0 }}>
           <label style={{ marginBottom: 2, fontSize: 11, color: '#fff' }}>Dataset Source</label>
-          <OrgSelect options={orgs} value={orgId} onChange={(e) => setOrgId(e.target.value)} placeholder="All dataset sources" style={{ padding: '6px 8px', height: 'auto' }} />
+          <OrgSelect options={orgs} value={orgId} onChange={(e) => setOrgId(e.target.value)} style={{ padding: '6px 8px', height: 'auto' }} />
         </div>
         {/* Station selector */}
         <div className="form-group" style={{ minWidth: 0 }}>
           <label style={{ marginBottom: 2, fontSize: 11, color: '#fff' }}>Station</label>
-          <StationSelect options={stations} value={station} onChange={(e) => setStation(e.target.value)} includeAllOption={true} allValue="" allLabel="All" placeholder="Select a station" style={{ padding: '6px 8px', height: 'auto' }} />
+          <StationSelect options={stations} value={station} onChange={(e) => setStation(e.target.value)} includeAllOption={true} allValue="" allLabel="All Stations" showPlaceholder={false} style={{ padding: '6px 8px', height: 'auto' }} />
         </div>
       </div>
       {loading && (

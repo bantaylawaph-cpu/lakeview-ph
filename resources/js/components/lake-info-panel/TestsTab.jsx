@@ -172,7 +172,7 @@ export default function TestsTab({ lake, onJumpToStation }) {
             </div>
             <div className="form-group" style={{ flex: 1, minWidth: 0 }}>
               <label style={{ fontSize: 11, marginBottom: 2, color: '#fff' }}>Station</label>
-              <StationSelect options={stations} value={stationId} onChange={(e) => setStationId(e.target.value)} includeAllOption={true} allValue="" allLabel="All" placeholder="Select a station" style={{ padding: '6px 8px', height: 'auto' }} />
+              <StationSelect options={stations} value={stationId} onChange={(e) => setStationId(e.target.value)} includeAllOption={true} allValue="" allLabel="All Stations" showPlaceholder={false} style={{ padding: '6px 8px', height: 'auto' }} />
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'end' }}>
               <div className="form-group" style={{ minWidth: 0 }}>

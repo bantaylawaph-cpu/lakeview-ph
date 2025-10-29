@@ -10,6 +10,7 @@ export default function StationSelect({
   allValue = 'all',
   allLabel = 'All Stations',
   placeholder = 'Select a station',
+  showPlaceholder = true,
   style = {},
 }) {
   return (
@@ -20,7 +21,7 @@ export default function StationSelect({
       disabled={disabled}
       style={{ width:'100%', minWidth:0, boxSizing:'border-box', padding:'10px 12px', height:40, lineHeight:'20px', ...style }}
     >
-      <option value="">{placeholder}</option>
+      {showPlaceholder && <option value="">{placeholder}</option>}
       {includeAllOption && <option value={allValue}>{allLabel}</option>}
       {options.map(s => (
         <option key={`station-${s.id}`} value={s.id}>{s.name}</option>
