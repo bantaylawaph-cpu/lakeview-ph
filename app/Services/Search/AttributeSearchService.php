@@ -17,7 +17,7 @@ class AttributeSearchService
             $kw = '%' . trim($q) . '%';
             $rows = [];
             if ($entity === 'lakes') {
-                $hasLakeKeyword = (bool)preg_match('/\blakes?\b/i', $q);
+                    $hasLakeKeywordExact = (bool)preg_match('/^\s*lakes?\s*$/i', $q);
                 $sql = <<<SQL
 SELECT l.id,
        COALESCE(NULLIF(l.name, ''), NULLIF(l.alt_name, ''), 'Lake') AS name,
@@ -34,10 +34,12 @@ SQL;
                 if ($place) {
                     $sql .= "\nAND ((l.region::text) ILIKE :place OR (l.province::text) ILIKE :place OR (l.municipality::text) ILIKE :place)";
                 }
-                $sql .= "\nORDER BY name ASC\nLIMIT :limit";
-                $params = [
-                    'kw' => $kw,
-                    'kwName' => $hasLakeKeyword ? '%lake%' : $kw,
+                // Rank exact name matches first, then fall back to alphabetical
+                $sql .= "\nORDER BY CASE WHEN (l.name ILIKE :exact OR l.alt_name ILIKE :exact) THEN 0 ELSE 1 END, name ASC\nLIMIT :limit";
+                    $params = [
+                        'kw' => $kw,
+                        'exact' => trim($q),
+                        'kwName' => $hasLakeKeywordExact ? '%lake%' : $kw,
                     'useRegionMatch' => $place ? 0 : 1,
                     'limit' => $limit,
                 ] + ($place ? ['place' => '%' . $place . '%'] : []);
