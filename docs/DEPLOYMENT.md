@@ -63,6 +63,12 @@ Note: Verify `raster2pgsql -v` in a local build before deploying. Keep DB_URL on
 
 You can configure via UI or a `render.yaml`. Below covers both.
 
+### Important: Build context and Docker ignore
+
+- In Render, set Root Directory to `lakeview-ph` and Docker Build Context Directory to `lakeview-ph`.
+- This prevents uploading large non-app folders (e.g., backups) and keeps builds fast/stable.
+- The project includes `lakeview-ph/.dockerignore` and a top-level `.dockerignore` to trim the context. Do not ignore `composer.lock` or `Dockerfile` in the app context; they’re required for deterministic and cached builds.
+
 ### Web service
 
 - Runtime: Docker

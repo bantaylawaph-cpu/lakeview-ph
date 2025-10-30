@@ -10,7 +10,8 @@ pnpm-lock.yaml
 
 # PHP / Composer
 vendor
-composer.lock
+# Keep composer.lock in build context so Docker layer caching and deterministic installs work
+# (do NOT ignore composer.lock)
 composer.phar
 
 # Build and IDE
@@ -25,8 +26,7 @@ storage/framework/cache/*
 storage/framework/sessions/*
 storage/framework/testing/*
 
-# Docker
-Dockerfile
-.dockerignore
+# Docker (keep Dockerfile and .dockerignore available to the builder)
+# Do NOT ignore Dockerfile or .dockerignore here
 
 docker-compose.yml
