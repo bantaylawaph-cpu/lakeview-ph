@@ -18,6 +18,7 @@ class AttributeSearchService
             $rows = [];
             if ($entity === 'lakes') {
                     $hasLakeKeywordExact = (bool)preg_match('/^\s*lakes?\s*$/i', $q);
+                // Allow place-only queries (e.g., "lakes in Cebu") to match by region/province/municipality
                 $sql = <<<SQL
 SELECT l.id,
        COALESCE(NULLIF(l.name, ''), NULLIF(l.alt_name, ''), 'Lake') AS name,
@@ -28,21 +29,26 @@ FROM lakes l
 WHERE (
     l.name ILIKE :kwName OR
     l.alt_name ILIKE :kwName OR
-    (:useRegionMatch = 1 AND ((l.region::text) ILIKE :kw OR (l.province::text) ILIKE :kw OR (l.municipality::text) ILIKE :kw))
+    %s
 )
 SQL;
-                if ($place) {
-                    $sql .= "\nAND ((l.region::text) ILIKE :place OR (l.province::text) ILIKE :place OR (l.municipality::text) ILIKE :place)";
-                }
+                $regionCond = $place
+                    ? '((l.region::text) ILIKE :place OR (l.province::text) ILIKE :place OR (l.municipality::text) ILIKE :place)'
+                    : '((l.region::text) ILIKE :kw OR (l.province::text) ILIKE :kw OR (l.municipality::text) ILIKE :kw)';
+                $sql = sprintf($sql, $regionCond);
                 // Rank exact name matches first, then fall back to alphabetical
                 $sql .= "\nORDER BY CASE WHEN (l.name ILIKE :exact OR l.alt_name ILIKE :exact) THEN 0 ELSE 1 END, name ASC\nLIMIT :limit";
-                    $params = [
-                        'kw' => $kw,
-                        'exact' => trim($q),
-                        'kwName' => $hasLakeKeywordExact ? '%lake%' : $kw,
-                    'useRegionMatch' => $place ? 0 : 1,
+                // Build params only for placeholders present in SQL
+                $params = [
+                    'exact' => trim($q),
+                    'kwName' => $hasLakeKeywordExact ? '%lake%' : $kw,
                     'limit' => $limit,
-                ] + ($place ? ['place' => '%' . $place . '%'] : []);
+                ];
+                if ($place) {
+                    $params['place'] = '%' . $place . '%';
+                } else {
+                    $params['kw'] = $kw;
+                }
                 $rows = DB::select($sql, $params);
                 return $this->mapper->mapRows($rows, 'lakes', null, $place);
             } elseif ($entity === 'layers') {
