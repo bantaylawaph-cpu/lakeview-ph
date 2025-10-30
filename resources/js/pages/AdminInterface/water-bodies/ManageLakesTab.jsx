@@ -23,6 +23,8 @@ const fmtNum = (value, digits = 2) => {
   if (value === null || value === undefined || value === "") return "";
   const num = Number(value);
   if (Number.isNaN(num)) return "";
+  // Support full-precision display when digits === 'full'
+  if (digits === "full") return String(value);
   return num.toFixed(digits);
 };
 
@@ -69,7 +71,8 @@ const normalizeRows = (rows = []) =>
       class_code: row.class_code ?? "",
       class_name: row.water_quality_class?.name ?? "",
       classification: row.class_code ? [row.class_code, row.water_quality_class?.name].filter(Boolean).join(" - ") : "",
-      surface_area_km2: fmtNum(row.surface_area_km2, 2),
+  // Show full precision for surface area (no rounding)
+  surface_area_km2: fmtNum(row.surface_area_km2, "full"),
       elevation_m: fmtNum(row.elevation_m, 1),
       mean_depth_m: fmtNum(row.mean_depth_m, 1),
       watershed: row.watershed?.name ?? "",
@@ -165,7 +168,7 @@ function ManageLakesTab() {
       { id: "lat", header: "Lat", accessor: "lat", width: 120, className: "col-md-hide", _optional: true },
       { id: "lon", header: "Lon", accessor: "lon", width: 120, className: "col-md-hide", _optional: true },
       { id: "classification", header: "DENR Class", accessor: "classification", width: 160, render: (row) => row.class_code || "" },
-      { id: "surface_area_km2", header: "Surface Area (km^2)", accessor: "surface_area_km2", width: 170, className: "col-sm-hide" },
+  { id: "surface_area_km2", header: "Surface Area (km²)", accessor: "surface_area_km2", width: 170, className: "col-sm-hide" },
       { id: "elevation_m", header: "Elevation (m)", accessor: "elevation_m", width: 150, className: "col-md-hide", _optional: true },
       { id: "mean_depth_m", header: "Mean Depth (m)", accessor: "mean_depth_m", width: 160, className: "col-md-hide", _optional: true },
       { id: "flows_status", header: "Flows", accessor: "flows_status", width: 160, className: "col-md-hide", _optional: true, render: (row) => fmtFlowsStatus(row.flows_status) },
@@ -859,7 +862,7 @@ function ManageLakesTab() {
           },
           {
             id: "area_km2",
-            label: "Surface Area (km^2)",
+            label: "Surface Area (km²)",
             type: "number-range",
             value: adv.area_km2 ?? [null, null],
             onChange: (range) => setAdv((state) => ({ ...state, area_km2: range })),

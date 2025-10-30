@@ -1,5 +1,6 @@
 import React from 'react';
 import { FiSearch } from 'react-icons/fi';
+import { ensureUnit, normalizeNumStr, shiftDecimalStr } from '../utils/conversions';
 
 export default function SearchResultsPopover({ open, results, loading, error, onClose, onSelect }) {
   if (!open) return null;
@@ -35,8 +36,27 @@ export default function SearchResultsPopover({ open, results, loading, error, on
           const entity = (r.table || r.entity || '').toString();
 
           const asText = (v) => Array.isArray(v) ? (v[0] ?? '') : (v ?? '');
-          const region = asText(attrs.region) ? String(asText(attrs.region)) : '';
-          const province = asText(attrs.province) ? String(asText(attrs.province)) : '';
+          // Normalize potential JSON-encoded arrays/objects or arrays into readable text
+          const normText = (v) => {
+            if (v == null) return '';
+            if (Array.isArray(v)) {
+              return v.map((x) => (x == null ? '' : String(x))).filter(Boolean).join(', ');
+            }
+            if (typeof v === 'string') {
+              const s = v.trim();
+              if (s && (s[0] === '[' || s[0] === '{')) {
+                try {
+                  const j = JSON.parse(s);
+                  if (Array.isArray(j)) return j.filter(Boolean).map(String).join(', ');
+                  if (j && typeof j === 'object') return Object.values(j).filter(Boolean).map(String).join(', ');
+                } catch {}
+              }
+              return s;
+            }
+            return String(v);
+          };
+          const region = (() => { const t = normText(attrs.region); return t ? String(t) : ''; })();
+          const province = (() => { const t = normText(attrs.province); return t ? String(t) : ''; })();
           // Build location: province, region (omit missing)
           const locParts = [];
           if (province) locParts.push(province);
@@ -51,24 +71,84 @@ export default function SearchResultsPopover({ open, results, loading, error, on
           const classCode = attrs.class_code || attrs.water_class || null;
           const depth = num(attrs.max_depth ?? attrs.depth);
           const elev = num(attrs.elevation ?? attrs.max_elevation);
-          const areaNum = num(attrs.surface_area_km2 ?? attrs.area_km2 ?? attrs.surface_area_ha ?? attrs.area_ha ?? attrs.surface_area ?? attrs.area);
-          const areaUnit = (() => {
-            if (attrs.surface_area_km2 != null || attrs.area_km2 != null) return 'km²';
-            if (attrs.surface_area_ha != null || attrs.area_ha != null) return 'ha';
-            return null;
-          })();
-          const areaTextExplicit = attrs.surface_area_text || attrs.area_text || attrs.surface_area_readable || null;
-          const areaText = areaTextExplicit
-            ? String(areaTextExplicit)
-            : (areaNum != null ? `${areaNum.toLocaleString()}${areaUnit ? ` ${areaUnit}` : ''}` : '');
+          const firstDefined = (...vals) => vals.find((v) => v !== undefined && v !== null);
+          // ---- Area formatting (show in km² with ha in parentheses) ----
+
+          // Determine km² and ha strings from available fields
+          const km2Src = firstDefined(attrs.surface_area_km2, attrs.area_km2);
+          const haSrc = firstDefined(attrs.surface_area_ha, attrs.area_ha);
+          let km2Str = km2Src != null ? normalizeNumStr(asText(km2Src)) : '';
+          let haStr = haSrc != null ? normalizeNumStr(asText(haSrc)) : '';
+          if (!km2Str && haStr) {
+            km2Str = shiftDecimalStr(haStr, -2);
+          }
+          if (!haStr && km2Str) {
+            haStr = shiftDecimalStr(km2Str, +2);
+          }
+          const areaText = km2Str ? `${km2Str} km²${haStr ? ` (${haStr} ha)` : ''}` : '';
+
+          // Depth (prefer explicit text, else raw value; add 'm' if missing)
+          const depthRawPref = firstDefined(
+            attrs.mean_depth_text,
+            attrs.average_depth_text,
+            attrs.avg_depth_text,
+            attrs.depth_text,
+            attrs.mean_depth,
+            attrs.average_depth,
+            attrs.avg_depth,
+            attrs.depth
+          );
+          const depthTextBase = depthRawPref != null ? String(asText(depthRawPref)) : '';
+          const depthText = depthTextBase ? ensureUnit(depthTextBase, 'm') : '';
+
+          // Elevation (prefer explicit text, else raw value; add 'm' if missing)
+          const elevRawPref = firstDefined(
+            attrs.elevation_text,
+            attrs.surface_elevation_text,
+            attrs.elevation,
+            attrs.surface_elevation,
+            attrs.max_elevation,
+            attrs.elevation_m
+          );
+          const elevTextBase = elevRawPref != null ? String(asText(elevRawPref)) : '';
+          const elevText = elevTextBase ? ensureUnit(elevTextBase, 'm') : '';
 
           const makeLakeSentence = () => {
-            // Format: "<name> is in <province, region> with the surface area of <area>"
-            const parts = [];
-            if (loc) parts.push(`${name} is in ${loc}`);
-            else parts.push(`${name} is a lake`);
-            if (areaText) parts.push(`with the surface area of ${areaText}`);
-            return parts.join(' ') + '.';
+              // Format: "<name> is in <province, region> with the surface area of <area>, average depth of <depth>, and surface elevation of <elev>"
+              const parts = [];
+              if (loc) parts.push(`${name} is in ${loc}`);
+              else parts.push(`${name} is a lake`);
+            const details = [];
+            if (areaText) details.push(`the surface area of ${areaText}`);
+            if (depthText) details.push(`an average depth of ${depthText}`);
+            if (elevText) details.push(`a surface elevation of ${elevText}`);
+
+            // If this is an analytical result, ensure the metric value is shown even if
+            // explicit fields are missing.
+            const attributeUsed = r.attribute_used || attrs.attribute_used || '';
+            const metricValue = (attrs.metric_value !== undefined && attrs.metric_value !== null)
+              ? attrs.metric_value
+              : (r.metric_value !== undefined && r.metric_value !== null ? r.metric_value : null);
+            if (attributeUsed && metricValue != null) {
+              const metricValText = String(asText(metricValue));
+              if (attributeUsed === 'depth' && !depthText) {
+                details.push(`a depth of ${ensureUnit(metricValText, 'm')}`);
+              } else if (attributeUsed === 'elevation' && !elevText) {
+                details.push(`a surface elevation of ${ensureUnit(metricValText, 'm')}`);
+              } else if (attributeUsed === 'area_m2' && !areaText) {
+                // Convert m² metric into km² with ha in parentheses as requested
+                const m2Str = normalizeNumStr(metricValText);
+                const km2FromM2 = shiftDecimalStr(m2Str, -6);
+                const haFromM2 = shiftDecimalStr(m2Str, -4);
+                const areaAnalyticText = km2FromM2 ? `${km2FromM2} km²${haFromM2 ? ` (${haFromM2} ha)` : ''}` : '';
+                if (areaAnalyticText) details.push(`the surface area of ${areaAnalyticText}`);
+              } else if (attributeUsed === 'shoreline_m') {
+                details.push(`a shoreline length of ${ensureUnit(metricValText, 'm')}`);
+              }
+            }
+              if (details.length === 1) parts.push(`with ${details[0]}`);
+              else if (details.length > 1) parts.push(`with ${details.slice(0, -1).join(', ')}, and ${details[details.length - 1]}`);
+              return parts.join(' ') + '.';
           };
 
           const makeGenericSentence = () => {
@@ -80,9 +160,8 @@ export default function SearchResultsPopover({ open, results, loading, error, on
             return `${name}${suffix}`;
           };
 
-          const sentence = (entity === 'lakes' && (attrs.description || '').trim())
-            ? String(attrs.description)
-            : (entity === 'lakes' ? makeLakeSentence() : makeGenericSentence());
+            // For lakes, always prefer our client-side sentence using raw values to avoid rounding.
+            const sentence = entity === 'lakes' ? makeLakeSentence() : makeGenericSentence();
 
           return (
             <button key={idx}

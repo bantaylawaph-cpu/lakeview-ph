@@ -304,7 +304,7 @@ function LayerList({
     if (visibleMap.downloadable) arr.push({ id: 'downloadable', header: 'Downloadable', render: (r) => (r.is_downloadable ? 'Yes' : 'No'), sortValue: (r) => (r.is_downloadable ? 1 : 0), width: 120 });
     if (visibleMap.default) arr.push({ id: 'default', header: 'Default Layer', render: (r) => (r.is_active ? 'Yes' : 'No'), sortValue: (r) => (r.is_active ? 1 : 0), width: 120 });
     if (visibleMap.creator) arr.push({ id: 'creator', header: 'Created by', render: (r) => formatCreator(r) });
-    if (visibleMap.area) arr.push({ id: 'area', header: 'Area (km2)', render: (r) => (r.area_km2 ?? '-'), sortValue: (r) => (typeof r.area_km2 === 'number' ? r.area_km2 : -1), width: 120 });
+  if (visibleMap.area) arr.push({ id: 'area', header: 'Surface Area (km²)', render: (r) => (r.area_km2 ?? '-'), sortValue: (r) => (typeof r.area_km2 === 'number' ? r.area_km2 : -1), width: 120 });
     if (visibleMap.updated) arr.push({ id: 'updated', header: 'Updated', render: (r) => (r.updated_at ? new Date(r.updated_at).toLocaleString() : '-'), sortValue: (r) => (r.updated_at || ''), width: 200 });
     return arr;
   }, [visibleMap]);
@@ -336,7 +336,7 @@ function LayerList({
     { id: 'downloadable', header: 'Downloadable' },
     { id: 'default', header: 'Default Layer' },
     { id: 'creator', header: 'Created by' },
-    { id: 'area', header: 'Area (km2)' },
+  { id: 'area', header: 'Surface Area (km²)' },
     { id: 'updated', header: 'Updated' },
   ], visibleMap, onVisibleChange: (m) => setVisibleMap(m) };
 

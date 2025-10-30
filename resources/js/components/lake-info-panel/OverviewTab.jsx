@@ -2,12 +2,21 @@ import React, { useMemo, useEffect, useState } from "react";
 import { FiMap, FiInfo } from 'react-icons/fi';
 import LoadingSpinner from "../LoadingSpinner";
 import { api } from "../../lib/api";
+import { normalizeNumStr, shiftDecimalStr } from "../../utils/conversions";
 
 const fmtNum = (v, suffix = "", digits = 2) => {
   if (v === null || v === undefined || v === "") return "–";
   const n = Number(v);
   if (!Number.isFinite(n)) return "–";
   return `${n.toFixed(digits)}${suffix}`;
+};
+
+// No-rounding formatter for cases where we want the full precision as stored
+const fmtNumFull = (v, suffix = "") => {
+  if (v === null || v === undefined || v === "") return "–";
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "–";
+  return `${v}${suffix}`;
 };
 
 
@@ -66,7 +75,17 @@ function OverviewTab({
   const provinceDisplay = useMemo(() => fmtList(lake?.province_list || lake?.province), [lake]);
   const municipalityDisplay = useMemo(() => fmtList(lake?.municipality_list || lake?.municipality), [lake]);
 
-  const areaStr      = useMemo(() => fmtNum(lake?.surface_area_km2, " km²", 2), [lake]);
+  // Surface Area: display as km² with ha in parentheses, deriving missing unit if needed (no rounding)
+  const areaStr      = useMemo(() => {
+    const km2Src = lake?.surface_area_km2 ?? lake?.area_km2;
+    const haSrc  = lake?.surface_area_ha ?? lake?.area_ha;
+    let km2Str = km2Src != null ? normalizeNumStr(km2Src) : '';
+    let haStr  = haSrc  != null ? normalizeNumStr(haSrc)  : '';
+    if (!km2Str && haStr) km2Str = shiftDecimalStr(haStr, -2);
+    if (!haStr && km2Str) haStr  = shiftDecimalStr(km2Str, +2);
+    if (!km2Str) return '–';
+    return `${km2Str} km²${haStr ? ` (${haStr} ha)` : ''}`;
+  }, [lake?.surface_area_km2, lake?.area_km2, lake?.surface_area_ha, lake?.area_ha]);
   const elevationStr = useMemo(() => fmtNum(lake?.elevation_m, " m", 1), [lake]);
   const meanDepthStr = useMemo(() => fmtNum(lake?.mean_depth_m, " m", 1), [lake]);
 
