@@ -4,7 +4,6 @@ import api from '../../lib/api';
 import { cachedGet, invalidateHttpCache } from '../../lib/httpCache';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { FiDatabase, FiUploadCloud, FiPlayCircle, FiStar, FiTrash2 } from 'react-icons/fi';
-import DashboardHeader from '../../components/DashboardHeader';
 import Swal from 'sweetalert2';
 import 'sweetalert2/dist/sweetalert2.min.css';
 import FileDropzone from '../../components/layers/FileDropzone';

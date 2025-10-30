@@ -20,6 +20,7 @@ import { SeriesModeToggle } from "./ui/Toggles";
 import LakeSelect from './ui/LakeSelect';
 import OrgSelect from './ui/OrgSelect';
 import ParamSelect from './ui/ParamSelect';
+import LoadingSpinner from '../LoadingSpinner';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, BarElement);
 // register year label plugin (used by bar charts)
@@ -56,6 +57,8 @@ export default function SingleLake({
   const [applied, setApplied] = useState(false);
   // 'time' | 'depth' | 'bar'
   const [chartType, setChartType] = useState('time');
+  const prevTypeRef = useRef('time');
+  const prevTimeStateRef = useRef({ timeRange: 'all', dateFrom: '', dateTo: '' });
   const [seriesMode, setSeriesMode] = useState('avg'); // 'avg' | 'per-station'
   const [infoOpen, setInfoOpen] = useState(false);
   const [infoContent, setInfoContent] = useState({ title: '', sections: [] });
@@ -73,7 +76,7 @@ export default function SingleLake({
   // narrowing to the chosen year when the user picks a year filter.
   const { events: eventsAll } = useSampleEvents(selectedLake, selectedOrg, 'all', '', '');
   const hasStationIds = true;
-  const { orgOptions: orgOptionsLocal, stationsByOrg, allStations } = useStationsCache(selectedLake);
+  const { orgOptions: orgOptionsLocal, stationsByOrg, allStations, loading: stationsLoading } = useStationsCache(selectedLake);
   const stationsList = useMemo(() => (!selectedOrg ? (allStations || []) : (stationsByOrg?.[String(selectedOrg)] || [])), [selectedOrg, allStations, stationsByOrg]);
   useEffect(() => {
     setApplied(false);
@@ -371,15 +374,16 @@ export default function SingleLake({
               } catch {}
               onOrgChange(nextOrg);
               setApplied(false);
-            }} disabled={!selectedLake} required={false} placeholder="Select a dataset source" style={{ width: '100%' }} />
+            }} disabled={!selectedLake} loading={!!selectedLake && stationsLoading} required={false} placeholder="Select a dataset source" style={{ width: '100%' }} />
           </div>
 
           {true ? (
             <div>
               <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Locations</div>
               <div style={{ position: 'relative' }}>
-                <button ref={stationBtnRef} type="button" className="pill-btn" disabled={!selectedLake || !selectedOrg || !stationsList?.length} title={!selectedOrg ? 'Choose a dataset source first' : (!stationsList?.length ? 'No stations available' : undefined)} onClick={() => setStationsOpen((v) => !v)} style={{ width: '100%' }}>
-                  {selectedStations.length ? `${selectedStations.length} selected` : 'Select locations'}
+                <button ref={stationBtnRef} type="button" className="pill-btn" disabled={!selectedLake || !selectedOrg || !stationsList?.length || stationsLoading} title={!selectedOrg ? 'Choose a dataset source first' : (!stationsList?.length ? 'No stations available' : undefined)} onClick={() => setStationsOpen((v) => !v)} style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <span>{selectedStations.length ? `${selectedStations.length} selected` : 'Select locations'}</span>
+                  {stationsLoading ? (<span style={{ marginLeft: 8 }}><LoadingSpinner inline size={16} label="Loading" /></span>) : null}
                 </button>
                 <StationPicker
                   anchorRef={stationBtnRef}
@@ -401,8 +405,21 @@ export default function SingleLake({
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Chart Type</div>
             <select className="pill-btn" value={chartType} onChange={(e) => {
               const next = e.target.value;
+              const prev = prevTypeRef.current;
               setChartType(next);
-              // preserve existing time selections across chart types
+              // If leaving Depth profile, clear year-based custom range to avoid leaking year dropdown
+              if (prev === 'depth' && next !== 'depth') {
+                try {
+                  const prevSaved = prevTimeStateRef.current || { timeRange: 'all', dateFrom: '', dateTo: '' };
+                  setTimeRange(prevSaved.timeRange || 'all');
+                  setDateFrom(prevSaved.dateFrom || '');
+                  setDateTo(prevSaved.dateTo || '');
+                } catch {}
+              } else if (next === 'depth' && prev !== 'depth') {
+                // Save existing time selection before switching into depth mode
+                prevTimeStateRef.current = { timeRange, dateFrom, dateTo };
+              }
+              prevTypeRef.current = next;
               setApplied(false);
             }} style={{ width: '100%' }}>
               <option value="time">Time series</option>
@@ -475,7 +492,7 @@ export default function SingleLake({
           {/* Parameters */}
           <div>
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Parameter</div>
-            <ParamSelect options={paramOptions} value={selectedParam} onChange={(e) => { onParamChange(e.target.value); setApplied(false); setDepthSelection('0'); }} disabled={!canChooseParam} placeholder="Select parameter" style={{ width: '100%' }} />
+            <ParamSelect options={paramOptions} value={selectedParam} onChange={(e) => { onParamChange(e.target.value); setApplied(false); setDepthSelection('0'); }} disabled={!canChooseParam} loading={!Array.isArray(paramOptions) || paramOptions.length === 0} placeholder="Select parameter" style={{ width: '100%' }} />
             {chartType === 'bar' && depthOptions && depthOptions.length >= 1 && (
               <div>
                 <div style={{ fontSize: 12, opacity: 0.8, marginTop: 8, marginBottom: 4 }}>Depth</div>
