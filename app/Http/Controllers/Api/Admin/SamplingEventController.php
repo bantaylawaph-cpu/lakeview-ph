@@ -14,6 +14,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\Rule;
 
 class SamplingEventController extends Controller
@@ -154,6 +155,8 @@ class SamplingEventController extends Controller
             return $event;
         });
 
+        // Bump public sample-events cache version
+        try { $v = (int) Cache::get('ver:public:sample-events', 1); Cache::forever('ver:public:sample-events', $v + 1); } catch (\Throwable $e) {}
         $resource = $this->eventDetailQuery()->findOrFail($event->id);
 
         return response()->json(['data' => $resource], 201);
@@ -222,6 +225,7 @@ class SamplingEventController extends Controller
             }
         });
 
+        try { $v = (int) Cache::get('ver:public:sample-events', 1); Cache::forever('ver:public:sample-events', $v + 1); } catch (\Throwable $e) {}
         $resource = $this->eventDetailQuery()->findOrFail($samplingEvent->id);
 
         return response()->json(['data' => $resource]);
@@ -263,7 +267,7 @@ class SamplingEventController extends Controller
             $samplingEvent->results()->delete();
             $samplingEvent->delete();
         });
-
+        try { $v = (int) Cache::get('ver:public:sample-events', 1); Cache::forever('ver:public:sample-events', $v + 1); } catch (\Throwable $e) {}
         return response()->json(['message' => 'Sampling event deleted']);
     }
 
@@ -379,12 +383,21 @@ class SamplingEventController extends Controller
             $query->where('sampling_events.sampled_at', '<=', CarbonImmutable::parse($request->query('sampled_to')));
         }
 
+        // Cache per lake/org/date window with short TTL and version bump
+        $ver = (int) Cache::get('ver:public:sample-events', 1);
+        $qs = $request->query(); ksort($qs);
+        $key = 'public:sample-events:v'.$ver.':'.md5(json_encode($qs));
+        if ($hit = Cache::get($key)) {
+            return response()->json(['data' => $hit]);
+        }
+
         $events = $query
             ->orderByDesc('sampling_events.sampled_at')
             ->orderBy('sampling_events.id', 'desc')
             ->limit($limit)
             ->get();
 
+        Cache::put($key, $events, now()->addMinutes(2));
         return response()->json(['data' => $events]);
     }
 
@@ -394,8 +407,10 @@ class SamplingEventController extends Controller
         if ($samplingEvent->status !== 'public') {
             abort(404);
         }
-
+        $key = 'public:sample-event:item:'.$samplingEvent->id;
+        if ($hit = Cache::get($key)) return response()->json(['data' => $hit]);
         $resource = $this->eventDetailQuery()->findOrFail($samplingEvent->id);
+        Cache::put($key, $resource, now()->addMinutes(5));
         return response()->json(['data' => $resource]);
     }
 
@@ -476,7 +491,7 @@ class SamplingEventController extends Controller
             $samplingEvent->status = ($samplingEvent->status === 'public') ? 'draft' : 'public';
             $samplingEvent->save();
         });
-
+        try { $v = (int) Cache::get('ver:public:sample-events', 1); Cache::forever('ver:public:sample-events', $v + 1); } catch (\Throwable $e) {}
         $resource = $this->eventDetailQuery()->findOrFail($samplingEvent->id);
         return response()->json(['data' => $resource]);
     }

@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { FiEye, FiMapPin } from 'react-icons/fi';
 import { apiPublic, buildQuery } from '../../lib/api';
+import cache from '../../lib/storageCache';
 import { alertError } from '../../lib/alerts';
 import PublicWQTestModal from '../modals/PublicWQTestModal';
 import LoadingSpinner from '../LoadingSpinner';
@@ -33,9 +34,25 @@ export default function TestsTab({ lake, onJumpToStation }) {
       setLoading(true);
       try {
         const qs = buildQuery({ lake_id: lakeId, limit: 500 });
+        const key = `public:sample-events:lake:${lakeId}:limit:500`;
+        const TTL = 5 * 60 * 1000; // 5 minutes
+        const cached = cache.get(key, { maxAgeMs: TTL });
+        if (cached) {
+          let rows = Array.isArray(cached) ? cached : [];
+          if (!mounted) return;
+          
+          const uniqOrgs = new Map();
+          rows.forEach((r) => {
+            const oid = r.organization_id ?? r.organization?.id;
+            const oname = r.organization_name ?? r.organization?.name;
+            if (oid && oname && !uniqOrgs.has(String(oid))) uniqOrgs.set(String(oid), { id: oid, name: oname });
+          });
+          setOrgs(Array.from(uniqOrgs.values()));
+        }
         const res = await apiPublic(`/public/sample-events${qs}`);
         if (!mounted) return;
         let rows = Array.isArray(res?.data) ? res.data : [];
+        cache.set(key, rows, { ttlMs: TTL });
 
         const uniqOrgs = new Map();
         rows.forEach((r) => {

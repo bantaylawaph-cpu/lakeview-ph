@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { apiPublic, buildQuery } from "../../lib/api";
+import cache from "../../lib/storageCache";
 import { alertError } from "../../lib/alerts";
 import { fetchStationsForLake } from "../stats-modal/data/fetchers";
 import {
@@ -73,8 +74,15 @@ function WaterQualityTab({ lake }) {
         sampled_to: toEff,
         limit: lim,
       });
+      const key = `public:sample-events:lake:${lakeId}:org:${org||''}:from:${fromEff||''}:to:${toEff||''}:lim:${lim}`;
+      const TTL = 5 * 60 * 1000; // 5 minutes
+      const cached = cache.get(key, { maxAgeMs: TTL });
+      if (cached && (!initialLoadedRef.current)) {
+        setTests(Array.isArray(cached) ? cached : []);
+      }
       const res = await apiPublic(`/public/sample-events${qs}`);
       const rows = Array.isArray(res?.data) ? res.data : [];
+      cache.set(key, rows, { ttlMs: TTL });
       setTests(rows);
       // Derive orgs list from payload only when not fetching for a specific org
       if (!org) {

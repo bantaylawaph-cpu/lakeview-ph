@@ -7,6 +7,7 @@ use App\Http\Requests\UpdateLayerRequest;
 use App\Models\Layer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\ValidationException;
 use App\Models\Role;
 
@@ -127,7 +128,15 @@ class LayerController extends Controller
         $query->addSelect(DB::raw("COALESCE(CASE WHEN roles.scope = 'tenant' THEN tenants.name END, 'LakeView') AS uploaded_by_org"));
 
         if ($include->contains('bounds')) $query->selectRaw('ST_AsGeoJSON(bbox) AS bbox_geojson');
+        // Cache list per body + include with version bump
+        $ver = (int) Cache::get('ver:public:layers', 1);
+        $bt = strtolower((string)$request->query('body_type'));
+        $bid = (int)$request->query('body_id');
+        $inc = (string)$request->query('include');
+        $key = sprintf('public:layers:list:v%d:%s:%d:%s', $ver, $bt, $bid, md5($inc));
+        if ($cached = Cache::get($key)) return response()->json(['data' => $cached]);
         $rows = $query->get();
+        Cache::put($key, $rows, now()->addMinutes(10));
         return response()->json(['data' => $rows]);
     }
 
@@ -147,8 +156,13 @@ class LayerController extends Controller
         $q->addSelect(DB::raw("COALESCE(CASE WHEN roles.scope = 'tenant' THEN tenants.name END, 'LakeView') AS uploaded_by_org"));
         if ($include->contains('geom'))   $q->selectRaw('ST_AsGeoJSON(geom)  AS geom_geojson');
         if ($include->contains('bounds')) $q->selectRaw('ST_AsGeoJSON(bbox)  AS bbox_geojson');
+        $ver = (int) Cache::get('ver:public:layers', 1);
+        $inc = (string)$request->query('include');
+        $key = sprintf('public:layers:geo:v%d:%d:%s', $ver, (int)$id, md5($inc));
+        if ($c = Cache::get($key)) return response()->json(['data' => $c]);
         $row = $q->first();
         if (!$row) return response()->json(['data' => null], 404);
+        Cache::put($key, $row, now()->addHours(24));
         return response()->json(['data' => $row]);
     }
 
@@ -252,7 +266,11 @@ class LayerController extends Controller
                                 ->select('*')
                                 ->selectRaw('ST_AsGeoJSON(geom) AS geom_geojson')
                                 ->first();
-
+                        // Bump public caches for layers and lakes (active geometry may change)
+                        try {
+                            $v1 = (int) Cache::get('ver:public:layers', 1); Cache::forever('ver:public:layers', $v1 + 1);
+                            $v2 = (int) Cache::get('ver:public:lakes', 1);  Cache::forever('ver:public:lakes',  $v2 + 1);
+                        } catch (\Throwable $e) {}
                         return response()->json(['data' => $fresh], 201);
                 });
     }
@@ -350,7 +368,11 @@ class LayerController extends Controller
                                 ->select('*')
                                 ->selectRaw('ST_AsGeoJSON(geom) AS geom_geojson')
                                 ->first();
-
+                        // Bump public caches for layers and lakes
+                        try {
+                            $v1 = (int) Cache::get('ver:public:layers', 1); Cache::forever('ver:public:layers', $v1 + 1);
+                            $v2 = (int) Cache::get('ver:public:lakes', 1);  Cache::forever('ver:public:lakes',  $v2 + 1);
+                        } catch (\Throwable $e) {}
                         return response()->json(['data' => $fresh]);
                 });
     }
@@ -361,6 +383,10 @@ class LayerController extends Controller
         $role = $this->resolveRole($user);
         if ($role === Role::SUPERADMIN) {
             $layer->delete();
+            try {
+                $v1 = (int) Cache::get('ver:public:layers', 1); Cache::forever('ver:public:layers', $v1 + 1);
+                $v2 = (int) Cache::get('ver:public:lakes', 1);  Cache::forever('ver:public:lakes',  $v2 + 1);
+            } catch (\Throwable $e) {}
             return response()->json([], 204);
         }
         if ($role === Role::ORG_ADMIN) {
@@ -369,6 +395,10 @@ class LayerController extends Controller
             $uploader = \App\Models\User::query()->select(['tenant_id'])->where('id', $layer->uploaded_by)->first();
             if (!$uploader || (int)$uploader->tenant_id !== (int)$tenantId) abort(403);
             $layer->delete();
+            try {
+                $v1 = (int) Cache::get('ver:public:layers', 1); Cache::forever('ver:public:layers', $v1 + 1);
+                $v2 = (int) Cache::get('ver:public:lakes', 1);  Cache::forever('ver:public:lakes',  $v2 + 1);
+            } catch (\Throwable $e) {}
             return response()->json([], 204);
         }
         abort(403);

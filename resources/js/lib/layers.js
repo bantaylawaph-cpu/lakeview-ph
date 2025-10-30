@@ -1,5 +1,6 @@
 // resources/js/lib/layers.js
 import { api, apiPublic, buildQuery, getToken } from "./api";
+import cache from './storageCache';
 
 /** Normalize array responses: array | {data: array} | {data:{data: array}} */
 const pluck = (r) => {
@@ -89,8 +90,14 @@ export async function fetchPublicLayers({ bodyType, bodyId, includeBounds = fals
     body_id: bodyId,
     include: includeBounds ? "bounds" : "",
   });
+  const key = `public:layers:list:${bodyType}:${bodyId}:${includeBounds ? 'b' : '-'}`;
+  const TTL = 10 * 60 * 1000; // 10 minutes
+  const cached = cache.get(key, { maxAgeMs: TTL });
+  if (cached) return cached;
   const res = await apiPublic(`/public/layers${qs}`);
-  return pluck(res);
+  const rows = pluck(res);
+  cache.set(key, rows, { ttlMs: TTL });
+  return rows;
 }
 
 /** NEW: fetch a single public layer with geometry */
@@ -99,9 +106,15 @@ export async function fetchPublicLayerGeo(id, { includeBounds = true } = {}) {
   const include = ["geom"];
   if (includeBounds) include.push("bounds");
   const qs = buildQuery({ include: include.join(",") });
+  const key = `public:layers:geo:${id}:${includeBounds ? 'b' : '-'}`;
+  const TTL = 24 * 60 * 60 * 1000; // 24h
+  const cached = cache.get(key, { maxAgeMs: TTL });
+  if (cached) return cached;
   try {
     const r = await apiPublic(`/public/layers/${encodeURIComponent(id)}${qs}`);
-    return r?.data || null;
+    const val = r?.data || null;
+    if (val) cache.set(key, val, { ttlMs: TTL });
+    return val;
   } catch (_) {
     return null;
   }

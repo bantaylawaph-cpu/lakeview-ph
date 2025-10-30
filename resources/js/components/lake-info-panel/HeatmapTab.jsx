@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import axios from "axios";
+import cache from "../../lib/storageCache";
 import LoadingSpinner from "../LoadingSpinner";
 import InfoModal from "../common/InfoModal";
 import { FiInfo } from 'react-icons/fi';
@@ -141,7 +142,14 @@ function HeatmapTab({ lake, onToggleHeatmap, onClearHeatmap, currentLayerId = nu
       setYearsLoading(true);
       setYearsError(null);
       try {
-        const { data } = await axios.get('/api/population/dataset-years');
+        const TTL = 24 * 60 * 60 * 1000; // 24h
+        const key = 'population:dataset-years';
+        let data = cache.get(key, { maxAgeMs: TTL });
+        if (!data) {
+          const resp = await axios.get('/api/population/dataset-years');
+          data = resp?.data || null;
+          if (data) cache.set(key, data, { ttlMs: TTL });
+        }
         if (!active) return;
         const yrs = Array.isArray(data?.years) ? data.years.slice().sort((a,b) => Number(b) - Number(a)) : [];
         setAvailableYears(yrs);
@@ -171,7 +179,14 @@ function HeatmapTab({ lake, onToggleHeatmap, onClearHeatmap, currentLayerId = nu
   const fetchDatasetInfo = async (y) => {
     if (!y) return;
     try {
-      const { data } = await axios.get('/api/population/dataset-info', { params: { year: y } });
+      const TTL = 24 * 60 * 60 * 1000; // 24h
+      const key = `population:dataset-info:${y}`;
+      let data = cache.get(key, { maxAgeMs: TTL });
+      if (!data) {
+        const resp = await axios.get('/api/population/dataset-info', { params: { year: y } });
+        data = resp?.data || null;
+        if (data) cache.set(key, data, { ttlMs: TTL });
+      }
       setDatasetInfo({ notes: data?.notes || null, link: data?.link || null });
     } catch (e) {
       setDatasetInfo({ notes: 'Failed to load dataset info', link: null });

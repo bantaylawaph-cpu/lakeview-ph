@@ -344,9 +344,13 @@ class PopulationController extends Controller
     public function datasetYears()
     {
         try {
+            $key = 'population:dataset-years:v1';
+            if ($hit = Cache::get($key)) return response()->json($hit);
             $rows = DB::select('SELECT DISTINCT year FROM pop_dataset_catalog WHERE is_enabled = TRUE AND is_default = TRUE ORDER BY year DESC');
             $years = array_map(fn($r) => (int)$r->year, $rows);
-            return response()->json(['years' => $years]);
+            $payload = ['years' => $years];
+            Cache::put($key, $payload, now()->addHours(24));
+            return response()->json($payload);
         } catch (\Throwable $e) {
             Log::warning('Failed to list population dataset years', ['error' => $e->getMessage()]);
             return response()->json(['years' => []], 500);
@@ -363,6 +367,8 @@ class PopulationController extends Controller
         $year = (int) ($request->query('year') ?? 0);
         if (!$year) return response()->json(['year' => null, 'notes' => null, 'link' => null], 400);
         try {
+            $key = 'population:dataset-info:v1:'.$year;
+            if ($hit = Cache::get($key)) return response()->json($hit);
             // Find the default enabled catalog entry for this year
             $catalog = DB::selectOne('SELECT id FROM pop_dataset_catalog WHERE year = ? AND is_enabled = TRUE AND is_default = TRUE LIMIT 1', [$year]);
             if (!$catalog) return response()->json(['year' => $year, 'notes' => null, 'link' => null]);
@@ -387,8 +393,9 @@ class PopulationController extends Controller
                     // ignore - return nulls
                 }
             }
-
-            return response()->json(['year' => $year, 'notes' => $notes, 'link' => $link]);
+            $payload = ['year' => $year, 'notes' => $notes, 'link' => $link];
+            Cache::put($key, $payload, now()->addHours(24));
+            return response()->json($payload);
         } catch (\Throwable $e) {
             Log::warning('Failed to fetch dataset info', ['year' => $year, 'error' => $e->getMessage()]);
             return response()->json(['year' => $year, 'notes' => null, 'link' => null], 500);

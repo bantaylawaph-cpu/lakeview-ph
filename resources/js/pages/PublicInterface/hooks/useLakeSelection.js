@@ -4,6 +4,7 @@ import L from 'leaflet';
 import { fetchPublicLayers, fetchLakeOptions, fetchPublicLayerGeo } from '../../../lib/layers';
 // Note: Nominatim-based geocode functionality remains available elsewhere (e.g. LayerWizard).
 import { apiPublic } from '../../../lib/api';
+import cache from '../../../lib/storageCache';
 
 // Helper to extract id (works for polygon layers or point fallback markers)
 const getLakeIdFromFeature = (feat) => {
@@ -111,8 +112,14 @@ export function useLakeSelection({ publicFC, mapRef, setPanelOpen, setFilterWate
       }
       if (lakeId != null) {
         try {
-          const pub = await apiPublic(`/public/lakes/${lakeId}`);
-          const detail = pub?.id ? pub : await apiPublic(`/lakes/${lakeId}`);
+          const ttl = 24 * 60 * 60 * 1000; // 24h
+          const key = `public:lakes:detail:${lakeId}`;
+          let detail = cache.get(key, { maxAgeMs: ttl });
+          if (!detail) {
+            const pub = await apiPublic(`/public/lakes/${lakeId}`);
+            detail = pub?.id ? pub : await apiPublic(`/lakes/${lakeId}`);
+            if (detail?.id) cache.set(key, detail, { ttlMs: ttl });
+          }
           if (detail?.id && String(detail.id) === String(lakeId)) {
             setSelectedLake(prev => ({ ...prev, ...detail }));
             setSelectedWatershedId(detail?.watershed_id ?? null);

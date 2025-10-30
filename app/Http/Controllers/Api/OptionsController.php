@@ -10,6 +10,7 @@ use App\Models\WaterQualityClass;
 use App\Models\Parameter;
 use App\Models\WqStandard;
 use App\Models\Tenant;
+use Illuminate\Support\Facades\Cache;
 
 class OptionsController extends Controller
 {
@@ -119,11 +120,13 @@ class OptionsController extends Controller
      */
     public function waterQualityClasses()
     {
+        $key = 'options:wq-classes:v1';
+        if ($hit = Cache::get($key)) return response()->json($hit);
         $rows = WaterQualityClass::query()
             ->select(['code', 'name', 'notes'])
             ->orderBy('code')
             ->get();
-
+        Cache::put($key, $rows, now()->addDays(7));
         return response()->json($rows);
     }
 

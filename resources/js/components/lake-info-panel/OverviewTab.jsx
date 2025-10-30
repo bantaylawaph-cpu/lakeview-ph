@@ -2,6 +2,7 @@ import React, { useMemo, useEffect, useState } from "react";
 import { FiMap, FiInfo } from 'react-icons/fi';
 import LoadingSpinner from "../LoadingSpinner";
 import { api } from "../../lib/api";
+import cache from "../../lib/storageCache";
 import { normalizeNumStr, shiftDecimalStr } from "../../utils/conversions";
 
 const fmtNum = (v, suffix = "", digits = 2) => {
@@ -103,8 +104,14 @@ function OverviewTab({
           return;
         }
 
-        const res = await api('/options/water-quality-classes');
-        const list = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+        const key = 'options:wq-classes';
+        const TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
+        let list = cache.get(key, { maxAgeMs: TTL });
+        if (!list) {
+          const res = await api('/options/water-quality-classes');
+          list = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+          if (Array.isArray(list)) cache.set(key, list, { ttlMs: TTL });
+        }
         const found = (list || []).find((c) => String(c.code) === String(lake.class_code) || String(c.id) === String(lake.class_code));
         if (!mounted) return;
   if (found) setDenrClassLabel(found.name);
