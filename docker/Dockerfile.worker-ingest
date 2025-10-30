@@ -1,0 +1,44 @@
+# Laravel ingest/geo worker image (no web server)
+# Includes Postgres client + PostGIS raster2pgsql + optional GDAL for geospatial tools
+
+FROM php:8.2-cli-bookworm
+
+# Install system dependencies and geospatial tools
+RUN apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    git unzip \
+    libpq-dev \
+    postgresql-client \
+    postgis \
+    gdal-bin \
+ && docker-php-ext-install pdo_pgsql pgsql \
+ && docker-php-ext-enable opcache \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /var/www/html
+
+# Install Composer
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+# Leverage build cache for composer deps
+COPY composer.json composer.lock* ./
+RUN composer install --no-dev --no-interaction --no-progress --prefer-dist --optimize-autoloader --no-scripts
+
+# Copy application source
+COPY . .
+
+# Ensure writable directories
+RUN chown -R www-data:www-data storage bootstrap/cache
+
+# Default environment safety
+ENV POP_IMPORT_ENABLE_SHELL=true \
+    POP_RASTER2PGSQL_PATH=/usr/bin/raster2pgsql \
+    POP_PSQL_PATH=/usr/bin/psql \
+    PGSSLMODE=require
+
+# Start script
+COPY docker/worker-ingest-start.sh /usr/local/bin/worker-ingest-start.sh
+RUN chmod +x /usr/local/bin/worker-ingest-start.sh
+
+# No EXPOSE needed; this is a background worker
+CMD ["worker-ingest-start.sh"]

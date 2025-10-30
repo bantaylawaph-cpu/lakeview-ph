@@ -84,11 +84,15 @@ You can configure via UI or a `render.yaml`. Below covers both.
 
 ### Worker service
 
-- Same Docker image
-- Start command:
-  `php artisan queue:work --sleep=3 --tries=1 --max-time=3600`
-- Scale: 1+ instances; increase as background load grows
-- Ensure queue tables exist (see “First deploy checklist”)
+- Prefer a dedicated worker image for ingest/geo jobs: `docker/Dockerfile.worker-ingest`.
+- Start command: handled by the image's default CMD.
+  - If overriding, use:
+    `worker-ingest-start.sh`
+  - This runs `php artisan queue:work` on the `ingest` queue with safe defaults.
+- Instance type: start with Standard (2 GB, 1 CPU); upgrade to Pro (4 GB, 2 CPU) if jobs are memory/CPU heavy.
+- Concurrency: keep to 1 (or 2 max) to avoid memory contention.
+- Disk: attach 10–20 GB SSD only if staging large archives locally; otherwise skip.
+- Ensure queue tables exist if using database queues (see “First deploy checklist”).
 
 ### Cron job (only if you add schedules)
 
@@ -119,7 +123,7 @@ DB_CONNECTION=pgsql
 DB_URL=postgresql://postgres:YOUR%2BPASSWORD@db.<PROJECT_HASH>.supabase.co:5432/postgres?sslmode=require
 
 # Queues / Cache / Session
-QUEUE_CONNECTION=database
+QUEUE_CONNECTION=redis
 CACHE_STORE=database
 SESSION_DRIVER=database
 SESSION_LIFETIME=120
@@ -147,6 +151,42 @@ Notes:
   `php -r "echo 'base64:'.base64_encode(random_bytes(32)).PHP_EOL;"`
 - If you opt for Redis: set `CACHE_STORE=redis`, `SESSION_DRIVER=redis`, provide `REDIS_URL=redis://:password@host:6379`
 - Mixed content/CORS: keep `ASSET_URL` unset and rely on HTTPS via `FORCE_HTTPS=true` (default) which the app enforces in production.
+
+### Worker 2 (ingest) specific env
+
+```env
+# Queue
+QUEUE_CONNECTION=redis              # or database initially, but redis preferred
+REDIS_URL=redis://:password@host:6379
+REDIS_QUEUE=ingest
+REDIS_QUEUE_RETRY_AFTER=2000        # > job timeout
+
+# Database (direct connection recommended for large imports)
+DB_CONNECTION=pgsql
+DB_URL=postgresql://USER:PASSWORD@db.<PROJECT_HASH>.supabase.co:5432/postgres?sslmode=require
+PGSSLMODE=require
+
+# Filesystem (choose one)
+FILESYSTEM_DISK=s3
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+AWS_DEFAULT_REGION=ap-southeast-1
+AWS_BUCKET=...
+# For S3-compatible storage:
+# AWS_ENDPOINT=...
+# AWS_USE_PATH_STYLE_ENDPOINT=true
+
+# Ingest tooling
+POP_IMPORT_ENABLE_SHELL=true
+POP_RASTER2PGSQL_PATH=/usr/bin/raster2pgsql
+POP_PSQL_PATH=/usr/bin/psql
+
+# Worker tuning (optional overrides)
+WORKER_MEMORY_MB=3000
+WORKER_TIMEOUT=1900
+WORKER_TRIES=1
+WORKER_SLEEP=3
+```
 
 ## First deploy checklist
 
