@@ -6,6 +6,7 @@ import { FiDatabase, FiUploadCloud, FiPlayCircle, FiStar, FiTrash2 } from 'react
 import DashboardHeader from '../../components/DashboardHeader';
 import Swal from 'sweetalert2';
 import 'sweetalert2/dist/sweetalert2.min.css';
+import FileDropzone from '../../components/layers/FileDropzone';
 
 // Superadmin page: manage uploaded population raster source files (GeoTIFF / ZIP). 
 // Ingestion into PostGIS + registration with population functions is out-of-scope here.
@@ -16,12 +17,12 @@ export default function AdminPopulationData() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [year, setYear] = useState(new Date().getFullYear());
-  const [notes, setNotes] = useState('');
+  const [citation, setCitation] = useState('');
   const [link, setLink] = useState('');
+  const [file, setFile] = useState(null);
   const [yearFilter, setYearFilter] = useState('');
   const [actingIds, setActingIds] = useState({}); // { [id]: 'processing' | 'makingDefault' }
   const pollRef = useRef(null);
-  const fileRef = useRef(null);
 
   // showError: whether errors should be surfaced to the UI (we avoid showing on initial auto-load)
   const load = useCallback(async (showError = false) => {
@@ -41,6 +42,11 @@ export default function AdminPopulationData() {
     }
   }, [yearFilter]);
 
+  // Initial load so the table reflects the database on first render
+  useEffect(() => {
+    load(true);
+  }, [load]);
+
   // Lightweight polling while any row is ingesting
   useEffect(() => {
     const anyIngesting = rows.some(r => r.status === 'ingesting');
@@ -57,18 +63,19 @@ export default function AdminPopulationData() {
   const onUpload = async (e) => {
     e.preventDefault();
     resetMessages();
-    const file = fileRef.current?.files?.[0];
     if (!file) return;
     setUploading(true);
     try {
       const form = new FormData();
       form.append('year', String(year));
       form.append('raster', file);
-      if (notes) form.append('notes', notes);
+      if (citation) form.append('notes', citation);
   if (link) form.append('link', link);
       const resp = await api.upload('/admin/population-rasters', form);
       const created = resp?.data || null;
       setRows(r => [created, ...r].filter(Boolean));
+      // Also refresh from server to ensure we reflect canonical DB state
+      await load(true);
       // show a success toast
       Swal.fire({
         toast: true,
@@ -80,8 +87,8 @@ export default function AdminPopulationData() {
         timer: 3000,
         timerProgressBar: true,
       });
-      fileRef.current.value = '';
-      setNotes('');
+      setFile(null);
+      setCitation('');
   setLink('');
     } catch (e) {
       const msg = e?.response?.data?.message || 'Upload failed';
@@ -203,24 +210,24 @@ export default function AdminPopulationData() {
             />
           </div>
           <div className="lv-field-row" style={{ display: 'grid', gap: 6 }}>
-            <label htmlFor="pop-file" style={{ fontSize: 12, fontWeight: 600 }}>Raster File (.tif / .tiff / .zip)</label>
-            <input id="pop-file" type="file" ref={fileRef} accept=".tif,.tiff,.zip" required style={inputStyle} />
+            <FileDropzone accept=".tif,.tiff,.zip" onFile={setFile} selectedFile={file} dropText="Drop a raster file here or click to select" acceptedText="Accepted: .tif, .tiff, .zip (zipped GeoTIFF)" />
             <div style={{ fontSize: 11, color: '#64748b' }}>Large files may take a moment to finish transferring; keep this tab open.</div>
           </div>
           <div className="lv-field-row" style={{ display: 'grid', gap: 6 }}>
-            <label htmlFor="pop-notes" style={{ fontSize: 12, fontWeight: 600 }}>Notes (optional)</label>
+            <label htmlFor="pop-citation" style={{ fontSize: 12, fontWeight: 600 }}>Citation</label>
             <textarea
-              id="pop-notes"
+              id="pop-citation"
               rows={3}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Source (e.g. WorldPop), resolution, license, citation..."
+              value={citation}
+              onChange={(e) => setCitation(e.target.value)}
+              placeholder="e.g. WorldPop 2020, 1km resolution, CC BY 4.0"
               style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.35 }}
               maxLength={1000}
+              required
             />
           </div>
           <div className="lv-field-row" style={{ display: 'grid', gap: 6 }}>
-            <label htmlFor="pop-link" style={{ fontSize: 12, fontWeight: 600 }}>Link to source (optional)</label>
+            <label htmlFor="pop-link" style={{ fontSize: 12, fontWeight: 600 }}>Link to source</label>
             <input
               id="pop-link"
               type="url"
@@ -284,7 +291,7 @@ export default function AdminPopulationData() {
                   <th style={{ ...th, width: '10%', textAlign: 'center' }}>Status</th>
                   <th style={{ ...th, width: '12%', textAlign: 'center' }}>Actions</th>
                   <th style={{ ...th, width: '12%' }}>Uploaded</th>
-                  <th style={{ ...th, width: '18%' }}>Notes</th>
+                  <th style={{ ...th, width: '18%' }}>Citation</th>
                   <th style={{ ...th, width: '4%', textAlign: 'center' }}>Link</th>
                 </tr>
               </thead>
