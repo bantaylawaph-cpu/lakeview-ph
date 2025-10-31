@@ -189,6 +189,86 @@ export default function ResultPanel({ result, paramCode, paramOptions, classCode
   const finalInterpretation = buildInterpretation({ result, paramCode, paramOptions, classCode, lakes, cl, fmt, sci, lakeId, compareValue });
   const ciLine = (r) => (r.ci_lower != null && r.ci_upper != null ? <div>CI ({Math.round((r.ci_level||0)*100)}%): [{fmt(r.ci_lower)}, {fmt(r.ci_upper)}]</div> : null);
 
+  // Add universal summary lines: p vs alpha and statistical decision
+  try {
+    const alpha = (result.alpha != null && Number.isFinite(Number(result.alpha))) ? Number(result.alpha) : null;
+    // Determine which p-value to use for comparison/decision
+    let pForDecision = null;
+    let pDisplayStr = null;
+    let decisionContext = 'standard'; // 'standard' significance or 'tost' equivalence
+    if (typeof result.p_value !== 'undefined' && result.p_value !== null) {
+      const pv = Number(result.p_value);
+      if (Number.isFinite(pv)) {
+        pForDecision = pv;
+        pDisplayStr = pv < 0.001 ? '<0.001' : sci(pv);
+      } else if (alpha != null && typeof result.p_value === 'string') {
+        // Handle strings like "<0.001" conservatively
+        const m = result.p_value.trim().match(/^<\s*([0-9]*\.?[0-9]+)/);
+        if (m) {
+          const thr = Number(m[1]);
+          if (Number.isFinite(thr) && thr <= alpha) {
+            // Safe to conclude p < α even without the exact value
+            pForDecision = alpha - Number.EPSILON; // sentinel just below α
+            pDisplayStr = `<${fmt(thr)}`;
+          }
+        }
+      }
+    } else if (testKind === 'tost_t' || testKind === 'tost_wilcoxon') {
+      // Prefer consolidated TOST p-value when available
+      let pTOST = null;
+      if (result.pTOST != null && Number.isFinite(Number(result.pTOST))) {
+        pTOST = Number(result.pTOST);
+      } else if (result.p1 != null && result.p2 != null) {
+        const p1 = Number(result.p1), p2 = Number(result.p2);
+        if (Number.isFinite(p1) && Number.isFinite(p2)) pTOST = Math.max(p1, p2);
+      } else if (result.p_lower != null && result.p_upper != null) {
+        const pl = Number(result.p_lower), pu = Number(result.p_upper);
+        if (Number.isFinite(pl) && Number.isFinite(pu)) pTOST = Math.max(pl, pu);
+      }
+      if (pTOST != null) {
+        pForDecision = pTOST;
+        pDisplayStr = pTOST < 0.001 ? '<0.001' : sci(pTOST);
+        decisionContext = 'tost';
+      }
+    }
+
+    // p vs alpha comparison row
+    if (alpha != null && pForDecision != null) {
+      const symbol = pForDecision < alpha ? '<' : '≥';
+      const label = decisionContext === 'tost' ? 'Equivalence (p vs α)' : 'Significance (p vs α)';
+      const tip = decisionContext === 'tost'
+        ? 'Compares the TOST p-value against α for equivalence.'
+        : 'Compares the test p-value against α for significance.';
+      const pShown = pDisplayStr ?? ((Number.isFinite(pForDecision) && pForDecision < 0.001) ? '<0.001' : sci(pForDecision));
+      pushTip(label, `p ${symbol} α (${pShown} vs ${fmt(alpha)})`, tip);
+    }
+
+    // Statistical decision row
+    let decision = null;
+    let decisionTip = null;
+    if (decisionContext === 'tost') {
+      if (alpha != null && pForDecision != null) {
+        const eq = pForDecision < alpha;
+        decision = eq ? 'Conclude Equivalent (reject H0 of non-equivalence)' : 'Not Equivalent (fail to reject H0)';
+        decisionTip = 'TOST decision based on pTOST < α.';
+      } else if (typeof result.equivalent === 'boolean') {
+        decision = result.equivalent ? 'Conclude Equivalent' : 'Not Equivalent';
+        decisionTip = 'Reported by the test as overall equivalence.';
+      }
+    } else {
+      if (typeof result.significant === 'boolean') {
+        decision = result.significant ? 'Reject H0' : 'Fail to Reject H0';
+        decisionTip = 'Reported by the test at the chosen α.';
+      } else if (alpha != null && pForDecision != null) {
+        decision = pForDecision < alpha ? 'Reject H0' : 'Fail to Reject H0';
+        decisionTip = 'Decision derived from p-value compared with α.';
+      }
+    }
+    if (decision) pushTip('Statistical Decision', decision, decisionTip);
+  } catch (_) {
+    // No-op: keep panel robust even if fields are missing
+  }
+
   return (
     <div className="stat-box">
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 2fr', gap:8 }}>
