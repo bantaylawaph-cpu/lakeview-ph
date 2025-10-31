@@ -17,39 +17,8 @@ export function buildInterpretation({
   // ---------------------------------------------------------------------
   // Helper utilities (refactored)
   // ---------------------------------------------------------------------
-  const SMALL_N = 8;
-  const BORDERLINE_REL = 0.15; // relative distance to alpha to show a borderline note
-  const safeFmt = (v) => {
-    if (v == null || Number.isNaN(v)) return '—';
-    try { return fmt ? fmt(v) : String(v); } catch { return String(v); }
-  };
-  const sciFmt = (v) => {
-    if (v == null) return '';
-    if (typeof v === 'string' && /</.test(v)) return v;
-    const num = Number(v);
-    if (!Number.isFinite(num)) return String(v);
-    try { return sci ? sci(num) : String(num); } catch { return String(num); }
-  };
-  // Format p-value compared to alpha (always show comparison when possible)
-  const formatPvA = (pv, a) => {
-    if (!Number.isFinite(pv)) return '';
-    const pStr = pv < 0.001 ? 'p < 0.001' : `p = ${sciFmt(pv)}`;
-    const aStr = Number.isFinite(a) ? `α = ${sciFmt(a)}` : null;
-    let cmp = '';
-    if (Number.isFinite(a)) {
-      if (pv < a) cmp = '(p < α)';
-      else if (pv > a) cmp = '(p > α)';
-      else cmp = '(p = α)';
-    }
-    return aStr ? `${pStr} vs ${aStr} ${cmp}` : pStr;
-  };
-  // Build a parenthetical method + significance string with graceful fallback
-  const methodWithSig = (methodLabel, pv, a) => {
-    const sig = formatPvA(pv, a);
-    if (sig) return `(${methodLabel}, ${sig})`;
-    // If p is unavailable, avoid dangling comma
-    return methodLabel ? `(${methodLabel})` : '';
-  };
+  // removed: SMALL_N threshold (caveat text removed)
+  // removed: sci/safe/p-value formatting helpers (no longer used in simplified text)
   const join = (parts) => parts.filter(Boolean).map(s => s.trim()).filter(Boolean).map(s => /[.!?]$/.test(s)? s : s + '.').join(' ');
   const toNum = (x) => (x != null && x !== '' && !Number.isNaN(Number(x)) ? Number(x) : null);
 
@@ -100,9 +69,7 @@ export function buildInterpretation({
 
   const alpha = Number(result.alpha != null ? result.alpha : (1 - Number(cl || '0.95')));
   const p = toNum(result.p_value);
-  const reject = (Number.isFinite(p) && Number.isFinite(alpha)) ? p < alpha : null;
-  const borderline = (Number.isFinite(p) && Number.isFinite(alpha) && Math.abs(p - alpha) / (alpha || 1) < BORDERLINE_REL) ? true : false;
-  const borderlineNote = borderline ? 'Near the cutoff; more data may help.' : null;
+  // derive significance inline where needed using p < alpha
 
   // Central tendency (one or two sample)
   const computeStats = (arr) => {
@@ -142,80 +109,35 @@ export function buildInterpretation({
   const lake1Name = lakeNameById(lakeId);
   const lake2Id = (compareValue && String(compareValue).startsWith('lake:')) ? String(compareValue).split(':')[1] : null;
   const lake2Name = lake2Id ? lakeNameById(lake2Id) : null;
+  const lake2Label = lake2Name || 'Lake 2';
 
   // Compliance classification
-  const classifyCompliance = (value, t) => {
-    if (value == null || !t) return { status: 'unknown' };
-    if (t.type === 'range') {
-      if (value < t.min) return { status: 'below_range' };
-      if (value > t.max) return { status: 'above_range' };
-      return { status: 'within_range' };
-    }
-    if (t.type === 'min') return (value >= t.value) ? { status: 'compliant' } : { status: 'below_min' };
-    if (t.type === 'max') return (value <= t.value) ? { status: 'compliant' } : { status: 'above_max' };
-    if (t.type === 'value') {
-      if (value === t.value) return { status: 'at_value' };
-      return { status: value > t.value ? 'above_value' : 'below_value' };
-    }
-    return { status: 'unknown' };
-  };
-
-  const comp = classifyCompliance(centralValue, thr);
-
-  const smallSampleCaveat = () => {
-    if (twoSample) {
-      const n1 = result.n1 || stats1?.n; const n2 = result.n2 || stats2?.n;
-      if ((n1 && n1 < SMALL_N) || (n2 && n2 < SMALL_N)) return 'Small sample size; interpret with caution.';
-    } else {
-      const n = result.n || statsOne?.n;
-      if (n && n < SMALL_N) return 'Small sample size; interpret with caution.';
-    }
-    return null;
-  };
+  // removed: compliance classifier and small sample caveat (not used in simplified text)
 
   // ------------------------------------------------------------------
   // 1. Normality (Shapiro–Wilk)
   // ------------------------------------------------------------------
   if (result.test_used === 'shapiro_wilk' || result.type === 'one-sample-normality') {
-    const n = result.n || statsOne?.n;
-    if (!Number.isFinite(p)) return join([`Normality check for ${paramLabel} in ${lake1Name}.`, 'Result unavailable.', smallSampleCaveat()]);
-    const follows = reject ? 'does not follow' : 'appears to follow';
-    const isRangeParam = (paramEval === 'range') || (thr && thr.type === 'range');
-    const guidance = reject
-      ? (
-          isRangeParam
-            ? 'This suggests skew or outliers. For range‑based evaluation, use Equivalence TOST (Wilcoxon). For other comparisons, use non‑parametric tests (Wilcoxon, Mann–Whitney, Sign, Mood’s median).'
-            : 'This suggests skew or outliers. Use non‑parametric tests for comparisons (Wilcoxon, Mann–Whitney, Sign, Mood’s median).'
-        )
-      : (
-          isRangeParam
-            ? 'Parametric tests are reasonable. For range‑based evaluation, use Equivalence TOST (t).'
-            : 'Parametric tests are reasonable (t‑tests, Welch, TOST).'
-        );
-    return join([
-      `${paramLabel} in ${lake1Name} ${follows} a normal distribution (Shapiro–Wilk, ${formatPvA(p, alpha)}).`,
-      guidance,
-      borderlineNote,
-      smallSampleCaveat()
-    ]);
+    if (!Number.isFinite(p)) return '';
+    return (p < alpha)
+      ? join([
+          `There is enough statistical evidence to suggest that the ${paramLabel} of ${lake1Name} deviates from normality`,
+          'Use non-parametric tests: Wilcoxon signed-rank (one-sample), Mann–Whitney U or Mood’s median (two-sample); consider robust methods where appropriate'
+        ])
+      : join([
+          `There is not enough statistical evidence to suggest that the ${paramLabel} of ${lake1Name} deviates from normality`,
+          'Parametric tests are reasonable: one-sample t-test; Student’s t-test or Welch (two-sample); for equivalence, TOST t-test'
+        ]);
   }
 
   // ------------------------------------------------------------------
   // 2. Variance (Levene)
   // ------------------------------------------------------------------
   if (result.test_used === 'levene') {
-    const n1 = result.n1 || stats1?.n; const n2 = result.n2 || stats2?.n;
-    if (!Number.isFinite(p)) return join([`Variance check for ${paramLabel}: ${lake1Name} vs ${lake2Name}.`, 'Result unavailable.', smallSampleCaveat()]);
-    const differ = reject ? 'differ' : 'are similar';
-    const advice = reject
-      ? 'Prefer Welch’s t‑test; if data is not normal, use Mann–Whitney or Mood’s median.'
-      : 'Student’s t‑test is acceptable if normal; otherwise use non‑parametric tests.';
-    return join([
-      `For ${paramLabel}, variances between ${lake1Name} and ${lake2Name} ${differ} (Levene, ${formatPvA(p, alpha)}).`,
-      advice,
-      borderlineNote,
-      smallSampleCaveat()
-    ]);
+    if (!Number.isFinite(p)) return '';
+    return (p < alpha)
+      ? join([`There is enough statistical evidence to suggest that the variances of ${paramLabel} differ between ${lake1Name} and ${lake2Label}`, 'Prefer Welch’s t-test; if non-normal, use Mann–Whitney or Mood’s median'])
+      : join([`There is not enough statistical evidence to suggest that the variances of ${paramLabel} differ between ${lake1Name} and ${lake2Label}`, 'Student’s t-test is acceptable if normal; otherwise use non-parametric tests']);
   }
 
   // Identify one-sample vs two-sample test categories
@@ -226,162 +148,90 @@ export function buildInterpretation({
   // 3. One-sample tests (Compliance / Degradation / Improvement)
   // ------------------------------------------------------------------
   if (isOneSample) {
-    const n = result.n || statsOne?.n;
     const centralLabel = centralMetric === 'mean' ? 'mean' : 'median';
 
-    // Equivalence (TOST)
-    if (/tost/.test(testKey)) {
-      const eq = !!result.equivalent;
-      const method = /wilcoxon/.test(testKey) ? 'TOST (Wilcoxon)' : 'TOST';
-      // Derive a single TOST p-value: standard practice is max of the two one-sided p-values
-      const pTost = (() => {
-        const pDirect = toNum(result.pTOST ?? result.p_tost ?? result.p_tost_value);
-        if (Number.isFinite(pDirect)) return pDirect;
-        const pl = toNum(result.p_lower ?? result.p1 ?? result.p_left ?? result.p_low);
-        const pu = toNum(result.p_upper ?? result.p2 ?? result.p_right ?? result.p_high);
-        if (Number.isFinite(pl) && Number.isFinite(pu)) return Math.max(pl, pu);
-        return toNum(result.p_value);
-      })();
-      const bounds = thr && thr.type === 'range'
-        ? `${safeFmt(thr.min)}–${safeFmt(thr.max)}`
-        : `${safeFmt(result.lower ?? result.threshold_min)}–${safeFmt(result.upper ?? result.threshold_max)}`;
-      const classTxt = classCode ? ` for Class ${classCode} waters` : '';
-      const withinTxt = `The ${paramLabel} values in ${lake1Name} fall within the acceptable range of ${bounds}${classTxt}.`;
-      const tostParen = methodWithSig(method, pTost, alpha);
-      const supportedTxt = `The equivalence test indicates there is enough statistical evidence to suggest that the lake’s ${paramLabel} stays inside this range ${tostParen}.`;
-      const notEstablishedTxt = `Equivalence was not established; there is not enough statistical evidence that values stay inside this range ${tostParen}.`;
-      return join([
-        withinTxt,
-        eq ? supportedTxt : notEstablishedTxt,
-        smallSampleCaveat()
-      ]);
+    const tkl = String(testKey || '').toLowerCase();
+    if (/tost/.test(tkl)) {
+      const centerWord = tkl.includes('wilcoxon') ? 'median' : 'mean';
+      let isEquiv = ('equivalent' in result) ? !!result.equivalent : null;
+      if (isEquiv == null) {
+        const pLower = toNum(result.p_lower ?? result.p1);
+        const pUpper = toNum(result.p_upper ?? result.p2);
+        const pTost = (Number.isFinite(pLower) && Number.isFinite(pUpper)) ? Math.max(pLower, pUpper) : toNum(result.p_value);
+        if (Number.isFinite(pTost) && Number.isFinite(alpha)) isEquiv = pTost < alpha;
+      }
+      const primary = isEquiv === true
+        ? `There is enough statistical evidence to suggest that the ${centerWord} of ${paramLabel} in ${lake1Name} is within the acceptable range`
+        : `There is not enough statistical evidence to suggest that the ${centerWord} of ${paramLabel} in ${lake1Name} is within the acceptable range`;
+      const therefore = isEquiv === true
+        ? 'Therefore, this suggests compliance with the acceptable range.'
+        : 'Therefore, compliance with the acceptable range is not supported.';
+      return join([primary, therefore]);
     }
 
-    // Non-equivalence one-sample tests (t, Wilcoxon, Sign)
-    const compliancePhrase = (() => {
-      if (!thr) return 'No official threshold provided — compliance can’t be assessed.';
-      switch (comp.status) {
-        case 'within_range': return 'Compliant (within acceptable range).';
-        case 'compliant': return 'Compliant with the threshold.';
-        case 'above_max': return 'Non‑compliant (exceeds the maximum threshold).';
-        case 'below_min': return 'Non‑compliant (below the minimum threshold).';
-        case 'above_range': return 'Non‑compliant (above the acceptable range).';
-        case 'below_range': return 'Non‑compliant (below the acceptable range).';
-        case 'above_value': return 'Above the reference value.';
-        case 'below_value': return 'Below the reference value.';
-        default: return 'Compliance status unknown.';
+    let direction = 'different from';
+    if (thr && Number.isFinite(centralValue)) {
+      if (thr.type === 'min' || thr.type === 'max' || thr.type === 'value') {
+        const t = thr.type === 'value' ? thr.value : thr.value;
+        if (Number.isFinite(t)) direction = centralValue > t ? 'above' : (centralValue < t ? 'below' : 'different from');
+      } else if (thr.type === 'range') {
+        direction = 'different from';
       }
-    })();
+    }
+    if (!Number.isFinite(p)) return '';
+    const primary = (p < alpha)
+      ? `There is enough statistical evidence to suggest that the ${centralLabel} of ${paramLabel} in ${lake1Name} is significantly ${direction} the guideline`
+      : `There is not enough statistical evidence to suggest that the ${centralLabel} of ${paramLabel} in ${lake1Name} is ${direction} the guideline`;
 
-    const testLabel = /wilcoxon/.test(testKey) ? 'Wilcoxon signed‑rank' : /sign_test|sign/.test(testKey) ? 'Sign test' : 'One‑sample t‑test';
-    const thresholdPhrase = (() => {
-      if (!thr) return 'no official threshold';
-      if (thr.type === 'range') return `acceptable range ${safeFmt(thr.min)}–${safeFmt(thr.max)}`;
-      if (thr.type === 'min') return `minimum threshold ${safeFmt(thr.value)}`;
-      if (thr.type === 'max') return `maximum threshold ${safeFmt(thr.value)}`;
-      return `reference value ${safeFmt(thr.value)}`;
-    })();
-    // New significance language with explicit evidence framing and alpha comparison
-    const sigTxt = (() => {
-      if (!Number.isFinite(p)) return 'Significance could not be evaluated.';
-      const pvAlpha = formatPvA(p, alpha);
-      const relativeTo = thr ? `relative to the ${thresholdPhrase}` : 'in this assessment';
-      if (reject) {
-        return `Based on ${testLabel} (${pvAlpha}), there is enough statistical evidence to suggest that the observed difference ${relativeTo} is not due to random variation.`;
-      }
-      return `Based on ${testLabel} (${pvAlpha}), there is not enough statistical evidence to conclude a real difference ${relativeTo}; the observed difference could be due to random variation.`;
-    })();
-
-    // Human-readable, threshold-focused narrative
-    const classTxt = classCode ? ` for Class ${classCode}` : '';
-    const whereTxt = (() => {
+    // Compliance framing
+    const therefore = (() => {
       if (!thr) return null;
-      if (thr.type === 'range') {
-        if (comp.status === 'within_range') return `which is within the acceptable range of ${safeFmt(thr.min)} to ${safeFmt(thr.max)}${classTxt}.`;
-        if (comp.status === 'above_range') return `which is above the acceptable range of ${safeFmt(thr.min)} to ${safeFmt(thr.max)}${classTxt}.`;
-        if (comp.status === 'below_range') return `which is below the acceptable range of ${safeFmt(thr.min)} to ${safeFmt(thr.max)}${classTxt}.`;
-        return `relative to the acceptable range of ${safeFmt(thr.min)} to ${safeFmt(thr.max)}${classTxt}.`;
-      }
       if (thr.type === 'max') {
-        return centralValue != null && centralValue <= thr.value
-          ? `which is below the${classTxt} standard limit of ${safeFmt(thr.value)}.`
-          : `which is above the${classTxt} standard limit of ${safeFmt(thr.value)}.`;
+        if (p < alpha && direction === 'above') return 'Therefore, this suggests non-compliance with the maximum guideline.';
+        if (p < alpha && (direction === 'below' || direction === 'different from')) return 'Therefore, this suggests compliance with the maximum guideline.';
+        return 'Therefore, there is not enough evidence to conclude exceedance of the maximum guideline.';
       }
       if (thr.type === 'min') {
-        return centralValue != null && centralValue >= thr.value
-          ? `which is above the minimum acceptable value of ${safeFmt(thr.value)}${classTxt}.`
-          : `which is below the minimum acceptable value of ${safeFmt(thr.value)}${classTxt}.`;
+        if (p < alpha && direction === 'below') return 'Therefore, this suggests non-compliance with the minimum guideline.';
+        if (p < alpha && (direction === 'above' || direction === 'different from')) return 'Therefore, this suggests compliance with the minimum guideline.';
+        return 'Therefore, there is not enough evidence to conclude falling below the minimum guideline.';
+      }
+      if (thr.type === 'range') {
+        if (!Number.isFinite(centralValue)) return null;
+        if (centralValue < thr.min) return 'Therefore, this indicates being below the acceptable range (non-compliant).';
+        if (centralValue > thr.max) return 'Therefore, this indicates being above the acceptable range (non-compliant).';
+        return 'Therefore, this indicates being within the acceptable range (compliant).';
       }
       return null;
     })();
 
-    const compliantTxt = (/compliant|within_range/.test(comp.status || ''))
-      ? `This means the lake is currently within the allowable guideline for ${paramLabel}.`
-      : (comp.status ? `This means the lake is not compliant with the guideline for ${paramLabel}.` : null);
-
-    return join([
-      `The ${centralLabel} ${paramLabel} level in ${lake1Name} is ${safeFmt(centralValue)}${whereTxt ? `, ${whereTxt}` : ''}`,
-      compliantTxt,
-      sigTxt,
-      borderlineNote,
-      smallSampleCaveat()
-    ]);
+    return join([primary, therefore]);
   }
 
   // ------------------------------------------------------------------
   // 4. Two-sample tests (Lake A vs Lake B)
   // ------------------------------------------------------------------
   if (twoSample) {
-    const n1 = result.n1 || stats1?.n; const n2 = result.n2 || stats2?.n;
-    // Means / medians
+    // Choose center based on test: means for t-tests; medians for rank/median tests
     const mean1 = toNum(result.mean1 ?? stats1?.mean); const mean2 = toNum(result.mean2 ?? stats2?.mean);
     const median1 = toNum(result.median1 ?? stats1?.median); const median2 = toNum(result.median2 ?? stats2?.median);
     const useMedian = /mann_whitney|mood_median|median_test/i.test(testKey);
     const c1 = useMedian ? (median1 != null ? median1 : mean1) : (mean1 != null ? mean1 : median1);
     const c2 = useMedian ? (median2 != null ? median2 : mean2) : (mean2 != null ? mean2 : median2);
-    const qualifier = useMedian ? 'median' : 'average';
-
-    const testLabelTwoSample = /t_student/.test(testKey) ? 'Student t-test'
-      : /t_welch|welch/.test(testKey) ? 'Welch t-test'
-      : /mann_whitney/.test(testKey) ? 'Mann–Whitney U test'
-      : /mood_median/.test(testKey) ? 'Mood’s median test'
-      : 'Two-sample test';
-
-    const narrative = (() => {
-      if (c1 == null || c2 == null) return 'Central tendency values are unavailable for comparison.';
-      if (c1 === c2) return `${lake1Name} has the same ${paramLabel} as ${lake2Name} (${qualifier} ${safeFmt(c1)}).`;
-      const rel = c1 < c2 ? 'lower' : 'higher';
-      return `${lake1Name} has a ${rel} ${paramLabel} than ${lake2Name} (about ${safeFmt(c1)} vs ${safeFmt(c2)} on ${qualifier}).`;
-    })();
-
-    const significanceSentence = (() => {
-      if (!Number.isFinite(p)) return 'Significance could not be determined.';
-      const pvAlpha = formatPvA(p, alpha);
-      return reject
-        ? `Based on ${testLabelTwoSample} (${pvAlpha}), there is enough statistical evidence to suggest that the difference between ${lake1Name} and ${lake2Name} is not due to random variation.`
-        : `Based on ${testLabelTwoSample} (${pvAlpha}), there is not enough statistical evidence to conclude a real difference between ${lake1Name} and ${lake2Name}; the observed gap could be due to random variation.`;
-    })();
-
-    const qualitySentence = (() => {
-      if (c1 == null || c2 == null || c1 === c2) return null;
-      const lakeWithLower = (c1 < c2) ? lake1Name : lake2Name;
-      const lakeWithHigher = (c1 > c2) ? lake1Name : lake2Name;
-      if (higherIsWorse === true) {
-        return `Because lower ${paramLabel} means better quality, ${lakeWithLower} has better water quality based on this parameter.`;
+    if (!Number.isFinite(p)) return '';
+    if (p < alpha) {
+      let dirWord = 'different from';
+      if (Number.isFinite(c1) && Number.isFinite(c2) && c1 !== c2) dirWord = c1 > c2 ? 'higher than' : 'lower than';
+      const primary = `There is enough statistical evidence to suggest that ${lake1Name} ${paramLabel} is significantly ${dirWord} ${lake2Label}’s.`;
+      // Add a parameter-focused favorability sentence (not overall water quality)
+      let favor = null;
+      if (Number.isFinite(c1) && Number.isFinite(c2) && c1 !== c2 && typeof higherIsWorse === 'boolean') {
+        const favorableLake = higherIsWorse ? (c1 < c2 ? lake1Name : lake2Label) : (c1 > c2 ? lake1Name : lake2Label);
+        favor = `Based on this parameter alone, ${favorableLake} shows a more favorable status for this parameter.`;
       }
-      if (higherIsWorse === false) {
-        return `Because higher ${paramLabel} means better quality, ${lakeWithHigher} has better water quality based on this parameter.`;
-      }
-      return null;
-    })();
-
-    return join([
-      narrative,
-      significanceSentence,
-      qualitySentence,
-      borderlineNote,
-      smallSampleCaveat()
-    ]);
+      return join([primary, favor]);
+    }
+    return `There is not enough statistical evidence to suggest a difference in ${paramLabel} between ${lake1Name} and ${lake2Label}.`;
   }
 
   // Fallback (should rarely hit)
