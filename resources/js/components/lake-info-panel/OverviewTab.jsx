@@ -249,10 +249,10 @@ function OverviewTab({
         <div><strong>Surface Area:</strong></div>
         <div>{areaStr}</div>
 
-        <div><strong>Elevation:</strong></div>
+        <div><strong>Surface Elevation:</strong></div>
         <div>{elevationStr}</div>
 
-        <div><strong>Mean Depth:</strong></div>
+        <div><strong>Average Depth:</strong></div>
         <div>{meanDepthStr}</div>
 
         <div><strong>Flows:</strong></div>

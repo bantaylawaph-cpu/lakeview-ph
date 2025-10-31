@@ -238,8 +238,8 @@ export default function FilterTray({ open, onClose, onApply, initial = {} }) {
           </div>
 
           <div className="ft-row">
-            <label>Municipality</label>
-            <select aria-label="Municipality" value={municipality} onChange={(e) => setMunicipality(e.target.value)} disabled={loading}>
+            <label>Municipality/City</label>
+            <select aria-label="Municipality/City" value={municipality} onChange={(e) => setMunicipality(e.target.value)} disabled={loading}>
               <option value="">(any)</option>
               {municipalityOptions.map((m) => (
                 <option key={m} value={m}>{m}</option>
@@ -248,8 +248,8 @@ export default function FilterTray({ open, onClose, onApply, initial = {} }) {
           </div>
 
           <div className="ft-row full-row">
-            <label>Water Quality Class</label>
-            <select aria-label="Water Quality Class" value={classCode} onChange={(e) => setClassCode(e.target.value)} disabled={loading}>
+            <label>Water Body Class</label>
+            <select aria-label="Water Body Class" value={classCode} onChange={(e) => setClassCode(e.target.value)} disabled={loading}>
               <option value="">(any)</option>
               {classOptions.map((c) => (
                 <option key={c.code || c.name} value={c.code || c.name}>{c.name || c.code}</option>
@@ -259,10 +259,10 @@ export default function FilterTray({ open, onClose, onApply, initial = {} }) {
 
           <NumberInput label="Surface area — min (km²)" value={surfaceMin} onChange={setSurfaceMin} />
           <NumberInput label="Surface area — max (km²)" value={surfaceMax} onChange={setSurfaceMax} />
-          <NumberInput label="Elevation — min (m)" value={elevationMin} onChange={setElevationMin} />
-          <NumberInput label="Elevation — max (m)" value={elevationMax} onChange={setElevationMax} />
-          <NumberInput label="Mean depth — min (m)" value={depthMin} onChange={setDepthMin} />
-          <NumberInput label="Mean depth — max (m)" value={depthMax} onChange={setDepthMax} />
+          <NumberInput label="Surface Elevation — min (m)" value={elevationMin} onChange={setElevationMin} />
+          <NumberInput label="Surface Elevation — max (m)" value={elevationMax} onChange={setElevationMax} />
+          <NumberInput label="Average depth — min (m)" value={depthMin} onChange={setDepthMin} />
+          <NumberInput label="Average depth — max (m)" value={depthMax} onChange={setDepthMax} />
         </div>
 
         <div className="ft-actions">
