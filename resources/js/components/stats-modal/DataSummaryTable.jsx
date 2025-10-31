@@ -479,7 +479,7 @@ export default function DataSummaryTable({ open, onClose, initialLake = '', init
             <div className="ds-field station">
               <div className="ds-label">Station</div>
               <select className="pill-btn" value={selectedStation} onChange={(e) => setSelectedStation(e.target.value)} disabled={!lakeId || !orgId || !selectedYear}>
-                <option value="">All stations</option>
+                <option value="">Select a Station</option>
                 {stationOptions.length > 0 ? stationOptions.map(opt => (<option key={opt.id} value={opt.id}>{opt.name}</option>)) : stationsList.map(s => (<option key={s} value={s}>{s}</option>))}
               </select>
             </div>
