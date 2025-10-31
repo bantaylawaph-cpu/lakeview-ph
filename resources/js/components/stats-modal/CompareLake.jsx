@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef, useImperativeHandle } from "react";
-import { Line, Bar } from "react-chartjs-2";
+import { Bar } from "react-chartjs-2";
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, BarElement } from "chart.js";
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, BarElement);
 // year label plugin will be registered below after importing from shared
@@ -9,14 +9,12 @@ import { fetchParameters } from "./data/fetchers";
 import InfoModal from "../common/InfoModal";
 import { buildGraphExplanation } from "../utils/graphExplain";
 import { eventStationName } from "./utils/dataUtils";
-import { lakeName, lakeClass, baseLineChartOptions, yearLabelPlugin } from "./utils/shared";
+import { lakeName, lakeClass, yearLabelPlugin } from "./utils/shared";
 // register plugin for bar charts (draws year labels under grouped bars)
 ChartJS.register(yearLabelPlugin);
-import useAnchoredTimeRange from "./hooks/useAnchoredTimeRange";
 import useStationsCache from "./hooks/useStationsCache";
 import GraphInfoButton from "./ui/GraphInfoButton";
 import useSampleEvents from "./hooks/useSampleEvents";
-import useCompareTimeSeriesData from "./hooks/useCompareTimeSeriesData";
 import useCompareBarData from "./hooks/useCompareBarData";
 import LakeSelect from './ui/LakeSelect';
 import OrgSelect from './ui/OrgSelect';
@@ -61,14 +59,10 @@ function CompareLake({
   // useSummaryStats removed
   const summaryA = null;
   const summaryB = null;
-  const [chartType, setChartType] = useState('time'); // 'time'
   const [selectedYears, setSelectedYears] = useState([]);
   const [depthSelection, setDepthSelection] = useState('0');
-  // Time-series depth selector: 'all' shows each depth as separate series, otherwise filters to a single depth band
-  const [selectedDepth, setSelectedDepth] = useState('all');
   const [infoOpen, setInfoOpen] = useState(false);
   const [infoContent, setInfoContent] = useState({ title: '', sections: [] });
-  const prevTypeRef = useRef('time');
 
   const nameForLake = (lk) => lakeName(lakeOptions, lk);
   const classForLake = (lk) => lakeClass(lakeOptions, lk);
@@ -235,17 +229,15 @@ function CompareLake({
     setApplied(true);
   };
 
-  useEffect(() => { setApplied(false); }, [lakeA, lakeB, selectedOrgA, selectedOrgB, selectedParam, timeRange, dateFrom, dateTo, bucket, selectedDepth]);
+  useEffect(() => { setApplied(false); }, [lakeA, lakeB, selectedOrgA, selectedOrgB, selectedParam, timeRange, dateFrom, dateTo, bucket]);
 
-  // Reset depth selection to surface when the parameter changes
+  // Reset bar depth selection to surface when the parameter changes
   useEffect(() => {
     setDepthSelection('0');
-    setSelectedDepth('all');
   }, [selectedParam]);
 
 
-  const eventsAFiltered = useAnchoredTimeRange(eventsA, timeRange, dateFrom, dateTo);
-  const eventsBFiltered = useAnchoredTimeRange(eventsB, timeRange, dateFrom, dateTo);
+  // removed: time-series filtered events (Compare view is bar-only)
 
   // Available years across selected datasets (union) for depth profile year selection
   const availableYears = useMemo(() => {
@@ -260,10 +252,10 @@ function CompareLake({
         } catch {}
       });
     };
-    pushYears(eventsA);
-    pushYears(eventsB);
+    pushYears(eventsAAll);
+    pushYears(eventsBAll);
     return Array.from(years).sort((a, b) => b - a);
-  }, [eventsA, eventsB]);
+  }, [eventsAAll, eventsBAll]);
 
   // derive depth options for selectedParam from events (union of both lakes)
   const depthOptions = useMemo(() => {
@@ -301,27 +293,15 @@ function CompareLake({
       });
     };
 
-    pushDepths(eventsAFiltered);
-    pushDepths(eventsBFiltered);
+    pushDepths(eventsAAll);
+    pushDepths(eventsBAll);
     const arr = Array.from(depths).sort((a,b)=>Number(a)-Number(b));
     // ensure surface (0) is present
     if (!arr.includes('0')) arr.unshift('0');
     return arr;
-  }, [eventsAFiltered, eventsBFiltered, selectedParam]);
+  }, [eventsAAll, eventsBAll, selectedParam]);
 
-  const chartData = useCompareTimeSeriesData({
-    eventsA: eventsAFiltered,
-    eventsB: eventsBFiltered,
-    lakeA,
-    lakeB,
-    selectedParam,
-    selectedOrgA,
-    selectedOrgB,
-    bucket,
-    lakeOptions,
-    seriesMode: 'avg',
-    depthSelection: selectedDepth,
-  });
+  // removed: time-series chart data (Compare is bar-only)
 
   useImperativeHandle(ref, () => ({
     clearAll: () => {
@@ -334,42 +314,19 @@ function CompareLake({
       // also clear compare-specific selections
       setSelectedYears([]);
       setDepthSelection('0');
-      setSelectedDepth('all');
     }
   }));
 
-  const compareChartOptions = useMemo(() => {
-    const base = baseLineChartOptions();
-    const sel = String(selectedParam || '');
-    const meta = (paramList || []).find(p => String(p.key || p.id || p.code) === sel);
-    const label = meta?.label || meta?.name || meta?.code || 'Value';
-    const unit = meta?.unit || '';
-    base.scales = base.scales || {};
-    base.scales.y = { ...(base.scales?.y || {}), title: { display: true, text: `${label}${unit ? ` (${unit})` : ''}`, color: '#fff' } };
-    return base;
-  }, [paramList, selectedParam]);
+  // removed: time-series chart options (Compare is bar-only)
 
   const barData = useCompareBarData({ eventsA: eventsAAll, eventsB: eventsBAll, bucket, selectedYears, depth: depthSelection, selectedParam, lakeA, lakeB, lakeOptions });
 
-  // Since custom year selection is removed from Time Series, prevent lingering 'custom'
-  useEffect(() => {
-    if (chartType === 'time' && timeRange === 'custom') {
-      setTimeRange('all');
-      setDateFrom('');
-      setDateTo('');
-    }
-  }, [chartType, timeRange]);
+  // Compare is bar-only; no time-series range state to correct
 
   const canShowInfo = useMemo(() => {
     if (!applied) return false;
-    if (chartType === 'time') {
-      try { return Boolean(chartData && Array.isArray(chartData.datasets) && chartData.datasets.length); } catch { return false; }
-    }
-    if (chartType === 'bar') {
-      try { return Boolean(barData && Array.isArray(barData.datasets) && barData.datasets.length); } catch { return false; }
-    }
-    return false;
-  }, [applied, chartType, chartData, barData]);
+    try { return Boolean(barData && Array.isArray(barData.datasets) && barData.datasets.length); } catch { return false; }
+  }, [applied, barData]);
 
   return (
     <div className="insight-card" style={{ backgroundColor: '#0f172a' }}>
@@ -380,13 +337,13 @@ function CompareLake({
         <GraphInfoButton
           disabled={!canShowInfo}
           onClick={() => {
-            // Prefer standards from barData.meta or chartData.meta when available
-            const meta = (chartType === 'bar' ? (barData?.meta || {}) : (chartData?.meta || {}));
+            // Prefer standards from barData.meta when available (Compare is bar-only)
+            const meta = (barData?.meta || {});
             let standards = [];
             if (Array.isArray(meta.standards) && meta.standards.length) {
               standards = meta.standards.map(s => ({ code: s.code, min: s.min, max: s.max }));
             } else {
-              const ds = (chartType === 'bar' ? (barData?.datasets || []) : (chartData?.datasets || []));
+              const ds = (barData?.datasets || []);
               const stdMap = new Map();
               ds.forEach((d) => {
                 const label = String(d?.label || '');
@@ -418,7 +375,7 @@ function CompareLake({
             })();
             const nameForLake = (lk) => lakeOptions.find((x)=>String(x.id)===String(lk))?.name || String(lk || '') || '';
             const ctx = {
-              chartType: chartType === 'depth' ? 'depth' : (chartType === 'bar' ? 'bar' : 'time'),
+              chartType: 'bar',
               param: pMeta,
               seriesMode: 'avg',
               bucket,
@@ -456,52 +413,21 @@ function CompareLake({
           <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '8px 0' }} />
 
           <div>
-            <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Chart Type</div>
-            <select className="pill-btn" value={chartType} onChange={(e) => {
-              const next = e.target.value;
-              const prev = prevTypeRef.current;
-              setChartType(next);
-              // If ever leaving Depth profile (should it be added back), clear year-based custom range
-              if (prev === 'depth' && next !== 'depth') {
-                try { setTimeRange('all'); setDateFrom(''); setDateTo(''); } catch {}
-              }
-              prevTypeRef.current = next;
-              setApplied(false);
-            }} style={{ width: '100%' }}>
-              <option value="time">Time series</option>
-              <option value="bar">Bar</option>
-            </select>
-            {chartType === 'time' && (
-              <TimeBucketRange
-                bucket={bucket}
-                setBucket={setBucket}
-                timeRange={timeRange}
-                setTimeRange={setTimeRange}
-                dateFrom={dateFrom}
-                setDateFrom={setDateFrom}
-                dateTo={dateTo}
-                setDateTo={setDateTo}
-                availableYears={availableYears}
-                includeCustom={false}
-              />
-            )}
-            {chartType === 'bar' && (
-              <TimeBucketRange
-                bucket={bucket}
-                setBucket={setBucket}
-                timeRange={timeRange}
-                setTimeRange={setTimeRange}
-                dateFrom={dateFrom}
-                setDateFrom={setDateFrom}
-                dateTo={dateTo}
-                setDateTo={setDateTo}
-                allowedBuckets={['year','quarter','month']}
-                rangeMode={'year-multi'}
-                availableYears={availableYears}
-                selectedYears={selectedYears}
-                setSelectedYears={setSelectedYears}
-              />
-            )}
+            <TimeBucketRange
+              bucket={bucket}
+              setBucket={setBucket}
+              timeRange={timeRange}
+              setTimeRange={setTimeRange}
+              dateFrom={dateFrom}
+              setDateFrom={setDateFrom}
+              dateTo={dateTo}
+              setDateTo={setDateTo}
+              allowedBuckets={['year','quarter','month']}
+              rangeMode={'year-multi'}
+              availableYears={availableYears}
+              selectedYears={selectedYears}
+              setSelectedYears={setSelectedYears}
+            />
           </div>
 
           <div>
@@ -509,21 +435,9 @@ function CompareLake({
             <ParamSelect options={paramList} value={selectedParam} onChange={(e) => { setSelectedParam(e.target.value); onParamChange?.(e.target.value); }} placeholder="Select parameter" style={{ width:'100%' }} loading={!Array.isArray(paramList) || paramList.length === 0} />
           </div>
 
-          {/* Time-series depth selector: show either all depths (each as a series) or pick a specific depth band */}
-          {chartType === 'time' && depthOptions && depthOptions.length >= 1 && (
-            <div style={{ marginTop: 8 }}>
-              <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Depth</div>
-              <select className="pill-btn" value={selectedDepth} onChange={(e) => { setSelectedDepth(e.target.value); setApplied(false); }} disabled={!selectedParam} style={{ width: '100%' }}>
-                <option value="all">All depths (separate lines)</option>
-                {(depthOptions && depthOptions.length ? depthOptions : ['0']).map((d) => {
-                  const label = d === '0' ? 'Surface (0 m)' : `${d} m`;
-                  return (<option key={`d-${String(d)}`} value={String(d)}>{label}</option>);
-                })}
-              </select>
-            </div>
-          )}
+          {/* removed: time-series depth selector */}
 
-          {chartType === 'bar' && (
+          {(
             <div>
               <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Depth</div>
               <select
@@ -550,12 +464,7 @@ function CompareLake({
           {/* Summary panels removed per design: Samples / Mean / Median are not shown in CompareLake */}
 
   <div className="wq-chart" style={{ height: 300, borderRadius: 8, background: 'transparent', border: '1px solid rgba(255,255,255,0.06)', padding: 8 }}>
-        {applied && chartType === 'time' && chartData && Array.isArray(chartData.datasets) && chartData.datasets.length ? (
-          (() => {
-            const cd = { ...chartData, datasets: colorizeDatasets(chartData.datasets) };
-            return <Line key={`time-${selectedParam}-${lakeA}-${lakeB}`} ref={chartRef} data={cd} options={compareChartOptions} />;
-          })()
-        ) : applied && chartType === 'bar' && barData && Array.isArray(barData.datasets) && barData.datasets.length ? (
+        {applied && barData && Array.isArray(barData.datasets) && barData.datasets.length ? (
           (() => {
             const bd = { ...barData, datasets: colorizeDatasets(barData.datasets) };
             const paramMeta = (paramList || []).find(p => String(p.key || p.id || p.code) === String(selectedParam));

@@ -1,17 +1,16 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import TimeBucketRange from "../controls/TimeBucketRange";
 import StatsSidebar from "./StatsSidebar";
-import { Line, Bar } from "react-chartjs-2";
-import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, BarElement } from "chart.js";
+import { Line } from "react-chartjs-2";
+import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend } from "chart.js";
 import InfoModal from "../common/InfoModal";
 import { buildGraphExplanation } from "../utils/graphExplain";
 import { eventStationName } from "./utils/dataUtils";
-import { lakeName, lakeClass, baseLineChartOptions, normalizeDepthDatasets, yearLabelPlugin } from "./utils/shared";
+import { lakeName, lakeClass, baseLineChartOptions, normalizeDepthDatasets } from "./utils/shared";
 import useSampleEvents from "./hooks/useSampleEvents";
 import useStationsCache from "./hooks/useStationsCache";
 import useTimeSeriesData from "./hooks/useTimeSeriesData";
 import useDepthProfileData from "./hooks/useDepthProfileData";
-import useSingleBarData from "./hooks/useSingleBarData";
 import useSeasonalMK from "./hooks/useSeasonalMK";
 import GraphInfoButton from "./ui/GraphInfoButton";
 import StationPicker from "./ui/StationPicker";
@@ -21,9 +20,7 @@ import OrgSelect from './ui/OrgSelect';
 import ParamSelect from './ui/ParamSelect';
 import LoadingSpinner from '../LoadingSpinner';
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, BarElement);
-// register year label plugin (used by bar charts)
-ChartJS.register(yearLabelPlugin);
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
 export default function SingleLake({
   lakeOptions,
@@ -61,8 +58,8 @@ export default function SingleLake({
   const [seriesMode, setSeriesMode] = useState('avg'); // 'avg' | 'per-station'
   const [infoOpen, setInfoOpen] = useState(false);
   const [infoContent, setInfoContent] = useState({ title: '', sections: [] });
-  const [selectedYears, setSelectedYears] = useState([]);
-  const [depthSelection, setDepthSelection] = useState('0');
+  // removed: bar-chart years state
+  // removed: bar chart depth selection state
   // Time-series depth selector: 'all' shows each depth as separate series, otherwise filters to a single depth band
   const [selectedDepth, setSelectedDepth] = useState('all');
   // Trend analysis (SMK)
@@ -147,8 +144,7 @@ export default function SingleLake({
     } catch (e) { /* noop */ }
   }, [seriesMode, depthOptions]);
 
-  // Bar charts ignore the time-series range; years selection drives grouping.
-  const barData = useSingleBarData({ events: eventsAll, bucket, selectedYears, depth: depthSelection, selectedParam, lake: selectedLake, lakeOptions, seriesMode, selectedStations });
+  // removed: single-lake bar data
 
   // Since custom range is removed from Time Series, force a safe preset if lingering
   useEffect(() => {
@@ -172,10 +168,9 @@ export default function SingleLake({
     try {
       if (chartType === 'time') return Boolean(chartData?.datasets?.length);
       if (chartType === 'depth') return Boolean(depthProfile?.datasets?.length);
-      if (chartType === 'bar') return Boolean(barData?.datasets?.length);
       return false;
     } catch { return false; }
-  }, [applied, chartType, chartData, depthProfile, barData]);
+  }, [applied, chartType, chartData, depthProfile]);
 
   const canChooseParam = useMemo(() => {
     if (!selectedLake || !selectedOrg) return false;
@@ -240,8 +235,8 @@ export default function SingleLake({
       return;
     }
     // Bar chart requires at least one year selected
-    if (chartType === 'bar') {
-      if (!selectedYears || !selectedYears.length) {
+    if (false) {
+      if (false) {
         const sentence = `Please select at least one year.`;
         try {
           const Swal = (await import('sweetalert2')).default;
@@ -277,19 +272,7 @@ export default function SingleLake({
     return base;
   }, [selectedParamLabel, selectedParamUnit]);
 
-  // If switching to Bar chart, ensure selectedStations does not exceed the allowed max (3)
-  useEffect(() => {
-    try {
-      if (chartType === 'bar' && Array.isArray(selectedStations) && selectedStations.length > 3) {
-        // Trim to the first 3 stations to enforce the bar-chart selection limit.
-        onStationsChange(selectedStations.slice(0, 3));
-        setApplied(false);
-      }
-    } catch (err) {
-      // Defensive: don't let trimming break the UI
-      // console.debug('Failed to trim selectedStations for bar chart', err);
-    }
-  }, [chartType, selectedStations, onStationsChange]);
+  // removed: bar-specific station selection limit
 
   const isComplete = useMemo(() => {
     if (!selectedLake) return false;
@@ -307,12 +290,12 @@ export default function SingleLake({
           onClick={() => {
             if (!canShowInfo) return;
             // Extract standards from current datasets (threshold lines are labeled "<std> – Min/Max")
-            // Prefer standards metadata produced by barData/chartData hooks when present
+            // Prefer standards metadata produced by the active chart hook when present
             const standards = (() => {
-              const meta = (chartType === 'bar' ? (barData?.meta || {}) : (chartData?.meta || {}));
+              const meta = (chartType === 'depth' ? (depthProfile?.meta || {}) : (chartData?.meta || {}));
               if (Array.isArray(meta.standards) && meta.standards.length) return meta.standards.map(s => ({ code: s.code, min: s.min, max: s.max }));
               // fallback: parse labels heuristically
-              const ds = (chartType === 'bar' ? (barData?.datasets || []) : (chartData?.datasets || []));
+              const ds = (chartType === 'depth' ? (depthProfile?.datasets || []) : (chartData?.datasets || []));
               const map = new Map();
               ds.forEach((d) => {
                 const label = String(d?.label || '');
@@ -367,7 +350,7 @@ export default function SingleLake({
   <StatsSidebar isOpen={sidebarOpen && isModalOpen} width={sidebarWidth} usePortal top={72} side="left" zIndex={10000} onToggle={toggleSidebar}>
           <div>
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Lake</div>
-            <LakeSelect lakes={lakeOptions} value={selectedLake} onChange={(e) => { onLakeChange(e.target.value); setApplied(false); setSelectedYears([]); }} />
+            <LakeSelect lakes={lakeOptions} value={selectedLake} onChange={(e) => { onLakeChange(e.target.value); setApplied(false); }} />
           </div>
 
           <div>
@@ -433,7 +416,7 @@ export default function SingleLake({
             }} style={{ width: '100%' }}>
               <option value="time">Time series</option>
               <option value="depth">Depth profile</option>
-              <option value="bar">Bar (Stations)</option>
+              
             </select>
             
           </div>
@@ -471,26 +454,9 @@ export default function SingleLake({
             />
           )}
 
-          {/* Bucket & Years controls for Bar chart */}
-          {chartType === 'bar' && (
-            <TimeBucketRange
-              bucket={bucket}
-              setBucket={setBucket}
-              timeRange={timeRange}
-              setTimeRange={setTimeRange}
-              dateFrom={dateFrom}
-              setDateFrom={setDateFrom}
-              dateTo={dateTo}
-              setDateTo={setDateTo}
-              allowedBuckets={['year','quarter','month']}
-              rangeMode={'year-multi'}
-              availableYears={availableYears}
-              selectedYears={selectedYears}
-              setSelectedYears={setSelectedYears}
-            />
-          )}
+          {/* removed: Bar chart controls */}
 
-          {(chartType === 'time' || chartType === 'bar') && (
+          {(chartType === 'time') && (
             <div>
               <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Series Mode</div>
               <SeriesModeToggle mode={seriesMode} onChange={(next) => { setSeriesMode(next); setApplied(false); }} />
@@ -502,18 +468,7 @@ export default function SingleLake({
           {/* Parameters */}
           <div>
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Parameter</div>
-            <ParamSelect options={paramOptions} value={selectedParam} onChange={(e) => { onParamChange(e.target.value); setApplied(false); setDepthSelection('0'); }} disabled={!canChooseParam} loading={!Array.isArray(paramOptions) || paramOptions.length === 0} placeholder="Select parameter" style={{ width: '100%' }} />
-            {chartType === 'bar' && depthOptions && depthOptions.length >= 1 && (
-              <div>
-                <div style={{ fontSize: 12, opacity: 0.8, marginTop: 8, marginBottom: 4 }}>Depth</div>
-                <select className="pill-btn" value={depthSelection} onChange={(e) => setDepthSelection(e.target.value)} disabled={!selectedParam} style={{ width: '100%' }}>
-                  {depthOptions.map((d) => {
-                    const label = d === '0' ? 'Surface (0 m)' : `${d} m`;
-                    return (<option key={String(d)} value={String(d)}>{label}</option>);
-                  })}
-                </select>
-              </div>
-            )}
+            <ParamSelect options={paramOptions} value={selectedParam} onChange={(e) => { onParamChange(e.target.value); setApplied(false); }} disabled={!canChooseParam} loading={!Array.isArray(paramOptions) || paramOptions.length === 0} placeholder="Select parameter" style={{ width: '100%' }} />
             {/* Time-series depth selector: show either all depths (each as a series) or pick a specific depth band */}
             {chartType === 'time' && depthOptions && depthOptions.length >= 1 && (
               <div style={{ marginTop: 8 }}>
@@ -646,46 +601,6 @@ export default function SingleLake({
             ) : (
               <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <span style={{ opacity: 0.9 }}>No time-series data available for this selection.</span>
-              </div>
-            )
-          ) : chartType === 'bar' ? (
-            barData && Array.isArray(barData.datasets) && barData.datasets.length ? (
-              (() => {
-                const bd = { ...barData, datasets: barData.datasets };
-                const yearIndexMap = (barData?.meta?.yearIndexMap) || {};
-                const yearOrder = (barData?.meta?.yearOrder) || Object.keys(yearIndexMap);
-                const yearColors = (barData?.meta?.yearColors) || {};
-                const hasThresholdLines = Array.isArray(bd?.datasets) && bd.datasets.some((d) => d && d.type === 'line');
-                const options = {
-                  responsive: true,
-                  maintainAspectRatio: false,
-                  plugins: {
-                    // Show legend only for threshold lines (Min/Max)
-                    legend: {
-                      display: !!hasThresholdLines,
-                      labels: {
-                        color: '#fff',
-                        filter: (legendItem, chartData) => {
-                          try {
-                            const ds = chartData?.datasets?.[legendItem.datasetIndex];
-                            return !!(ds && ds.type === 'line');
-                          } catch { return false; }
-                        },
-                      },
-                    },
-                    tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.formattedValue}` } },
-                    // Draw per-group year labels inside the chart area to avoid tick overlap
-                    yearLabelPlugin: { meta: barData?.meta || {}, color: '#fff', fontSize: 11, paddingInside: 14 },
-                  },
-                  indexAxis: 'x',
-                  datasets: { bar: { categoryPercentage: 0.75, barPercentage: 0.9 } },
-                  scales: { x: { ticks: { color: '#fff' }, grid: { display: false } }, y: { ticks: { color: '#fff' }, title: { display: true, text: `${selectedParamLabel}${selectedParamUnit ? ` (${selectedParamUnit})` : ''}`, color: '#fff' }, grid: { color: 'rgba(255,255,255,0.08)' } } },
-                };
-                return <Bar key={`bar-${selectedParam}-${selectedLake}-${seriesMode}`} ref={chartRef} data={bd} options={options} />;
-              })()
-            ) : (
-              <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <span style={{ opacity: 0.9 }}>No bar data available for this selection.</span>
               </div>
             )
           ) : null
