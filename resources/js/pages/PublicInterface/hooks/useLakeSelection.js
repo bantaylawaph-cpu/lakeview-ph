@@ -32,10 +32,22 @@ export function useLakeSelection({ publicFC, mapRef, setPanelOpen, setFilterWate
     setBaseKeyBump(v => v + 1);
     if (!lakeId) { setLakeLayers([]); setLakeActiveLayerId(null); return; }
     try {
-      const rows = await fetchPublicLayers({ bodyType: 'lake', bodyId: lakeId });
-      setLakeLayers(rows);
-      const active = rows.find(r => r.is_active);
-      setLakeActiveLayerId(active ? active.id : null);
+      // Phase 1: serve cached rows if available (fast paint)
+      const rowsCached = await fetchPublicLayers({ bodyType: 'lake', bodyId: lakeId });
+      setLakeLayers(rowsCached);
+      const activeCached = rowsCached.find(r => r.is_active);
+      setLakeActiveLayerId(activeCached ? activeCached.id : null);
+
+      // Phase 2: revalidate from network and update if different
+      try {
+        const rowsFresh = await fetchPublicLayers({ bodyType: 'lake', bodyId: lakeId, forceNetwork: true });
+        const changed = JSON.stringify(rowsFresh) !== JSON.stringify(rowsCached);
+        if (changed) {
+          setLakeLayers(rowsFresh);
+          const active = rowsFresh.find(r => r.is_active);
+          setLakeActiveLayerId(active ? active.id : null);
+        }
+      } catch (_) { /* ignore revalidation errors */ }
     } catch (e) {
       console.warn('[useLakeSelection] layer fetch failed', e);
       setLakeLayers([]); setLakeActiveLayerId(null);
@@ -112,18 +124,26 @@ export function useLakeSelection({ publicFC, mapRef, setPanelOpen, setFilterWate
       }
       if (lakeId != null) {
         try {
-          const ttl = 24 * 60 * 60 * 1000; // 24h
+          const ttl = 24 * 60 * 60 * 1000; // 24h (cache hint; we still revalidate below)
           const key = `public:lakes:detail:${lakeId}`;
-          let detail = cache.get(key, { maxAgeMs: ttl });
-          if (!detail) {
-            const pub = await apiPublic(`/public/lakes/${lakeId}`);
-            detail = pub?.id ? pub : await apiPublic(`/lakes/${lakeId}`);
-            if (detail?.id) cache.set(key, detail, { ttlMs: ttl });
+          // SWR: 1) seed from cache if present
+          const cachedDetail = cache.get(key, { maxAgeMs: ttl });
+          if (cachedDetail?.id && String(cachedDetail.id) === String(lakeId)) {
+            setSelectedLake(prev => ({ ...prev, ...cachedDetail }));
+            setSelectedWatershedId(cachedDetail?.watershed_id ?? null);
+            setFilterWatershedId?.(cachedDetail?.watershed_id ?? null);
           }
-          if (detail?.id && String(detail.id) === String(lakeId)) {
-            setSelectedLake(prev => ({ ...prev, ...detail }));
-            setSelectedWatershedId(detail?.watershed_id ?? null);
-            setFilterWatershedId?.(detail?.watershed_id ?? null);
+          // 2) always revalidate from network
+          const pub = await apiPublic(`/public/lakes/${lakeId}`);
+          const fresh = pub?.id ? pub : await apiPublic(`/lakes/${lakeId}`);
+          if (fresh?.id && String(fresh.id) === String(lakeId)) {
+            const changed = JSON.stringify(fresh) !== JSON.stringify(cachedDetail || null);
+            if (changed) {
+              setSelectedLake(prev => ({ ...prev, ...fresh }));
+              setSelectedWatershedId(fresh?.watershed_id ?? null);
+              setFilterWatershedId?.(fresh?.watershed_id ?? null);
+            }
+            cache.set(key, fresh, { ttlMs: ttl });
           }
         } catch (err) { console.warn('[useLakeSelection] lake detail fetch failed', err); setSelectedWatershedId(null); }
         await loadPublicLayersForLake(lakeId);
@@ -175,10 +195,21 @@ export function useLakeSelection({ publicFC, mapRef, setPanelOpen, setFilterWate
     if (!checked) { setWatershedOverlayFeature(null); return; }
     if (!selectedWatershedId) { setWatershedToggleOn(false); return; }
     try {
-      const candidates = await fetchPublicLayers({ bodyType: 'watershed', bodyId: selectedWatershedId });
-      const target = candidates?.find(l => l.is_active) || candidates?.[0];
+      // Phase 1: fast path from cache
+      const candidatesCached = await fetchPublicLayers({ bodyType: 'watershed', bodyId: selectedWatershedId });
+      let target = candidatesCached?.find(l => l.is_active) || candidatesCached?.[0];
       if (!target) { setWatershedToggleOn(false); return; }
       await applyOverlayByLayerId(target.id, { fit: true });
+      // Phase 2: revalidate from network and update overlay if active changed
+      try {
+        const candidatesFresh = await fetchPublicLayers({ bodyType: 'watershed', bodyId: selectedWatershedId, forceNetwork: true });
+        const freshTarget = candidatesFresh?.find(l => l.is_active) || candidatesFresh?.[0];
+        const changed = JSON.stringify(freshTarget || null) !== JSON.stringify(target || null);
+        if (freshTarget && changed) {
+          target = freshTarget;
+          await applyOverlayByLayerId(target.id, { fit: true });
+        }
+      } catch (_) { /* ignore */ }
     } catch (err) { console.warn('[useLakeSelection] toggle watershed failed', err); setWatershedToggleOn(false); }
   }, [selectedWatershedId, applyOverlayByLayerId]);
 

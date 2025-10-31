@@ -84,7 +84,7 @@ export const fetchWatershedOptions = async (q = "") => {
 };
 
 /** ---- Layers (PUBLIC list for LakeInfoPanel) ---- */
-export async function fetchPublicLayers({ bodyType, bodyId, includeBounds = false } = {}) {
+export async function fetchPublicLayers({ bodyType, bodyId, includeBounds = false, forceNetwork = false } = {}) {
   if (!bodyType || !bodyId) return [];
   const qs = buildQuery({
     body_type: bodyType,
@@ -94,7 +94,7 @@ export async function fetchPublicLayers({ bodyType, bodyId, includeBounds = fals
   const key = `public:layers:list:${bodyType}:${bodyId}:${includeBounds ? 'b' : '-'}`;
   const TTL = 10 * 60 * 1000; // 10 minutes
   const cached = cache.get(key, { maxAgeMs: TTL });
-  if (cached) return cached;
+  if (cached && !forceNetwork) return cached;
   const res = await apiPublic(`/public/layers${qs}`);
   const rows = pluck(res);
   cache.set(key, rows, { ttlMs: TTL });

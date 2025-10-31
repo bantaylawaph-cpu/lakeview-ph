@@ -142,18 +142,25 @@ function HeatmapTab({ lake, onToggleHeatmap, onClearHeatmap, currentLayerId = nu
       setYearsLoading(true);
       setYearsError(null);
       try {
-        const TTL = 24 * 60 * 60 * 1000; // 24h
+        const TTL = 6 * 60 * 60 * 1000; // 6h
         const key = 'population:dataset-years';
-        let data = cache.get(key, { maxAgeMs: TTL });
-        if (!data) {
-          const resp = await axios.get('/api/population/dataset-years');
-          data = resp?.data || null;
-          if (data) cache.set(key, data, { ttlMs: TTL });
+        const cached = cache.get(key, { maxAgeMs: TTL });
+        if (cached && active) {
+          const yrsCached = Array.isArray(cached?.years) ? cached.years.slice().sort((a,b) => Number(b) - Number(a)) : [];
+          setAvailableYears(yrsCached);
+          if (yrsCached.length > 0) {
+            setYear(prev => (prev && yrsCached.includes(prev) ? prev : yrsCached[0]));
+          } else {
+            setYear(null);
+          }
         }
+        // Revalidate from network
+        const resp = await axios.get('/api/population/dataset-years');
+        const data = resp?.data || null;
         if (!active) return;
+        if (data) cache.set(key, data, { ttlMs: TTL });
         const yrs = Array.isArray(data?.years) ? data.years.slice().sort((a,b) => Number(b) - Number(a)) : [];
         setAvailableYears(yrs);
-        // Use the most recent year (max) as default if none selected
         if (yrs.length > 0) {
           setYear(prev => (prev && yrs.includes(prev) ? prev : yrs[0]));
         } else {
@@ -179,14 +186,13 @@ function HeatmapTab({ lake, onToggleHeatmap, onClearHeatmap, currentLayerId = nu
   const fetchDatasetInfo = async (y) => {
     if (!y) return;
     try {
-      const TTL = 24 * 60 * 60 * 1000; // 24h
+      const TTL = 6 * 60 * 60 * 1000; // 6h
       const key = `population:dataset-info:${y}`;
-      let data = cache.get(key, { maxAgeMs: TTL });
-      if (!data) {
-        const resp = await axios.get('/api/population/dataset-info', { params: { year: y } });
-        data = resp?.data || null;
-        if (data) cache.set(key, data, { ttlMs: TTL });
-      }
+      const cached = cache.get(key, { maxAgeMs: TTL });
+      if (cached) setDatasetInfo({ notes: cached?.notes || null, link: cached?.link || null });
+      const resp = await axios.get('/api/population/dataset-info', { params: { year: y } });
+      const data = resp?.data || null;
+      if (data) cache.set(key, data, { ttlMs: TTL });
       setDatasetInfo({ notes: data?.notes || null, link: data?.link || null });
     } catch (e) {
       setDatasetInfo({ notes: 'Failed to load dataset info', link: null });
