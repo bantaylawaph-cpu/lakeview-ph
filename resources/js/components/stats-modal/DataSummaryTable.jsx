@@ -464,32 +464,32 @@ export default function DataSummaryTable({ open, onClose, initialLake = '', init
           </div>
 
           <div className="ds-field org">
-            <div className="ds-label">Dataset source</div>
-            <OrgSelect options={orgOptions || []} value={orgId} onChange={(e) => setOrgId(e.target.value)} disabled={!lakeId} required={false} placeholder="All dataset sources" />
+            <div className="ds-label">Dataset Source</div>
+            <OrgSelect options={orgOptions || []} value={orgId} onChange={(e) => setOrgId(e.target.value)} disabled={!lakeId} required={false} placeholder="Select a dataset" />
           </div>
 
-              <div className="ds-field year">
-                <div className="ds-label">Year</div>
-                <select className="pill-btn" value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} disabled={!lakeId || !orgId}>
-                  <option value="">All years</option>
-                  {yearOptions.map(y => (<option key={y} value={y}>{y}</option>))}
-                </select>
-              </div>
+          <div className="ds-field station">
+            <div className="ds-label">Station</div>
+            <select className="pill-btn" value={selectedStation} onChange={(e) => setSelectedStation(e.target.value)} disabled={!lakeId || !orgId}>
+              <option value="">Select a station</option>
+              {stationOptions.length > 0 ? stationOptions.map(opt => (<option key={opt.id} value={opt.id}>{opt.name}</option>)) : stationsList.map(s => (<option key={s} value={s}>{s}</option>))}
+            </select>
+          </div>
 
-            <div className="ds-field station">
-              <div className="ds-label">Station</div>
-              <select className="pill-btn" value={selectedStation} onChange={(e) => setSelectedStation(e.target.value)} disabled={!lakeId || !orgId || !selectedYear}>
-                <option value="">Select a Station</option>
-                {stationOptions.length > 0 ? stationOptions.map(opt => (<option key={opt.id} value={opt.id}>{opt.name}</option>)) : stationsList.map(s => (<option key={s} value={s}>{s}</option>))}
-              </select>
-            </div>
+          <div className="ds-field year">
+            <div className="ds-label">Year</div>
+            <select className="pill-btn" value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} disabled={!lakeId || !orgId}>
+              <option value="">Select a year</option>
+              {yearOptions.map(y => (<option key={y} value={y}>{y}</option>))}
+            </select>
+          </div>
         </div>
 
   <div className="ds-table-wrap modern-scrollbar" ref={tableRef}>
           {(loading && lakeId && orgId && selectedYear && selectedStation) ? (
             <div className="ds-center-loading"><LoadingSpinner label="Loading table…" size={28} /></div>
           ) : (!lakeId || !orgId || !selectedYear || !selectedStation) ? (
-            <div className="ds-empty">Please select a Lake, Dataset source, Year and Station to view this table.</div>
+            <div className="ds-empty">Please select a Lake, Dataset Source, Station and Year to view this table.</div>
           ) : pivot ? (
             <table className="ds-table lv-table">
               <thead>
