@@ -47,36 +47,43 @@ class ElevationController extends Controller
         if ($maxSamples > 5000) $maxSamples = 5000; // hard cap
 
         // Build SQL and evaluate in PostGIS
-        // Note: using base raster table name `de_ph`
-                $sql = <<<'SQL'
+        // Optimized approach: preselect intersecting tiles once, then use LATERAL for per-point value lookups.
+        // Assumptions: de_ph rasters are SRID 4326, mostly 256x256 tiles, with a GiST index on ST_ConvexHull(rast).
+        $sql = <<<'SQL'
 WITH input AS (
     SELECT ST_SetSRID(ST_GeomFromGeoJSON(:gj)::geometry, 4326) AS g
 ), L AS (
-  SELECT g, ST_Length(g::geography) AS meters FROM input
+    SELECT g, ST_Length(g::geography) AS meters FROM input
 ), P AS (
-  SELECT g, meters,
-         GREATEST(2, LEAST(:maxSamples::int, CEIL(meters / :step)::int + 1)) AS n
-  FROM L
+    SELECT g, meters,
+           GREATEST(2, LEAST(:maxSamples::int, CEIL(meters / :step)::int + 1)) AS n
+    FROM L
 ), series AS (
-  SELECT i, (i::double precision - 1) / (p.n - 1) AS t, p.g, p.meters
-  FROM P p, generate_series(1, (SELECT n FROM P)) AS s(i)
+    SELECT i, (i::double precision - 1) / (p.n - 1) AS t, p.g, p.meters
+    FROM P p, generate_series(1, (SELECT n FROM P)) AS s(i)
 ), pts AS (
-  SELECT i, t, meters, ST_LineInterpolatePoint(g, t) AS pt4326
-  FROM series
+    SELECT i, t, meters, ST_LineInterpolatePoint(g, t) AS pt4326
+    FROM series
+), tiles AS (
+    -- Prefilter tiles that intersect the line once; leverages the GiST index
+    SELECT r.rid, r.rast
+    FROM public.de_ph r, input
+    WHERE ST_Intersects(r.rast, input.g)
 ), samp AS (
-  SELECT
-    i,
-    t,
-    meters,
-    ST_X(pt4326) AS lon,
-    ST_Y(pt4326) AS lat,
-    (
-            SELECT ST_Value(rast, 1, ST_Transform(pt4326, ST_SRID(rast)))
-      FROM public.de_ph r
-            WHERE ST_Intersects(r.rast, ST_Transform(pt4326, ST_SRID(r.rast)))
-      LIMIT 1
-    ) AS elev
-  FROM pts
+    SELECT
+        p.i,
+        p.t,
+        p.meters,
+        ST_X(p.pt4326) AS lon,
+        ST_Y(p.pt4326) AS lat,
+        v.elev
+    FROM pts p
+    LEFT JOIN LATERAL (
+        SELECT ST_Value(r.rast, 1, p.pt4326) AS elev
+        FROM tiles r
+        WHERE ST_Intersects(r.rast, p.pt4326)
+        LIMIT 1
+    ) v ON true
 )
 SELECT i, t, lon, lat, elev,
        (t * meters) AS distance_m
@@ -85,7 +92,9 @@ ORDER BY i;
 SQL;
 
         try {
-            // Ensure GDAL drivers and out-db rasters are enabled for this session
+            // Add a short statement timeout to avoid long-running queries piling up
+            try { DB::statement("SET LOCAL statement_timeout = '8000ms'"); } catch (\Throwable $e) {}
+            // Ensure GDAL drivers and out-db rasters are enabled for this session (harmless if in-DB)
             try { DB::statement("SET LOCAL postgis.gdal_enabled_drivers = 'ENABLE_ALL'"); } catch (\Throwable $e) {}
             try { DB::statement("SET LOCAL postgis.enable_outdb_rasters = 'on'"); } catch (\Throwable $e) {}
             $rows = DB::select($sql, [

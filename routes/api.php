@@ -380,7 +380,8 @@ Route::get('/tiles/contours/{z}/{x}/{y}.pbf', [TileController::class, 'contours'
 Route::get('/contours/labels', [TileController::class, 'contourLabels']);
 
 // Elevation profile (public)
-Route::post('/elevation/profile', [ElevationController::class, 'profile']);
+Route::post('/elevation/profile', [ElevationController::class, 'profile'])
+    ->middleware('throttle:10,1');
 
 /*
 |--------------------------------------------------------------------------
