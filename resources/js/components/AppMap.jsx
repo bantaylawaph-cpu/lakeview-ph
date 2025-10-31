@@ -178,7 +178,7 @@ function ContoursVectorLayer({ url }) {
                 };
               }
             },
-            interactive: true,
+            interactive: false,
             maxNativeZoom: 14,
             maxZoom: 22,
           }).addTo(map);
