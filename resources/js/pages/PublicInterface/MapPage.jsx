@@ -467,7 +467,7 @@ function MapPage() {
             >
               <Popup>
                 <div style={{ minWidth: 160 }}>
-                  <strong style={{ textTransform: 'capitalize' }}>{f.flow_type}</strong><br />
+                  {(() => { const t = f.flow_type === 'inflow' ? 'Inlet' : (f.flow_type === 'outflow' ? 'Outlet' : String(f.flow_type || '')); return (<strong>{t}</strong>); })()}<br />
                   {f.name || f.source || 'Flow Point'} {f.is_primary ? <em style={{ color: '#fbbf24' }}>★</em> : null}<br />
                   <small>Lat: {lat} Lon: {lon}</small>
                 </div>

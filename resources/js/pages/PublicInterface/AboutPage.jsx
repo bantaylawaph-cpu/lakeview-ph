@@ -36,7 +36,7 @@ function AboutPage({ open, onClose }) {
             data overlays, enable a population heatmap, and jump to water‑quality stations.
           </li>
           <li>
-            <strong>See inflows/outflows</strong>: show lake flow markers (inflow/outflow). Click a marker to view details.
+            <strong>See inlets/outlets</strong>: show lake tributary markers (inlet/outlet). Click a marker to view details.
           </li>
           <li>
             <strong>Measure and capture</strong>: right‑click the map to measure distance or area, and use the screenshot

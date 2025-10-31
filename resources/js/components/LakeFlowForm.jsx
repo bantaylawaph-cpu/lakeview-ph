@@ -29,8 +29,8 @@ export default function LakeFlowForm({ open, mode='create', initialValue=EMPTY, 
     <Modal
       open={open}
       onClose={onCancel}
-      title={mode==='create'?'Add Flow Point':'Edit Flow Point'}
-      ariaLabel="Lake Flow Form"
+      title={mode==='create'?'Add Tributary':'Edit Tributary'}
+      ariaLabel="Lake Tributary Form"
       width={720}
       footer={<div className="lv-modal-actions">
         <button type="button" className="pill-btn ghost" onClick={onCancel} disabled={loading}>Cancel</button>
@@ -48,8 +48,8 @@ export default function LakeFlowForm({ open, mode='create', initialValue=EMPTY, 
         <label className="lv-field">
           <span>Type *</span>
           <select value={form.flow_type} onChange={e=>setForm(f=>({...f,flow_type:e.target.value}))}>
-            <option value="inflow">Inflow</option>
-            <option value="outflow">Outflow</option>
+            <option value="inflow">Inlet</option>
+            <option value="outflow">Outlet</option>
           </select>
         </label>
         <label className="lv-field">

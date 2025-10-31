@@ -172,7 +172,7 @@ function ManageLakesTab() {
   { id: "surface_area_km2", header: "Surface Area (km²)", accessor: "surface_area_km2", width: 170, className: "col-sm-hide" },
       { id: "elevation_m", header: "Surface Elevation (m)", accessor: "elevation_m", width: 150, className: "col-md-hide", _optional: true },
       { id: "mean_depth_m", header: "Average Depth (m)", accessor: "mean_depth_m", width: 160, className: "col-md-hide", _optional: true },
-      { id: "flows_status", header: "Flows", accessor: "flows_status", width: 160, className: "col-md-hide", _optional: true, render: (row) => fmtFlowsStatus(row.flows_status) },
+      { id: "flows_status", header: "Tributaries", accessor: "flows_status", width: 160, className: "col-md-hide", _optional: true, render: (row) => fmtFlowsStatus(row.flows_status) },
       { id: "watershed", header: "Watershed", accessor: "watershed", width: 220, _optional: true },
       { id: "created_at", header: "Created", accessor: "created_at", width: 140, className: "col-md-hide", _optional: true },
       { id: "updated_at", header: "Updated", accessor: "updated_at", width: 140, className: "col-sm-hide", _optional: true },
@@ -606,7 +606,7 @@ function ManageLakesTab() {
         // Build confirmation message
         const reasons = [];
         if (hasEvents) reasons.push('associated water quality test(s)');
-        if (hasFlows) reasons.push('inflow/outflow flow point(s)');
+        if (hasFlows) reasons.push('inlet/outlet tributary point(s)');
         if (linkedWatershedId) reasons.push(linkedWatershedName ? `linked watershed (${linkedWatershedName})` : 'a linked watershed');
 
         if (reasons.length) {
@@ -821,7 +821,7 @@ function ManageLakesTab() {
         fields={[
           {
             id: "flows_status",
-            label: "Flows Status",
+            label: "Tributaries Status",
             type: "select",
             value: adv.flows_status ?? "",
             onChange: (value) => setAdv((state) => ({ ...state, flows_status: value })),

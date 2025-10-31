@@ -26,7 +26,7 @@ function AdminWaterCat() {
               Manage Lakes
             </button>
             <button type="button" className={`pill-btn ${activeTab === "watersheds" ? "primary" : ""}`} onClick={() => setActiveTab("watersheds")}>Manage Watersheds</button>
-            <button type="button" className={`pill-btn ${activeTab === "flows" ? "primary" : ""}`} onClick={() => setActiveTab("flows")}>Manage Flows</button>
+            <button type="button" className={`pill-btn ${activeTab === "flows" ? "primary" : ""}`} onClick={() => setActiveTab("flows")}>Manage Tributaries</button>
           </div>
         )}
       />

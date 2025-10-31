@@ -124,7 +124,7 @@ function OverviewTab({
     return () => { mounted = false; };
   }, [lake?.class_code, lake?.water_quality_class]);
 
-  // Flows tri-state status from API: 'unknown' | 'none' | 'present'
+  // Flows/Tributaries tri-state status from API: 'unknown' | 'none' | 'present'
   const flowsStatus = lake?.flows_status || 'unknown';
   // Separate inflows / outflows, keep stable references (only meaningful when present)
   const inflows = useMemo(() => (flows || []).filter(f => f.flow_type === 'inflow'), [flows]);
@@ -135,7 +135,7 @@ function OverviewTab({
     return (
       <span style={{display:'inline-flex',flexWrap:'wrap',gap:6}}>
         {list.map(f => {
-          const label = f.name || f.source || (f.flow_type === 'inflow' ? 'Inflow' : 'Outflow');
+          const label = f.name || f.source || (f.flow_type === 'inflow' ? 'Inlet' : 'Outlet');
           return (
             <button
               key={f.id}
@@ -255,16 +255,18 @@ function OverviewTab({
         <div><strong>Average Depth:</strong></div>
         <div>{meanDepthStr}</div>
 
-        <div><strong>Flows:</strong></div>
+        <div><strong>Tributaries:</strong></div>
         {flowsStatus === 'present' ? (
           <>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
-              <span style={{fontSize:12,opacity:0.8}}>Inflows: {inflows.length} • Outflows: {outflows.length}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {renderFlowList([...(inflows||[]), ...(outflows||[])])}
+              </div>
               {showFlowToggle && (
                 <button
                   type="button"
                   aria-pressed={showFlows}
-                  title={showFlows ? 'Hide flow markers' : 'Show flow markers'}
+                  title={showFlows ? 'Hide tributary markers' : 'Show tributary markers'}
                   onClick={() => onToggleFlows?.(!showFlows)}
                   style={{
                     border: 'none',
@@ -284,13 +286,8 @@ function OverviewTab({
             </div>
 
             <div style={{ gridColumn: '1 / -1', fontSize: 11, color: '#ddd', marginTop: 4 }}>
-              <em>Flows are known inlets/outlets for this lake. 'Primary' marks the main channel.</em>
+              <em>Tributaries are known inlets and outlets for this lake. 'Primary', denoted by a "★", marks the main channel.</em>
             </div>
-
-            <div><strong>Inflows:</strong></div>
-            <div>{renderFlowList(inflows)}</div>
-            <div><strong>Outflows:</strong></div>
-            <div>{renderFlowList(outflows)}</div>
           </>
         ) : flowsStatus === 'none' ? (
           <div style={{opacity:0.8}}>None</div>
