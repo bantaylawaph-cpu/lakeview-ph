@@ -24,7 +24,7 @@ const infoSections = [
       'Optionally set Compare to a Class (then optionally pick a Station) or another Lake (then pick its Dataset Source).',
       'Open the gear to set years and (optionally) an exact depth.',
       'Pick a Test (disabled when not applicable) and click Run Test.',
-      'Review the summary, p‑value, and advisories; use Export for PDF.'
+      'Review the summary and p‑value; use Export for PDF.'
     ]
   },
   {
@@ -55,8 +55,7 @@ const infoSections = [
     bullets: [
       'p‑value: Smaller (e.g., < 0.05) = stronger evidence.',
       'Confidence level: 95% is common; higher = wider intervals, stricter.',
-      'TOST: Pass when both one‑sided p‑values are below alpha (e.g., 0.05).',
-      'Advisories: Notes on sample size, imbalance, and distance to limits.'
+      'TOST: Pass when both one‑sided p‑values are below alpha (e.g., 0.05).'
     ]
   },
   {

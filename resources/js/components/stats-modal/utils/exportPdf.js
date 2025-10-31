@@ -23,7 +23,7 @@ import { fmt, sci } from '../formatters';
 import { lakeName } from './shared';
 import { testLabelFromResult, testLabelFromCode } from './testLabels';
 
-export function buildAdvancedStatReport({ result, advisories = [], paramCode = '', paramOptions = [], lakes = [], lakeId = '', compareValue = '', title = '' }) {
+export function buildAdvancedStatReport({ result, paramCode = '', paramOptions = [], lakes = [], lakeId = '', compareValue = '', title = '' }) {
   const style = `body { font-family: Arial, Helvetica, sans-serif; color: #111; padding: 18px; } h1 { font-size: 18px; } table { border-collapse: collapse; width: 100%; } th, td { border: 1px solid #ddd; padding: 6px; } h3 { margin-top: 16px; }`;
 
   const fmtP = (p) => {
@@ -72,7 +72,6 @@ export function buildAdvancedStatReport({ result, advisories = [], paramCode = '
     if (result.range_distance != null) summaryRows.push(`<tr><th>Distance to bound/range</th><td>${fmt(result.range_distance)}</td></tr>`);
     if (result.range_distance1 != null || result.range_distance2 != null) summaryRows.push(`<tr><th>Range distance (group 1 / 2)</th><td>${result.range_distance1 != null ? fmt(result.range_distance1) : ''} / ${result.range_distance2 != null ? fmt(result.range_distance2) : ''}</td></tr>`);
     if (result.mu0 != null) summaryRows.push(`<tr><th>Reference (mu0)</th><td>${fmt(result.mu0)}</td></tr>`);
-    if (advisories.length) summaryRows.push(`<tr><th>Advisories</th><td>${advisories.map(a=>a.replace(/</g,'&lt;')).join('<br/>')}</td></tr>`);
   }
 
   let valuesSection = '';

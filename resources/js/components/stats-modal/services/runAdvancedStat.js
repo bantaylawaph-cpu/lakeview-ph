@@ -3,7 +3,7 @@ import { runOneSample, runTwoSample } from '../statsAdapter';
 import { fmt } from '../formatters';
 
 // Core orchestration for AdvancedStat execution.
-// Returns { computed, advisories } or throws typed errors with .code.
+// Returns { computed } or throws typed errors with .code.
 export default async function runAdvancedStat({
   inferredTest,
   selectedTest,
@@ -52,7 +52,6 @@ export default async function runAdvancedStat({
   const evalType = series?.evaluation_type;
 
   let computed;
-  const advisories = [];
 
   if (inferredTest === 'one-sample') {
     const values = (series?.sample_values || []).map(Number).filter(Number.isFinite);
@@ -85,22 +84,15 @@ export default async function runAdvancedStat({
       }
       computed = await runOneSample({ selectedTest, values, mu0, alpha, evalType, thrMin, thrMax, alt });
     }
-    // Advisories and distance to thresholds
-    const n = values.length;
-    if (n < 5) advisories.push('Fewer than 5 samples; low statistical power.');
-    else if (n < 10) advisories.push('Moderate sample size (<10); interpret with caution.');
     const mean = computed.mean != null ? computed.mean : (values.reduce((a,b)=>a+b,0)/values.length);
     const thrMinEff = series?.threshold_min ?? null;
     const thrMaxEff = series?.threshold_max ?? null;
     if (evalType === 'min' && thrMinEff != null) {
       const dist = mean - thrMinEff; computed.range_distance = dist;
-      advisories.push(dist >= 0 ? `Mean is above minimum by ${fmt(dist)}` : `Mean is below minimum by ${fmt(Math.abs(dist))}`);
     } else if (evalType === 'max' && thrMaxEff != null) {
       const dist = thrMaxEff - mean; computed.range_distance = dist;
-      advisories.push(dist >= 0 ? `Mean is below maximum by ${fmt(dist)}` : `Mean exceeds maximum by ${fmt(Math.abs(dist))}`);
     } else if (evalType === 'range' && thrMinEff != null && thrMaxEff != null) {
       let dist = 0; if (mean < thrMinEff) dist = thrMinEff - mean; else if (mean > thrMaxEff) dist = mean - thrMaxEff; computed.range_distance = dist;
-      advisories.push(dist === 0 ? 'Mean lies within acceptable range.' : (mean < thrMinEff ? `Mean is below range by ${fmt(dist)}` : `Mean is above range by ${fmt(dist)}`));
     }
   } else {
     const x = (series?.sample1_values || []).map(Number).filter(Number.isFinite);
@@ -112,9 +104,7 @@ export default async function runAdvancedStat({
       throw err;
     }
     computed = await runTwoSample({ selectedTest, sample1: x, sample2: y, alpha, evalType });
-    const n1 = x.length, n2 = y.length; const small = Math.min(n1, n2), large = Math.max(n1, n2);
-    if (small < 5) advisories.push('One group has fewer than 5 samples; statistical power is limited.');
-    if (large > 0 && small / large < 0.5) advisories.push('Sample size imbalance (smaller group < 50% of larger); consider cautious interpretation.');
+    const n1 = x.length, n2 = y.length;
     const thrMin = series?.threshold_min ?? null; const thrMax = series?.threshold_max ?? null;
     if (thrMin != null || thrMax != null) {
       const mean1 = computed.mean1 != null ? computed.mean1 : (x.reduce((a,b)=>a+b,0)/x.length);
@@ -128,13 +118,9 @@ export default async function runAdvancedStat({
       const d1 = distCalc(mean1); const d2 = distCalc(mean2);
       if (d1 != null) computed.range_distance1 = d1;
       if (d2 != null) computed.range_distance2 = d2;
-      if (evalType === 'range') {
-        if (d1 === 0 && d2 === 0) advisories.push('Both group means lie within the acceptable range.');
-        else if ((d1 === 0 && d2 !== 0) || (d2 === 0 && d1 !== 0)) advisories.push('Only one group mean lies within the acceptable range.');
-      }
     }
   }
 
   if (series?.events) computed = { ...computed, events: series.events };
-  return { computed, advisories };
+  return { computed };
 }

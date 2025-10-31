@@ -48,7 +48,6 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
   const [depthValue, setDepthValue] = useState('');
   const [availableDepths, setAvailableDepths] = useState([]);
   const [cl, setCl] = useState('0.95');
-  const [advisories, setAdvisories] = useState([]);
   const paramOptions = (parentParamOptions && parentParamOptions.length ? parentParamOptions : (params || []));
   const { standards, classes } = useStandardsAndClasses();
   const [paramEvaluationType, setParamEvaluationType] = useState(null);
@@ -167,9 +166,6 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
 
   useEffect(() => { if (result) setResult(null); }, [debouncedYearFrom, debouncedYearTo]);
 
-  useEffect(() => {
-    setAdvisories([]);
-  }, [inferredTest, compareValue, selectedTest, lakeId, classCode, organizationId, secondaryOrganizationId, depthMode, depthValue, debouncedYearFrom, debouncedYearTo, paramCode, appliedStandardId]);
 
   const evalTypeHook = useParamEvaluationType({
     enabled: inferredTest === 'one-sample',
@@ -181,7 +177,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
   useEffect(() => { setParamEvaluationType(evalTypeHook || null); }, [evalTypeHook]);
 
   const run = async () => {
-    setLoading(true); setError(null); setResult(null); setShowExactP(false); setAdvisories([]);
+    setLoading(true); setError(null); setResult(null); setShowExactP(false);
     if (!lakeId) { alertError('Missing Lake', 'Please select a Primary Lake before running the test.'); setLoading(false); return; }
     if (!organizationId) { alertError('Missing Dataset Source', 'Please select a Dataset Source before running the test.'); setLoading(false); return; }
   if (inferredTest !== 'two-sample' && !appliedStandardId) { alertError('Missing Applied Standard', 'Please select an Applied Standard before running the test.'); setLoading(false); return; }
@@ -197,7 +193,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
     }
     if (yearError) { alertError('Invalid Year Range', yearError); setLoading(false); return; }
     try {
-      const { computed, advisories } = await runAdvancedStat({
+      const { computed } = await runAdvancedStat({
         inferredTest,
         selectedTest,
         paramCode,
@@ -213,7 +209,6 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
         stationId,
         cl,
       });
-      setAdvisories(advisories);
       
       const minVal = computed.threshold_min != null ? Number(computed.threshold_min) : null;
       const maxVal = computed.threshold_max != null ? Number(computed.threshold_max) : null;
@@ -269,8 +264,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
     setResult(null);
     setError(null);
     setShowAllValues(false);
-  setShowExactP(false);
-    setAdvisories([]);
+    setShowExactP(false);
     setParamEvaluationType(null);
     setStationId('');
   };
@@ -287,7 +281,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
         return;
       }
       const title = `Advanced statistics - ${paramCode || ''}`;
-      const { css, bodyHtml } = buildAdvancedStatReport({ result, advisories, paramCode, paramOptions, lakes, lakeId, compareValue, title });
+      const { css, bodyHtml } = buildAdvancedStatReport({ result, paramCode, paramOptions, lakes, lakeId, compareValue, title });
       openPrintWindowWithStyle({ title, css, bodyHtml });
     } catch (e) {
       console.error('Export failed', e);
@@ -387,7 +381,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
       />
     </Popover>
 
-    <StatusMessages error={error} yearError={yearError} advisories={advisories} />
+    <StatusMessages error={error} yearError={yearError} />
 
     {result && (
       <div style={{ marginTop:8 }}>

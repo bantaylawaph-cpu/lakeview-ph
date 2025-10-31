@@ -284,11 +284,6 @@ export default function ResultPanel({ result, paramCode, paramOptions, classCode
       <div style={{ marginTop:8, padding:8, background:'rgba(255,255,255,0.02)', borderRadius:6 }}>
         <strong>Interpretation:</strong>
         <div style={{ marginTop:6 }}>{finalInterpretation}</div>
-        {result.significant != null && (
-          <div style={{ marginTop:6, fontSize:12, opacity:0.8 }}>
-            Statistical decision: {result.significant ? 'Reject null hypothesis (difference detected).' : 'Fail to reject null hypothesis.'}
-          </div>
-        )}
       </div>
       <ValuesTable result={result} lakes={lakes} lakeId={lakeId} compareValue={compareValue} showAllValues={showAllValues} setShowAllValues={setShowAllValues} fmt={fmt} />
     </div>
