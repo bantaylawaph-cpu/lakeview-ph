@@ -4,6 +4,7 @@
 export const lakeName = (lakeOptions = [], lakeId) => {
   if (!lakeId) return '';
   try {
+    if (String(lakeId) === 'custom') return 'Custom dataset';
     return lakeOptions.find((x) => String(x.id) === String(lakeId))?.name || String(lakeId);
   } catch {
     return String(lakeId);

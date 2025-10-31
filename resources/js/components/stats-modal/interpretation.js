@@ -103,6 +103,7 @@ export function buildInterpretation({
 
   // Lake name helpers
   const lakeNameById = (id) => {
+    if (String(id) === 'custom') return 'Custom dataset';
     const lk = lakes.find(l => String(l.id) === String(id));
     return lk ? (lk.name || `Lake ${lk.id}`) : (id == null ? 'Lake' : `Lake ${id}`);
   };
@@ -110,6 +111,7 @@ export function buildInterpretation({
   const lake2Id = (compareValue && String(compareValue).startsWith('lake:')) ? String(compareValue).split(':')[1] : null;
   const lake2Name = lake2Id ? lakeNameById(lake2Id) : null;
   const lake2Label = lake2Name || 'Lake 2';
+  const lake1Label = (String(lakeId) === 'custom') ? 'the custom dataset' : lake1Name;
 
   // Compliance classification
   // removed: compliance classifier and small sample caveat (not used in simplified text)
@@ -121,11 +123,11 @@ export function buildInterpretation({
     if (!Number.isFinite(p)) return '';
     return (p < alpha)
       ? join([
-          `There is enough statistical evidence to suggest that the ${paramLabel} of ${lake1Name} deviates from normality`,
+          `There is enough statistical evidence to suggest that the ${paramLabel} of ${lake1Label} deviates from normality`,
           'Use non-parametric tests: Wilcoxon signed-rank (one-sample), Mann–Whitney U or Mood’s median (two-sample); consider robust methods where appropriate'
         ])
       : join([
-          `There is not enough statistical evidence to suggest that the ${paramLabel} of ${lake1Name} deviates from normality`,
+          `There is not enough statistical evidence to suggest that the ${paramLabel} of ${lake1Label} deviates from normality`,
           'Parametric tests are reasonable: one-sample t-test; Student’s t-test or Welch (two-sample); for equivalence, TOST t-test'
         ]);
   }
@@ -136,8 +138,8 @@ export function buildInterpretation({
   if (result.test_used === 'levene') {
     if (!Number.isFinite(p)) return '';
     return (p < alpha)
-      ? join([`There is enough statistical evidence to suggest that the variances of ${paramLabel} differ between ${lake1Name} and ${lake2Label}`, 'Prefer Welch’s t-test; if non-normal, use Mann–Whitney or Mood’s median'])
-      : join([`There is not enough statistical evidence to suggest that the variances of ${paramLabel} differ between ${lake1Name} and ${lake2Label}`, 'Student’s t-test is acceptable if normal; otherwise use non-parametric tests']);
+      ? join([`There is enough statistical evidence to suggest that the variances of ${paramLabel} differ between ${lake1Label} and ${lake2Label}`, 'Prefer Welch’s t-test; if non-normal, use Mann–Whitney or Mood’s median'])
+      : join([`There is not enough statistical evidence to suggest that the variances of ${paramLabel} differ between ${lake1Label} and ${lake2Label}`, 'Student’s t-test is acceptable if normal; otherwise use non-parametric tests']);
   }
 
   // Identify one-sample vs two-sample test categories
@@ -161,8 +163,8 @@ export function buildInterpretation({
         if (Number.isFinite(pTost) && Number.isFinite(alpha)) isEquiv = pTost < alpha;
       }
       const primary = isEquiv === true
-        ? `There is enough statistical evidence to suggest that the ${centerWord} of ${paramLabel} in ${lake1Name} is within the acceptable range`
-        : `There is not enough statistical evidence to suggest that the ${centerWord} of ${paramLabel} in ${lake1Name} is within the acceptable range`;
+        ? `There is enough statistical evidence to suggest that the ${centerWord} of ${paramLabel} in ${lake1Label} is within the acceptable range`
+        : `There is not enough statistical evidence to suggest that the ${centerWord} of ${paramLabel} in ${lake1Label} is within the acceptable range`;
       const therefore = isEquiv === true
         ? 'Therefore, this suggests compliance with the acceptable range.'
         : 'Therefore, compliance with the acceptable range is not supported.';
@@ -180,8 +182,8 @@ export function buildInterpretation({
     }
     if (!Number.isFinite(p)) return '';
     const primary = (p < alpha)
-      ? `There is enough statistical evidence to suggest that the ${centralLabel} of ${paramLabel} in ${lake1Name} is significantly ${direction} the guideline`
-      : `There is not enough statistical evidence to suggest that the ${centralLabel} of ${paramLabel} in ${lake1Name} is ${direction} the guideline`;
+      ? `There is enough statistical evidence to suggest that the ${centralLabel} of ${paramLabel} in ${lake1Label} is significantly ${direction} the guideline`
+      : `There is not enough statistical evidence to suggest that the ${centralLabel} of ${paramLabel} in ${lake1Label} is ${direction} the guideline`;
 
     // Compliance framing
     const therefore = (() => {
@@ -222,16 +224,16 @@ export function buildInterpretation({
     if (p < alpha) {
       let dirWord = 'different from';
       if (Number.isFinite(c1) && Number.isFinite(c2) && c1 !== c2) dirWord = c1 > c2 ? 'higher than' : 'lower than';
-      const primary = `There is enough statistical evidence to suggest that ${lake1Name} ${paramLabel} is significantly ${dirWord} ${lake2Label}’s.`;
+      const primary = `There is enough statistical evidence to suggest that ${lake1Label} ${paramLabel} is significantly ${dirWord} ${lake2Label}’s.`;
       // Add a parameter-focused favorability sentence (not overall water quality)
       let favor = null;
       if (Number.isFinite(c1) && Number.isFinite(c2) && c1 !== c2 && typeof higherIsWorse === 'boolean') {
-        const favorableLake = higherIsWorse ? (c1 < c2 ? lake1Name : lake2Label) : (c1 > c2 ? lake1Name : lake2Label);
+        const favorableLake = higherIsWorse ? (c1 < c2 ? lake1Label : lake2Label) : (c1 > c2 ? lake1Label : lake2Label);
         favor = `Based on this parameter alone, ${favorableLake} shows a more favorable status for this parameter.`;
       }
       return join([primary, favor]);
     }
-    return `There is not enough statistical evidence to suggest a difference in ${paramLabel} between ${lake1Name} and ${lake2Label}.`;
+    return `There is not enough statistical evidence to suggest a difference in ${paramLabel} between ${lake1Label} and ${lake2Label}.`;
   }
 
   // Fallback (should rarely hit)

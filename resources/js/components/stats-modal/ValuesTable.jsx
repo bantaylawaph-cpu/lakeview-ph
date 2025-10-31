@@ -20,8 +20,11 @@ export default function ValuesTable({ result, lakes, lakeId, compareValue, showA
 
   const groupLabel = (a,b,idx) => {
     if (!(a && b)) return idx === 1 ? 'Group 1' : 'Group 2';
-    const lake = lakes.find(l => String(l.id) === String(lakeId));
-    if (idx === 1) return lake?.name ? `${lake.name}` : 'Group 1';
+    if (idx === 1) {
+      if (String(lakeId) === 'custom') return 'Custom dataset';
+      const lake = lakes.find(l => String(l.id) === String(lakeId));
+      return lake?.name ? `${lake.name}` : 'Group 1';
+    }
     if (compareValue && String(compareValue).startsWith('lake:')){
       const otherId = String(compareValue).split(':')[1];
       const lake2 = lakes.find(l => String(l.id) === String(otherId));
@@ -81,7 +84,7 @@ export default function ValuesTable({ result, lakes, lakeId, compareValue, showA
   return (
     <div style={{ marginTop:10, padding:10, background:'rgba(255,255,255,0.02)', borderRadius:6 }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-        <strong>Data used</strong>
+        <strong>{String(lakeId) === 'custom' && one ? `Custom dataset values (${one.length})` : 'Data used'}</strong>
         <div style={{ display:'flex', gap:8 }}>
           <button className="pill-btn" onClick={()=>setShowAllValues(s=>!s)}>{showAll ? `Show first ${limit}` : 'Show all'}</button>
           <button className="pill-btn" onClick={copyValues}>Copy</button>

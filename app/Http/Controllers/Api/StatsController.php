@@ -10,6 +10,48 @@ use Carbon\Carbon;
 class StatsController extends Controller
 {
     /**
+     * POST /api/stats/thresholds
+     * Returns threshold metadata for a parameter given an explicit class and optional standard.
+     * Request:
+     *   parameter_code (required) string
+     *   class_code (required) string
+     *   applied_standard_id (optional) int
+     * Response: { evaluation_type: 'min'|'max'|'range'|null, threshold_min?: number, threshold_max?: number, standard_code?: string, applied_standard_id_used?: number }
+     */
+    public function thresholds(Request $request)
+    {
+        $data = $request->validate([
+            'parameter_code' => 'required|string',
+            'class_code' => 'required|string',
+            'applied_standard_id' => 'nullable|integer|exists:wq_standards,id',
+        ]);
+
+        $param = \DB::table('parameters')
+            ->whereRaw('LOWER(code) = ?', [strtolower($data['parameter_code'])])
+            ->first();
+        if (!$param) return response()->json(['error' => 'Parameter not found'], 404);
+
+        $class = $data['class_code'];
+        $requestedStdId = $data['applied_standard_id'] ?? null;
+        // Since client explicitly provides class_code, do not fallback to no-class rows unless necessary
+        $thrRow = self::findThresholdRow($param->id, $class, $requestedStdId, /* allowClassFallback */ true);
+        $thrMin = $thrRow ? ($thrRow->min_value ?? null) : null;
+        $thrMax = $thrRow ? ($thrRow->max_value ?? null) : null;
+        $evalType = null;
+        if ($thrMin !== null && $thrMax !== null) $evalType = 'range';
+        elseif ($thrMin !== null) $evalType = 'min';
+        elseif ($thrMax !== null) $evalType = 'max';
+
+        return response()->json([
+            'threshold_min' => $thrMin,
+            'threshold_max' => $thrMax,
+            'evaluation_type' => $evalType,
+            'standard_code' => $thrRow ? ($thrRow->standard_code ?? null) : null,
+            'applied_standard_id_used' => $thrRow ? ($thrRow->standard_id ?? null) : null,
+            'class_code_used' => $thrRow ? ($thrRow->class_code ?? $class) : $class,
+        ]);
+    }
+    /**
      * GET /api/stats/depths
      * Returns distinct sample depths (depth_m) for a parameter (by code) optionally filtered by lake and date range.
      * Query params:

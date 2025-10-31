@@ -19,6 +19,7 @@ export default async function runAdvancedStat({
   secondaryOrganizationId,
   stationId,
   cl = '0.95',
+  customValues,
 }) {
   const alpha = 1 - Number(cl || '0.95');
 
@@ -48,8 +49,44 @@ export default async function runAdvancedStat({
     if (orgIds.some(v => v)) body.organization_ids = lakeIds.map((_, idx) => orgIds[idx] ?? null);
   }
 
-  const series = await apiPublic('/stats/series', { method: 'POST', body });
-  const evalType = series?.evaluation_type;
+  const isCustomPrimary = String(lakeId) === 'custom';
+  let series;
+  let evalType = null;
+
+  if (isCustomPrimary) {
+    const otherLake = (compareValue && String(compareValue).startsWith('lake:')) ? Number(String(compareValue).split(':')[1]) : undefined;
+    if (inferredTest === 'one-sample') {
+      // Custom dataset vs class thresholds
+      const classCode = (compareValue && String(compareValue).startsWith('class:')) ? String(compareValue).split(':')[1] : '';
+      const thr = await apiPublic('/stats/thresholds', { method: 'POST', body: { parameter_code: paramCode, applied_standard_id: appliedStandardId || undefined, class_code: classCode || undefined } });
+      series = {
+        sample_values: (customValues || []).map(Number).filter(Number.isFinite),
+        threshold_min: thr?.threshold_min ?? null,
+        threshold_max: thr?.threshold_max ?? null,
+        evaluation_type: thr?.evaluation_type ?? null,
+      };
+      evalType = series.evaluation_type;
+    } else {
+      // Custom dataset vs lake: fetch sample values only for the other lake as one-sample
+      const body2 = {
+        parameter_code: paramCode,
+        lake_id: Number(otherLake),
+        date_from: yearFrom ? `${yearFrom}-01-01` : undefined,
+        date_to: yearTo ? `${yearTo}-12-31` : undefined,
+      };
+      if (depthMode === 'single' && depthValue) body2.depth_m = Number(depthValue);
+      if (secondaryOrganizationId) body2.organization_id = secondaryOrganizationId;
+      const res2 = await apiPublic('/stats/series', { method: 'POST', body: body2 });
+      series = {
+        sample1_values: (customValues || []).map(Number).filter(Number.isFinite),
+        sample2_values: (res2?.sample_values || []).map(Number).filter(Number.isFinite),
+      };
+      evalType = res2?.evaluation_type || null;
+    }
+  } else {
+    series = await apiPublic('/stats/series', { method: 'POST', body });
+    evalType = series?.evaluation_type;
+  }
 
   let computed;
 

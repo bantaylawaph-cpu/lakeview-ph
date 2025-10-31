@@ -334,13 +334,15 @@ export function buildAdvancedStatReport({ result, paramCode = '', paramOptions =
     valuesSection = `<h3>Data Used</h3><table><thead><tr><th>Sampled at</th><th>Lake</th><th>Station</th><th>Value</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
   } else if (Array.isArray(result?.sample_values) && result.sample_values.length) {
     const rowsHtml = result.sample_values.map(v => `<tr><td>${escapeHtml(fmt(v))}</td></tr>`).join('');
-    valuesSection = `<h3>Data Used</h3><table><thead><tr><th>Value</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
+    const header = String(lakeId) === 'custom' ? 'Custom dataset values' : 'Value';
+    valuesSection = `<h3>Data Used</h3><table><thead><tr><th>${escapeHtml(header)}</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
   } else if (Array.isArray(result?.sample1_values) || Array.isArray(result?.sample2_values)) {
     const a = Array.isArray(result?.sample1_values) ? result.sample1_values : [];
     const b = Array.isArray(result?.sample2_values) ? result.sample2_values : [];
     const maxLen = Math.max(a.length, b.length);
     const group1 = (()=>{
       if (!Array.isArray(a) || !Array.isArray(b)) return 'Group 1';
+      if (String(lakeId) === 'custom') return 'Custom dataset';
       const lk = lakes.find(l => String(l.id) === String(lakeId));
       return lk?.name || 'Group 1';
     })();
@@ -385,4 +387,3 @@ export function buildAdvancedStatReport({ result, paramCode = '', paramOptions =
 }
 
 export default { openPrintWindow, openPrintWindowWithStyle, buildAdvancedStatReport };
-

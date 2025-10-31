@@ -1,7 +1,7 @@
 import React from 'react';
 import LoadingSpinner from '../../LoadingSpinner';
 
-export default function LakeSelect({ lakes = [], value = '', onChange = () => {}, placeholder = 'Select a lake', style = {}, loading = false }) {
+export default function LakeSelect({ lakes = [], value = '', onChange = () => {}, placeholder = 'Select a lake', style = {}, loading = false, includeCustom = false, customValue = 'custom', customLabel = 'Custom dataset' }) {
   return (
     <div style={{ position: 'relative' }}>
       <select
@@ -12,6 +12,9 @@ export default function LakeSelect({ lakes = [], value = '', onChange = () => {}
         style={{ width:'100%', minWidth:0, boxSizing:'border-box', padding:'10px 12px', height:40, lineHeight:'20px', paddingRight: loading ? 44 : 12, ...style }}
       >
         <option value="">{placeholder}</option>
+        {includeCustom ? (
+          <option value={customValue}>{customLabel}</option>
+        ) : null}
         {lakes.map(l => {
           const raw = l.class_code || l.classification || l.class || '';
           const code = raw ? String(raw).replace(/^class\s*/i, '') : '';

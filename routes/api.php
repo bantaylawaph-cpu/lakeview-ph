@@ -365,6 +365,8 @@ Route::get('/options/lake-municipalities', [LakeOptionsController::class, 'munic
 Route::get('/stats/depths', [StatsController::class, 'depths']);
 Route::get('/stats/stations', [StatsController::class, 'stations']);
 Route::post('/stats/series', [StatsController::class, 'series']);
+// Lightweight threshold metadata lookup for custom datasets (no lake required)
+Route::post('/stats/thresholds', [StatsController::class, 'thresholds']);
 Route::get('/population/estimate', [PopulationController::class, 'estimate']);
 Route::get('/tiles/pop/{z}/{x}/{y}', [PopulationController::class, 'tile'])
     ->where(['z' => '[0-9]+', 'x' => '[0-9]+', 'y' => '[0-9]+']);

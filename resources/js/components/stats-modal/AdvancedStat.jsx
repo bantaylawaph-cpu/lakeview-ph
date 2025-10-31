@@ -28,6 +28,7 @@ import infoSectionsContent from './content/advancedStatHelp';
 import { lakeName } from './utils/shared';
 import { openPrintWindowWithStyle, buildAdvancedStatReport } from './utils/exportPdf';
 import runAdvancedStat from './services/runAdvancedStat';
+import CustomDatasetModal from './ui/CustomDatasetModal';
 
 function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOptions = [] }, ref) {
   const [paramCode, setParamCode] = useState('');
@@ -53,6 +54,8 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
   const [paramEvaluationType, setParamEvaluationType] = useState(null);
 
   const [stationId, setStationId] = useState('');
+  const [customValues, setCustomValues] = useState([]);
+  const [customOpen, setCustomOpen] = useState(false);
 
   const containerRef = useRef(null);
   const gearBtnRef = useRef(null);
@@ -61,11 +64,12 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
 
   const debouncedYearFrom = useDebounce(yearFrom);
   const debouncedYearTo = useDebounce(yearTo);
-  const { events: primaryEvents } = useSampleEvents(lakeId, null, 'custom', yearFrom, yearTo);
+  const { events: primaryEvents } = useSampleEvents(lakeId && String(lakeId) !== 'custom' ? lakeId : null, null, 'custom', yearFrom, yearTo);
   // Unbounded events for deriving stable org options and year dropdowns
-  const { events: primaryAllEvents } = useSampleEvents(lakeId, null, 'all', '', '');
+  const { events: primaryAllEvents } = useSampleEvents(lakeId && String(lakeId) !== 'custom' ? lakeId : null, null, 'all', '', '');
   const otherLakeId = compareValue && String(compareValue).startsWith('lake:') ? Number(String(compareValue).split(':')[1]) : null;
   const { events: secondaryEvents } = useSampleEvents(otherLakeId, null, 'custom', yearFrom, yearTo);
+  const { events: secondaryAllEvents } = useSampleEvents(otherLakeId, null, 'all', '', '');
 
   const orgOptions = React.useMemo(() => deriveOrgOptions(primaryAllEvents), [primaryAllEvents]);
   const secondaryOrgOptions = React.useMemo(() => deriveOrgOptions(secondaryEvents), [secondaryEvents]);
@@ -105,7 +109,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
     compareValue,
     yearFrom: debouncedYearFrom,
     yearTo: debouncedYearTo,
-    organizationId,
+    organizationId: String(lakeId) === 'custom' ? secondaryOrganizationId : organizationId,
     stationId,
     inferredTest,
   });
@@ -118,11 +122,15 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
 
   // Derive available years from the currently selected dataset (primary lake + selected organization)
   const availableYears = React.useMemo(() => {
-    const events = Array.isArray(primaryAllEvents) ? primaryAllEvents : [];
-    const filtered = organizationId
+    const isCustom = String(lakeId) === 'custom';
+    // Pick source events for deriving years
+    const events = isCustom && otherLakeId ? (Array.isArray(secondaryAllEvents) ? secondaryAllEvents : []) : (Array.isArray(primaryAllEvents) ? primaryAllEvents : []);
+    // Filter by the correct organization selector
+    const orgFilterId = isCustom ? secondaryOrganizationId : organizationId;
+    const filtered = orgFilterId
       ? events.filter(ev => {
           const oid = ev.organization_id ?? ev.organization?.id ?? null;
-          return String(oid || '') === String(organizationId || '');
+          return String(oid || '') === String(orgFilterId || '');
         })
       : events;
     const set = new Set();
@@ -133,7 +141,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
       if (!Number.isNaN(y)) set.add(String(y));
     }
     return Array.from(set).sort((a,b)=> Number(b) - Number(a));
-  }, [primaryAllEvents, organizationId]);
+  }, [primaryAllEvents, secondaryAllEvents, organizationId, secondaryOrganizationId, lakeId, compareValue]);
 
   useEffect(() => {
     if ((selectedTest === 'tost' || selectedTest === 'tost_wilcoxon') && (!paramHasRange || inferredTest !== 'one-sample')) {
@@ -179,7 +187,8 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
   const run = async () => {
     setLoading(true); setError(null); setResult(null); setShowExactP(false);
     if (!lakeId) { alertError('Missing Lake', 'Please select a Primary Lake before running the test.'); setLoading(false); return; }
-    if (!organizationId) { alertError('Missing Dataset Source', 'Please select a Dataset Source before running the test.'); setLoading(false); return; }
+    const isCustom = String(lakeId) === 'custom';
+    if (!isCustom && !organizationId) { alertError('Missing Dataset Source', 'Please select a Dataset Source before running the test.'); setLoading(false); return; }
   if (inferredTest !== 'two-sample' && !appliedStandardId) { alertError('Missing Applied Standard', 'Please select an Applied Standard before running the test.'); setLoading(false); return; }
     if (!paramCode) { alertError('Missing Parameter', 'Please select a Parameter before running the test.'); setLoading(false); return; }
     if (!selectedTest) { alertError('Missing Test', 'Please select a Test before running the test.'); setLoading(false); return; }
@@ -189,7 +198,8 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
       if (!secondaryOrganizationId) { alertError('Missing Secondary Dataset Source', 'Please select a Secondary Dataset Source for the comparison lake.'); setLoading(false); return; }
     } else if (inferredTest === 'one-sample') {
       if (!compareValue) { alertError('Missing Comparison', 'Please select a Class or Lake to compare against.'); setLoading(false); return; }
-      if (String(compareValue).startsWith('class:') && stationId === '') { alertError('Missing Station Selection', 'Please select a station or "All Stations" for lake vs class threshold tests.'); setLoading(false); return; }
+      if (!isCustom && String(compareValue).startsWith('class:') && stationId === '') { alertError('Missing Station Selection', 'Please select a station or "All Stations" for lake vs class threshold tests.'); setLoading(false); return; }
+      if (isCustom && (!Array.isArray(customValues) || customValues.length < 2)) { alertError('Not enough data', 'Enter at least 2 values in your custom dataset.'); setLoading(false); return; }
     }
     if (yearError) { alertError('Invalid Year Range', yearError); setLoading(false); return; }
     try {
@@ -208,6 +218,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
         secondaryOrganizationId,
         stationId,
         cl,
+        customValues,
       });
       
       const minVal = computed.threshold_min != null ? Number(computed.threshold_min) : null;
@@ -267,6 +278,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
     setShowExactP(false);
     setParamEvaluationType(null);
     setStationId('');
+    setCustomValues([]);
   };
 
   const exportPdf = async () => {
@@ -306,7 +318,12 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
   <div>
   <div style={{ display:'grid', gridTemplateColumns:'1fr 2fr 1fr 1fr', gridTemplateRows:'repeat(2, auto)', gap:10, alignItems:'start', fontSize:13, minWidth:0 }}>
       <div style={{ gridColumn: '1 / span 1', minWidth:0 }}>
-        <LakeSelect lakes={lakes} value={lakeId} onChange={e=>{ setLakeId(e.target.value); setResult(null); }} />
+        <div style={{ display:'flex', gap:6, alignItems:'center' }}>
+          <LakeSelect includeCustom lakes={lakes} value={lakeId} onChange={e=>{ setLakeId(e.target.value); setResult(null); }} />
+          {String(lakeId) === 'custom' ? (
+            <button className="pill-btn" type="button" onClick={() => setCustomOpen(true)} title="Enter custom values" style={{ whiteSpace:'nowrap' }}>Enter values</button>
+          ) : null}
+        </div>
       </div>
       <div style={{ gridColumn: '2 / span 1', minWidth:0 }}>
         <CompareSelect lakes={lakes} classes={classes} lakeId={lakeId} value={compareValue} onChange={e=>{
@@ -314,7 +331,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
         }} />
       </div>
       <div style={{ gridColumn: '3 / span 1', minWidth:0 }}>
-        <OrgSelect required options={orgOptions} value={organizationId} onChange={e=>{ setOrganizationId(e.target.value); setResult(null); }} />
+        <OrgSelect required options={orgOptions} value={organizationId} onChange={e=>{ setOrganizationId(e.target.value); setResult(null); }} placeholder={String(lakeId) === 'custom' ? 'Custom dataset' : 'Dataset Source'} disabled={String(lakeId) === 'custom'} />
       </div>
       {compareValue && String(compareValue).startsWith('lake:') ? (
         <div style={{ gridColumn: '4 / span 1', minWidth:0 }}>
@@ -322,7 +339,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
         </div>
       ) : (
         <div style={{ gridColumn: '4 / span 1', minWidth:0 }}>
-          <StationSelect options={stationOptions} value={stationId} onChange={e=>{ setStationId(e.target.value); setResult(null); }} disabled={!organizationId || !compareValue || !String(compareValue).startsWith('class:')} />
+          <StationSelect options={stationOptions} value={stationId} onChange={e=>{ setStationId(e.target.value); setResult(null); }} disabled={String(lakeId) === 'custom' || !organizationId || !compareValue || !String(compareValue).startsWith('class:')} />
         </div>
       )}
 
@@ -400,6 +417,11 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
         />
       </div>
     )}
+    <CustomDatasetModal
+      open={customOpen}
+      onClose={() => setCustomOpen(false)}
+      onSave={(vals)=>{ setCustomValues(vals); setCustomOpen(false); setResult(null); }}
+    />
   <InfoModal open={infoOpen} onClose={() => setInfoOpen(false)} title="Advanced Statistics – What it does and how to use it" sections={infoSectionsContent} />
   </div>
     </div>
