@@ -280,8 +280,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
         await alertError('No results to export', 'Please run a test before exporting results to PDF.');
         return;
       }
-      const title = `Advanced statistics - ${paramCode || ''}`;
-      const { css, bodyHtml } = buildAdvancedStatReport({ result, paramCode, paramOptions, lakes, lakeId, compareValue, title });
+      const { css, bodyHtml, title } = buildAdvancedStatReport({ result, paramCode, paramOptions, lakes, lakeId, compareValue, cl });
       openPrintWindowWithStyle({ title, css, bodyHtml });
     } catch (e) {
       console.error('Export failed', e);
