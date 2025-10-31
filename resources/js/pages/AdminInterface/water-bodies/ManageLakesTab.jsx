@@ -168,7 +168,7 @@ function ManageLakesTab() {
       { id: "municipality", header: "Municipality", accessor: "municipality", width: 180, className: "col-sm-hide" },
       { id: "lat", header: "Lat", accessor: "lat", width: 120, className: "col-md-hide", _optional: true },
       { id: "lon", header: "Lon", accessor: "lon", width: 120, className: "col-md-hide", _optional: true },
-      { id: "classification", header: "DENR Class", accessor: "classification", width: 160, render: (row) => row.class_code || "" },
+      { id: "classification", header: "Water Body Classification", accessor: "classification", width: 200, render: (row) => row.class_code || "" },
   { id: "surface_area_km2", header: "Surface Area (km²)", accessor: "surface_area_km2", width: 170, className: "col-sm-hide" },
       { id: "elevation_m", header: "Surface Elevation (m)", accessor: "elevation_m", width: 150, className: "col-md-hide", _optional: true },
       { id: "mean_depth_m", header: "Average Depth (m)", accessor: "mean_depth_m", width: 160, className: "col-md-hide", _optional: true },
@@ -777,7 +777,7 @@ function ManageLakesTab() {
 
   const classFilterOptions = useMemo(
     () => [
-      { value: "", label: "All DENR classes" },
+      { value: "", label: "All Classifications" },
       ...classOptions.map((item) => ({
         value: item.code,
         label: item.name ? `${item.code} - ${item.name}` : item.code,
@@ -858,7 +858,7 @@ function ManageLakesTab() {
           },
           {
             id: "class_code",
-            label: "DENR Class",
+            label: "Water Body Classification",
             type: "select",
             value: adv.class_code ?? "",
             onChange: (value) => setAdv((state) => ({ ...state, class_code: value })),

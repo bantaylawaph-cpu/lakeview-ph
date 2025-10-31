@@ -319,7 +319,7 @@ export default function LakeForm({
         </label>
 
         <label className="lv-field">
-          <span>DENR Classification</span>
+          <span>Water Body Classification</span>
           <select
             value={form.class_code ?? ""}
             onChange={(e) => setForm({ ...form, class_code: e.target.value })}

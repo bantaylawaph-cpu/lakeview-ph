@@ -221,7 +221,7 @@ function OverviewTab({
   <div><strong>Municipality/City:</strong></div>
         <div title={municipalityDisplay || ''}>{municipalityDisplay || '–'}</div>
 
-        <div><strong>Lake DENR Classification:</strong></div>
+        <div><strong>Water Body Classification:</strong></div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <div title={denrClassLabel || lake?.denr_classification || ''} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{denrClassLabel || lake?.denr_classification || '–'}</div>
           <a

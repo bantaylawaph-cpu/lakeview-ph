@@ -248,8 +248,8 @@ export default function FilterTray({ open, onClose, onApply, initial = {} }) {
           </div>
 
           <div className="ft-row full-row">
-            <label>Water Body Class</label>
-            <select aria-label="Water Body Class" value={classCode} onChange={(e) => setClassCode(e.target.value)} disabled={loading}>
+            <label>Water Body Classification</label>
+            <select aria-label="Water Body Classification" value={classCode} onChange={(e) => setClassCode(e.target.value)} disabled={loading}>
               <option value="">(any)</option>
               {classOptions.map((c) => (
                 <option key={c.code || c.name} value={c.code || c.name}>{c.name || c.code}</option>
