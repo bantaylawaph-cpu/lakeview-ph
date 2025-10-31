@@ -62,6 +62,12 @@ export default function OrgWQTestModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  const formatDepth = (d) => {
+    const n = Number(d);
+    if (!Number.isFinite(n)) return d ?? '—';
+    return n === 0 ? 'Surface' : d;
+  };
+
   useEffect(() => {
     setSampleEvent(record || null);
   }, [record, open]);
@@ -414,7 +420,7 @@ export default function OrgWQTestModal({
                             />
                           </div>
                         ) : (
-                          <>{r.depth_m ?? 0}</>
+                          <>{formatDepth(r.depth_m ?? 0)}</>
                         )}
                       </td>
                       <td>{pfLabel(r.pass_fail)}</td>

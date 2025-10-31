@@ -83,6 +83,12 @@ export default function WQTestWizard({
 }) {
   const [resolvedUserRole, setResolvedUserRole] = useState(currentUserRole);
 
+  const formatDepth = (d) => {
+    const n = Number(d);
+    if (!Number.isFinite(n)) return d ?? '—';
+    return n === 0 ? 'Surface' : d;
+  };
+
   useEffect(() => {
     if (currentUserRole) return; 
     let mounted = true;
@@ -878,7 +884,7 @@ export default function WQTestWizard({
                             <td>{p ? `${p.code} — ${p.name}` : r.parameter_code || "—"}</td>
                             <td>{r.value !== "" && r.value !== null ? r.value : "—"}</td>
                             <td>{r.unit || p?.unit || "—"}</td>
-                            <td>{r.depth_m !== "" && r.depth_m !== null ? r.depth_m : "—"}</td>
+                            <td>{r.depth_m !== "" && r.depth_m !== null ? formatDepth(r.depth_m) : "—"}</td>
                             <td>{r.remarks || "—"}</td>
                           </tr>
                         );

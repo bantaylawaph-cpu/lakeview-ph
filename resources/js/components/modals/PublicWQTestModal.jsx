@@ -108,6 +108,12 @@ export default function PublicWQTestModal({ open, onClose, record, basePath = "/
         : [];
   const rows = Array.isArray(rawRows) ? rawRows.map(normalizeRow) : [];
 
+  const formatDepth = (d) => {
+    const n = Number(d);
+    if (!Number.isFinite(n)) return d ?? '—';
+    return n === 0 ? 'Surface' : d;
+  };
+
   return (
     <Modal
       open={open}
@@ -194,7 +200,7 @@ export default function PublicWQTestModal({ open, onClose, record, basePath = "/
                         <td style={{ background: 'transparent', color: '#fff' }}>{r.code ? `${r.code} — ${r.name || ''}` : (r.name || '—')}</td>
                         <td style={{ background: 'transparent', color: '#fff' }}>{r.value ?? '—'}</td>
                         <td style={{ background: 'transparent', color: '#fff' }}>{r.unit || '—'}</td>
-                        <td style={{ background: 'transparent', color: '#fff' }}>{r.depth_m ?? 0}</td>
+                        <td style={{ background: 'transparent', color: '#fff' }}>{formatDepth(r.depth_m ?? 0)}</td>
                         <td style={{ background: 'transparent', color: '#fff' }}>{(r.pass_fail ?? '').toString().toUpperCase() || '—'}</td>
                         <td style={{ background: 'transparent', color: '#fff' }}>{r.remarks || '—'}</td>
                       </tr>
