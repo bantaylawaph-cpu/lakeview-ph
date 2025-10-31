@@ -39,20 +39,16 @@ function WaterQualityTab({ lake }) {
   const [initialLoading, setInitialLoading] = useState(true);
   const initialLoadedRef = useRef(false);
   const [bucket, setBucket] = useState("month"); // 'year' | 'quarter' | 'month'
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [timeRange, setTimeRange] = useState("all");
+  // Year range UI replacing the old Range selector
+  const [yearFrom, setYearFrom] = useState("");
+  const [yearTo, setYearTo] = useState("");
+  const [yearOptions, setYearOptions] = useState([]); // full set of years for selected dataset
   const [infoOpen, setInfoOpen] = useState(false);
   const [infoContent, setInfoContent] = useState({ title: '', sections: [] });
 
-  // Apply range helper same as StatsModal
-  const fmtIso = (d) => {
-    if (!d) return "";
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${dd}`;
-  };
+  // ISO helpers
+  const startOfYearIso = (y) => (y ? `${y}-01-01` : "");
+  const endOfYearIso = (y) => (y ? `${y}-12-31` : "");
 
   // Load org options for this lake based on tests seen (client-side pass 1)
   const fetchTests = async (org = "") => {
@@ -60,12 +56,10 @@ function WaterQualityTab({ lake }) {
     setLoading(true);
     try {
       // Use the most recent test date as the reference 'today' when available, otherwise use actual today
-      const today = latestTestDate || new Date();
-      const lim = (timeRange === "all" || timeRange === "custom") ? 5000 : 1000;
-      let fromEff, toEff;
-      if (timeRange === 'all') { fromEff = undefined; toEff = undefined; }
-    else if (!dateFrom && !dateTo) { const d = new Date(today); d.setFullYear(d.getFullYear() - 5); fromEff = fmtIso(d); toEff = fmtIso(today); }
-    else { fromEff = dateFrom || undefined; toEff = dateTo || undefined; }
+      // When year range is selected, query that inclusive span; otherwise fetch all (bounded by limit)
+      const lim = 5000;
+      const fromEff = (yearFrom && yearTo) ? startOfYearIso(yearFrom) : undefined;
+      const toEff = (yearFrom && yearTo) ? endOfYearIso(yearTo) : undefined;
 
       const qs = buildQuery({
         lake_id: lakeId,
@@ -131,33 +125,52 @@ function WaterQualityTab({ lake }) {
     }
   };
 
-  // Compute latest test date (sampled_at) from fetched tests. Used as the reference for range selectors.
-  const latestTestDate = useMemo(() => {
-    if (!tests || tests.length === 0) return null;
-    let max = null;
-    for (const t of tests) {
-      if (!t) continue;
-      const d = new Date(t.sampled_at);
-      if (isNaN(d.getTime())) continue;
-      if (!max || d > max) max = d;
-    }
-    return max;
-  }, [tests]);
+  // previously used to anchor ranges by latest date; not needed with explicit year span
 
-  const applyRange = (key) => {
-    const today = latestTestDate || new Date();
-    let from = "";
-    let to = fmtIso(today);
-    if (key === "all") { from = ""; to = ""; }
-    else if (key === "custom") { from = dateFrom || ""; to = dateTo || ""; }
-    else if (key === "5y") { const d = new Date(today); d.setFullYear(d.getFullYear() - 5); from = fmtIso(d); }
-    else if (key === "3y") { const d = new Date(today); d.setFullYear(d.getFullYear() - 3); from = fmtIso(d); }
-    else if (key === "1y") { const d = new Date(today); d.setFullYear(d.getFullYear() - 1); from = fmtIso(d); }
-    else if (key === "6mo") { const d = new Date(today); d.setMonth(d.getMonth() - 6); from = fmtIso(d); }
-    setDateFrom(from);
-    setDateTo(to === "" ? "" : to);
-    setTimeRange(key);
-  };
+  // Fetch full year options (ignoring current year filter) whenever lake or dataset changes
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      if (!lakeId) { if (mounted) { setYearOptions([]); setYearFrom(''); setYearTo(''); } return; }
+      try {
+        const lim = 5000; // generous upper bound
+        const qs = buildQuery({ lake_id: lakeId, organization_id: orgId || undefined, limit: lim });
+        const key = `public:sample-years:lake:${lakeId}:org:${orgId||''}:lim:${lim}`;
+        const TTL = 5 * 60 * 1000;
+        const cached = cache.get(key, { maxAgeMs: TTL });
+        let rows = Array.isArray(cached) ? cached : null;
+        if (!rows) {
+          const res = await apiPublic(`/public/sample-events${qs}`);
+          rows = Array.isArray(res?.data) ? res.data : [];
+          cache.set(key, rows, { ttlMs: TTL });
+        }
+        if (!mounted) return;
+        const set = new Set();
+        for (const t of rows) {
+          if (!t?.sampled_at) continue;
+          const y = new Date(t.sampled_at).getFullYear();
+          if (!Number.isNaN(y)) set.add(String(y));
+        }
+        const years = Array.from(set).sort((a,b) => Number(a) - Number(b));
+        setYearOptions(years);
+        // Initialize or sanitize yearFrom/yearTo based on available years
+        if (years.length === 0) { setYearFrom(''); setYearTo(''); return; }
+        const minY = years[0];
+        const maxY = years[years.length - 1];
+        setYearFrom(prev => (prev && years.includes(prev)) ? prev : minY);
+        setYearTo(prev => (prev && years.includes(prev)) ? prev : maxY);
+        // keep ordering valid
+        const yf = (years.includes(yearFrom) ? yearFrom : minY);
+        const yt = (years.includes(yearTo) ? yearTo : maxY);
+        if (Number(yf) > Number(yt)) {
+          setYearTo(yf);
+        }
+      } catch {
+        if (mounted) { setYearOptions([]); setYearFrom(''); setYearTo(''); }
+      }
+    })();
+    return () => { mounted = false; };
+  }, [lakeId, orgId]);
 
   // Reset on lake change and fetch
   useEffect(() => {
@@ -174,8 +187,8 @@ function WaterQualityTab({ lake }) {
     setInitialLoading(true);
     fetchTests("");
   }, [lakeId]);
-  // Refetch when org or time range changes
-  useEffect(() => { if (lakeId != null) fetchTests(orgId); }, [orgId, dateFrom, dateTo, timeRange]);
+  // Refetch when org or year span changes
+  useEffect(() => { if (lakeId != null) fetchTests(orgId); }, [orgId, yearFrom, yearTo]);
 
   // Load station options for this lake and time window
   useEffect(() => {
@@ -183,12 +196,9 @@ function WaterQualityTab({ lake }) {
     (async () => {
       if (!lakeId) { if (mounted) setStations([]); return; }
       try {
-        const today = latestTestDate || new Date();
-        const lim = (timeRange === "all" || timeRange === "custom") ? 5000 : 1000;
-        let fromEff, toEff;
-        if (timeRange === 'all') { fromEff = undefined; toEff = undefined; }
-        else if (!dateFrom && !dateTo) { const d = new Date(today); d.setFullYear(d.getFullYear() - 5); fromEff = fmtIso(d); toEff = fmtIso(today); }
-        else { fromEff = dateFrom || undefined; toEff = dateTo || undefined; }
+        const lim = 5000;
+        const fromEff = (yearFrom && yearTo) ? startOfYearIso(yearFrom) : undefined;
+        const toEff = (yearFrom && yearTo) ? endOfYearIso(yearTo) : undefined;
         const list = await fetchStationsForLake({ lakeId, from: fromEff, to: toEff, limit: lim, organizationId: orgId });
         if (mounted) setStations(Array.isArray(list) ? list.map(s => ({id: s, name: s})) : []);
         // If the currently selected station is no longer in the list, clear it
@@ -201,7 +211,7 @@ function WaterQualityTab({ lake }) {
       }
     })();
     return () => { mounted = false; };
-  }, [lakeId, dateFrom, dateTo, timeRange, orgId, station]);
+  }, [lakeId, yearFrom, yearTo, orgId, station]);
 
   // Resolve station name for an event (consistent with fetchers)
   const eventStationName = (ev) => ev?.station?.name || ev?.station_name || null;
@@ -242,24 +252,27 @@ function WaterQualityTab({ lake }) {
     <>
       <div style={{ fontSize: 12, color: '#ddd', marginBottom: 6 }}>Markers are shown on the map while this tab is open.</div>
   <div style={{ display: 'grid', gridTemplateColumns: 'auto auto 1fr 1fr auto', alignItems: 'end', gap: 6, marginBottom: 6, overflow: 'hidden' }}>
-        {/* Range */}
-        <div className="form-group" style={{ minWidth: 120 }}>
-          <label style={{ marginBottom: 2, fontSize: 11, color: '#fff' }}>Range</label>
+        {/* Year Range */}
+        <div className="form-group" style={{ minWidth: 180 }}>
+          <label style={{ marginBottom: 2, fontSize: 11, color: '#fff' }}>Year</label>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <select value={timeRange} onChange={(e) => applyRange(e.target.value)} style={{ padding: '6px 8px' }}>
-              <option value="all">All Time</option>
-              <option value="5y">5 Yr</option>
-              <option value="3y">3 Yr</option>
-              <option value="1y">1 Yr</option>
-              <option value="6mo">6 Mo</option>
+            <select value={yearFrom} onChange={(e) => {
+              const v = e.target.value;
+              setYearFrom(v);
+              if (!yearTo || Number(v) > Number(yearTo)) setYearTo(v);
+            }} style={{ padding: '6px 8px' }} disabled={!yearOptions.length}>
+              {yearOptions.length === 0 ? (<option value="">No years</option>) : null}
+              {yearOptions.map((y) => (<option key={`yf-${y}`} value={y}>{y}</option>))}
             </select>
-            {timeRange === 'custom' && (
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setTimeRange('custom'); }} className="pill-btn" />
-                <span>to</span>
-                <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setTimeRange('custom'); }} className="pill-btn" />
-              </div>
-            )}
+            <span style={{ color: '#fff' }}>to</span>
+            <select value={yearTo} onChange={(e) => {
+              const v = e.target.value;
+              setYearTo(v);
+              if (!yearFrom || Number(v) < Number(yearFrom)) setYearFrom(v);
+            }} style={{ padding: '6px 8px' }} disabled={!yearOptions.length}>
+              {yearOptions.length === 0 ? (<option value="">No years</option>) : null}
+              {yearOptions.map((y) => (<option key={`yt-${y}`} value={y}>{y}</option>))}
+            </select>
           </div>
         </div>
         {/* Bucket */}
