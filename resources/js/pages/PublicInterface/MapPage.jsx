@@ -579,6 +579,33 @@ function MapPage() {
     }
   };
 
+  // Clear all non-lake overlays (watersheds, pins, stations, API results, flow paths)
+  const clearOverlays = () => {
+    try {
+      // Hide lake watershed overlay (from Lake panel)
+      if (typeof handlePanelToggleWatershed === 'function') {
+        try { handlePanelToggleWatershed(false); } catch {}
+      }
+      // Global Watersheds API results and pins
+      setGwFlowpathFC(null);
+      setGwWatershedFC(null);
+      setGwRiversFC(null);
+      setGwFlowClickPoint(null);
+      setGwWsClickPoint(null);
+      setGwPinMode(null);
+      // Flow markers
+      setShowFlows(false);
+      // Station markers (WQ): broadcast inactive to clear layer
+      try { window.dispatchEvent(new CustomEvent('lv-wq-active', { detail: { active: false } })); } catch {}
+      // Measurement / tools overlays
+      setMeasureActive(false);
+      setProfileActive(false);
+      setElevInitialPoints([]);
+      // Population heatmap overlay
+      try { typeof clearHeatmap === 'function' && clearHeatmap(); } catch {}
+    } catch {}
+  };
+
   return (
     <div className={themeClass} style={{ height: "100vh", width: "100vw", margin: 0, padding: 0, position: 'relative' }}>
   <AppMap view={selectedView} zoomControl={false} showPostgisContours={showContours} showContourLabels={showContourLabels} whenCreated={(m) => { mapRef.current = m; try { window.lv_map = m; } catch {} }}>
@@ -750,7 +777,7 @@ function MapPage() {
   <ElevationProfileTool active={profileActive} initialPoints={elevInitialPoints} onClose={() => setProfileActive(false)} />
         <CoordinatesScale />
         {/* Map Controls */}
-        <MapControls defaultBounds={worldBounds} />
+  <MapControls defaultBounds={worldBounds} onErase={clearOverlays} />
       </AppMap>
 
       {/* Lake Info Panel */}

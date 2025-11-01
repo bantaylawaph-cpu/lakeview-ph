@@ -1,7 +1,7 @@
 // src/components/MapControls.jsx
 import React, { useState } from "react";
 import { useMap, Marker, Tooltip } from "react-leaflet"; // use Tooltip instead of Popup
-import { FiBarChart2, FiCrosshair, FiPlus, FiMinus } from "react-icons/fi";
+import { FiBarChart2, FiCrosshair, FiPlus, FiMinus, FiTrash2 } from "react-icons/fi";
 import { FaLocationDot } from "react-icons/fa6"; // filled location dot
 import { FaTable } from "react-icons/fa";
 import DataSummaryTable from "./stats-modal/DataSummaryTable";
@@ -23,7 +23,7 @@ const locationIcon = new L.DivIcon({
   popupAnchor: [0, -28],
 });
 
-function MapControls({ defaultCenter = [12.8797, 121.7740], defaultZoom = 6, defaultBounds = null }) {
+function MapControls({ defaultCenter = [12.8797, 121.7740], defaultZoom = 6, defaultBounds = null, onErase = null }) {
   const map = useMap();
   const [geolocated, setGeolocated] = useState(false);
   const [position, setPosition] = useState(null);
@@ -79,6 +79,13 @@ function MapControls({ defaultCenter = [12.8797, 121.7740], defaultZoom = 6, def
         </button>
         <button className="btn-floating" onClick={handleZoomOut}>
           <FiMinus className="icon-layer" />
+        </button>
+                <button
+          className="btn-floating"
+          onClick={() => { try { typeof onErase === 'function' && onErase(); } catch {} }}
+          title="Erase overlays"
+        >
+          <FiTrash2 className="icon-layer" />
         </button>
       </div>
 
