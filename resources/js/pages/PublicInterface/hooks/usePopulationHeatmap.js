@@ -40,8 +40,8 @@ export function usePopulationHeatmap({ mapRef, selectedLake, lakeBounds = null }
     gridIndexRef.current = { cell: 0, cells: new Map() };
     // Remove the current heat layer
     clearLayer();
-    // Reset UI state but keep the feature enabled so users can refresh/trigger later
-    setLoading(false); setResolution(null); setError(null);
+    // Reset UI state and disable the feature so it won't auto-refresh until re-enabled
+    setEnabled(false); setLoading(false); setResolution(null); setError(null);
   }, [mapRef]);
 
   const runFetch = useCallback(() => {

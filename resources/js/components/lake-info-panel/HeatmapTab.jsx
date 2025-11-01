@@ -222,7 +222,9 @@ function HeatmapTab({ lake, onToggleHeatmap, onClearHeatmap, currentLayerId = nu
   };
 
   const handleClear = () => {
-    // Clear the current heat layer and cancel inflight; do not change heatOn state
+    // Fully stop the heatmap: abort in-flight, remove layer, and disable further auto-refresh.
+    setHeatOn(false);
+    onToggleHeatmap?.(false);
     if (typeof onClearHeatmap === 'function') onClearHeatmap();
     // If clearing during an active load, reset local loading action so no spinner remains
     setLoadingAction(null);
