@@ -11,6 +11,7 @@ const customClass = {
   htmlContainer: 'swal-text',
   confirmButton: 'swal-confirm',
   cancelButton: 'swal-cancel',
+  denyButton: 'swal-confirm', // match confirm styling for consistent look
 };
 
 export const Toast = ReactSwal.mixin({
@@ -95,4 +96,30 @@ export async function showLoading(title = 'Loading', text = 'Please wait...') {
 
 export function closeLoading() {
   try { ReactSwal.close(); } catch {}
+}
+
+// Prompt user to choose a download format (GeoJSON or KML). Returns 'geojson' | 'kml' | null
+export async function promptDownloadFormat({
+  title = 'Download Watershed',
+  text = 'Choose a format to download',
+  confirmText = 'GeoJSON',
+  denyText = 'KML',
+} = {}) {
+  const res = await ReactSwal.fire({
+    title,
+    text,
+    icon: 'question',
+    showCancelButton: true,
+    showDenyButton: true,
+    confirmButtonText: confirmText,
+    denyButtonText: denyText,
+    // unify button appearance while allowing distinct colors
+    confirmButtonColor: '#6366f1', // indigo
+    denyButtonColor: '#ef4444',    // red
+    cancelButtonColor: '#6b7280',  // gray
+    customClass,
+  });
+  if (res.isConfirmed) return 'geojson';
+  if (res.isDenied) return 'kml';
+  return null;
 }

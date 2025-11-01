@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { FiDownload, FiFileText, FiGlobe } from "react-icons/fi";
-import Popover from "../common/Popover";
-import { alertError, alertSuccess } from "../../lib/alerts";
+import { alertError, alertSuccess, promptDownloadFormat } from "../../lib/alerts";
 import { getToken } from "../../lib/api";
 import LoadingSpinner from "../LoadingSpinner";
+import { fetchPublicLayers } from "../../lib/layers";
 
 
 const fmtText = (v) => (v && String(v).trim() ? String(v).trim() : "–");
@@ -21,6 +21,7 @@ const getOrgName = (layer) => {
  * - onResetToActive: () => void
  */
 function LayersTab({
+  lake = null,
   layers = [],
   activeLayerId = null,
   selectedLayerId = null,
@@ -28,15 +29,16 @@ function LayersTab({
   onResetToActive,
   isAuthenticated = false, // external hint (e.g. from higher-level auth context)
 }) {
-  const [downloadLayer, setDownloadLayer] = useState(null);
-  const downloadAnchorRef = useRef(null);
   const [downloading, setDownloading] = useState(false);
+  const [downloadingLayerId, setDownloadingLayerId] = useState(null);
   const [authed, setAuthed] = useState(!!isAuthenticated);
   const [initialLoading, setInitialLoading] = useState(true);
   const initialLoadedRef = useRef(false);
   // auth state derived from parent
+  const [watershedLayers, setWatershedLayers] = useState([]);
+  const [wsLoading, setWsLoading] = useState(false);
 
-  const closePopover = () => setDownloadLayer(null);
+  const closePopover = () => {};
 
   // If parent doesn't pass isAuthenticated, attempt a lazy one-time probe when needed.
   const ensureAuthOrPrompt = useCallback(async () => {
@@ -56,6 +58,25 @@ function LayersTab({
     }
   }, [layers]);
 
+  // Fetch watershed layers connected to this lake (if any)
+  useEffect(() => {
+    const wsId = lake?.watershed_id ?? lake?.watershedId ?? null;
+    if (!wsId) { setWatershedLayers([]); return; }
+    let aborted = false;
+    (async () => {
+      setWsLoading(true);
+      try {
+        const rows = await fetchPublicLayers({ bodyType: 'watershed', bodyId: wsId });
+        if (!aborted) setWatershedLayers(Array.isArray(rows) ? rows : []);
+      } catch (_) {
+        if (!aborted) setWatershedLayers([]);
+      } finally {
+        if (!aborted) setWsLoading(false);
+      }
+    })();
+    return () => { aborted = true; };
+  }, [lake?.watershed_id]);
+
   // PNG export intentionally omitted (use screenshot feature)
 
   const doDownloadVector = async (layer, format) => {
@@ -67,7 +88,8 @@ function LayersTab({
     if (!token) { if (!(await ensureAuthOrPrompt())) return; }
     const effectiveToken = getToken();
     if (!effectiveToken) return; // user cancelled
-    setDownloading(true);
+  setDownloading(true);
+  setDownloadingLayerId(layer.id);
     try {
       const resp = await fetch(`/api/layers/${layer.id}/download?format=${format}`, {
         method: 'GET',
@@ -101,6 +123,7 @@ function LayersTab({
       await alertError('Download failed', e?.message || 'Unknown error');
     } finally {
       setDownloading(false);
+      setDownloadingLayerId(null);
       closePopover();
     }
   };
@@ -120,7 +143,7 @@ function LayersTab({
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <style>{`.spin { animation: spin 1s linear infinite; } @keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg);} }`}</style>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-        <h3 style={{ marginTop: 0, marginBottom: 8 }}>Layers</h3>
+        <h3 style={{ marginTop: 0, marginBottom: 8, fontWeight: 'bold' }}>Layers</h3>
         <button
           type="button"
           onClick={onResetToActive}
@@ -151,6 +174,10 @@ function LayersTab({
         // Make the list area stretch and scroll to fill the parent panel
         <div style={{ flex: 1, overflowY: "auto", paddingRight: 4, minHeight: 0 }}>
           <div style={{ display: "grid", gap: 10 }}>
+            {/* Lake Layers Section */}
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+              <h4 style={{ margin: 0, fontWeight: 'bold' }}>Lake layers</h4>
+            </div>
             {layers.map((layer) => {
               const isSelected = String(selectedLayerId) === String(layer.id);
               const isActive = String(activeLayerId) === String(layer.id);
@@ -197,18 +224,19 @@ function LayersTab({
                   </div>
 
                   <button
-                    ref={downloadLayer?.id === layer.id ? downloadAnchorRef : undefined}
+                    
                     type="button"
                     className="pill-btn liquid"
                     title={layer.is_downloadable ? (authed ? 'Download layer' : 'Sign in to download') : 'Downloads disabled'}
                     aria-label={`Download layer ${layer.name || layer.id}`}
                     disabled={!layer.is_downloadable || downloading}
-                    onClick={(e) => {
+                    onClick={async (e) => {
                       e.stopPropagation();
-                      if (!layer.is_downloadable) { alertError('Not Downloadable','This layer does not allow downloads.'); return; }
-                      if (!authed) { ensureAuthOrPrompt(); return; }
-                      downloadAnchorRef.current = e.currentTarget;
-                      setDownloadLayer(layer);
+                      if (!layer.is_downloadable) { await alertError('Not Downloadable','This layer does not allow downloads.'); return; }
+                      if (!authed) { const ok = await ensureAuthOrPrompt(); if (!ok) return; }
+                      const choice = await promptDownloadFormat({ title: 'Download Layer', text: 'Choose a format to download this layer.' });
+                      if (!choice) return;
+                      await doDownloadVector(layer, choice);
                     }}
                     style={{
                       position: "absolute",
@@ -225,7 +253,7 @@ function LayersTab({
                       opacity: layer.is_downloadable ? 1 : 0.5,
                     }}
                   >
-                    {downloading && downloadLayer?.id === layer.id ? (
+                    {downloading && downloadingLayerId === layer.id ? (
                       <FiDownload className="spin" style={{ width: 16, height: 16, opacity: 0.6 }} />
                     ) : (
                       <FiDownload style={{ width: 16, height: 16 }} />
@@ -234,51 +262,100 @@ function LayersTab({
                 </div>
               );
             })}
+
+            {/* Watershed Layers Section */}
+            {wsLoading ? (
+              <div className="insight-card">
+                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                  <LoadingSpinner label={"Loading watershed layers…"} color="#fff" />
+                </div>
+              </div>
+            ) : null}
+            {(!wsLoading && watershedLayers && watershedLayers.length > 0) ? (
+              <>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop: 6 }}>
+                  <h4 style={{ margin: 0, fontWeight: 'bold' }}>Watershed layers</h4>
+                </div>
+                {watershedLayers.map((layer) => {
+                  const isSelected = String(selectedLayerId) === String(layer.id);
+                  const isDefaultWs = !!layer.is_active; // default within its watershed
+                  return (
+                    <div
+                      key={`ws-${layer.id}`}
+                      className="insight-card"
+                      style={{ display: "grid", gap: 6, position: "relative" }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                        <span style={{ fontWeight: 700 }}>{fmtText(layer.name)}</span>
+                        {isDefaultWs ? (
+                          <span
+                            style={{
+                              fontSize: 12,
+                              padding: "2px 8px",
+                              borderRadius: 999,
+                              background: "rgba(255,255,255,0.25)",
+                              border: "1px solid rgba(255,255,255,0.4)",
+                              color: "#fff",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            Default
+                          </span>
+                        ) : null}
+                      </div>
+
+                      <div style={{ fontSize: 13, opacity: 0.9 }}>
+                        <strong>Organization:</strong> {fmtText(getOrgName(layer))}
+                      </div>
+
+                      <div style={{ fontSize: 13, opacity: 0.9 }}>
+                        <strong>Notes:</strong> {fmtText(layer.notes)}
+                      </div>
+
+                      <button
+                        type="button"
+                        className="pill-btn liquid"
+                        title={layer.is_downloadable ? (authed ? 'Download layer' : 'Sign in to download') : 'Downloads disabled'}
+                        aria-label={`Download watershed layer ${layer.name || layer.id}`}
+                        disabled={!layer.is_downloadable || downloading}
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (!layer.is_downloadable) { await alertError('Not Downloadable','This layer does not allow downloads.'); return; }
+                          if (!authed) { const ok = await ensureAuthOrPrompt(); if (!ok) return; }
+                          const choice = await promptDownloadFormat({ title: 'Download Watershed Layer', text: 'Choose a format to download this layer.' });
+                          if (!choice) return;
+                          await doDownloadVector(layer, choice);
+                        }}
+                        style={{
+                          position: "absolute",
+                          right: 8,
+                          bottom: 8,
+                          width: 34,
+                          height: 34,
+                          padding: 6,
+                          borderRadius: 999,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          cursor: (!layer.is_downloadable || downloading) ? 'not-allowed' : 'pointer',
+                          opacity: layer.is_downloadable ? 1 : 0.5,
+                        }}
+                      >
+                        {downloading && downloadingLayerId === layer.id ? (
+                          <FiDownload className="spin" style={{ width: 16, height: 16, opacity: 0.6 }} />
+                        ) : (
+                          <FiDownload style={{ width: 16, height: 16 }} />
+                        )}
+                      </button>
+                    </div>
+                  );
+                })}
+              </>
+            ) : null}
           </div>
         </div>
       )}
 
-      <Popover
-        anchorRef={downloadAnchorRef}
-        open={!!downloadLayer}
-        onClose={closePopover}
-        minWidth={200}
-      >
-        {!downloadLayer ? null : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div style={{ fontSize: 12, opacity: 0.85, padding: '2px 4px' }}>
-              <strong>{downloadLayer.name || `Layer ${downloadLayer.id}`}</strong>
-            </div>
-            {/* Spinner removed */}
-            <button
-              type="button"
-              className="pill-btn primary"
-              disabled={downloading}
-              onClick={() => doDownloadVector(downloadLayer, 'geojson')}
-              style={{ display: 'flex', alignItems:'center', gap:6, justifyContent:'center' }}
-            >
-              <FiFileText /> GeoJSON
-            </button>
-            <button
-              type="button"
-              className="pill-btn primary"
-              disabled={downloading}
-              onClick={() => doDownloadVector(downloadLayer, 'kml')}
-              style={{ display: 'flex', alignItems:'center', gap:6, justifyContent:'center' }}
-            >
-              <FiGlobe /> KML
-            </button>
-            <button
-              type="button"
-              className="pill-btn ghost"
-              onClick={closePopover}
-              disabled={downloading}
-            >
-              Close
-            </button>
-          </div>
-        )}
-      </Popover>
     </div>
   );
 }

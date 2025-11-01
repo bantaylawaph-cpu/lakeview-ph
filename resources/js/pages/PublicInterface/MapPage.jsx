@@ -32,7 +32,8 @@ import { usePublicLakes } from "./hooks/usePublicLakes";
 import { useLakeSelection } from "./hooks/useLakeSelection";
 import { usePopulationHeatmap } from "./hooks/usePopulationHeatmap";
 import { useWaterQualityMarkers } from "./hooks/useWaterQualityMarkers";
-import { alertError, showLoading, closeLoading } from "../../lib/alerts";
+import { alertError, alertInfo, showLoading, closeLoading, promptDownloadFormat } from "../../lib/alerts";
+import { getToken } from "../../lib/api";
 import { getFlowpath, getWatershed } from "../../lib/globalWatersheds";
 import DataPrivacyDisclaimer from "./DataPrivacyDisclaimer";
 import AboutData from "./AboutData";
@@ -57,6 +58,9 @@ function createPinIcon(color = '#3388ff') {
 
 const INFLOW_ICON = createPinIcon('#14b8a6');
 const OUTFLOW_ICON = createPinIcon('#7c3aed');
+// Click markers for Global Watersheds actions
+const FLOWPOINT_ICON = createPinIcon('#06b6d4'); // cyan-ish for flow path
+const WATERSHEDPOINT_ICON = createPinIcon('#16a34a'); // green for watershed seed
 
 function MapWithContextMenu({ children }) {
   const map = useMap();
@@ -218,6 +222,35 @@ function MapPage() {
   const [gwWatershedFC, setGwWatershedFC] = useState(null);
   const [gwRiversFC, setGwRiversFC] = useState(null);
   const [gwFlowpathFC, setGwFlowpathFC] = useState(null);
+  // Click points for Global Watersheds actions
+  const [gwFlowClickPoint, setGwFlowClickPoint] = useState(null);
+  const [gwWsClickPoint, setGwWsClickPoint] = useState(null);
+  // Pinning mode for next map click ('flow' | 'watershed' | null)
+  const [gwPinMode, setGwPinMode] = useState(null); // extended to include 'elev'
+  // Elevation profile seeding
+  const [elevInitialPoints, setElevInitialPoints] = useState([]);
+
+  // Change cursor to crosshair while pinning
+  useEffect(() => {
+    const map = mapRef.current;
+    const container = map?.getContainer?.();
+    if (!container) return;
+    const prev = container.style.cursor;
+    if (gwPinMode) {
+      container.style.cursor = 'crosshair';
+    } else {
+      container.style.cursor = '';
+    }
+    return () => { try { container.style.cursor = prev; } catch {} };
+  }, [gwPinMode]);
+
+  // Helper: wait for next map click, then resolve with latlng
+  const waitForNextMapClick = () => new Promise((resolve) => {
+    const map = mapRef.current;
+    if (!map) return resolve(null);
+    const once = (e) => { try { map.off('click', once); } catch {} resolve(e?.latlng || null); };
+    map.once('click', once);
+  });
   // ---------------- Auth / route modal (centralized auth state) ----------------
   const { userRole, authUser, authOpen, authMode, openAuth, closeAuth, setAuthMode } = useAuthRole();
 
@@ -424,11 +457,62 @@ function MapPage() {
     } catch {}
   };
 
+  // Minimal GeoJSON -> KML (Polygon/MultiPolygon/LineString) for download
+  const geojsonToKml = (geo) => {
+    try {
+      const fc = (geo && geo.type === 'FeatureCollection') ? geo : { type: 'FeatureCollection', features: [geo] };
+      const placemarks = [];
+      const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+      const coordsToStr = (coords) => coords.map(c => Array.isArray(c) ? c.join(',') : '').join(' ');
+      const ringToKml = (ring) => `<LinearRing><coordinates>${coordsToStr(ring)}</coordinates></LinearRing>`;
+      const polyToKml = (poly) => {
+        const rings = poly.coordinates || [];
+        if (!rings.length) return '';
+        const outer = ringToKml(rings[0]);
+        const inners = rings.slice(1).map(r => `<innerBoundaryIs>${ringToKml(r)}</innerBoundaryIs>`).join('');
+        return `<Polygon><outerBoundaryIs>${outer}</outerBoundaryIs>${inners}</Polygon>`;
+      };
+
+      const lineToKml = (line) => `<LineString><coordinates>${coordsToStr(line.coordinates || [])}</coordinates></LineString>`;
+
+      for (const f of (fc.features || [])) {
+        const g = f.geometry || {};
+        let geomKml = '';
+        if (g.type === 'Polygon') geomKml = polyToKml(g);
+        else if (g.type === 'MultiPolygon') geomKml = (g.coordinates || []).map(coords => polyToKml({ type:'Polygon', coordinates: coords })).join('');
+        else if (g.type === 'LineString') geomKml = lineToKml(g);
+        if (!geomKml) continue;
+        const name = esc(f.properties?.name || 'Feature');
+        placemarks.push(`<Placemark><name>${name}</name>${geomKml}</Placemark>`);
+      }
+      return `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document>${placemarks.join('')}</Document></kml>`;
+    } catch (e) {
+      return `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document/></kml>`;
+    }
+  };
+
+  const downloadBlob = (blob, filename) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename || 'download.dat';
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   const handleTraceFlowPath = async (latlng) => {
     if (!latlng) return;
     const zoom = mapRef.current?.getZoom?.() ?? 2;
     try {
+      // Clear any previous Global Watersheds overlays before executing a new trace
+      setGwFlowpathFC(null);
+      setGwWatershedFC(null);
+      setGwRiversFC(null);
+      // Clear the other tool's pin to avoid confusion
+      setGwWsClickPoint(null);
       showLoading('Tracing flow path…', ' Getting flow path data');
+      // record click point for marker
+      setGwFlowClickPoint({ lat: Number(latlng.lat), lng: Number(latlng.lng) });
       const fc = await getFlowpath({ lat: latlng.lat, lng: latlng.lng, zoom });
       setGwFlowpathFC(fc); // replace previous
       fitToGeoJSON(fc);
@@ -443,7 +527,15 @@ function MapPage() {
     if (!latlng) return;
     const zoom = mapRef.current?.getZoom?.() ?? 2;
     try {
+      // Clear any previous Global Watersheds overlays before executing a new delineation
+      setGwFlowpathFC(null);
+      setGwWatershedFC(null);
+      setGwRiversFC(null);
+      // Clear the other tool's pin to avoid confusion
+      setGwFlowClickPoint(null);
       showLoading('Delineating watershed…', 'Getting watershed data');
+      // record click point for marker
+      setGwWsClickPoint({ lat: Number(latlng.lat), lng: Number(latlng.lng) });
       const { watershed, rivers } = await getWatershed({ lat: latlng.lat, lng: latlng.lng, zoom, includeRivers: true });
       setGwWatershedFC(watershed);
       setGwRiversFC(rivers || null);
@@ -452,6 +544,38 @@ function MapPage() {
       await alertError('Watershed error', e?.message || 'Unable to delineate watershed.');
     } finally {
       closeLoading();
+    }
+  };
+
+  // Start pin modes from context menu
+  const startFlowPathMode = async () => {
+    // 1-2. Prompt with hint, then enable pin mode
+    await alertInfo('Trace Flow Path', 'Click a point on the map to trace the downstream path from that location.');
+    setGwPinMode('flow');
+    const latlng = await waitForNextMapClick();
+    setGwPinMode(null);
+    if (latlng) await handleTraceFlowPath(latlng);
+  };
+
+  const startWatershedMode = async () => {
+    await alertInfo('Delineate Watershed', 'Click a point on the map to delineate its contributing watershed.');
+    setGwPinMode('watershed');
+    const latlng = await waitForNextMapClick();
+    setGwPinMode(null);
+    if (latlng) await handleDelineateWatershed(latlng);
+  };
+
+  const startElevationMode = async () => {
+    // Show hint and wait for map pin, then activate tool seeded with the first point
+    await alertInfo('Elevation Profile', 'Click a start point on the map. Then add more points and press Compute (or Enter). Esc to pause, Esc again to close.');
+    // Ensure tool is not active so it does not capture this pin click
+    setProfileActive(false);
+    setGwPinMode('elev');
+    const latlng = await waitForNextMapClick();
+    setGwPinMode(null);
+    if (latlng) {
+      setElevInitialPoints([{ lat: Number(latlng.lat), lng: Number(latlng.lng) }]);
+      setProfileActive(true);
     }
   };
 
@@ -489,7 +613,31 @@ function MapPage() {
             key={`gw-ws-${JSON.stringify(gwWatershedFC).length}`}
             data={gwWatershedFC}
             style={{ color: 'green', weight: 5, fillColor: 'green', fillOpacity: 0.15 }}
-            onEachFeature={(feat, layer) => { try { layer.bringToFront(); } catch {} }}
+            onEachFeature={(feat, layer) => {
+              try { layer.bringToFront(); } catch {}
+              try {
+                layer.on('click', async () => {
+                  // Require sign-in before allowing any download
+                  const token = getToken();
+                  if (!token) {
+                    await alertError('Sign in required', 'You must be a registered user to download watersheds.');
+                    return;
+                  }
+                  const choice = await promptDownloadFormat({ title: 'Download Watershed', text: 'Choose a format to download this watershed.' });
+                  if (!choice) return;
+                  // Build a single-feature FeatureCollection for the clicked polygon
+                  const single = { type: 'FeatureCollection', features: [feat] };
+                  if (choice === 'geojson') {
+                    const blob = new Blob([JSON.stringify(single)], { type: 'application/geo+json' });
+                    downloadBlob(blob, 'watershed.geojson');
+                  } else if (choice === 'kml') {
+                    const kml = geojsonToKml(single);
+                    const blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
+                    downloadBlob(blob, 'watershed.kml');
+                  }
+                });
+              } catch {}
+            }}
           />
         )}
         {gwRiversFC && (
@@ -507,6 +655,26 @@ function MapPage() {
             style={{ color: 'cyan', weight: 5, opacity: 0.95 }}
             onEachFeature={(feat, layer) => { try { layer.bringToFront(); } catch {} }}
           />
+        )}
+
+        {/* Click markers for Global Watersheds actions */}
+        {gwFlowClickPoint && (
+          <Marker
+            key={`gw-fp-click-${gwFlowClickPoint.lat.toFixed(6)}-${gwFlowClickPoint.lng.toFixed(6)}`}
+            position={[gwFlowClickPoint.lat, gwFlowClickPoint.lng]}
+            icon={FLOWPOINT_ICON}
+          >
+            <Popup>Flow path start</Popup>
+          </Marker>
+        )}
+        {gwWsClickPoint && (
+          <Marker
+            key={`gw-ws-click-${gwWsClickPoint.lat.toFixed(6)}-${gwWsClickPoint.lng.toFixed(6)}`}
+            position={[gwWsClickPoint.lat, gwWsClickPoint.lng]}
+            icon={WATERSHEDPOINT_ICON}
+          >
+            <Popup>Watershed seed</Popup>
+          </Marker>
         )}
 
         {/* Lake overlay (blue by default) */}
@@ -570,16 +738,16 @@ function MapPage() {
               map={map}
               onMeasureDistance={() => { setMeasureMode("distance"); setMeasureActive(true); }}
               onMeasureArea={() => { setMeasureMode("area"); setMeasureActive(true); }}
-              onElevationProfile={() => { setProfileActive(true); setMeasureActive(false); }}
-              onTraceFlowPath={handleTraceFlowPath}
-              onDelineateWatershed={handleDelineateWatershed}
+              onElevationProfile={startElevationMode}
+              onTraceFlowPath={startFlowPathMode}
+              onDelineateWatershed={startWatershedMode}
             />
           )}
         </MapWithContextMenu>
 
         {/* Measure Tool */}
   <MeasureTool active={measureActive} mode={measureMode} onFinish={() => setMeasureActive(false)} />
-  <ElevationProfileTool active={profileActive} onClose={() => setProfileActive(false)} />
+  <ElevationProfileTool active={profileActive} initialPoints={elevInitialPoints} onClose={() => setProfileActive(false)} />
         <CoordinatesScale />
         {/* Map Controls */}
         <MapControls defaultBounds={worldBounds} />

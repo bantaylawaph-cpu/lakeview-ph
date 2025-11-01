@@ -16,7 +16,7 @@ import {
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
 // A lightweight tool to draw a path and request an elevation profile from the backend
-export default function ElevationProfileTool({ active, onClose }) {
+export default function ElevationProfileTool({ active, onClose, initialPoints }) {
   const map = useMap();
   const [animState, setAnimState] = useState(''); // '' | 'enter' | 'exit'
   const [points, setPoints] = useState([]);
@@ -49,6 +49,32 @@ export default function ElevationProfileTool({ active, onClose }) {
       containerCursor.current = "";
     }
   }, [active]);
+
+  // Seed initial points when becoming active
+  useEffect(() => {
+    if (!active) return;
+    if (initialPoints && Array.isArray(initialPoints) && initialPoints.length > 0) {
+      try {
+        const pts = initialPoints.map((p) => L.latLng(Number(p.lat), Number(p.lng)));
+        setPoints(pts);
+        setProfile(null);
+        setError(null);
+      } catch {}
+    }
+  }, [active]);
+
+  // If initialPoints changes while active, update the path
+  useEffect(() => {
+    if (!active) return;
+    if (initialPoints && Array.isArray(initialPoints) && initialPoints.length > 0) {
+      try {
+        const pts = initialPoints.map((p) => L.latLng(Number(p.lat), Number(p.lng)));
+        setPoints(pts);
+        setProfile(null);
+        setError(null);
+      } catch {}
+    }
+  }, [initialPoints]);
 
   // entrance animation when becoming active
   useEffect(() => {

@@ -180,6 +180,7 @@ function LakeInfoPanel({
 
         {activeTab === "layers" && (
           <LayersTab
+            lake={lake}
             layers={layers}
             activeLayerId={activeLayerId}
             selectedLayerId={selectedLayerId}
