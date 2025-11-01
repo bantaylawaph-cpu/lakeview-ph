@@ -229,7 +229,7 @@ class PopulationController extends Controller
             'year'      => 'integer|min:1900|max:3000',
             'layer_id'  => 'nullable|integer|min:1',
             'bbox'      => 'nullable|string', // minLon,minLat,maxLon,maxLat
-            'max_points'=> 'nullable|integer|min:100|max:20000',
+            'max_points'=> 'nullable|integer|min:100|max:30000',
         ]);
 
         $lakeId   = (int) ($validated['lake_id'] ?? 0);
