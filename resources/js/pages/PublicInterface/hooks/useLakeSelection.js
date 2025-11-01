@@ -234,6 +234,7 @@ export function useLakeSelection({ publicFC, mapRef, setPanelOpen, setFilterWate
     selectedLake, selectedLakeId, selectedWatershedId, watershedToggleOn,
     lakeOverlayFeature, watershedOverlayFeature, lakeLayers, lakeActiveLayerId,
     baseMatchesSelectedLake, baseKeyBump,
+    baseIsPoint,
     // derived
     // Nominatim/OSM outline feature removed; keep other actions below
     // actions

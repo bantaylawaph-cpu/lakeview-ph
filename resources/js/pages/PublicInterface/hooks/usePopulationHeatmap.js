@@ -52,7 +52,7 @@ export function usePopulationHeatmap({ mapRef, selectedLake, lakeBounds = null }
     const controller = new AbortController();
     abortRef.current = controller;
     const zoom = map.getZoom?.() || 8;
-    const maxPoints = zoom >= 13 ? 30000 : zoom >= 11 ? 30000 : zoom >= 9 ? 30000 : 30000;
+    const maxPoints = zoom >= 13 ? 50000 : zoom >= 11 ? 50000 : zoom >= 9 ? 50000 : 50000;
     const smallPoints = Math.min(1200, Math.floor(maxPoints / 4));
     const b = map.getBounds();
     const sw = b.getSouthWest();

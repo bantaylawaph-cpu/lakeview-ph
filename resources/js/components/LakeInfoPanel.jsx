@@ -12,6 +12,7 @@ function LakeInfoPanel({
   isOpen,
   onClose,
   lake,
+  isPointLake = false,
   onJumpToStation,
   onToggleHeatmap,
   onClearHeatmap,
@@ -34,6 +35,7 @@ function LakeInfoPanel({
 }) {
   const [activeTab, setActiveTab] = useState("overview");
   const [closing, setClosing] = useState(false);
+  const [hasSampling, setHasSampling] = useState(null); // null = unknown/loading, false = none, true = has
   // When the panel is first opened we want to add the "open" class after a
   // tick so the CSS transition runs. If we mount with `open` already set the
   // browser doesn't animate.
@@ -55,6 +57,37 @@ function LakeInfoPanel({
   const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   useEffect(() => { if (isOpen) setClosing(false); }, [isOpen]);
+
+  // Check for presence of sampling events to decide if WQ/Tests tabs should be shown
+  useEffect(() => {
+    let abort = false;
+    (async () => {
+      try {
+        const id = lake?.id;
+        if (!id) { setHasSampling(null); return; }
+        // Lightweight presence probe (limit 1)
+        const resp = await fetch(`/api/public/sample-events?lake_id=${id}&limit=1`);
+        if (!resp.ok) { if (!abort) setHasSampling(null); return; }
+        const js = await resp.json();
+        if (!abort) setHasSampling(Array.isArray(js?.data) ? js.data.length > 0 : Array.isArray(js) ? js.length > 0 : false);
+      } catch {
+        if (!abort) setHasSampling(null);
+      }
+    })();
+    return () => { abort = true; };
+  }, [lake?.id]);
+
+  // Ensure activeTab remains valid when visibility conditions change
+  useEffect(() => {
+    if ((activeTab === 'population' || activeTab === 'layers') && isPointLake) {
+      setActiveTab('overview');
+      return;
+    }
+    if ((activeTab === 'water' || activeTab === 'tests') && hasSampling === false) {
+      setActiveTab('overview');
+      return;
+    }
+  }, [activeTab, isPointLake, hasSampling]);
 
   // Sync selection when the lake or its active layer changes
   useEffect(() => {
@@ -125,10 +158,20 @@ function LakeInfoPanel({
   {/* Tabs */}
       <div className="lake-info-tabs">
         <button className={`lake-tab ${activeTab === "overview" ? "active" : ""}`} onClick={() => setActiveTab("overview")}>Overview</button>
-        <button className={`lake-tab ${activeTab === "water" ? "active" : ""}`} onClick={() => setActiveTab("water")}>Water Quality</button>
-        <button className={`lake-tab ${activeTab === "tests" ? "active" : ""}`} onClick={() => setActiveTab("tests")}>Tests</button>
-        <button className={`lake-tab ${activeTab === "population" ? "active" : ""}`} onClick={() => setActiveTab("population")}>Heatmap</button>
-        <button className={`lake-tab ${activeTab === "layers" ? "active" : ""}`} onClick={() => setActiveTab("layers")}>Layers</button>
+        {/* Hide WQ and Tests when lake has no sampling events (only when explicitly known to be none) */}
+        {hasSampling !== false && (
+          <button className={`lake-tab ${activeTab === "water" ? "active" : ""}`} onClick={() => setActiveTab("water")}>Water Quality</button>
+        )}
+        {hasSampling !== false && (
+          <button className={`lake-tab ${activeTab === "tests" ? "active" : ""}`} onClick={() => setActiveTab("tests")}>Tests</button>
+        )}
+        {/* Hide Heatmap and Layers when selected lake is only a marker/point */}
+        {!isPointLake && (
+          <button className={`lake-tab ${activeTab === "population" ? "active" : ""}`} onClick={() => setActiveTab("population")}>Heatmap</button>
+        )}
+        {!isPointLake && (
+          <button className={`lake-tab ${activeTab === "layers" ? "active" : ""}`} onClick={() => setActiveTab("layers")}>Layers</button>
+        )}
       </div>
 
       {/* Content */}
@@ -146,7 +189,7 @@ function LakeInfoPanel({
             onJumpToFlow={onJumpToFlow}
           />
         )}
-        {activeTab === "water" && (
+        {activeTab === "water" && hasSampling !== false && (
           <WaterQualityTab
             lake={lake}
             onSelectTestStation={(lat, lon) => {
@@ -158,11 +201,11 @@ function LakeInfoPanel({
             }}
           />
         )}
-        {activeTab === "tests" && (
+        {activeTab === "tests" && hasSampling !== false && (
           <TestsTab lake={lake} onJumpToStation={onJumpToStation} />
         )}
 
-        {activeTab === "population" && (
+        {activeTab === "population" && !isPointLake && (
           <HeatmapTab
             lake={lake}
             onToggleHeatmap={onToggleHeatmap}
@@ -178,7 +221,7 @@ function LakeInfoPanel({
           />
         )}
 
-        {activeTab === "layers" && (
+        {activeTab === "layers" && !isPointLake && (
           <LayersTab
             layers={layers}
             activeLayerId={activeLayerId}
