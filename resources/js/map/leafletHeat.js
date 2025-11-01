@@ -74,7 +74,7 @@ function approxP95(values) {
   return sample[Math.floor(0.95 * (sample.length - 1))] || sample[sample.length-1] || 1;
 }
 
-function normalizeHeat(points) {
+function normalizeHeat(points, capFromServer = null) {
   if (!Array.isArray(points) || points.length === 0) return [];
   const vals = [];
   for (const p of points) {
@@ -82,7 +82,8 @@ function normalizeHeat(points) {
     if (Number.isFinite(v) && v > 0) vals.push(v);
   }
   if (vals.length === 0) return points.map(([lat, lon]) => [lat, lon, 0]);
-  const p95 = approxP95(vals);
+  const capCandidate = Number(capFromServer);
+  const p95 = Number.isFinite(capCandidate) && capCandidate > 0 ? capCandidate : approxP95(vals);
   const cap = p95 > 0 ? p95 : 1;
   const compress = (x) => Math.sqrt(Math.max(0, Math.min(1, x)));
   return points.map((p) => {
@@ -115,7 +116,8 @@ export async function fetchPopPoints({ lakeId, year = 2025, radiusKm = 2, layerI
   }
   const { data } = await axios.get('/api/population/points', { params, ...axiosOpts });
   const raw = Array.isArray(data?.points) ? data.points : [];
-  const normalized = normalizeHeat(raw);
+  const cap = data?.stats?.p95_raw;
+  const normalized = normalizeHeat(raw, cap);
   return { raw, normalized };
 }
 

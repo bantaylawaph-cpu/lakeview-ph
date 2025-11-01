@@ -275,27 +275,28 @@ class PopulationController extends Controller
                 return response()->json(array_merge($cached, ['cached' => true]));
             }
 
+            // Optimized: clip rasters to ring early, prefilter by optional viewport bbox,
+            // and compute non-NaN pixel count with ST_SummaryStatsAgg instead of COUNT(*)
+            // over enumerated pixels. Then reservoir-sample pixels using a ratio derived
+            // from the aggregated count to avoid generating and counting the full set.
             $sql = "WITH ring AS (
                 SELECT ST_GeomFromEWKT(?::text) AS g
             ), env AS (
                 SELECT " . ($bboxGeomSQL ?: 'NULL::geometry') . " AS g
             ), tiles AS (
-              SELECT ST_Clip(rast, COALESCE((SELECT g FROM env), (SELECT g FROM ring))) rast
+              SELECT ST_Clip(r.rast, (SELECT g FROM ring)) AS rast
               FROM $qname r
               WHERE ST_Intersects(r.rast, (SELECT g FROM ring))
                 AND ( (SELECT g FROM env) IS NULL OR ST_Intersects(r.rast, (SELECT g FROM env)) )
-            ), pts AS (
+            ), stats AS (
+              SELECT COALESCE( (ST_SummaryStatsAgg(rast,1,true)).count, 0) AS n FROM tiles
+            ), sampled AS (
               SELECT (pp).geom::geometry(Point,4326) AS g,
                      NULLIF((pp).val::float8, ST_BandNoDataValue(rast,1)) AS pop
-              FROM tiles CROSS JOIN LATERAL ST_PixelAsPoints(rast,1) pp
+              FROM tiles, stats
+              CROSS JOIN LATERAL ST_PixelAsPoints(rast,1) pp
               WHERE (pp).val IS NOT NULL
-            ), clipped AS (
-              SELECT g, pop FROM pts WHERE pop IS NOT NULL AND ST_Intersects(g, (SELECT g FROM ring))
-            ), cnt AS (
-              SELECT COUNT(*) AS n FROM clipped
-            ), sampled AS (
-              SELECT g, pop FROM clipped, cnt
-              WHERE random() < LEAST(1.0, (?::float / NULLIF(cnt.n,1)))
+                AND random() < LEAST(1.0, (?::float / NULLIF(stats.n,1)))
               LIMIT ?
             )
             SELECT ST_Y(g) AS lat, ST_X(g) AS lon, pop FROM sampled";

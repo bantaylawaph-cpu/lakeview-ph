@@ -10,6 +10,7 @@ export function usePopulationHeatmap({ mapRef, selectedLake, lakeBounds = null }
   const paramsRef = useRef(null);
   const heatLayerRef = useRef(null);
   const rawPointsRef = useRef([]); // store raw points for hover calculations
+  const gridIndexRef = useRef({ cell: 0, cells: new Map() });
   const hoverTooltipRef = useRef(null);
   const hoverHandlersRef = useRef(null);
   const debounceRef = useRef(null);
@@ -36,6 +37,7 @@ export function usePopulationHeatmap({ mapRef, selectedLake, lakeBounds = null }
     hoverHandlersRef.current = null;
     if (hoverTooltipRef.current && hoverTooltipRef.current._map) { try { hoverTooltipRef.current.remove(); } catch {} }
     rawPointsRef.current = [];
+    gridIndexRef.current = { cell: 0, cells: new Map() };
     // Remove the current heat layer
     clearLayer();
     // Reset UI state but keep the feature enabled so users can refresh/trigger later
@@ -70,6 +72,36 @@ export function usePopulationHeatmap({ mapRef, selectedLake, lakeBounds = null }
       onIntermediate: (payload) => {
         const pts = payload?.normalized || [];
         rawPointsRef.current = Array.isArray(payload?.raw) ? payload.raw : [];
+        // Rebuild lightweight spatial grid index for hover queries
+        try {
+          const map = mapRef?.current;
+          if (map) {
+            const layerRadiusPx = Number(heatLayerRef.current?.options?.radius) || 18;
+            const center = map.getCenter?.();
+            if (center) {
+              const pt = map.latLngToContainerPoint(center);
+              const pt2 = L.point(pt.x + layerRadiusPx, pt.y);
+              const latlng2 = map.containerPointToLatLng(pt2);
+              const radiusMeters = map.distance(center, latlng2) || 250;
+              const cellSize = Math.max(50, Math.min(1000, Math.floor(radiusMeters))); // clamp to [50m, 1000m]
+              const proj = L.CRS.EPSG3857;
+              const cells = new Map();
+              const raw = rawPointsRef.current || [];
+              for (let i = 0; i < raw.length; i++) {
+                const p = raw[i];
+                const ll = L.latLng(p[0], p[1]);
+                const m = proj.project(ll);
+                const cx = Math.floor(m.x / cellSize);
+                const cy = Math.floor(m.y / cellSize);
+                const key = cx + ':' + cy;
+                let bucket = cells.get(key);
+                if (!bucket) { bucket = []; cells.set(key, bucket); }
+                bucket.push([m.x, m.y, Number(p[2]) || 0]);
+              }
+              gridIndexRef.current = { cell: cellSize, cells };
+            }
+          }
+        } catch {}
         if (!heatLayerRef.current) {
           const layer = createHeatLayer(pts);
           heatLayerRef.current = layer; layer.addTo(map);
@@ -79,6 +111,36 @@ export function usePopulationHeatmap({ mapRef, selectedLake, lakeBounds = null }
       onFinal: (payload) => {
         const pts = payload?.normalized || [];
         rawPointsRef.current = Array.isArray(payload?.raw) ? payload.raw : rawPointsRef.current;
+        // Rebuild grid index using full payload
+        try {
+          const map = mapRef?.current;
+          if (map) {
+            const layerRadiusPx = Number(heatLayerRef.current?.options?.radius) || 18;
+            const center = map.getCenter?.();
+            if (center) {
+              const pt = map.latLngToContainerPoint(center);
+              const pt2 = L.point(pt.x + layerRadiusPx, pt.y);
+              const latlng2 = map.containerPointToLatLng(pt2);
+              const radiusMeters = map.distance(center, latlng2) || 250;
+              const cellSize = Math.max(50, Math.min(1000, Math.floor(radiusMeters)));
+              const proj = L.CRS.EPSG3857;
+              const cells = new Map();
+              const raw = rawPointsRef.current || [];
+              for (let i = 0; i < raw.length; i++) {
+                const p = raw[i];
+                const ll = L.latLng(p[0], p[1]);
+                const m = proj.project(ll);
+                const cx = Math.floor(m.x / cellSize);
+                const cy = Math.floor(m.y / cellSize);
+                const key = cx + ':' + cy;
+                let bucket = cells.get(key);
+                if (!bucket) { bucket = []; cells.set(key, bucket); }
+                bucket.push([m.x, m.y, Number(p[2]) || 0]);
+              }
+              gridIndexRef.current = { cell: cellSize, cells };
+            }
+          }
+        } catch {}
         if (heatLayerRef.current) { heatLayerRef.current.__setData?.(pts); }
         else { const layer = createHeatLayer(pts); heatLayerRef.current = layer; layer.addTo(map); }
         setLoading(false); setResolution('final'); setError(null);
@@ -189,19 +251,34 @@ export function usePopulationHeatmap({ mapRef, selectedLake, lakeBounds = null }
         const pt = map.latLngToContainerPoint(latlng);
         const pt2 = L.point(pt.x + radiusPx, pt.y);
         const latlng2 = map.containerPointToLatLng(pt2);
-        const metersRadius = map.distance(latlng, latlng2);
+        const metersRadius = map.distance(latlng, latlng2) || 250;
 
-        const raw = rawPointsRef.current || [];
-        let count = 0;
+        // Fast hover sum using a simple grid index in EPSG:3857 meters
+        const proj = L.CRS.EPSG3857;
+        const m = proj.project(latlng);
+        const grid = gridIndexRef.current || { cell: 0, cells: new Map() };
+        const cell = grid.cell || Math.max(50, Math.min(1000, Math.floor(metersRadius)));
+        const cells = grid.cells || new Map();
+        const cx = Math.floor(m.x / cell);
+        const cy = Math.floor(m.y / cell);
+        const rCells = Math.max(1, Math.ceil(metersRadius / cell));
         let sum = 0;
-        for (let i = 0; i < raw.length; i++) {
-          const p = raw[i];
-          const pll = L.latLng(p[0], p[1]);
-          const d = map.distance(latlng, pll);
-          if (d <= metersRadius) {
-            count++;
-            const v = Number(p[2]);
-            if (Number.isFinite(v)) sum += v;
+        let count = 0;
+        for (let dx = -rCells; dx <= rCells; dx++) {
+          for (let dy = -rCells; dy <= rCells; dy++) {
+            const bucket = cells.get((cx + dx) + ':' + (cy + dy));
+            if (!bucket) continue;
+            for (let i = 0; i < bucket.length; i++) {
+              const p = bucket[i]; // [mx, my, val]
+              const dxm = p[0] - m.x;
+              const dym = p[1] - m.y;
+              const d2 = dxm*dxm + dym*dym;
+              if (d2 <= metersRadius * metersRadius) {
+                count++;
+                const v = p[2];
+                if (Number.isFinite(v)) sum += v;
+              }
+            }
           }
         }
 
@@ -262,6 +339,7 @@ export function usePopulationHeatmap({ mapRef, selectedLake, lakeBounds = null }
     if (hoverTooltipRef.current && hoverTooltipRef.current._map) { try { hoverTooltipRef.current.remove(); } catch {} }
     // Clear layer from the map
     clearLayer();
+    gridIndexRef.current = { cell: 0, cells: new Map() };
     // Reset UI flags; keep enabled=false unless user toggles again for the new lake
     setLoading(false); setResolution(null); setError(null); setEnabled(false);
     // Also reset estimate lifecycle state to avoid auto-refetch from previous cycle
