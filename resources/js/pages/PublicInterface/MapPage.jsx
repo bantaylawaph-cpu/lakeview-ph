@@ -309,7 +309,15 @@ function MapPage() {
       setGwFlowpathFC(fc); 
       fitToGeoJSON(fc);
     } catch (e) {
-      await alertError('Flow path error', e?.message || 'Unable to fetch flow path.');
+      const errorMessage = e?.message || 'Unable to fetch flow path.';
+      let userFriendlyMessage = errorMessage;
+      
+      // Provide more user-friendly messages for common external API errors
+      if (errorMessage.toLowerCase().includes('ocean') || errorMessage.toLowerCase().includes('coast')) {
+        userFriendlyMessage = 'Please select a point on land to trace a flow path. Points over water or near the coast cannot be processed.';
+      }
+      
+      await alertError('Flow path error', userFriendlyMessage);
     } finally {
       closeLoading();
     }
@@ -330,7 +338,15 @@ function MapPage() {
       setGwRiversFC(rivers || null);
       fitToGeoJSON(watershed);
     } catch (e) {
-      await alertError('Watershed error', e?.message || 'Unable to delineate watershed.');
+      const errorMessage = e?.message || 'Unable to delineate watershed.';
+      let userFriendlyMessage = errorMessage;
+      
+      // Provide more user-friendly messages for common external API errors
+      if (errorMessage.toLowerCase().includes('ocean') || errorMessage.toLowerCase().includes('coast')) {
+        userFriendlyMessage = 'Please select a point on land to delineate a watershed. Points over water or near the coast cannot be processed.';
+      }
+      
+      await alertError('Watershed error', userFriendlyMessage);
     } finally {
       closeLoading();
     }
