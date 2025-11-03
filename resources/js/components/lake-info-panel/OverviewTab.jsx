@@ -32,6 +32,8 @@ function OverviewTab({
   showFlows = false,       // whether markers are shown on map
   onToggleFlows,           // (checked:boolean) => void
   onJumpToFlow,            // (flow) => void (fly map to flow)
+  isLoadingWatershed = false,
+  isLoadingFlows = false,
 }) {
   const [initialLoading, setInitialLoading] = useState(true);
 
@@ -189,7 +191,7 @@ function OverviewTab({
         <div><strong>Watershed:</strong></div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{watershedName}</span>
-          {showToggle && (
+          {showToggle && !isLoadingWatershed && (
             <button
               type="button"
               aria-pressed={showWatershed}
@@ -209,6 +211,9 @@ function OverviewTab({
             >
               <FiMap size={16} />
             </button>
+          )}
+          {showToggle && isLoadingWatershed && (
+            <LoadingSpinner size={16} color="#fff" inline={true} />
           )}
         </div>
 
@@ -262,7 +267,7 @@ function OverviewTab({
               <div style={{ flex: 1, minWidth: 0 }}>
                 {renderFlowList([...(inflows||[]), ...(outflows||[])])}
               </div>
-              {showFlowToggle && (
+              {showFlowToggle && !isLoadingFlows && (
                 <button
                   type="button"
                   aria-pressed={showFlows}
@@ -282,6 +287,9 @@ function OverviewTab({
                 >
                   <FiMap size={16} />
                 </button>
+              )}
+              {showFlowToggle && isLoadingFlows && (
+                <LoadingSpinner size={16} color="#fff" inline={true} />
               )}
             </div>
 
