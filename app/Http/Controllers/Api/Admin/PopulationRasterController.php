@@ -123,7 +123,8 @@ class PopulationRasterController extends Controller
             return response()->json(['message' => 'Raster not in a processable state.'], 422);
         }
         $makeDefault = filter_var($request->query('make_default'), FILTER_VALIDATE_BOOLEAN) ?? false;
-        IngestPopulationRaster::dispatch($r->id, $makeDefault);
+        // Route the job explicitly to the 'ingest' queue
+        IngestPopulationRaster::dispatch($r->id, $makeDefault)->onQueue('ingest');
         return response()->json(['queued' => true, 'id' => $r->id]);
     }
 

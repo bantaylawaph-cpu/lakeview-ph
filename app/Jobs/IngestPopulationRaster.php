@@ -20,8 +20,6 @@ class IngestPopulationRaster implements ShouldQueue
 
     public $timeout = 1800;
     public $tries = 1;
-    /** Route this job to the dedicated 'ingest' queue */
-    public $queue = 'ingest';
 
     public function __construct(public int $rasterId, public bool $makeDefault = false) {}
 
