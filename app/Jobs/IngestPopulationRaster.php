@@ -130,6 +130,42 @@ class IngestPopulationRaster implements ShouldQueue
                         }
                     }
                 }
+                // Normalize file paths to absolute local files to satisfy raster2pgsql
+                try {
+                    $resolved = [];
+                    foreach ($importFiles as $f) {
+                        // Already absolute and exists
+                        if (is_string($f) && strlen($f) > 0 && ($f[0] === '/' || preg_match('~^[A-Za-z]:\\\\~', $f)) && is_file($f)) {
+                            $resolved[] = $f;
+                            continue;
+                        }
+                        // If it's a local disk path, try resolving to an absolute path
+                        try {
+                            $abs = Storage::disk($disk)->path($f);
+                            if (is_file($abs)) { $resolved[] = $abs; continue; }
+                        } catch (\Throwable $e) { /* not a local path */ }
+                        // As a last resort, stream to temp from the disk
+                        if (Storage::disk($disk)->exists($f)) {
+                            $ext = strtolower(pathinfo($f, PATHINFO_EXTENSION) ?: 'bin');
+                            $tmp = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'pop_ingest_part_' . $r->id . '_' . uniqid() . '.' . $ext;
+                            $in = Storage::disk($disk)->readStream($f);
+                            if ($in === false || $in === null) throw new \RuntimeException('Unable to open stream for: ' . $f);
+                            $out = fopen($tmp, 'w');
+                            if ($out === false) { if (is_resource($in)) fclose($in); throw new \RuntimeException('Unable to create temp file for: ' . $f); }
+                            stream_copy_to_stream($in, $out);
+                            if (is_resource($in)) fclose($in); fclose($out);
+                            $resolved[] = $tmp;
+                            $cleanupLocal = true; // mark for cleanup later
+                            continue;
+                        }
+                        // Not resolvable; keep original for error reporting
+                        $resolved[] = $f;
+                    }
+                    $importFiles = $resolved;
+                } catch (\Throwable $e) {
+                    Log::warning('IngestPopulationRaster: file path normalization failed', ['id' => $r->id, 'error' => $e->getMessage(), 'files' => $importFiles]);
+                }
+
                 $envVars = [ 'PGPASSWORD' => $password ];
                 $tmpSql = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'pop_ingest_' . $r->id . '_' . uniqid() . '.sql';
                 $r2pPath = $r2p;
