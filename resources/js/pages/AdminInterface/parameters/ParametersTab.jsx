@@ -214,6 +214,22 @@ function ParametersTab() {
     }
   };
 
+  // Threshold-based guards removed by request; only sampling events will be used as reference for deletion rules.
+
+  // Check if any sampling events have results that use this parameter
+  const hasSamplingEventsForParameter = useCallback(async (paramId) => {
+    try {
+      const res = await api(`/admin/sample-events?parameter_id=${encodeURIComponent(paramId)}&per_page=1`);
+      const arr = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+      if (Array.isArray(arr) && arr.length > 0) return true;
+      if (res?.meta && typeof res.meta.total === 'number' && res.meta.total > 0) return true;
+      return false;
+    } catch (_) {
+      // Do not block on pre-check errors; backend constraints still apply
+      return false;
+    }
+  }, []);
+
   const deleteGridRow = async (row) => {
     if (!row.__id) {
       setGridEdits((prev) => ({ ...prev, [row.id]: {} }));
@@ -222,6 +238,14 @@ function ParametersTab() {
     }
     const ok = await confirm({ title: 'Delete parameter?', text: `Delete ${row.code}?`, confirmButtonText: 'Delete' });
     if (!ok) return;
+    // Guard: prevent deletion when sampling events used this parameter
+    try {
+      const used = await hasSamplingEventsForParameter(row.__id);
+      if (used) {
+        await alertError('Delete not allowed', `Cannot delete "${row.code}" because there are sampling events that used this parameter.`);
+        return;
+      }
+    } catch (_) {}
     try {
   showLoading('Deleting parameter', 'Please wait…');
       await api(`/admin/parameters/${row.__id}`, { method: "DELETE" });
@@ -413,6 +437,14 @@ function ParametersTab() {
         onClick: async (row) => {
           const ok = await confirm({ title: 'Delete parameter?', text: `Delete ${row.code}?`, confirmButtonText: 'Delete' });
           if (!ok) return;
+          // Guard: prevent deletion when sampling events used this parameter
+          try {
+            const used = await hasSamplingEventsForParameter(row.id);
+            if (used) {
+              await alertError('Delete not allowed', `Cannot delete "${row.code}" because there are sampling events that used this parameter.`);
+              return;
+            }
+          } catch (_) {}
           try {
             showLoading('Deleting parameter', 'Please wait…');
             await api(`/admin/parameters/${row.id}`, { method: "DELETE" });

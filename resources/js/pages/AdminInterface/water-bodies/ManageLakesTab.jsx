@@ -578,14 +578,16 @@ function ManageLakesTab() {
         const linkedWatershedId = detail?.watershed_id ?? detail?.watershed?.id ?? target?.watershed_id ?? target?.watershed?.id ?? null;
         const linkedWatershedName = detail?.watershed?.name ?? target?.watershed?.name ?? null;
 
-        // Parallel checks for sample-events and lake-flows (request 1 item for speed)
+        // Parallel checks for sample-events, lake-flows (in/out tributaries), and published layers (request 1 item for speed)
         const checks = await Promise.allSettled([
           api(`/admin/sample-events?lake_id=${encodeURIComponent(target.id)}&per_page=1`),
           api(`/lake-flows?lake_id=${encodeURIComponent(target.id)}&per_page=1`),
+          api(`/layers?body_type=lake&body_id=${encodeURIComponent(target.id)}&per_page=1`),
         ]);
 
         let hasEvents = false;
         let hasFlows = false;
+        let hasLayers = false;
 
         // sample-events result
         try {
@@ -603,10 +605,19 @@ function ManageLakesTab() {
           else if (res?.meta && typeof res.meta.total === 'number' && res.meta.total > 0) hasFlows = true;
         } catch (e) {}
 
+        // layers result
+        try {
+          const res = checks[2].status === 'fulfilled' ? checks[2].value : null;
+          const arr = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+          if (Array.isArray(arr) && arr.length > 0) hasLayers = true;
+          else if (res?.meta && typeof res.meta.total === 'number' && res.meta.total > 0) hasLayers = true;
+        } catch (e) {}
+
         // Build confirmation message
         const reasons = [];
-        if (hasEvents) reasons.push('associated water quality test(s)');
-        if (hasFlows) reasons.push('inlet/outlet tributary point(s)');
+  if (hasEvents) reasons.push('associated water quality test(s)');
+  if (hasFlows) reasons.push('inlet/outlet tributary point(s)');
+  if (hasLayers) reasons.push('published GIS layer(s)');
         if (linkedWatershedId) reasons.push(linkedWatershedName ? `linked watershed (${linkedWatershedName})` : 'a linked watershed');
 
         if (reasons.length) {

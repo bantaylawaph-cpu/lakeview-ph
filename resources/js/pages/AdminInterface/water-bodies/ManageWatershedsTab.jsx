@@ -309,8 +309,28 @@ export default function ManageWatershedsTab() {
 
   const handleDelete = async (target) => {
     if (!target?.id) return;
-    const ok = await confirm({ title: 'Delete watershed?', text: `Delete "${target.name}"?`, confirmButtonText: 'Delete' });
-    if (!ok) return;
+    // Pre-check for published layers linked to this watershed
+    let hasLayers = false;
+    try {
+      const res = await api(`/layers?body_type=watershed&body_id=${encodeURIComponent(target.id)}&per_page=1`);
+      const arr = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+      if (Array.isArray(arr) && arr.length > 0) hasLayers = true;
+      else if (res?.meta && typeof res.meta.total === 'number' && res.meta.total > 0) hasLayers = true;
+    } catch (_) {
+      // ignore pre-check errors; proceed to normal confirm
+    }
+
+    if (hasLayers) {
+      const okLayers = await confirm({
+        title: 'Related records detected',
+        text: `This watershed has published GIS layer(s). Deleting the watershed may affect related data. Delete anyway?`,
+        confirmButtonText: 'Delete',
+      });
+      if (!okLayers) return;
+    } else {
+      const ok = await confirm({ title: 'Delete watershed?', text: `Delete "${target.name}"?`, confirmButtonText: 'Delete' });
+      if (!ok) return;
+    }
     setLoading(true);
     setErrorMsg("");
     try {

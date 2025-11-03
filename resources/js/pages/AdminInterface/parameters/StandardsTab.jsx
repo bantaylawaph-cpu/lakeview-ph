@@ -4,7 +4,7 @@ import { FiPlus, FiSave, FiTrash2 } from "react-icons/fi";
 import TableLayout from "../../../layouts/TableLayout";
 import { api } from "../../../lib/api";
 import { cachedGet, invalidateHttpCache } from "../../../lib/httpCache";
-import { alertSuccess, alertError, showLoading, closeLoading } from "../../../lib/alerts";
+import { confirm, alertSuccess, alertError, showLoading, closeLoading } from "../../../lib/alerts";
 
 const emptyStandard = {
   code: "",
@@ -99,6 +99,21 @@ function StandardsTab() {
       setGridEdits((prev) => ({ ...prev, [row.id]: {} }));
       setNewRows((prev) => prev.filter((rid) => rid !== row.id));
       return;
+    }
+    // Confirm deletion
+    const ok = await confirm({ title: 'Delete standard?', text: `Delete ${row.code}?`, confirmButtonText: 'Delete' });
+    if (!ok) return;
+    // Guard: prevent deletion if there are sampling events using this standard
+    try {
+      const resEv = await api(`/admin/sample-events?applied_standard_id=${encodeURIComponent(row.__id)}&per_page=1`);
+      const arrEv = Array.isArray(resEv?.data) ? resEv.data : Array.isArray(resEv) ? resEv : [];
+      const hasEvents = (Array.isArray(arrEv) && arrEv.length > 0) || (resEv?.meta && typeof resEv.meta.total === 'number' && resEv.meta.total > 0);
+      if (hasEvents) {
+        await alertError('Delete not allowed', `Cannot delete "${row.code}" because there are sampling events that used this standard.`);
+        return;
+      }
+    } catch (_) {
+      // Ignore pre-check failures; backend will still enforce constraints
     }
     try {
   showLoading('Deleting standard', 'Please wait…');
