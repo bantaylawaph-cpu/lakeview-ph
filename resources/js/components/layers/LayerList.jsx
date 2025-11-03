@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FiLayers, FiLoader, FiEye, FiTrash2, FiEdit2 } from "react-icons/fi";
 
 import Modal from "../Modal";
-import { confirm, alertError, alertSuccess, alertWarning } from "../../lib/alerts";
+import { confirm, alertError, alertSuccess, alertWarning, showLoading, closeLoading } from "../../lib/alerts";
 import { fetchAllLayers, toggleLayerVisibility, deleteLayer, updateLayer, computeNextVisibility } from "../../lib/layers";
 import TableLayout from "../../layouts/TableLayout";
 import TableToolbar from "../table/TableToolbar";
@@ -230,11 +230,14 @@ function LayerList({
     if (allowedVisibilityValues.length < 2) return; // read-only context
     if (currentUserRole && !['superadmin','org_admin'].includes(currentUserRole)) return; // guard
     try {
+  showLoading('Updating visibility', 'Please wait…');
       await toggleLayerVisibility(row, allowedVisibilityValues);
       await refresh();
     } catch (e) {
       console.error('[LayerList] Toggle visibility failed', e);
       await alertError('Failed to toggle visibility', e?.message || '');
+    } finally {
+      closeLoading();
     }
   };
 
@@ -244,17 +247,21 @@ function LayerList({
     const name = target && typeof target === 'object' ? target.name : null;
     if (!(await confirm({ title: 'Delete this layer?', text: 'This cannot be undone.', confirmButtonText: 'Delete' }))) return;
     try {
+  showLoading('Deleting layer', 'Please wait…');
       await deleteLayer(id);
       await refresh();
       await alertSuccess('Deleted', name ? `"${name}" was deleted.` : 'Layer deleted.');
     } catch (e) {
       console.error('[LayerList] Delete failed', e);
       await alertError('Failed to delete layer', e?.message || '');
+    } finally {
+      closeLoading();
     }
   };
 
   const doToggleDefault = async (row) => {
     try {
+  showLoading(row.is_active ? 'Updating layer' : 'Setting as default', 'Please wait…');
       if (row.is_active) {
         // Turn OFF current default
         await updateLayer(row.id, { is_active: false });
@@ -272,6 +279,8 @@ function LayerList({
       } catch (e) {
       console.error('[LayerList] Toggle default failed', e);
       await alertError('Failed to toggle default', e?.message || '');
+    } finally {
+      closeLoading();
     }
   };
 
@@ -445,8 +454,17 @@ function LayerList({
         normalizedVisibilityOptions={normalizedVisibilityOptions}
         allLayers={layers}
         onSave={async (id, patch) => {
-          await updateLayer(id, patch);
-          await refresh();
+          try {
+            showLoading('Saving layer', 'Please wait…');
+            await updateLayer(id, patch);
+            await refresh();
+            await alertSuccess('Saved', 'Layer updated.');
+          } catch (e) {
+            console.error('[LayerList] Edit save failed', e);
+            await alertError('Save failed', e?.message || 'Failed to save layer');
+          } finally {
+            closeLoading();
+          }
         }}
       />
     </>

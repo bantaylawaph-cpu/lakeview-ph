@@ -6,7 +6,7 @@ import TableToolbar from "../../../components/table/TableToolbar";
 import FilterPanel from "../../../components/table/FilterPanel";
 import { api, buildQuery } from "../../../lib/api";
 import { cachedGet, invalidateHttpCache } from "../../../lib/httpCache";
-import { confirm, alertSuccess, alertError } from "../../../lib/alerts";
+import { confirm, alertSuccess, alertError, showLoading, closeLoading } from "../../../lib/alerts";
 
 const CATEGORY_OPTIONS = [
   { value: "Physico-chemical", label: "Physico-chemical" },
@@ -189,6 +189,7 @@ function ParametersTab() {
 
     try {
       if (effectiveRow.__id) {
+  showLoading('Saving parameter', 'Please wait…');
         await api(`/admin/parameters/${effectiveRow.__id}`, { method: "PUT", body: payload });
         await alertSuccess("Saved", `Updated ${payload.code}.`);
       } else {
@@ -196,6 +197,7 @@ function ParametersTab() {
           await alertError("Validation", "Code and Name are required for new parameter");
           return;
         }
+  showLoading('Creating parameter', 'Please wait…');
         await api(`/admin/parameters`, { method: "POST", body: payload });
         await alertSuccess("Created", `Created ${payload.code}.`);
       }
@@ -207,6 +209,8 @@ function ParametersTab() {
     } catch (err) {
       console.error("Failed to save parameter", err);
       await alertError("Save failed", err?.message || "Failed to save parameter");
+    } finally {
+      closeLoading();
     }
   };
 
@@ -219,6 +223,7 @@ function ParametersTab() {
     const ok = await confirm({ title: 'Delete parameter?', text: `Delete ${row.code}?`, confirmButtonText: 'Delete' });
     if (!ok) return;
     try {
+  showLoading('Deleting parameter', 'Please wait…');
       await api(`/admin/parameters/${row.__id}`, { method: "DELETE" });
       setGridEdits((prev) => ({ ...prev, [row.id]: {} }));
       invalidateHttpCache('/admin/parameters');
@@ -233,6 +238,8 @@ function ParametersTab() {
       } else {
         await alertError('Delete failed', raw || 'Failed to delete parameter');
       }
+    } finally {
+      closeLoading();
     }
   };
 
@@ -407,6 +414,7 @@ function ParametersTab() {
           const ok = await confirm({ title: 'Delete parameter?', text: `Delete ${row.code}?`, confirmButtonText: 'Delete' });
           if (!ok) return;
           try {
+            showLoading('Deleting parameter', 'Please wait…');
             await api(`/admin/parameters/${row.id}`, { method: "DELETE" });
             await fetchParameters();
             await alertSuccess('Deleted', `"${row.code}" was deleted.`);
@@ -418,6 +426,8 @@ function ParametersTab() {
             } else {
               await alertError('Delete failed', raw || 'Failed to delete parameter');
             }
+          } finally {
+            closeLoading();
           }
         },
       },
@@ -447,9 +457,11 @@ function ParametersTab() {
       };
 
       if (form.__id) {
+  showLoading('Saving parameter', 'Please wait…');
         await api(`/admin/parameters/${form.__id}`, { method: "PUT", body: payload });
         await alertSuccess('Saved', `"${payload.code}" was updated.`);
       } else {
+  showLoading('Creating parameter', 'Please wait…');
         await api("/admin/parameters", { method: "POST", body: payload });
         await alertSuccess('Created', `"${payload.code}" was created.`);
       }
@@ -461,6 +473,7 @@ function ParametersTab() {
       console.error("Failed to save parameter", err);
       await alertError('Save failed', err?.message || 'Failed to save parameter');
     } finally {
+      closeLoading();
       setSaving(false);
     }
   };
@@ -474,7 +487,7 @@ function ParametersTab() {
       </div>
 
       <div className="dashboard-card-body" style={{ paddingTop: 8 }}>
-        <TableLayout
+          <TableLayout
           tableId={GRID_TABLE_ID}
           columns={effectiveColumns}
           data={gridRows}
@@ -487,6 +500,12 @@ function ParametersTab() {
           columnPicker={false}
           toolbar={
             <div style={{ display: 'flex', flexDirection: 'column', width: '100%', flex: 1, minWidth: 0, gap: 8 }}>
+              <div>
+                <button type="button" className="pill-btn primary" onClick={() => setNewRows((prev) => [`__new__-${Date.now()}`, ...prev])}>
+                  <FiPlus />
+                  <span>Add Water Quality Parameter</span>
+                </button>
+              </div>
               <TableToolbar
                 tableId={GRID_TABLE_ID}
                 search={{ value: query, onChange: setQuery, placeholder: 'Search code or name…' }}

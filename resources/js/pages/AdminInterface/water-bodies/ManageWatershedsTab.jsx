@@ -8,7 +8,7 @@ import L from "leaflet";
 
 import TableLayout from "../../../layouts/TableLayout";
 import TableToolbar from "../../../components/table/TableToolbar";
-import { confirm, alertSuccess, alertError } from "../../../lib/alerts";
+import { confirm, alertSuccess, alertError, showLoading, closeLoading } from "../../../lib/alerts";
 import WatershedForm from "../../../components/WatershedForm";
 import { api } from "../../../lib/api";
 import { cachedGet, invalidateHttpCache } from "../../../lib/httpCache";
@@ -286,9 +286,11 @@ export default function ManageWatershedsTab() {
     setErrorMsg("");
     try {
       if (formMode === "edit" && data.id) {
+  showLoading('Saving watershed', 'Please wait…');
         await api(`/watersheds/${data.id}`, { method: "PUT", body: payload });
         await alertSuccess('Saved', `"${payload.name}" was updated.`);
       } else {
+  showLoading('Creating watershed', 'Please wait…');
         await api('/watersheds', { method: "POST", body: payload });
         await alertSuccess('Created', `"${payload.name}" was created.`);
       }
@@ -300,6 +302,7 @@ export default function ManageWatershedsTab() {
       setErrorMsg(parseError(e, "Failed to save watershed."));
       await alertError('Save failed', parseError(e, 'Failed to save watershed.'));
     } finally {
+      closeLoading();
       setLoading(false);
     }
   };
@@ -311,6 +314,7 @@ export default function ManageWatershedsTab() {
     setLoading(true);
     setErrorMsg("");
     try {
+  showLoading('Deleting watershed', 'Please wait…');
       await api(`/watersheds/${target.id}`, { method: "DELETE" });
       invalidateHttpCache('/watersheds');
       await loadWatersheds();
@@ -320,6 +324,7 @@ export default function ManageWatershedsTab() {
       setErrorMsg(parseError(e, "Failed to delete watershed."));
       await alertError('Delete failed', parseError(e, 'Failed to delete watershed.'));
     } finally {
+      closeLoading();
       setLoading(false);
     }
   };

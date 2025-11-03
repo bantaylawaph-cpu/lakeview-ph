@@ -8,7 +8,7 @@ import { GeoJSON, CircleMarker } from 'react-leaflet';
 import L from 'leaflet';
 import { api } from '../../../lib/api';
 import { cachedGet, invalidateHttpCache } from '../../../lib/httpCache';
-import { confirm, alertError, alertSuccess } from '../../../lib/alerts';
+import { confirm, alertError, alertSuccess, showLoading, closeLoading } from '../../../lib/alerts';
 import TableToolbar from '../../../components/table/TableToolbar';
 import TableLayout from '../../../layouts/TableLayout';
 
@@ -98,12 +98,15 @@ export default function ManageFlowsTab() {
     const ok = await confirm({ title: 'Delete tributary?', text: `Delete "${src.name || 'this tributary'}"?`, confirmButtonText: 'Delete' });
     if (!ok) return;
     try { 
+  showLoading('Deleting tributary', 'Please wait…');
       await api(`/lake-flows/${src.id}`, { method: 'DELETE' }); 
       invalidateHttpCache('/lake-flows');
       await alertSuccess('Deleted', `"${src.name || 'Tributary'}" has been deleted successfully.`);
       fetchRows(); 
     } catch (e) { 
       await alertError('Delete failed', e.message || 'Failed to delete tributary'); 
+    } finally {
+      closeLoading();
     }
   };
 
@@ -165,12 +168,13 @@ export default function ManageFlowsTab() {
     try {
       const path = formMode === 'create' ? '/lake-flows' : `/lake-flows/${formInitial.id}`;
       // Pass plain object; api wrapper will JSON.stringify once. Previously we double-stringified causing 422.
+  showLoading(formMode === 'create' ? 'Creating tributary' : 'Saving tributary', 'Please wait…');
       await api(path, { method, body });
       await alertSuccess('Success', formMode === 'create' ? `Tributary "${payload.name}" created successfully in ${lakeName}!` : 'Tributary updated successfully!');
     } catch (e) {
       await alertError('Save failed', e.message || 'Failed to save tributary');
       return;
-    }
+    } finally { closeLoading(); }
     setFormOpen(false); invalidateHttpCache('/lake-flows'); fetchRows();
   };
 

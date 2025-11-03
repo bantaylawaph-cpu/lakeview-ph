@@ -4,7 +4,7 @@ import { FiSave, FiTrash2 } from "react-icons/fi";
 import TableLayout from "../../../layouts/TableLayout";
 import { api } from "../../../lib/api";
 import { cachedGet, invalidateHttpCache } from "../../../lib/httpCache";
-import { confirm, alertSuccess, alertError } from "../../../lib/alerts";
+import { confirm, alertSuccess, alertError, showLoading, closeLoading } from "../../../lib/alerts";
 
 const GRID_TABLE_ID = "admin-thresholds-grid";
 
@@ -146,9 +146,11 @@ function ThresholdsTab() {
     };
     try {
       if (row.__id) {
+  showLoading('Saving threshold', 'Please wait…');
         await api(`/admin/parameter-thresholds/${row.__id}`, { method: "PUT", body: payload });
         await alertSuccess("Saved", `Updated ${row.class_code} threshold.`);
       } else {
+  showLoading('Creating threshold', 'Please wait…');
         await api(`/admin/parameter-thresholds`, { method: "POST", body: payload });
         await alertSuccess("Created", `Saved ${row.class_code} threshold.`);
       }
@@ -158,6 +160,8 @@ function ThresholdsTab() {
     } catch (err) {
       console.error("Failed to save threshold", err);
       await alertError("Save failed", err?.message || "Failed to save threshold");
+    } finally {
+      closeLoading();
     }
   };
 
@@ -169,6 +173,7 @@ function ThresholdsTab() {
     const ok = await confirm({ title: 'Delete threshold?', text: `Delete ${row.class_code} threshold?`, confirmButtonText: 'Delete' });
     if (!ok) return;
     try {
+  showLoading('Deleting threshold', 'Please wait…');
       await api(`/admin/parameter-thresholds/${row.__id}`, { method: "DELETE" });
       setGridEdits((prev) => ({ ...prev, [row.class_code]: {} }));
       invalidateHttpCache('/admin/parameter-thresholds');
@@ -177,6 +182,8 @@ function ThresholdsTab() {
     } catch (err) {
       console.error("Failed to delete threshold", err);
       await alertError('Delete failed', err?.message || 'Failed to delete threshold');
+    } finally {
+      closeLoading();
     }
   };
 

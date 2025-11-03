@@ -11,7 +11,7 @@ import TableLayout from "../../../layouts/TableLayout";
 import { api } from "../../../lib/api";
 import { cachedGet, invalidateHttpCache } from "../../../lib/httpCache";
 import LakeForm from "../../../components/LakeForm";
-import { confirm, alertSuccess, alertError } from "../../../lib/alerts";
+import { confirm, alertSuccess, alertError, showLoading, closeLoading } from "../../../lib/alerts";
 import TableToolbar from "../../../components/table/TableToolbar";
 import FilterPanel from "../../../components/table/FilterPanel";
 
@@ -630,6 +630,7 @@ function ManageLakesTab() {
 
         // Proceed with delete
         try {
+          showLoading('Deleting lake', 'Please wait…');
           await api(`/lakes/${target.id}`, { method: "DELETE" });
           invalidateHttpCache('/lakes');
           await fetchLakes();
@@ -639,6 +640,7 @@ function ManageLakesTab() {
           setErrorMsg("Delete failed. This lake may be referenced by other records.");
           await alertError('Delete failed', err?.message || 'Could not delete lake');
         } finally {
+          closeLoading();
           setLoading(false);
         }
         checksOk = true;
@@ -651,6 +653,7 @@ function ManageLakesTab() {
           setLoading(true);
           setErrorMsg("");
           try {
+            showLoading('Deleting lake', 'Please wait…');
             await api(`/lakes/${target.id}`, { method: "DELETE" });
             invalidateHttpCache('/lakes');
             await fetchLakes();
@@ -660,6 +663,7 @@ function ManageLakesTab() {
             setErrorMsg("Delete failed. This lake may be referenced by other records.");
             await alertError('Delete failed', err2?.message || 'Could not delete lake');
           } finally {
+            closeLoading();
             setLoading(false);
           }
         } catch (e2) {
@@ -700,9 +704,11 @@ function ManageLakesTab() {
       setErrorMsg("");
       try {
         if (formMode === "create") {
+          showLoading('Creating lake', 'Please wait…');
           await api("/lakes", { method: "POST", body: payload });
           await alertSuccess('Created', `"${payload.name}" was created.`);
         } else {
+          showLoading('Saving lake', 'Please wait…');
           await api(`/lakes/${payload.id}`, { method: "PUT", body: payload });
           await alertSuccess('Saved', `"${payload.name}" was updated.`);
         }
@@ -714,6 +720,7 @@ function ManageLakesTab() {
         setErrorMsg("Save failed. Please verify required fields and that the name is unique.");
         await alertError('Save failed', err?.message || 'Unable to save lake');
       } finally {
+        closeLoading();
         setLoading(false);
       }
     },

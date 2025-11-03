@@ -4,7 +4,7 @@ import { FiPlus, FiSave, FiTrash2 } from "react-icons/fi";
 import TableLayout from "../../../layouts/TableLayout";
 import { api } from "../../../lib/api";
 import { cachedGet, invalidateHttpCache } from "../../../lib/httpCache";
-import { alertSuccess, alertError } from "../../../lib/alerts";
+import { alertSuccess, alertError, showLoading, closeLoading } from "../../../lib/alerts";
 
 const emptyStandard = {
   code: "",
@@ -70,6 +70,7 @@ function StandardsTab() {
     };
     try {
       if (row.__id) {
+  showLoading('Saving standard', 'Please wait…');
         await api(`/admin/wq-standards/${row.__id}`, { method: "PUT", body: payload });
         await alertSuccess("Saved", `Updated ${payload.code}.`);
       } else {
@@ -77,6 +78,7 @@ function StandardsTab() {
           await alertError("Validation", "Code is required for new standard");
           return;
         }
+  showLoading('Creating standard', 'Please wait…');
         await api(`/admin/wq-standards`, { method: "POST", body: payload });
         await alertSuccess("Created", `Created ${payload.code}.`);
       }
@@ -87,6 +89,8 @@ function StandardsTab() {
     } catch (err) {
       console.error("Failed to save standard", err);
       await alertError("Save failed", err?.message || "Failed to save standard");
+    } finally {
+      closeLoading();
     }
   };
 
@@ -97,6 +101,7 @@ function StandardsTab() {
       return;
     }
     try {
+  showLoading('Deleting standard', 'Please wait…');
       await api(`/admin/wq-standards/${row.__id}`, { method: "DELETE" });
       setGridEdits((prev) => ({ ...prev, [row.id]: {} }));
       invalidateHttpCache('/admin/wq-standards');
@@ -105,6 +110,8 @@ function StandardsTab() {
     } catch (err) {
       console.error("Failed to delete standard", err);
       await alertError("Delete failed", err?.message || "Failed to delete standard");
+    } finally {
+      closeLoading();
     }
   };
 

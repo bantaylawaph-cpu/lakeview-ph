@@ -16,7 +16,7 @@ import {
 } from "../../utils/geo";
 
 import { createLayer, fetchLakeOptions, fetchWatershedOptions } from "../../lib/layers";
-import { alertSuccess, alertError } from "../../lib/alerts";
+import { alertSuccess, alertError, showLoading, closeLoading } from "../../lib/alerts";
 import { parseSpatialFile, ACCEPTED_EXT_REGEX } from "../../utils/parsers";
 import PolygonChooser from '../../components/PolygonChooser';
 import FileDropzone from './FileDropzone';
@@ -421,10 +421,10 @@ export default function LayerWizard({
         geom_geojson: JSON.stringify(form.uploadGeom),
       };
 
-
+      // Show loading while publishing
+  showLoading('Publishing layer', 'Please wait…');
       const res = await createLayer(payload);
       if (typeof onPublished === "function") onPublished(res);
-
       await alertSuccess("Layer created successfully.");
     } catch (e) {
       console.error('[LayerWizard] Publish failed', e);
@@ -452,6 +452,8 @@ export default function LayerWizard({
 
       setError(friendly);
       await alertError('Failed to publish layer', friendly);
+    } finally {
+      closeLoading();
     }
   };
 
