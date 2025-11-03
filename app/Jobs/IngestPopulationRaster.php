@@ -42,7 +42,39 @@ class IngestPopulationRaster implements ShouldQueue
         $r->save();
 
         $disk = $r->disk ?: 'local';
-        if (!Storage::disk($disk)->exists($r->path)) {
+        // Brief retry loop in case of eventual consistency on remote storage
+        $exists = false;
+        for ($i = 0; $i < 3; $i++) {
+            try {
+                if (Storage::disk($disk)->exists($r->path)) { $exists = true; break; }
+            } catch (\Throwable $e) {
+                // swallow, we'll log details below
+            }
+            usleep(300000); // 300ms backoff
+        }
+        if (!$exists) {
+            // Diagnostic logging without leaking secrets
+            $defaultDisk = config('filesystems.default');
+            $s3Info = [
+                'bucket' => (string)config('filesystems.disks.s3.bucket'),
+                'endpoint' => (string)config('filesystems.disks.s3.endpoint'),
+                'region' => (string)config('filesystems.disks.s3.region'),
+                'use_path_style' => (bool)config('filesystems.disks.s3.use_path_style_endpoint')
+            ];
+            $awsEnvOk = [
+                'AWS_ACCESS_KEY_ID' => env('AWS_ACCESS_KEY_ID') ? true : false,
+                'AWS_SECRET_ACCESS_KEY' => env('AWS_SECRET_ACCESS_KEY') ? true : false,
+                'AWS_BUCKET' => env('AWS_BUCKET') ? true : false,
+                'AWS_ENDPOINT' => env('AWS_ENDPOINT') ? true : false,
+            ];
+            \Log::error('IngestPopulationRaster: file missing at ingestion time', [
+                'id' => $r->id,
+                'disk' => $disk,
+                'path' => $r->path,
+                'filesystems.default' => $defaultDisk,
+                's3_info' => $s3Info,
+                'aws_env_present' => $awsEnvOk,
+            ]);
             $r->status = 'error';
             $r->error_message = 'File missing at ingestion time';
             $r->ingestion_finished_at = now();
