@@ -96,7 +96,7 @@ export default function StationModal({
   function MiniPickMap({ value = {}, onChange }) {
     const ref = React.useRef(null);
     const mapRef = React.useRef(null);
-    const markerRef = React.useRef(null);
+  const markerRef = React.useRef(null);
 
     useEffect(() => {
       let mounted = true;
@@ -110,13 +110,13 @@ export default function StationModal({
 
         map.on('click', (e) => {
           const { lat, lng } = e.latlng;
-          if (!markerRef.current) markerRef.current = L.marker([lat, lng]).addTo(map);
+          if (!markerRef.current) markerRef.current = L.circleMarker([lat, lng], { radius: 8, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.9 }).addTo(map);
           else markerRef.current.setLatLng([lat, lng]);
           onChange?.({ lat: Number(lat.toFixed(6)), lng: Number(lng.toFixed(6)) });
         });
 
         if (value.lat && value.lng) {
-          markerRef.current = L.marker([value.lat, value.lng]).addTo(map);
+          markerRef.current = L.circleMarker([value.lat, value.lng], { radius: 8, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.9 }).addTo(map);
           map.setView([value.lat, value.lng], 12);
         }
       })();
@@ -128,9 +128,12 @@ export default function StationModal({
       if (!mapRef.current) return;
       const lat = value.lat; const lng = value.lng;
       if (lat && lng) {
-        if (!markerRef.current) markerRef.current = (async () => { const L = await import('leaflet'); return L.marker([lat, lng]).addTo(mapRef.current); })();
-        else markerRef.current.setLatLng([lat, lng]);
-        mapRef.current.setView([lat, lng], 12);
+        (async () => {
+          const L = await import('leaflet');
+          if (!markerRef.current) markerRef.current = L.circleMarker([lat, lng], { radius: 8, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.9 }).addTo(mapRef.current);
+          else markerRef.current.setLatLng([lat, lng]);
+          mapRef.current.setView([lat, lng], 12);
+        })();
       }
     }, [value.lat, value.lng]);
 

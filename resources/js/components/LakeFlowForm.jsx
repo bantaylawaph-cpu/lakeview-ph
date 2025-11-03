@@ -128,14 +128,14 @@ function MiniPickMap({ form, setForm }) {
       map.on('click', (e) => {
         const { lat, lng } = e.latlng;
         // place marker
-        if (!markerRef.current) markerRef.current = L.marker([lat, lng]).addTo(map);
+        if (!markerRef.current) markerRef.current = L.circleMarker([lat, lng], { radius: 8, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.9 }).addTo(map);
         else markerRef.current.setLatLng([lat, lng]);
         setForm((f) => ({ ...f, lat: Number(lat.toFixed(6)), lon: Number(lng.toFixed(6)) }));
       });
 
       // initial marker from form coordinates
       if (form.lat && form.lon) {
-        markerRef.current = L.marker([form.lat, form.lon]).addTo(map);
+        markerRef.current = L.circleMarker([form.lat, form.lon], { radius: 8, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.9 }).addTo(map);
         map.setView([form.lat, form.lon], 12);
       }
     })();
@@ -176,7 +176,8 @@ function MiniPickMap({ form, setForm }) {
         const lat = data?.latitude ?? data?.lat ?? null;
         const lon = data?.longitude ?? data?.lon ?? null;
         if (lat && lon && mapRef.current) {
-          if (!markerRef.current) markerRef.current = (await import('leaflet')).marker([lat, lon]).addTo(mapRef.current);
+          const L = await import('leaflet');
+          if (!markerRef.current) markerRef.current = L.circleMarker([lat, lon], { radius: 8, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.9 }).addTo(mapRef.current);
           else markerRef.current.setLatLng([lat, lon]);
           mapRef.current.setView([lat, lon], 12);
           return;
@@ -212,9 +213,12 @@ function MiniPickMap({ form, setForm }) {
     if (!mapRef.current) return;
     const lat = form.lat; const lon = form.lon;
     if (lat && lon) {
-      if (!markerRef.current) markerRef.current = (async () => { const L = await import('leaflet'); return L.marker([lat, lon]).addTo(mapRef.current); })();
-      else markerRef.current.setLatLng([lat, lon]);
-      mapRef.current.setView([lat, lon], 12);
+      (async () => {
+        const L = await import('leaflet');
+        if (!markerRef.current) markerRef.current = L.circleMarker([lat, lon], { radius: 8, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.9 }).addTo(mapRef.current);
+        else markerRef.current.setLatLng([lat, lon]);
+        mapRef.current.setView([lat, lon], 12);
+      })();
     }
   }, [form.lat, form.lon]);
 
