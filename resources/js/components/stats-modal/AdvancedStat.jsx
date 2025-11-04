@@ -309,7 +309,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
         type="button"
         className="pill-btn liquid"
         title="Explain this tool"
-        onClick={() => setInfoOpen(true)}
+        onClick={setInfoOpen}
         style={{ width:32, height:32, padding:0, borderRadius:'50%', display:'inline-flex', alignItems:'center', justifyContent:'center' }}
       >
         <FiInfo size={14} />
@@ -422,7 +422,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
       onClose={() => setCustomOpen(false)}
       onSave={(vals)=>{ setCustomValues(vals); setCustomOpen(false); setResult(null); }}
     />
-  <InfoModal open={infoOpen} onClose={() => setInfoOpen(false)} title="Advanced Statistics – What it does and how to use it" sections={infoSectionsContent} />
+  <InfoModal open={infoOpen} onClose={closeInfo} title="About Advanced Statistics" sections={infoSectionsContent} />
   </div>
     </div>
   );
