@@ -266,26 +266,34 @@ function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth, onOpenFeedbac
           </li>
         )}
 
-        <li>
-          <a
-            href="/about"
-            className={`sidebar-row ${isActive('/about') ? 'active' : ''}`}
-            onClick={handleNav('/about')}
-          >
-            <FiInfo className="sidebar-icon" />
-            <span>About LakeView PH</span>
-          </a>
-        </li>
-        <li>
-          <a
-            href="/manual"
-            className={`sidebar-row ${isActive('/manual') ? 'active' : ''}`}
-            onClick={handleNav('/manual')}
-          >
-            <FiBookOpen className="sidebar-icon" />
-            <span>How to use LakeView?</span>
-          </a>
-        </li>
+        {/**
+         * Temporarily disabled: About LakeView PH link
+         *
+         * <li>
+         *   <a
+         *     href="/about"
+         *     className={`sidebar-row ${isActive('/about') ? 'active' : ''}`}
+         *     onClick={handleNav('/about')}
+         *   >
+         *     <FiInfo className="sidebar-icon" />
+         *     <span>About LakeView PH</span>
+         *   </a>
+         * </li>
+         */}
+        {/**
+         * Temporarily disabled: How to use LakeView PH link
+         *
+         * <li>
+         *   <a
+         *     href="/manual"
+         *     className={`sidebar-row ${isActive('/manual') ? 'active' : ''}`}
+         *     onClick={handleNav('/manual')}
+         *   >
+         *     <FiBookOpen className="sidebar-icon" />
+         *     <span>How to use LakeView?</span>
+         *   </a>
+         * </li>
+         */}
         <li>
           <a
             href="#feedback"
@@ -296,18 +304,22 @@ function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth, onOpenFeedbac
             <span>Submit Feedback</span>
           </a>
         </li>
-        <li>
-          <a
-            className="sidebar-row"
-            href="https://github.com/"
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={!pinned ? onClose : undefined}
-          >
-            <FiGithub className="sidebar-icon" />
-            <span>GitHub Page</span>
-          </a>
-        </li>
+        {/**
+         * Temporarily disabled: GitHub Page link
+         *
+         * <li>
+         *   <a
+         *     className="sidebar-row"
+         *     href="https://github.com/"
+         *     target="_blank"
+         *     rel="noopener noreferrer"
+         *     onClick={!pinned ? onClose : undefined}
+         *   >
+         *     <FiGithub className="sidebar-icon" />
+         *     <span>GitHub Page</span>
+         *   </a>
+         * </li>
+         */}
         {/* About the Data (dropdown) */}
         <li className="has-submenu">
           <a
