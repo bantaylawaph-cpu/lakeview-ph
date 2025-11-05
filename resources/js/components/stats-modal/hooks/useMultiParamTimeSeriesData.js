@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 
-// Build array of time-series chart data for all primary parameters in events
+// Build array of time-series chart data for all parameters in events
 // Each chart's lines represent distinct depths; thresholds are overlaid as guides.
 // Returns [{ id, code, name, unit, threshold: {min, max}, labels, statsByDepth, chartData }, ...]
 export default function useMultiParamTimeSeriesData({ events, bucket }) {
@@ -68,10 +68,8 @@ export default function useMultiParamTimeSeriesData({ events, bucket }) {
       if (!tKey) continue;
       const results = Array.isArray(ev?.results) ? ev.results : [];
       for (const r of results) {
-        const p = r?.parameter;
-        if (!p) continue;
-        const group = String(p.group || p.param_group || '').toLowerCase();
-        if (group !== 'primary') continue;
+  const p = r?.parameter;
+  if (!p) continue;
         const v = Number(r?.value);
         if (!Number.isFinite(v)) continue;
         const pid = r.parameter_id || p.id;
