@@ -159,7 +159,7 @@ export default function FilterTray({ open, onClose, onApply, initial = {} }) {
           <div className="ft-row">
             <label>Region</label>
             <select aria-label="Region" value={region} onChange={(e) => setRegion(e.target.value)} disabled={loading}>
-              <option value="">(any)</option>
+              <option value="">All Regions</option>
               {regionOptions.map((r) => (
                 <option key={r} value={r}>{r}</option>
               ))}
@@ -169,7 +169,7 @@ export default function FilterTray({ open, onClose, onApply, initial = {} }) {
           <div className="ft-row">
             <label>Province</label>
             <select aria-label="Province" value={province} onChange={(e) => setProvince(e.target.value)} disabled={loading}>
-              <option value="">(any)</option>
+              <option value="">All Provinces</option>
               {provinceOptions.map((p) => (
                 <option key={p} value={p}>{p}</option>
               ))}
@@ -179,7 +179,7 @@ export default function FilterTray({ open, onClose, onApply, initial = {} }) {
           <div className="ft-row">
             <label>Municipality/City</label>
             <select aria-label="Municipality/City" value={municipality} onChange={(e) => setMunicipality(e.target.value)} disabled={loading}>
-              <option value="">(any)</option>
+              <option value="">All Municipalities</option>
               {municipalityOptions.map((m) => (
                 <option key={m} value={m}>{m}</option>
               ))}
@@ -189,7 +189,7 @@ export default function FilterTray({ open, onClose, onApply, initial = {} }) {
           <div className="ft-row full-row">
             <label>Water Body Classification</label>
             <select aria-label="Water Body Classification" value={classCode} onChange={(e) => setClassCode(e.target.value)} disabled={loading}>
-              <option value="">(any)</option>
+              <option value="">All Classifications</option>
               {classOptions.map((c) => (
                 <option key={c.code || c.name} value={c.code || c.name}>{c.name || c.code}</option>
               ))}
