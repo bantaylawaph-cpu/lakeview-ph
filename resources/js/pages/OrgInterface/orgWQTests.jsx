@@ -18,6 +18,9 @@ export default function OrgWQTests({ initialLakes = [], initialTests = [], param
     setFiltersOpen,
     displayColumns,
     filtered,
+    sorted,
+    sort,
+    handleSortChange,
     actions,
     resetSignal,
     loading,
@@ -58,6 +61,8 @@ export default function OrgWQTests({ initialLakes = [], initialTests = [], param
           serverSide={true}
           pagination={{ page, totalPages }}
           onPageChange={(p) => setPage(p)}
+          sort={sort}
+          onSortChange={handleSortChange}
         />
       </div>
       <OrgWQTestModal

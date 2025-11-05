@@ -34,10 +34,10 @@ class LakeFlowController extends Controller
         // Search
         if ($search = $request->query('q')) {
             $q->where(function ($query) use ($search) {
-                $query->where('name', 'like', "%{$search}%")
-                    ->orWhere('source', 'like', "%{$search}%")
+                $query->where(DB::raw('LOWER(name)'), 'like', strtolower("%{$search}%"))
+                    ->orWhere(DB::raw('LOWER(source)'), 'like', strtolower("%{$search}%"))
                     ->orWhereHas('lake', function ($q) use ($search) {
-                        $q->where('name', 'like', "%{$search}%");
+                        $q->where(DB::raw('LOWER(name)'), 'like', strtolower("%{$search}%"));
                     });
             });
         }

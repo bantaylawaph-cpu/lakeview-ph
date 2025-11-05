@@ -50,6 +50,25 @@ export function useWQTests({ variant, tableId, initialLakes = [], initialTests =
   const [resetSignal, setResetSignal] = useState(0);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  // Sorting (client-side on current page data)
+  const SORT_KEY = `${tableId || 'wqtests'}::sort`;
+  const [sort, setSort] = useState(() => {
+    try {
+      const raw = localStorage.getItem(SORT_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed.id === 'string' && (parsed.dir === 'asc' || parsed.dir === 'desc')) {
+          return parsed;
+        }
+      }
+    } catch {}
+    // Default to sampling date (Month-Day) DESC i.e., most recent first
+    return { id: 'month_day', dir: 'desc' };
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem(SORT_KEY, JSON.stringify(sort)); } catch {}
+  }, [SORT_KEY, sort]);
 
   // Auth/context
   const [currentUserRole, setCurrentUserRole] = useState(null);
@@ -249,6 +268,10 @@ export function useWQTests({ variant, tableId, initialLakes = [], initialTests =
         const params = new URLSearchParams();
         params.set('per_page', '10');
         params.set('page', String(page));
+        if (sort && sort.id) {
+          params.set('sort_by', String(sort.id));
+          params.set('sort_dir', sort.dir === 'asc' ? 'asc' : 'desc');
+        }
         if (isAdmin) {
           if (organizationId) params.set('organization_id', String(organizationId));
         }
@@ -279,7 +302,7 @@ export function useWQTests({ variant, tableId, initialLakes = [], initialTests =
             ? `/org/${currentTenantId}/sample-events`
             : `/contrib/${currentOrgId}/sample-events`;
 
-        const res = await cachedGet(`${basePath}?${params.toString()}`, { ttlMs: 2 * 60 * 1000 });
+  const res = await cachedGet(`${basePath}?${params.toString()}`, { ttlMs: 2 * 60 * 1000 });
         if (!mounted) return;
         const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : (Array.isArray(res?.data?.data) ? res.data.data : []);
         setTests(list);
@@ -294,7 +317,7 @@ export function useWQTests({ variant, tableId, initialLakes = [], initialTests =
       }
     })();
     return () => { mounted = false; };
-  }, [isAdmin, isOrg, isContrib, authLoaded, currentTenantId, currentOrgId, resetSignal, page, organizationId, lakeId, status, memberId, dateFrom, dateTo, year, quarter, month, q]);
+  }, [isAdmin, isOrg, isContrib, authLoaded, currentTenantId, currentOrgId, resetSignal, page, organizationId, lakeId, status, memberId, dateFrom, dateTo, year, quarter, month, q, sort.id, sort.dir]);
 
   // Reset to first page on filter changes
   useEffect(() => {
@@ -403,6 +426,19 @@ export function useWQTests({ variant, tableId, initialLakes = [], initialTests =
       return true;
     });
   }, [tests, isAdmin, isOrg, isContrib, organizationId, lakeId, status, memberId, year, quarter, month, dateFrom, dateTo, createdByUserIdFromQs]);
+
+  // Sorting: derive sorted array from filtered using the selected column's sortValue or sensible fallback
+  // For server-side sorting, the backend returns the list already sorted for the current page.
+  const sorted = filtered;
+
+  const handleSortChange = (colId) => {
+    setSort((prev) => {
+      if (!prev || prev.id !== colId) return { id: colId, dir: 'asc' };
+      return { id: colId, dir: prev.dir === 'asc' ? 'desc' : 'asc' };
+    });
+    // reset to first page when sort changes so the server returns the correct page start
+    setPage(1);
+  };
 
   // Actions per variant
   const actions = useMemo(() => {
@@ -564,8 +600,12 @@ export function useWQTests({ variant, tableId, initialLakes = [], initialTests =
     setFiltersOpen,
 
     // table
-    displayColumns,
-    filtered,
+  displayColumns,
+  // data for table
+  filtered,
+  sorted,
+  sort,
+  handleSortChange,
     actions,
     resetSignal,
     loading,

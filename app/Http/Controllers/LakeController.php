@@ -22,8 +22,8 @@ class LakeController extends Controller
         if ($request->has('q')) {
             $search = strtolower($request->query('q'));
             $query->where(function ($q) use ($search) {
-                $q->where(DB::raw('LOWER(name)'), 'like', "%{$search}%")
-                    ->orWhere(DB::raw('LOWER(alt_name)'), 'like', "%{$search}%");
+                $q->where(DB::raw('LOWER(lakes.name)'), 'like', "%{$search}%")
+                    ->orWhere(DB::raw('LOWER(lakes.alt_name)'), 'like', "%{$search}%");
             });
         }
 

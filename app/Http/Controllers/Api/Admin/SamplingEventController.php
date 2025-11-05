@@ -168,8 +168,34 @@ class SamplingEventController extends Controller
         if ($perPage <= 0) $perPage = 10;
         if ($perPage > 100) $perPage = 100;
 
+        // Server-side sorting
+        $sortBy = (string) $request->query('sort_by', 'month_day');
+        $sortDir = strtolower((string) $request->query('sort_dir', 'desc')) === 'asc' ? 'asc' : 'desc';
+        // Map UI column ids to database expressions
+        $sortMap = [
+            'organization' => 'tenants.name',
+            'lake_name' => 'lakes.name',
+            'station_name' => 'stations.name',
+            'status' => 'sampling_events.status',
+            'logged_by' => '__creator.name',
+            'updated_by' => '__updater.name',
+            'logged_at' => 'sampling_events.created_at',
+            'updated_at' => 'sampling_events.updated_at',
+            // Derived from sampled_at
+            'year' => DB::raw('EXTRACT(YEAR FROM sampling_events.sampled_at)'),
+            'quarter' => DB::raw('EXTRACT(QUARTER FROM sampling_events.sampled_at)'),
+            'month_day' => 'sampling_events.sampled_at', // primary sampling date
+            'sampled_at' => 'sampling_events.sampled_at',
+        ];
+
+        $expr = $sortMap[$sortBy] ?? 'sampling_events.sampled_at';
+
         $events = $query
-            ->orderByDesc('sampling_events.sampled_at')
+            ->when($expr instanceof \Illuminate\Database\Query\Expression, function ($q) use ($expr, $sortDir) {
+                $q->orderBy($expr, $sortDir);
+            }, function ($q) use ($expr, $sortDir) {
+                $q->orderBy($expr, $sortDir);
+            })
             ->orderBy('sampling_events.id', 'desc')
             ->paginate($perPage);
 

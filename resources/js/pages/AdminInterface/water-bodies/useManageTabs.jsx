@@ -129,8 +129,6 @@ export function useManageLakesTabLogic() {
       { id: "region", header: "Region", accessor: "region", width: 140, className: "col-md-hide" },
       { id: "province", header: "Province", accessor: "province", width: 160, className: "col-md-hide" },
       { id: "municipality", header: "Municipality", accessor: "municipality", width: 180, className: "col-sm-hide" },
-      { id: "lat", header: "Lat", accessor: "lat", width: 120, className: "col-md-hide", _optional: true },
-      { id: "lon", header: "Lon", accessor: "lon", width: 120, className: "col-md-hide", _optional: true },
       { id: "classification", header: "Water Body Classification", accessor: "classification", width: 200, render: (row) => row.class_code || "" },
       { id: "surface_area_km2", header: "Surface Area (km²)", accessor: "surface_area_km2", width: 170, className: "col-sm-hide" },
       { id: "elevation_m", header: "Surface Elevation (m)", accessor: "elevation_m", width: 150, className: "col-md-hide", _optional: true },
@@ -512,6 +510,19 @@ export function useManageLakesTabLogic() {
     setErrorMsg("");
     try {
       const detail = await api(`/lakes/${source.id}`);
+      // If lake has geometry but no lat/lon, calculate from centroid
+      if (detail.geom_geojson && (!detail.lat || !detail.lon)) {
+        try {
+          const geom = JSON.parse(detail.geom_geojson);
+          const layer = L.geoJSON(geom);
+          const bounds = layer.getBounds();
+          const center = bounds.getCenter();
+          detail.lat = center.lat;
+          detail.lon = center.lng;
+        } catch (e) {
+          // Ignore parsing errors
+        }
+      }
       setFormMode("edit");
       setFormInitial({
         id: detail.id,
@@ -951,8 +962,8 @@ export function useManageFlowsTabLogic() {
       if (raw) {
         try { const parsed = JSON.parse(raw); parsed.updated_at = false; return parsed; } catch {}
       }
-      return { lake:true, flow_type:true, name:true, source:true, is_primary:true, latitude:true, longitude:true, updated_at:false };
-    } catch { return { lake:true, flow_type:true, name:true, source:true, is_primary:true, latitude:true, longitude:true, updated_at:false }; }
+      return { lake:true, flow_type:true, name:true, source:true, is_primary:true, updated_at:false };
+    } catch { return { lake:true, flow_type:true, name:true, source:true, is_primary:true, updated_at:false }; }
   });
   useEffect(()=>{ try { localStorage.setItem(VIS_KEY, JSON.stringify(visibleMap)); } catch {} }, [visibleMap]);
   const [resetSignal, setResetSignal] = useState(0);
@@ -1036,8 +1047,6 @@ export function useManageFlowsTabLogic() {
     { id:'name', header:'Name', accessor:'name', width:200 },
     { id:'source', header:'Source', accessor:'source', width:200 },
     { id:'is_primary', header:'Primary', accessor:'is_primary', width:90, render:(r)=> r.is_primary ? 'Yes' : '' },
-    { id:'latitude', header:'Lat', accessor:'latitude', width:120 },
-    { id:'longitude', header:'Lon', accessor:'longitude', width:120 },
     { id:'updated_at', header:'Updated', accessor:'updated_at', width:180, render:(r)=> fmtDt(r.updated_at) },
   ], []);
 

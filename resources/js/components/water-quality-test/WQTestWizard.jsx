@@ -10,20 +10,13 @@ import Wizard from "../Wizard";
 import AppMap from "../AppMap";
 import MapViewport from "../MapViewport";
 import StationModal from "../../components/modals/StationModal";
-import { GeoJSON, Marker, Popup } from "react-leaflet";
+import { GeoJSON, Marker, Popup, CircleMarker } from "react-leaflet";
 import L from "leaflet";
 
 const fmtDateLocal = (d = new Date()) => {
   const pad = (n) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
-
-const DEFAULT_ICON = new L.Icon({
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-});
 
 const INITIAL_DATA = {
   organization_id: null,
@@ -351,6 +344,7 @@ export default function WQTestWizard({
       station_id: "",
       station_name: "",
       station_desc: "",
+      geom_point: null,
     });
     if (id) {
       fetchLakeGeo(id).catch(() => {});
@@ -614,13 +608,13 @@ export default function WQTestWizard({
 
           {/* Map (station-only; no pin drop) */}
           <div className="map-preview" style={{ marginTop: 12 }}>
-            <AppMap style={{ height: 380 }}>
+            <AppMap style={{ height: 380 }} disableDrag={true} zoomControl={false} scrollWheelZoom={false}>
               {data.lake_id && mergedLakeGeoms?.[String(data.lake_id)] ? (
-                <GeoJSON key={String(data.lake_id)} data={mergedLakeGeoms[String(data.lake_id)]} style={{ color: "#2563eb", weight: 2, fillOpacity: 0.1 }} />
+                <GeoJSON key={String(data.lake_id)} data={mergedLakeGeoms[String(data.lake_id)]} style={{ color: "#2563eb", weight: 2, fillOpacity: 0.1 }} pointToLayer={(feature, latlng) => L.circleMarker(latlng, { color: '#2563eb', fillColor: '#2563eb', fillOpacity: 0.5, radius: 8 })} />
               ) : null}
 
               {data.geom_point ? (
-                <Marker position={[data.geom_point.lat, data.geom_point.lng]} icon={DEFAULT_ICON}>
+                <CircleMarker center={[data.geom_point.lat, data.geom_point.lng]} radius={8} pathOptions={{ color:'#ef4444', fillColor:'#ef4444', fillOpacity:0.9 }}>
                   <Popup>
                     <div>
                       <div><strong>Station Coordinates</strong></div>
@@ -628,7 +622,7 @@ export default function WQTestWizard({
                       {data.station_id ? <div>Station: {data.station_name}</div> : null}
                     </div>
                   </Popup>
-                </Marker>
+                </CircleMarker>
               ) : null}
 
               <MapViewport bounds={mapBounds(data)} maxZoom={14} padding={[16, 16]} pad={0.02} />

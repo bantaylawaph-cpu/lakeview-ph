@@ -19,6 +19,9 @@ export default function AdminWQTests({ initialLakes = [], initialTests = [], par
     setFiltersOpen,
     displayColumns,
     filtered,
+    sorted,
+    sort,
+    handleSortChange,
     actions,
     resetSignal,
     loading,
@@ -58,6 +61,8 @@ export default function AdminWQTests({ initialLakes = [], initialTests = [], par
           serverSide={true}
           pagination={{ page, totalPages }}
           onPageChange={(p) => setPage(p)}
+          sort={sort}
+          onSortChange={handleSortChange}
         />
       </div>
 

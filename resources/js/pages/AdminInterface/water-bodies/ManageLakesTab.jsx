@@ -109,7 +109,7 @@ function ManageLakesTab() {
           {/* Map area: only render when lake geometry exists; otherwise show placeholder */}
           {s.lakeFeature ? (
             <div style={{ height: '60vh', minHeight: 320, borderRadius: 8, overflow: 'hidden' }}>
-              <AppMap view="osm" whenCreated={(map) => { s.viewMapRef.current = map; }}>
+              <AppMap view="osm" whenCreated={(map) => { s.viewMapRef.current = map; }} disableDrag={true} zoomControl={false} scrollWheelZoom={false}>
                 {s.watershedFeature && (
                   <GeoJSON data={s.watershedFeature} style={{ weight: 1.5, color: '#047857', fillOpacity: 0.08 }} />
                 )}

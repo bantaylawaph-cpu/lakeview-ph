@@ -16,6 +16,9 @@ export default function ContribWQTests() {
     setFiltersOpen,
     displayColumns,
     filtered,
+    sorted,
+    sort,
+    handleSortChange,
     actions,
     resetSignal,
     loading,
@@ -55,6 +58,8 @@ export default function ContribWQTests() {
           serverSide={true}
           pagination={{ page, totalPages }}
           onPageChange={(p) => setPage(p)}
+          sort={sort}
+          onSortChange={handleSortChange}
         />
       </div>
 

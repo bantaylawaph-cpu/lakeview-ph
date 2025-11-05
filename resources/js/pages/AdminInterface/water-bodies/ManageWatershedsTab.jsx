@@ -3,7 +3,6 @@ import AppMap from "../../../components/AppMap";
 import MapViewport from "../../../components/MapViewport";
 import Modal from "../../../components/Modal";
 import { GeoJSON } from "react-leaflet";
-import L from "leaflet";
 
 import TableLayout from "../../../layouts/TableLayout";
 import TableToolbar from "../../../components/table/TableToolbar";
@@ -56,7 +55,7 @@ export default function ManageWatershedsTab() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '80vh' }}>
           <div style={{ height: '55vh', minHeight: 260, borderRadius: 8, overflow: 'hidden' }}>
             {s.previewFeature ? (
-              <AppMap view="osm" whenCreated={(map) => (s.viewMapRef.current = map)}>
+              <AppMap view="osm" whenCreated={(map) => (s.viewMapRef.current = map)} disableDrag={true} zoomControl={false} scrollWheelZoom={false}>
                 <GeoJSON
                   data={s.previewFeature}
                   style={{ color: '#16a34a', weight: 2, fillOpacity: 0.15 }}

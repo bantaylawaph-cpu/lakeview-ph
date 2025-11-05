@@ -96,7 +96,7 @@ export default function ManageFlowsTab() {
       />
       <Modal open={s.viewOpen} onClose={()=>s.setViewOpen(false)} title="View Flow Point" width={900} ariaLabel="View Flow">
         <div style={{ height: 480, borderRadius: 8, overflow: 'hidden' }}>
-          <AppMap view="osm" whenCreated={(m)=>{ s.viewMapRef.current = m; }}>
+          <AppMap view="osm" whenCreated={(m)=>{ s.viewMapRef.current = m; }} disableDrag={true} zoomControl={false} scrollWheelZoom={false}>
             {s.viewFeature && (
               <GeoJSON data={s.viewFeature} style={{ color:'#2563eb', weight:2, fillOpacity:0.08 }} />
             )}
