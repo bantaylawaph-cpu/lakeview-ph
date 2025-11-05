@@ -361,6 +361,11 @@ function ManageLakesTab() {
     fetchRegions();
   }, [fetchWatersheds, fetchClasses, fetchProvinces, fetchRegions]);
 
+  // Reset to first page whenever search or filters change
+  useEffect(() => {
+    setPagination((prev) => (prev.page === 1 ? prev : { ...prev, page: 1 }));
+  }, [query, adv]);
+
   useEffect(() => {
     const t = setTimeout(() => fetchLakes(), 300);
     return () => clearTimeout(t);
