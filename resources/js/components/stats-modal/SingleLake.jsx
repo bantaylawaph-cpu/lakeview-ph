@@ -12,6 +12,8 @@ import useStationsCache from "./hooks/useStationsCache";
 import useTimeSeriesData from "./hooks/useTimeSeriesData";
 import useDepthProfileData from "./hooks/useDepthProfileData";
 import useSeasonalMK from "./hooks/useSeasonalMK";
+import useCurrentStandard from "./hooks/useCurrentStandard";
+import useParamThresholds from "./hooks/useParamThresholds";
 import GraphInfoButton from "./ui/GraphInfoButton";
 import StationPicker from "./ui/StationPicker";
 import { SeriesModeToggle } from "./ui/Toggles";
@@ -97,7 +99,8 @@ export default function SingleLake({
   const summaryStats = null;
   const nameForSelectedLake = useMemo(() => lakeName(lakeOptions, selectedLake) || String(selectedLake || '') || '', [lakeOptions, selectedLake]);
   const classForSelectedLake = useMemo(() => lakeClass(lakeOptions, selectedLake) || selectedClass || '', [lakeOptions, selectedLake, selectedClass]);
-  const chartData = useTimeSeriesData({ events, selectedParam, selectedStations, bucket, timeRange, dateFrom, dateTo, seriesMode, classForSelectedLake, depthSelection: selectedDepth });
+  const { current: currentStd } = useCurrentStandard();
+  const chartData = useTimeSeriesData({ events, selectedParam, selectedStations, bucket, timeRange, dateFrom, dateTo, seriesMode, classForSelectedLake, depthSelection: selectedDepth, appliedStandardId: currentStd?.id });
   const depthProfile = useDepthProfileData({ events, selectedParam, selectedStations, bucket });
   // Correlation removed
   // derive depth options for selectedParam from events
@@ -162,6 +165,8 @@ export default function SingleLake({
   }, [paramOptions, selectedParam]);
   const selectedParamLabel = useMemo(() => (selectedParamMeta?.label || selectedParamMeta?.name || selectedParamMeta?.code || 'Value'), [selectedParamMeta]);
   const selectedParamUnit = useMemo(() => (selectedParamMeta?.unit || ''), [selectedParamMeta]);
+  const selectedParamCode = useMemo(() => (selectedParamMeta?.code || String(selectedParam || '')), [selectedParamMeta, selectedParam]);
+  const depthThr = useParamThresholds({ paramCode: selectedParamCode, appliedStandardId: currentStd?.id, classCode: classForSelectedLake || undefined });
 
   const canShowInfo = useMemo(() => {
     if (!applied) return false;
@@ -512,31 +517,13 @@ export default function SingleLake({
               (() => {
                 const depthDatasets = (depthProfile.datasets || []).slice();
                 const maxDepth = depthProfile.maxDepth || 0;
-                let tMin = null; let tMax = null; let stdLabel = null;
-                try {
-                  for (const ev of events || []) {
-                    const sName = eventStationName(ev) || '';
-                    if (!selectedStations.includes(sName)) continue;
-                    const results = Array.isArray(ev?.results) ? ev.results : [];
-                    for (const r of results) {
-                      const p = r?.parameter; if (!p) continue;
-                      const match = (String(p.code) === String(selectedParam)) || (String(p.id) === String(selectedParam)) || (String(r.parameter_id) === String(selectedParam));
-                      if (!match) continue;
-                      const sk = r?.threshold?.standard?.code || r?.threshold?.standard?.name || null;
-                      if (!stdLabel && sk) stdLabel = sk;
-                      if (r?.threshold?.min_value != null && tMin == null) tMin = Number(r.threshold.min_value);
-                      if (r?.threshold?.max_value != null && tMax == null) tMax = Number(r.threshold.max_value);
-                      if (tMin != null && tMax != null) break;
-                    }
-                    if (tMin != null && tMax != null) break;
-                  }
-                } catch (e) { /* ignore */ }
-                const clsLbl = classForSelectedLake ? ` (Class ${classForSelectedLake})` : '';
-                if (Number.isFinite(tMin)) {
-                  depthDatasets.push({ label: `${stdLabel || 'Standard'}${clsLbl} – Min`, data: [{ x: tMin, y: 0 }, { x: tMin, y: Math.max(1, maxDepth) }], borderColor: 'rgba(16,185,129,1)', backgroundColor: 'transparent', pointRadius: 0, borderDash: [4,4], tension: 0, spanGaps: true, showLine: true, parsing: false });
+                const tMin = Number.isFinite(depthThr?.min) ? Number(depthThr.min) : null;
+                const tMax = Number.isFinite(depthThr?.max) ? Number(depthThr.max) : null;
+                if (tMin != null) {
+                  depthDatasets.push({ label: `Min`, data: [{ x: tMin, y: 0 }, { x: tMin, y: Math.max(1, maxDepth) }], borderColor: 'rgba(16,185,129,1)', backgroundColor: 'transparent', pointRadius: 0, borderDash: [4,4], tension: 0, spanGaps: true, showLine: true, parsing: false });
                 }
-                if (Number.isFinite(tMax)) {
-                  depthDatasets.push({ label: `${stdLabel || 'Standard'}${clsLbl} – Max`, data: [{ x: tMax, y: 0 }, { x: tMax, y: Math.max(1, maxDepth) }], borderColor: 'rgba(239,68,68,1)', backgroundColor: 'transparent', pointRadius: 0, borderDash: [4,4], tension: 0, spanGaps: true, showLine: true, parsing: false });
+                if (tMax != null) {
+                  depthDatasets.push({ label: `Max`, data: [{ x: tMax, y: 0 }, { x: tMax, y: Math.max(1, maxDepth) }], borderColor: 'rgba(239,68,68,1)', backgroundColor: 'transparent', pointRadius: 0, borderDash: [4,4], tension: 0, spanGaps: true, showLine: true, parsing: false });
                 }
                 const depthData = { datasets: normalizeDepthDatasets(depthDatasets) };
                 return (

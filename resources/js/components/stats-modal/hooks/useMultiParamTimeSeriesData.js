@@ -1,9 +1,41 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import useCurrentStandard from './useCurrentStandard';
+import { fetchParamThresholds } from './useParamThresholds';
 
 // Build array of time-series chart data for all parameters in events
 // Each chart's lines represent distinct depths; thresholds are overlaid as guides.
 // Returns [{ id, code, name, unit, threshold: {min, max}, labels, statsByDepth, chartData }, ...]
-export default function useMultiParamTimeSeriesData({ events, bucket }) {
+export default function useMultiParamTimeSeriesData({ events, bucket, classCode }) {
+  const { current } = useCurrentStandard();
+  const [thrByCode, setThrByCode] = useState({});
+
+  // Derive unique parameter codes present in events to prefetch thresholds
+  const paramCodes = useMemo(() => {
+    const codes = new Set();
+    (Array.isArray(events) ? events : []).forEach((ev) => {
+      const results = Array.isArray(ev?.results) ? ev.results : [];
+      results.forEach((r) => {
+        const p = r?.parameter; if (p?.code) codes.add(String(p.code));
+      });
+    });
+    return Array.from(codes);
+  }, [events]);
+
+  useEffect(() => {
+    let abort = false;
+    (async () => {
+      if (!current?.id || !paramCodes.length) { setThrByCode({}); return; }
+      const pairs = await Promise.all(paramCodes.map(async (code) => {
+        const thr = await fetchParamThresholds({ paramCode: code, appliedStandardId: current.id, classCode: classCode || undefined });
+        return [code, thr];
+      }));
+      if (abort) return;
+      const next = {};
+      pairs.forEach(([code, thr]) => { next[String(code)] = thr || { min: null, max: null, code: current?.code || null }; });
+      setThrByCode(next);
+    })();
+    return () => { abort = true; };
+  }, [current?.id, current?.code, JSON.stringify(paramCodes), classCode]);
   const seriesByParameter = useMemo(() => {
     if (!Array.isArray(events) || events.length === 0) return [];
 
@@ -28,7 +60,7 @@ export default function useMultiParamTimeSeriesData({ events, bucket }) {
       return y * 12 + (q || mo);
     };
 
-    const extractDepth = (r, ev) => {
+  const extractDepth = (r, ev) => {
       let d = r?.depth_m;
       if (d == null) d = r?.depth;
       if (d == null) d = r?.sample_depth_m;
@@ -59,7 +91,7 @@ export default function useMultiParamTimeSeriesData({ events, bucket }) {
 
     const colorForIndex = (i) => depthColors[i % depthColors.length];
 
-    // paramId -> { id, code, name, unit, threshold, depths: Map(depthNum -> { label, buckets: Map(timeKey -> { sum,cnt,min,max }) }) }
+  // paramId -> { id, code, name, unit, threshold, depths: Map(depthNum -> { label, buckets: Map(timeKey -> { sum,cnt,min,max }) }) }
     const byParam = new Map();
 
     for (const ev of events) {
@@ -80,16 +112,12 @@ export default function useMultiParamTimeSeriesData({ events, bucket }) {
             name: p.name || p.code || String(pid),
             unit: p.unit || '',
             desc: p.desc || '',
-            threshold: { min: r?.threshold?.min_value ?? null, max: r?.threshold?.max_value ?? null },
+            threshold: { min: null, max: null },
             depths: new Map(),
           });
         }
         const entry = byParam.get(pid);
-        // carry forward thresholds if newly available
-        if (entry && entry.threshold) {
-          if (entry.threshold.min == null && r?.threshold?.min_value != null) entry.threshold.min = r.threshold.min_value;
-          if (entry.threshold.max == null && r?.threshold?.max_value != null) entry.threshold.max = r.threshold.max_value;
-        }
+        // Do not read thresholds from events; thresholds will be overlaid from current-standard fetch.
         const depthNum = extractDepth(r, ev);
         const depthLabel = `${depthNum} m`;
         if (!entry.depths.has(depthNum)) {
@@ -134,21 +162,22 @@ export default function useMultiParamTimeSeriesData({ events, bucket }) {
         });
       });
 
-      // Threshold overlays (unchanged)
-      if (entry.threshold.min != null) {
+      // Threshold overlays from current standard (if available per parameter code)
+      const thr = thrByCode?.[String(entry.code)] || null;
+      if (thr && thr.min != null) {
         datasets.push({
-          label: 'Min Threshold',
-          data: labels.map(() => Number(entry.threshold.min)),
+          label: 'Min',
+          data: labels.map(() => Number(thr.min)),
           borderColor: 'rgba(16,185,129,1)',
           backgroundColor: 'rgba(16,185,129,0.15)',
           pointRadius: 0,
           borderDash: [4,4],
         });
       }
-      if (entry.threshold.max != null) {
+      if (thr && thr.max != null) {
         datasets.push({
-          label: 'Max Threshold',
-          data: labels.map(() => Number(entry.threshold.max)),
+          label: 'Max',
+          data: labels.map(() => Number(thr.max)),
           borderColor: 'rgba(239,68,68,1)',
           backgroundColor: 'rgba(239,68,68,0.15)',
           pointRadius: 0,
@@ -162,7 +191,7 @@ export default function useMultiParamTimeSeriesData({ events, bucket }) {
         name: entry.name,
         unit: entry.unit,
         desc: entry.desc || '',
-        threshold: entry.threshold,
+        threshold: { min: (thrByCode?.[String(entry.code)]?.min ?? null), max: (thrByCode?.[String(entry.code)]?.max ?? null) },
         labels,
         statsByDepth, // Map depthLabel -> [{sum,cnt,min,max}|null]
         chartData: { labels, datasets },
@@ -172,7 +201,7 @@ export default function useMultiParamTimeSeriesData({ events, bucket }) {
     // Sort parameters by name (fallback to code)
     out.sort((a,b) => String(a.name || a.code).localeCompare(String(b.name || b.code)));
     return out;
-  }, [events, bucket]);
+  }, [events, bucket, thrByCode]);
 
   return seriesByParameter;
 }

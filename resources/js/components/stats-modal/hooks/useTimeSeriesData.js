@@ -1,11 +1,32 @@
 import { useMemo } from 'react';
+import useParamThresholds from './useParamThresholds';
 import { eventStationName, parseIsoDate, depthBandKeyInt } from '../utils/dataUtils';
 import { bucketKey as makeBucketKey, bucketSortKey as sortBucketKey } from '../utils/chartUtils';
 
 // Build Chart.js line datasets for single-lake time series
 // Props: { events, selectedParam, selectedStations, bucket, timeRange, dateFrom, dateTo, seriesMode, classForSelectedLake }
 // depthSelection: 'all' (default) or a depth band key (string) to filter results to a single depth
-export default function useTimeSeriesData({ events, selectedParam, selectedStations = [], bucket, timeRange, dateFrom, dateTo, seriesMode = 'avg', classForSelectedLake, depthSelection = 'all' }) {
+export default function useTimeSeriesData({ events, selectedParam, selectedStations = [], bucket, timeRange, dateFrom, dateTo, seriesMode = 'avg', classForSelectedLake, depthSelection = 'all', appliedStandardId }) {
+  // Try to resolve a parameter code for threshold fetching (some callers pass ids)
+  const paramCode = useMemo(() => {
+    const sel = String(selectedParam || '');
+    if (!sel) return null;
+    const evs = Array.isArray(events) ? events : [];
+    for (const ev of evs) {
+      const results = Array.isArray(ev?.results) ? ev.results : [];
+      for (const r of results) {
+        const p = r?.parameter;
+        if (!p) continue;
+        const match = (String(p.code) === sel) || (String(p.id) === sel) || (String(r.parameter_id) === sel) || (String(r.parameter_code) === sel) || (String(r.parameter_key) === sel);
+        if (match && p.code) return String(p.code);
+      }
+    }
+    // Fallback: assume caller already provided a code
+    return sel || null;
+  }, [events, selectedParam]);
+
+  // Fetch thresholds based on current standard and selected lake class (when available)
+  const thr = useParamThresholds({ paramCode, appliedStandardId, classCode: classForSelectedLake || undefined });
   const chartData = useMemo(() => {
     if (!selectedParam) return null;
     const parseDate = parseIsoDate;
@@ -34,11 +55,7 @@ export default function useTimeSeriesData({ events, selectedParam, selectedStati
   const perStationDepthBands = new Map(); // stationName -> Map(depthKey -> Map(bucket -> {sum,cnt}))
     const depthBands = new Map(); // depthKey -> Map(bucket -> {sum,cnt})
     const depthBandKey = depthBandKeyInt;
-    const thByStandard = new Map(); // stdKey -> { stdLabel, min, max, buckets: Set<string> }
-    const ensureStdEntry = (stdKey, stdLabel) => {
-      if (!thByStandard.has(stdKey)) thByStandard.set(stdKey, { stdLabel: stdLabel || `Standard ${stdKey}`, min: null, max: null, buckets: new Set() });
-      return thByStandard.get(stdKey);
-    };
+    // NOTE: We no longer read thresholds from events; we enforce current standard via useParamThresholds.
 
     for (const ev of evs) {
       const sName = eventStationName(ev) || '';
@@ -82,15 +99,7 @@ export default function useTimeSeriesData({ events, selectedParam, selectedStati
             // noop - defensive
           }
         }
-        const stdId = r?.threshold?.standard_id ?? ev?.applied_standard_id ?? null;
-        const stdKey = r?.threshold?.standard?.code || r?.threshold?.standard?.name || (stdId != null ? String(stdId) : null);
-        const stdLabel = stdKey;
-        if (stdKey != null && (r?.threshold?.min_value != null || r?.threshold?.max_value != null)) {
-          const entry = ensureStdEntry(String(stdKey), stdLabel);
-          if (r?.threshold?.min_value != null) entry.min = Number(r.threshold.min_value);
-          if (r?.threshold?.max_value != null) entry.max = Number(r.threshold.max_value);
-          entry.buckets.add(bk);
-        }
+        // thresholds ignored per-event
       }
     }
 
@@ -137,23 +146,21 @@ export default function useTimeSeriesData({ events, selectedParam, selectedStati
       }
     }
 
+    // Enforced current-standard threshold overlays (simple: span all labels)
     const minColor = '#16a34a';
     const maxColor = '#ef4444';
-    Array.from(thByStandard.entries()).forEach(([stdKey, entry]) => {
-      if (entry.min != null) {
-        const data = labels.map((lb) => entry.buckets.has(lb) ? entry.min : null);
-        const clsLbl = classForSelectedLake ? ` (Class ${classForSelectedLake})` : '';
-        datasets.push({ label: `${entry.stdLabel}${clsLbl} – Min`, data, borderColor: minColor, backgroundColor: `${minColor}33`, borderDash: [4,4], pointRadius: 0, tension: 0, spanGaps: true });
-      }
-      if (entry.max != null) {
-        const data = labels.map((lb) => entry.buckets.has(lb) ? entry.max : null);
-        const clsLbl = classForSelectedLake ? ` (Class ${classForSelectedLake})` : '';
-        datasets.push({ label: `${entry.stdLabel}${clsLbl} – Max`, data, borderColor: maxColor, backgroundColor: `${maxColor}33`, borderDash: [4,4], pointRadius: 0, tension: 0, spanGaps: true });
-      }
-    });
+    // Simplified labels: do not include guideline/standard names
+    if (thr && thr.min != null) {
+      const data = labels.map(() => thr.min);
+      datasets.push({ label: 'Min', data, borderColor: minColor, backgroundColor: `${minColor}33`, borderDash: [4,4], pointRadius: 0, tension: 0, spanGaps: true });
+    }
+    if (thr && thr.max != null) {
+      const data = labels.map(() => thr.max);
+      datasets.push({ label: 'Max', data, borderColor: maxColor, backgroundColor: `${maxColor}33`, borderDash: [4,4], pointRadius: 0, tension: 0, spanGaps: true });
+    }
 
-    return { labels, datasets };
-  }, [events, selectedParam, JSON.stringify(selectedStations), bucket, timeRange, dateFrom, dateTo, seriesMode, classForSelectedLake, depthSelection]);
+    return { labels, datasets, meta: { standards: [{ code: thr?.code || null, min: thr?.min ?? null, max: thr?.max ?? null }].filter(s => s.code || s.min != null || s.max != null) } };
+  }, [events, selectedParam, JSON.stringify(selectedStations), bucket, timeRange, dateFrom, dateTo, seriesMode, classForSelectedLake, depthSelection, appliedStandardId, thr.min, thr.max, thr.code]);
 
   return chartData;
 }

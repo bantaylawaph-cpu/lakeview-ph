@@ -1,8 +1,54 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { parseIsoDate } from '../utils/dataUtils';
 import { lakeName, lakeClass } from '../utils/shared';
+import useCurrentStandard from './useCurrentStandard';
+import { fetchParamThresholds } from './useParamThresholds';
 
 export default function useCompareBarData({ eventsA = [], eventsB = [], bucket = 'year', selectedYears = [], depth = '', selectedParam = '', lakeA = '', lakeB = '', lakeOptions = [] }) {
+  const { current } = useCurrentStandard();
+  const [thrA, setThrA] = useState({ min: null, max: null, code: null });
+  const [thrB, setThrB] = useState({ min: null, max: null, code: null });
+
+  // Try to resolve a parameter code from either events list (fallback to selectedParam as-is)
+  const paramCode = useMemo(() => {
+    const sel = String(selectedParam || '');
+    const search = (events = []) => {
+      for (const ev of events) {
+        const results = Array.isArray(ev?.results) ? ev.results : [];
+        for (const r of results) {
+          const p = r?.parameter; if (!p) continue;
+          const match = (String(p.code) === sel) || (String(p.id) === sel) || (String(r.parameter_id) === sel) || (String(r.parameter_code) === sel) || (String(r.parameter_key) === sel);
+          if (match && p.code) return String(p.code);
+        }
+      }
+      return null;
+    };
+    return search(eventsA) || search(eventsB) || (sel || null);
+  }, [eventsA, eventsB, selectedParam]);
+
+  useEffect(() => {
+    let abort = false;
+    (async () => {
+      try {
+        if (!current?.id || !paramCode) { setThrA({ min: null, max: null, code: null }); setThrB({ min: null, max: null, code: null }); return; }
+        const classA = lakeA ? lakeClass(lakeOptions, lakeA) : null;
+        const classB = lakeB ? lakeClass(lakeOptions, lakeB) : null;
+        const [a, b] = await Promise.all([
+          lakeA ? fetchParamThresholds({ paramCode, appliedStandardId: current.id, classCode: classA || undefined }) : Promise.resolve({ min: null, max: null, code: current?.code || null }),
+          lakeB ? fetchParamThresholds({ paramCode, appliedStandardId: current.id, classCode: classB || undefined }) : Promise.resolve({ min: null, max: null, code: current?.code || null }),
+        ]);
+        if (abort) return;
+        setThrA(a || { min: null, max: null, code: current?.code || null });
+        setThrB(b || { min: null, max: null, code: current?.code || null });
+      } catch {
+        if (abort) return;
+        setThrA({ min: null, max: null, code: current?.code || null });
+        setThrB({ min: null, max: null, code: current?.code || null });
+      }
+    })();
+    return () => { abort = true; };
+  }, [current?.id, current?.code, paramCode, lakeA, lakeB, JSON.stringify(lakeOptions)]);
+
   return useMemo(() => {
     const years = Array.isArray(selectedYears) ? selectedYears.map(String) : [];
     const lakes = [];
@@ -125,32 +171,9 @@ export default function useCompareBarData({ eventsA = [], eventsB = [], bucket =
       const arr = yearIndexMap.get(c.year) || []; arr.push(datasets.length - 1); yearIndexMap.set(c.year, arr);
     });
 
-    // Thresholds: collect per-lake min/max/stdLabel
-    const collectStd = (events = []) => {
-      // return { stdKey, min, max, stdLabel }
-      let min = null, max = null, stdLabel = null, stdKey = null;
-      for (const ev of events || []) {
-        const evStdCode = ev?.applied_standard_code ?? ev?.applied_standard_name ?? ev?.applied_standard?.code ?? ev?.applied_standard?.name ?? null;
-        const results = Array.isArray(ev?.results) ? ev.results : [];
-        for (const r of results) {
-          const p = r?.parameter; if (!p) continue;
-          const match = (String(p.code) === String(selectedParam)) || (String(p.id) === String(selectedParam)) || (String(r.parameter_id) === String(selectedParam));
-          if (!match) continue;
-          const stdId = r?.threshold?.standard_id ?? ev?.applied_standard_id ?? null;
-          const maybeKey = r?.threshold?.standard?.code || r?.threshold?.standard?.name || (stdId != null ? String(stdId) : null) || evStdCode;
-          if (maybeKey) stdKey = maybeKey;
-          if (r?.threshold?.min_value != null) min = Number(r.threshold.min_value);
-          if (r?.threshold?.max_value != null) max = Number(r.threshold.max_value);
-          stdLabel = r?.threshold?.standard?.code || r?.threshold?.standard?.name || stdLabel || evStdCode;
-          if (min != null || max != null) break;
-        }
-        if (min != null || max != null) break;
-      }
-      return { stdKey, min, max, stdLabel };
-    };
-
-    const stdA = collectStd(eventsA);
-    const stdB = collectStd(eventsB);
+    // Enforced current-standard thresholds per lake (using pre-fetched thrA/thrB)
+    const stdA = thrA || { min: null, max: null, code: current?.code || null };
+    const stdB = thrB || { min: null, max: null, code: current?.code || null };
 
     // If both lakes share identical min/max/stdKey, emit unified lines, else per-lake similar to timeseries
     const makeLine = (label, value, color) => {
@@ -177,35 +200,36 @@ export default function useCompareBarData({ eventsA = [], eventsB = [], bucket =
     const combinedStandards = new Map();
     const addStdEntry = (stdInfo, lakeKey) => {
       if (!stdInfo || (stdInfo.min == null && stdInfo.max == null)) return;
-      const stdKey = stdInfo.stdKey || stdInfo.stdLabel || 'std';
+      const stdKey = stdInfo.code || 'std';
       const uniqueKey = `${stdKey}::${stdInfo.min ?? 'null'}::${stdInfo.max ?? 'null'}`;
-      if (!combinedStandards.has(uniqueKey)) combinedStandards.set(uniqueKey, { stdLabel: stdInfo.stdLabel || stdKey, min: stdInfo.min ?? null, max: stdInfo.max ?? null, lakes: new Set([lakeKey]) });
+      if (!combinedStandards.has(uniqueKey)) combinedStandards.set(uniqueKey, { stdLabel: stdKey, min: stdInfo.min ?? null, max: stdInfo.max ?? null, lakes: new Set([lakeKey]) });
       else combinedStandards.get(uniqueKey).lakes.add(lakeKey);
     };
 
-    addStdEntry(stdA, String(lakeA));
-    addStdEntry(stdB, String(lakeB));
+  addStdEntry(stdA, String(lakeA));
+  addStdEntry(stdB, String(lakeB));
 
     combinedStandards.forEach((entry) => {
       if (entry.lakes.size > 1) {
-        const lakesMeta = Array.from(entry.lakes).map((lkKey) => lakeName(lakeOptions, lkKey) || String(lkKey)).join(', ');
-        if (entry.min != null) datasets.push(makeLine(`${entry.stdLabel} – Min (${lakesMeta})`, entry.min, '#16a34a'));
-        if (entry.max != null) datasets.push(makeLine(`${entry.stdLabel} – Max (${lakesMeta})`, entry.max, '#ef4444'));
+        // Unified threshold across both lakes: keep labels concise
+        if (entry.min != null) datasets.push(makeLine('Min', entry.min, '#16a34a'));
+        if (entry.max != null) datasets.push(makeLine('Max', entry.max, '#ef4444'));
       } else {
+        // Per-lake threshold line: append the lake name for clarity, but omit guideline name
         const onlyLakeKey = Array.from(entry.lakes)[0];
         const lakeLabel = lakeName(lakeOptions, onlyLakeKey) || String(onlyLakeKey || '');
-        if (entry.min != null) datasets.push(makeLine(`${lakeLabel} – ${entry.stdLabel} – Min`, entry.min, '#16a34a'));
-        if (entry.max != null) datasets.push(makeLine(`${lakeLabel} – ${entry.stdLabel} – Max`, entry.max, '#ef4444'));
+        if (entry.min != null) datasets.push(makeLine(`Min — ${lakeLabel}`, entry.min, '#16a34a'));
+        if (entry.max != null) datasets.push(makeLine(`Max — ${lakeLabel}`, entry.max, '#ef4444'));
       }
     });
 
     // expose detected standard info for callers (map of combined standards)
-    const standards = Array.from(combinedStandards.values()).map((entry) => ({ code: entry.stdLabel, min: entry.min != null ? entry.min : null, max: entry.max != null ? entry.max : null, lakes: Array.from(entry.lakes) }));
+  const standards = Array.from(combinedStandards.values()).map((entry) => ({ code: entry.stdLabel, min: entry.min != null ? entry.min : null, max: entry.max != null ? entry.max : null, lakes: Array.from(entry.lakes) }));
 
     const yearColors = {};
     yearsFromKeys.forEach((y) => { const hue = yearHue.get(String(y)) ?? 200; yearColors[String(y)] = `hsla(${hue}, 70%, 55%, 0.9)`; });
     const yearIndexObj = {}; Array.from(yearIndexMap.entries()).forEach(([y, idxs]) => { yearIndexObj[y] = idxs; });
 
     return { labels: lakeLabels, datasets, meta: { years, standards, bucket, periodInfo, yearIndexMap: yearIndexObj, yearColors, yearOrder: yearsFromKeys } };
-  }, [eventsA, eventsB, bucket, selectedYears, depth, selectedParam, lakeA, lakeB, lakeOptions]);
+  }, [eventsA, eventsB, bucket, selectedYears, depth, selectedParam, lakeA, lakeB, lakeOptions, thrA?.min, thrA?.max, thrB?.min, thrB?.max, thrA?.code, thrB?.code]);
 }

@@ -238,7 +238,8 @@ function WaterQualityTab({ lake }) {
     } catch {}
   }, [visibleTests]);
 
-  const seriesByParameter = useMultiParamTimeSeriesData({ events: visibleTests, bucket });
+  // Pass the lake's class code so thresholds resolve for the correct class under the current standard
+  const seriesByParameter = useMultiParamTimeSeriesData({ events: visibleTests, bucket, classCode: lake?.class_code || undefined });
 
   if (initialLoading) {
     return (
