@@ -108,7 +108,7 @@ function ManageLakesTab() {
   const [errorMsg, setErrorMsg] = useState("");
 
   const [lakes, setLakes] = useState([]);
-  const [pagination, setPagination] = useState({ page: 1, perPage: 10, total: 0, lastPage: 1 });
+  const [pagination, setPagination] = useState({ page: 1, perPage: 5, total: 0, lastPage: 1 });
   const [sort, setSort] = useState(() => {
     try {
       const raw = localStorage.getItem(SORT_KEY);

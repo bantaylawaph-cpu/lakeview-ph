@@ -29,12 +29,52 @@ class LakeFlowController extends Controller
     // Admin list
     public function index(Request $request)
     {
-        $q = LakeFlow::query()->with(['lake:id,name','creator:id,name']);
-        if ($t = $request->query('type')) $q->where('flow_type', $t);
-        if ($lake = $request->query('lake_id')) $q->where('lake_id', $lake);
-        if ($primary = $request->query('primary')) $q->where('is_primary', filter_var($primary, FILTER_VALIDATE_BOOLEAN));
-        $rows = $q->orderBy('lake_id')->orderByDesc('is_primary')->orderBy('flow_type')->orderBy('id')->get();
-        return [ 'data' => $rows->map(fn($r) => $this->serialize($r)) ];
+        $q = LakeFlow::query()->with(['lake:id,name', 'creator:id,name']);
+
+        // Search
+        if ($search = $request->query('q')) {
+            $q->where(function ($query) use ($search) {
+                $query->where('name', 'like', "%{$search}%")
+                    ->orWhere('source', 'like', "%{$search}%")
+                    ->orWhereHas('lake', function ($q) use ($search) {
+                        $q->where('name', 'like', "%{$search}%");
+                    });
+            });
+        }
+
+        // Filters
+        if ($t = $request->query('type')) {
+            $q->where('flow_type', $t);
+        }
+        if ($lake = $request->query('lake_id')) {
+            $q->where('lake_id', $lake);
+        }
+        if ($primary = $request->query('primary')) {
+            $q->where('is_primary', filter_var($primary, FILTER_VALIDATE_BOOLEAN));
+        }
+
+        // Sort
+        $sortBy = $request->query('sort_by', 'lake_id');
+        $sortDir = $request->query('sort_dir', 'asc');
+        if ($sortBy === 'lake') {
+            $q->orderBy(
+                Lake::select('name')->whereColumn('lakes.id', 'lake_flows.lake_id'),
+                $sortDir
+            );
+        } elseif ($sortBy) {
+            $q->orderBy($sortBy, $sortDir);
+        } else {
+            $q->orderBy('lake_id')->orderByDesc('is_primary')->orderBy('flow_type')->orderBy('id');
+        }
+
+        // Pagination
+        $perPage = $request->query('per_page', 10);
+        $flows = $q->paginate($perPage);
+
+        // We need to serialize the paginated items
+        $flows->getCollection()->transform(fn($r) => $this->serialize($r));
+
+        return $flows;
     }
 
     public function show(LakeFlow $flow)

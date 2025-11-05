@@ -38,6 +38,8 @@ export default function ManageFlowsTab() {
   const [lakesLoading, setLakesLoading] = useState(false);
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
+  const [pagination, setPagination] = useState({ page: 1, perPage: 5, total: 0, lastPage: 1 });
+  const [sort, setSort] = useState({ id: 'lake', dir: 'asc' });
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState('create');
   const [formInitial, setFormInitial] = useState(null);
@@ -78,18 +80,41 @@ export default function ManageFlowsTab() {
   const fetchRows = useCallback(async () => {
     setLoading(true); setErrorMsg('');
     try {
-      const params = {};
-      if (typeFilter) params.type = typeFilter;
-      const res = await cachedGet('/lake-flows', { params, ttlMs: 5 * 60 * 1000 });
-      const list = Array.isArray(res) ? res : res?.data ?? [];
+      const params = {
+        page: pagination.page,
+        per_page: pagination.perPage,
+        sort_by: sort.id,
+        sort_dir: sort.dir,
+        q: query,
+        type: typeFilter,
+      };
+      const res = await api('/lake-flows', { params });
+      const list = Array.isArray(res.data) ? res.data : [];
       setRows(normalizeRows(list));
+      setPagination({
+        page: res.current_page,
+        perPage: res.per_page,
+        total: res.total,
+        lastPage: res.last_page,
+      });
     } catch (e) {
       setRows([]); setErrorMsg(e.message || 'Failed to load tributaries');
     } finally { setLoading(false); }
-  }, [typeFilter]);
+  }, [pagination.page, pagination.perPage, sort.id, sort.dir, query, typeFilter]);
 
   useEffect(()=>{ fetchLakesOptions(); }, [fetchLakesOptions]);
   useEffect(()=>{ fetchRows(); }, [fetchRows]);
+
+  const handlePageChange = (newPage) => {
+    setPagination(p => ({ ...p, page: newPage }));
+  };
+
+  const handleSortChange = (colId) => {
+    setSort(s => ({
+      id: colId,
+      dir: s.id === colId && s.dir === 'asc' ? 'desc' : 'asc',
+    }));
+  };
 
   const openCreate = () => { setFormMode('create'); setFormInitial({}); setFormOpen(true); };
   const openEdit = (row) => { const src = row?._raw ?? row; setFormMode('edit'); setFormInitial(src); setFormOpen(true); };
@@ -195,15 +220,6 @@ export default function ManageFlowsTab() {
 
   const visibleColumns = useMemo(()=> columns.filter(c => visibleMap[c.id] !== false), [columns, visibleMap]);
 
-  const filteredRows = useMemo(()=>{
-    const q = query.trim().toLowerCase();
-    if (!q && !typeFilter) return rows;
-    return rows.filter(r => (
-      (!q || `${r.lake} ${r.name} ${r.source}`.toLowerCase().includes(q)) &&
-      (!typeFilter || r.flow_type === typeFilter)
-    ));
-  }, [rows, query, typeFilter]);
-
   const actions = useMemo(()=>[
     { label:'View', title:'View', icon:<FiEye />, onClick: (row) => viewFlow(row), type:'view' },
     { label:'Edit', title:'Edit', icon:<FiEdit2 />, onClick: openEdit, type:'edit' },
@@ -238,8 +254,11 @@ export default function ManageFlowsTab() {
             <TableLayout
               tableId={TABLE_ID}
               columns={visibleColumns}
-              data={filteredRows}
-              pageSize={5}
+              data={rows}
+              pagination={pagination}
+              onPageChange={handlePageChange}
+              sort={sort}
+              onSortChange={handleSortChange}
               actions={actions}
               resetSignal={resetSignal}
               loading={loading}

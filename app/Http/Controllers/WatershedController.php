@@ -8,11 +8,28 @@ use Illuminate\Validation\Rule;
 
 class WatershedController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        return Watershed::select('id','name','description','created_at','updated_at')
-            ->orderBy('name')
-            ->get();
+        $query = Watershed::query();
+
+        // Search
+        if ($search = $request->query('q')) {
+            $query->where('name', 'like', "%{$search}%")
+                  ->orWhere('description', 'like', "%{$search}%");
+        }
+
+        // Sort
+        $sortBy = $request->query('sort_by', 'name');
+        $sortDir = $request->query('sort_dir', 'asc');
+        if ($sortBy) {
+            $query->orderBy($sortBy, $sortDir);
+        }
+
+        // Pagination
+        $perPage = $request->query('per_page', 10);
+        $watersheds = $query->paginate($perPage);
+
+        return $watersheds;
     }
 
     public function show(Watershed $watershed)

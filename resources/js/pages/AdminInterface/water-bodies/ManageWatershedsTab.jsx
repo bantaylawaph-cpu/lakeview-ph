@@ -42,6 +42,9 @@ export default function ManageWatershedsTab() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
+  const [pagination, setPagination] = useState({ page: 1, perPage: 5, total: 0, lastPage: 1 });
+  const [sort, setSort] = useState({ id: 'name', dir: 'asc' });
+
   const [visibleMap, setVisibleMap] = useState(() => {
     try {
       const raw = window.localStorage.getItem(VIS_KEY);
@@ -102,9 +105,22 @@ export default function ManageWatershedsTab() {
     setLoading(true);
     setErrorMsg("");
     try {
-      const data = await cachedGet("/watersheds", { ttlMs: 10 * 60 * 1000 });
-      const list = Array.isArray(data) ? data : data?.data ?? [];
+      const params = {
+        page: pagination.page,
+        per_page: pagination.perPage,
+        sort_by: sort.id,
+        sort_dir: sort.dir,
+        q: query,
+      };
+      const data = await api("/watersheds", { params });
+      const list = Array.isArray(data.data) ? data.data : [];
       setRows(normalizeRows(list));
+      setPagination({
+        page: data.current_page,
+        perPage: data.per_page,
+        total: data.total,
+        lastPage: data.last_page,
+      });
     } catch (err) {
       console.error("[ManageWatershedsTab] Failed to load watersheds", err);
       setRows([]);
@@ -112,11 +128,22 @@ export default function ManageWatershedsTab() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [pagination.page, pagination.perPage, sort.id, sort.dir, query]);
 
   useEffect(() => {
     loadWatersheds();
   }, [loadWatersheds]);
+
+  const handleSortChange = (colId) => {
+    setSort((prev) => ({
+      id: colId,
+      dir: prev.id === colId && prev.dir === "asc" ? "desc" : "asc",
+    }));
+  };
+
+  const handlePageChange = (newPage) => {
+    setPagination((prev) => ({ ...prev, page: newPage }));
+  };
 
   const columns = useMemo(
     () => [
@@ -390,8 +417,11 @@ export default function ManageWatershedsTab() {
           <TableLayout
             tableId={TABLE_ID}
             columns={visibleColumns}
-            data={filteredRows}
-            pageSize={5}
+            data={rows}
+            pagination={pagination}
+            onPageChange={handlePageChange}
+            sort={sort}
+            onSortChange={handleSortChange}
             actions={actions}
             resetSignal={resetSignal}
             loading={loading}
