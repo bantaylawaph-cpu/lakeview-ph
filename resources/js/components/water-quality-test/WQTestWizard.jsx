@@ -71,6 +71,27 @@ const STEP_LABELS = [
   { key: 'review',    title: 'Review' },
 ];
 
+const METHOD_DISPLAY = {
+  manual: "Manual Grab Sampling",
+  automatic: "Automatic Sampling",
+};
+
+const WEATHER_DISPLAY = {
+  sunny: "Sunny",
+  partly_cloudy: "Partly Cloudy",
+  cloudy: "Cloudy",
+  rainy: "Rainy",
+  stormy: "Stormy",
+  foggy: "Foggy",
+  windy: "Windy",
+  overcast: "Overcast",
+};
+
+const STATUS_DISPLAY = {
+  draft: "Draft",
+  public: "Published",
+};
+
 export default function WQTestWizard({
   lakes = [],
   lakeGeoms = {},
@@ -854,9 +875,9 @@ export default function WQTestWizard({
                 <div><strong>Sampled At:</strong> {data.sampled_at ? new Date(data.sampled_at).toLocaleString(undefined, { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : "—"}</div>
                 <div><strong>Period:</strong> {d ? `${yr} · Q${qt} · M${String(mo).padStart(2,"0")}` : "—"}</div>
                 <div><strong>Sampler:</strong> {data.sampler_name || "—"}</div>
-                <div><strong>Method:</strong> {data.method || "—"}</div>
-                <div><strong>Weather:</strong> {data.weather || "—"}</div>
-                <div><strong>Status:</strong> {data.status || "draft"}</div>
+                <div><strong>Method:</strong> {METHOD_DISPLAY[data.method] || data.method || "—"}</div>
+                <div><strong>Weather:</strong> {WEATHER_DISPLAY[data.weather] || data.weather || "—"}</div>
+                <div><strong>Status:</strong> {STATUS_DISPLAY[data.status] || data.status || "Draft"}</div>
               </div>
             </div>
 
