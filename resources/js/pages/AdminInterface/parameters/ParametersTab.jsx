@@ -262,7 +262,6 @@ function ParametersTab() {
         search: query,
         page,
         per_page: perPage,
-        evaluation: filterEval || undefined,
       });
       setResetSignal((value) => value + 1);
     } catch (err) {
