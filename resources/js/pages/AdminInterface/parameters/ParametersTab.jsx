@@ -117,14 +117,25 @@ function ParametersTab() {
   const [resetSignal, setResetSignal] = useState(0);
   const [gridEdits, setGridEdits] = useState({});
   const [newRows, setNewRows] = useState([]);
+  // Server-side pagination state
+  const [page, setPage] = useState(1);
+  const perPage = 5;
+  const [totalPages, setTotalPages] = useState(1);
 
   const fetchParameters = useCallback(async (opts = {}) => {
     setLoading(true);
     try {
-      const qs = buildQuery(opts);
       const res = await cachedGet(`/admin/parameters`, { params: opts, ttlMs: 10 * 60 * 1000 });
       const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
       setParams(list);
+      if (res && typeof res.current_page === 'number') {
+        setPage(res.current_page || 1);
+      }
+      if (res && typeof res.last_page === 'number') {
+        setTotalPages(res.last_page || 1);
+      } else {
+        setTotalPages(1);
+      }
     } catch (err) {
       console.error("Failed to load parameters", err);
     } finally {
@@ -132,21 +143,25 @@ function ParametersTab() {
     }
   }, []);
 
+  // Reset to page 1 when query or filters change
   useEffect(() => {
-    fetchParameters({ search: query });
-  }, [fetchParameters, query, resetSignal]);
+    setPage(1);
+  }, [query, filterCategory, filterGroup, filterEval]);
 
-  const filtered = useMemo(() => {
-    const q = (query || "").toLowerCase();
-    return params.filter((p) => {
-      const matchesQuery = !q || (p.code || "").toLowerCase().includes(q) || (p.name || "").toLowerCase().includes(q);
-      const matchesCat = !filterCategory || String(p.category || "") === filterCategory;
-      const matchesGroup = !filterGroup || String(p.group || "") === filterGroup;
-      const evalVal = (p.evaluation_type || "").toString().toLowerCase();
-      const matchesEval = !filterEval || evalVal.includes(filterEval.toLowerCase());
-      return matchesQuery && matchesCat && matchesGroup && matchesEval;
-    });
-  }, [params, query, filterCategory, filterGroup, filterEval]);
+  useEffect(() => {
+    const paramsObj = {
+      search: query,
+      page,
+      per_page: perPage,
+      category: filterCategory || undefined,
+      group: filterGroup || undefined,
+      evaluation: filterEval || undefined,
+    };
+    fetchParameters(paramsObj);
+  }, [fetchParameters, query, filterCategory, filterGroup, filterEval, page, resetSignal]);
+
+  // With server-side pagination and filtering, use the server result as-is
+  const filtered = useMemo(() => params, [params]);
 
   const gridRows = useMemo(() => {
     const existing = filtered.map((p) => ({
@@ -205,7 +220,14 @@ function ParametersTab() {
       setGridEdits((prev) => ({ ...prev, [key]: {} }));
       if (!effectiveRow.__id) setNewRows((prev) => prev.filter((rid) => rid !== key));
       invalidateHttpCache('/admin/parameters');
-      await fetchParameters({ search: query });
+      await fetchParameters({
+        search: query,
+        page,
+        per_page: perPage,
+        category: filterCategory || undefined,
+        group: filterGroup || undefined,
+        evaluation: filterEval || undefined,
+      });
     } catch (err) {
       console.error("Failed to save parameter", err);
       await alertError("Save failed", err?.message || "Failed to save parameter");
@@ -251,7 +273,14 @@ function ParametersTab() {
       await api(`/admin/parameters/${row.__id}`, { method: "DELETE" });
       setGridEdits((prev) => ({ ...prev, [row.id]: {} }));
       invalidateHttpCache('/admin/parameters');
-      await fetchParameters({ search: query });
+      await fetchParameters({
+        search: query,
+        page,
+        per_page: perPage,
+        category: filterCategory || undefined,
+        group: filterGroup || undefined,
+        evaluation: filterEval || undefined,
+      });
       await alertSuccess('Deleted', `"${row.code}" was deleted.`);
     } catch (err) {
       console.error("Failed to delete parameter", err);
@@ -346,8 +375,15 @@ function ParametersTab() {
   }, [gridColumns, visibleMap]);
 
   const handleRefresh = useCallback(() => {
-    fetchParameters({ search: query });
-  }, [fetchParameters, query]);
+    fetchParameters({
+      search: query,
+      page,
+      per_page: perPage,
+      category: filterCategory || undefined,
+      group: filterGroup || undefined,
+      evaluation: filterEval || undefined,
+    });
+  }, [fetchParameters, query, page, filterCategory, filterGroup, filterEval]);
 
   const categoryOptions = useMemo(() => ensureOption(CATEGORY_OPTIONS, form.category), [form.category]);
   const groupOptions = useMemo(() => ensureOption(GROUP_OPTIONS, form.group), [form.group]);
@@ -448,7 +484,14 @@ function ParametersTab() {
           try {
             showLoading('Deleting parameter', 'Please wait…');
             await api(`/admin/parameters/${row.id}`, { method: "DELETE" });
-            await fetchParameters();
+            await fetchParameters({
+              search: query,
+              page,
+              per_page: perPage,
+              category: filterCategory || undefined,
+              group: filterGroup || undefined,
+              evaluation: filterEval || undefined,
+            });
             await alertSuccess('Deleted', `"${row.code}" was deleted.`);
           } catch (err) {
             console.error("Failed to delete parameter", err);
@@ -499,7 +542,14 @@ function ParametersTab() {
       }
 
       handleReset();
-      await fetchParameters();
+      await fetchParameters({
+        search: query,
+        page,
+        per_page: perPage,
+        category: filterCategory || undefined,
+        group: filterGroup || undefined,
+        evaluation: filterEval || undefined,
+      });
       setResetSignal((value) => value + 1);
     } catch (err) {
       console.error("Failed to save parameter", err);
@@ -523,7 +573,9 @@ function ParametersTab() {
           tableId={GRID_TABLE_ID}
           columns={effectiveColumns}
           data={gridRows}
-          pageSize={5}
+          serverSide={true}
+          pagination={{ page, totalPages }}
+          onPageChange={(p) => setPage(p)}
           actions={[
             { label: "Save", type: "edit", icon: <FiSave />, onClick: (row) => saveGridRow(row) },
             { label: "Delete", type: "delete", icon: <FiTrash2 />, onClick: (row) => deleteGridRow(row) },
@@ -533,7 +585,7 @@ function ParametersTab() {
           toolbar={
             <div style={{ display: 'flex', flexDirection: 'column', width: '100%', flex: 1, minWidth: 0, gap: 8 }}>
               <div>
-                <button type="button" className="pill-btn primary" onClick={() => setNewRows((prev) => [`__new__-${Date.now()}`, ...prev])}>
+                <button type="button" className="pill-btn primary" onClick={() => { setPage(1); setNewRows((prev) => [`__new__-${Date.now()}`, ...prev]); }}>
                   <FiPlus />
                   <span>Add Water Quality Parameter</span>
                 </button>

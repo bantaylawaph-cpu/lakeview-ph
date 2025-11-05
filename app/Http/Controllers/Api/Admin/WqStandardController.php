@@ -28,11 +28,20 @@ class WqStandardController extends Controller
             $query->where('is_current', true);
         }
 
-        $standards = $query->orderByDesc('is_current')
+        $query = $query->orderByDesc('is_current')
             ->orderByDesc('priority')
-            ->orderBy('code')
-            ->get();
+            ->orderBy('code');
 
+        // Support optional server-side pagination. If per_page is provided, return a paginator
+        $perPage = $request->integer('per_page');
+        if ($perPage !== null && $perPage > 0) {
+            // Cap page size to a sane maximum
+            if ($perPage > 100) { $perPage = 100; }
+            return $query->paginate($perPage);
+        }
+
+        // Default (legacy) response: full list under data[]
+        $standards = $query->get();
         return response()->json(['data' => $standards]);
     }
 

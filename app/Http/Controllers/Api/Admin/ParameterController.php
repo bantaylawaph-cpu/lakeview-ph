@@ -36,12 +36,41 @@ class ParameterController extends Controller
             $query->where('category', $request->input('category'));
         }
 
+        // Optional group filter (to align with UI advanced filters)
+        if ($request->filled('group')) {
+            $query->where('group', $request->input('group'));
+        }
+
+        // Optional evaluation filter (canonical: max|min|range) or direct evaluation_type string
+        if ($request->filled('evaluation')) {
+            $eval = strtolower(trim((string) $request->input('evaluation')));
+            $map = [
+                'max' => 'Max (≤)',
+                'min' => 'Min (≥)',
+                'range' => 'Range',
+            ];
+            $value = $map[$eval] ?? null;
+            if ($value) {
+                $query->where('evaluation_type', $value);
+            }
+        } elseif ($request->filled('evaluation_type')) {
+            $query->where('evaluation_type', $request->input('evaluation_type'));
+        }
+
         if ($request->filled('is_active')) {
             $query->where('is_active', filter_var($request->input('is_active'), FILTER_VALIDATE_BOOLEAN));
         }
 
-        $parameters = $query->orderBy('name')->get();
+        $query = $query->orderBy('name');
 
+        // Support optional server-side pagination when per_page is provided
+        $perPage = $request->integer('per_page');
+        if ($perPage !== null && $perPage > 0) {
+            if ($perPage > 100) { $perPage = 100; }
+            return $query->paginate($perPage);
+        }
+
+        $parameters = $query->get();
         return response()->json(['data' => $parameters]);
     }
 

@@ -20,25 +20,37 @@ function StandardsTab() {
   const [loading, setLoading] = useState(false);
   const [gridEdits, setGridEdits] = useState({}); // { [id|'__new__']: partial }
   const [newRows, setNewRows] = useState([]); // array of synthetic IDs
+  const [page, setPage] = useState(1);
+  const perPage = 5;
+  const [totalPages, setTotalPages] = useState(1);
 
   const GRID_TABLE_ID = "admin-standards-grid";
 
-  const fetchStandards = useCallback(async () => {
+  const fetchStandards = useCallback(async (p = page) => {
     setLoading(true);
     try {
-      const res = await cachedGet("/admin/wq-standards", { ttlMs: 10 * 60 * 1000 });
+      const res = await cachedGet("/admin/wq-standards", { params: { page: p, per_page: perPage }, ttlMs: 10 * 60 * 1000 });
       const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
       setStandards(list);
+      // If server returned paginator, update page and totalPages
+      if (res && typeof res.current_page === 'number') {
+        setPage(res.current_page || p);
+      }
+      if (res && typeof res.last_page === 'number') {
+        setTotalPages(res.last_page || 1);
+      } else {
+        setTotalPages(1);
+      }
     } catch (err) {
       console.error("Failed to load standards", err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page]);
 
   useEffect(() => {
-    fetchStandards();
-  }, [fetchStandards]);
+    fetchStandards(page);
+  }, [fetchStandards, page]);
 
   const updateGridCell = (key, field, value) => {
     setGridEdits((prev) => ({ ...prev, [key]: { ...prev[key], [field]: value } }));
@@ -85,7 +97,7 @@ function StandardsTab() {
       setGridEdits((prev) => ({ ...prev, [row.id]: {} }));
       if (!row.__id) setNewRows((prev) => prev.filter((rid) => rid !== row.id));
       invalidateHttpCache('/admin/wq-standards');
-      await fetchStandards();
+      await fetchStandards(page);
     } catch (err) {
       console.error("Failed to save standard", err);
       await alertError("Save failed", err?.message || "Failed to save standard");
@@ -120,7 +132,7 @@ function StandardsTab() {
       await api(`/admin/wq-standards/${row.__id}`, { method: "DELETE" });
       setGridEdits((prev) => ({ ...prev, [row.id]: {} }));
       invalidateHttpCache('/admin/wq-standards');
-      await fetchStandards();
+        await fetchStandards(page);
       await alertSuccess("Deleted", `Deleted ${row.code}.`);
     } catch (err) {
       console.error("Failed to delete standard", err);
@@ -218,7 +230,9 @@ function StandardsTab() {
           tableId={GRID_TABLE_ID}
           columns={gridColumns}
           data={gridRows}
-          pageSize={5}
+          serverSide={true}
+          pagination={{ page, totalPages }}
+          onPageChange={(p) => setPage(p)}
           actions={[
             { label: "Save", type: "edit", icon: <FiSave />, onClick: (row) => saveGridRow(row) },
             { label: "Delete", type: "delete", icon: <FiTrash2 />, onClick: (row) => deleteGridRow(row) },
@@ -226,7 +240,7 @@ function StandardsTab() {
           columnPicker={{ label: "Columns", locked: ["code"], defaultHidden: ["notes"] }}
           toolbar={{
             left: (
-              <button type="button" className="pill-btn primary" onClick={() => setNewRows((prev) => [`__new__-${Date.now()}`, ...prev])}>
+              <button type="button" className="pill-btn primary" onClick={() => { setPage(1); setNewRows((prev) => [`__new__-${Date.now()}`, ...prev]); }}>
                 <FiPlus />
                     <span>Add Standard</span>
               </button>
