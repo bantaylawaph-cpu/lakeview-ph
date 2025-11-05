@@ -20,6 +20,14 @@ const Pill = ({ children, tone = "muted" }) => (
   </span>
 );
 
+const pfLabel = (v) => {
+  const s = (v ?? "").toString().trim().toLowerCase();
+  if (s === "pass") return "PASS";
+  if (s === "fail") return "FAIL";
+  if (s === "not_applicable") return "N/A";
+  return "—";
+};
+
 export default function PublicWQTestModal({ open, onClose, record, basePath = "/public/sample-events" }) {
   const [sampleEvent, setSampleEvent] = useState(record || null);
   const [loading, setLoading] = useState(false);
@@ -201,7 +209,7 @@ export default function PublicWQTestModal({ open, onClose, record, basePath = "/
                         <td style={{ background: 'transparent', color: '#fff' }}>{r.value ?? '—'}</td>
                         <td style={{ background: 'transparent', color: '#fff' }}>{r.unit || '—'}</td>
                         <td style={{ background: 'transparent', color: '#fff' }}>{formatDepth(r.depth_m ?? 0)}</td>
-                        <td style={{ background: 'transparent', color: '#fff' }}>{(r.pass_fail ?? '').toString().toUpperCase() || '—'}</td>
+                        <td style={{ background: 'transparent', color: '#fff' }}>{pfLabel(r.pass_fail)}</td>
                         <td style={{ background: 'transparent', color: '#fff' }}>{r.remarks || '—'}</td>
                       </tr>
                     )) : (

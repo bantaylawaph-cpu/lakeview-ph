@@ -32,7 +32,7 @@ function yqmFrom(record) {
 
 const pfLabel = (v) => {
   const s = (v ?? "").toString().trim().toLowerCase();
-  return s === "pass" ? "Pass" : s === "fail" ? "Fail" : "—";
+  return s === "pass" ? "Pass" : s === "fail" ? "Fail" : s === "not_applicable" ? "N/A" : "—";
 };
 
 /**
