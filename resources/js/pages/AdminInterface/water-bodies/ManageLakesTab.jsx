@@ -19,6 +19,8 @@ const TABLE_ID = "admin-watercat-lakes";
 const VIS_KEY = `${TABLE_ID}::visible`;
 const ADV_KEY = `${TABLE_ID}::filters_advanced`;
 const SEARCH_KEY = `${TABLE_ID}::search`;
+const PAGE_KEY = `${TABLE_ID}::page`;
+const SORT_KEY = `${TABLE_ID}::sort`;
 
 const fmtNum = (value, digits = 2) => {
   if (value === null || value === undefined || value === "") return "";
@@ -105,10 +107,21 @@ function ManageLakesTab() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  const [allLakes, setAllLakes] = useState([]);
   const [lakes, setLakes] = useState([]);
+  const [pagination, setPagination] = useState({ page: 1, perPage: 10, total: 0, lastPage: 1 });
+  const [sort, setSort] = useState(() => {
+    try {
+      const raw = localStorage.getItem(SORT_KEY);
+      return raw ? JSON.parse(raw) : { id: 'name', dir: 'asc' };
+    } catch (err) {
+      return { id: 'name', dir: 'asc' };
+    }
+  });
+
   const [watersheds, setWatersheds] = useState([]);
   const [classOptions, setClassOptions] = useState([]);
+  const [provinceOptions, setProvinceOptions] = useState([]);
+  const [regionOptions, setRegionOptions] = useState([]);
 
   const mapRef = useRef(null);
   const viewMapRef = useRef(null);
@@ -239,6 +252,14 @@ function ManageLakesTab() {
     }
   }, [adv]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(SORT_KEY, JSON.stringify(sort));
+    } catch (err) {
+      // ignore storage failure
+    }
+  }, [sort]);
+
   const restoreDefaults = useCallback(() => {
     try {
       localStorage.removeItem(VIS_KEY);
@@ -276,65 +297,88 @@ function ManageLakesTab() {
       setClassOptions([]);
     }
   }, []);
+
+  const fetchProvinces = useCallback(async () => {
+    try {
+      const res = await cachedGet("/options/provinces", { ttlMs: 10 * 60 * 1000 });
+      const list = Array.isArray(res) ? res : [];
+      setProvinceOptions(list.map(p => ({ value: p, label: p })));
+    } catch (err) {
+      console.error("[ManageLakesTab] Failed to load provinces", err);
+      setProvinceOptions([]);
+    }
+  }, []);
+
+  const fetchRegions = useCallback(async () => {
+    try {
+      const res = await cachedGet("/options/regions", { ttlMs: 10 * 60 * 1000 });
+      const list = Array.isArray(res) ? res : [];
+      setRegionOptions(list.map(r => ({ value: r, label: r })));
+    } catch (err) {
+      console.error("[ManageLakesTab] Failed to load regions", err);
+      setRegionOptions([]);
+    }
+  }, []);
+
   const fetchLakes = useCallback(async () => {
     setLoading(true);
     setErrorMsg("");
     try {
-      const data = await api("/lakes", { auth: false });
-      const list = Array.isArray(data) ? data : data?.data ?? [];
-      setAllLakes(normalizeRows(list));
+      const params = new URLSearchParams();
+      params.append('page', pagination.page);
+      params.append('per_page', pagination.perPage);
+      params.append('sort_by', sort.id);
+      params.append('sort_dir', sort.dir);
+      if (query) {
+        params.append('q', query);
+      }
+      if (Object.keys(adv).length > 0) {
+        params.append('adv', JSON.stringify(adv));
+      }
+
+      const data = await api(`/lakes?${params.toString()}`, { auth: false });
+      const list = Array.isArray(data.data) ? data.data : [];
+      setLakes(normalizeRows(list));
+      setPagination({
+        page: data.current_page,
+        perPage: data.per_page,
+        total: data.total,
+        lastPage: data.last_page,
+      });
     } catch (err) {
       console.error("[ManageLakesTab] Failed to load lakes", err);
-      setAllLakes([]);
+      setLakes([]);
       setErrorMsg("Failed to load lakes.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [pagination.page, pagination.perPage, sort.id, sort.dir, query, adv]);
 
   useEffect(() => {
     fetchWatersheds();
     fetchClasses();
-    fetchLakes();
-  }, [fetchWatersheds, fetchClasses, fetchLakes]);
+    fetchProvinces();
+    fetchRegions();
+  }, [fetchWatersheds, fetchClasses, fetchProvinces, fetchRegions]);
 
   useEffect(() => {
-    const q = query.trim().toLowerCase();
-    const region = (adv.region ?? "").toLowerCase();
-    const province = (adv.province ?? "").toLowerCase();
-    const municipality = (adv.municipality ?? "").toLowerCase();
-    const [minArea, maxArea] = adv.area_km2 ?? [null, null];
-    const [minElevation, maxElevation] = adv.elevation_m ?? [null, null];
-    const [minDepth, maxDepth] = adv.mean_depth_m ?? [null, null];
-  const flowsStatusFilter = (adv.flows_status ?? "").toLowerCase();
+    const t = setTimeout(() => fetchLakes(), 300);
+    return () => clearTimeout(t);
+  }, [fetchLakes]);
 
-    const filtered = allLakes.filter((row) => {
-      const haystack = `${row.name} ${row.alt_name || ""} ${row.location} ${row.watershed} ${row.classification}`.toLowerCase();
 
-      if (q && !haystack.includes(q)) return false;
-      if (region && (row.region || "").toLowerCase() !== region) return false;
-      if (province && (row.province || "").toLowerCase() !== province) return false;
-      if (municipality && (row.municipality || "").toLowerCase() !== municipality) return false;
-  if ((adv.class_code ?? "") && (row.class_code || "") !== adv.class_code) return false;
-  if (flowsStatusFilter && (row.flows_status || "").toLowerCase() !== flowsStatusFilter) return false;
-
-      const area = row._raw?.surface_area_km2 ?? null;
-      if (minArea != null && !(area != null && Number(area) >= Number(minArea))) return false;
-      if (maxArea != null && !(area != null && Number(area) <= Number(maxArea))) return false;
-
-      const elevation = row._raw?.elevation_m ?? null;
-      if (minElevation != null && !(elevation != null && Number(elevation) >= Number(minElevation))) return false;
-      if (maxElevation != null && !(elevation != null && Number(elevation) <= Number(maxElevation))) return false;
-
-      const depth = row._raw?.mean_depth_m ?? null;
-      if (minDepth != null && !(depth != null && Number(depth) >= Number(minDepth))) return false;
-      if (maxDepth != null && !(depth != null && Number(depth) <= Number(maxDepth))) return false;
-
-      return true;
+  const handleSortChange = (colId) => {
+    setSort(prev => {
+      if (prev.id === colId) {
+        return { id: colId, dir: prev.dir === 'asc' ? 'desc' : 'asc' };
+      }
+      return { id: colId, dir: 'asc' };
     });
+  };
 
-    setLakes(filtered);
-  }, [allLakes, query, adv]);
+  const handlePageChange = (newPage) => {
+    setPagination(prev => ({ ...prev, page: newPage }));
+  };
 
   useEffect(() => {
     if (!lakeBounds) return;
@@ -730,17 +774,17 @@ function ManageLakesTab() {
         if (formMode === "create") {
           showLoading('Creating lake', 'Please wait…');
           updatedLake = await api("/lakes", { method: "POST", body: payload });
-          setAllLakes((prev) => [...prev, normalizeRows([updatedLake])[0]]);
           await alertSuccess('Created', `"${updatedLake.name || payload.name}" was created.`);
+          fetchLakes(); // Refetch to show the new lake
         } else {
           showLoading('Saving lake', 'Please wait…');
           updatedLake = await api(`/lakes/${payload.id}`, { method: "PUT", body: payload });
-          setAllLakes((prev) => prev.map((lake) => (lake.id === updatedLake.id ? normalizeRows([updatedLake])[0] : lake)));
           await alertSuccess('Saved', `"${updatedLake.name || payload.name}" was updated.`);
+          fetchLakes(); // Refetch to show the updated data
         }
         setFormOpen(false);
         // Invalidate caches used across tabs (lists, options, and flows list which may display lake name)
-        invalidateHttpCache(['/lakes', '/options/lakes', '/lake-flows']);
+        invalidateHttpCache(['/options/lakes', '/lake-flows']);
       } catch (err) {
         console.error("[ManageLakesTab] Failed to save lake", err);
         setErrorMsg("Save failed. Please verify required fields and that the name is unique.");
@@ -753,27 +797,14 @@ function ManageLakesTab() {
     [formMode]
   );
 
-  // delete flow now handled inline in openDelete
-
-  
-
-  const regionOptions = useMemo(
-    () => ["", ...new Set(allLakes.map((row) => row.region).filter(Boolean))].map((value) => ({ value, label: value || "All Regions" })),
-    [allLakes]
+  const regionsForFilter = useMemo(
+    () => [{ value: "", label: "All Regions" }, ...regionOptions],
+    [regionOptions]
   );
 
-  const provinceOptions = useMemo(
-    () => ["", ...new Set(allLakes.map((row) => row.province).filter(Boolean))].map((value) => ({ value, label: value || "All Provinces" })),
-    [allLakes]
-  );
-
-  const municipalityOptions = useMemo(
-    () =>
-      ["", ...new Set(allLakes.map((row) => row.municipality).filter(Boolean))].map((value) => ({
-        value,
-        label: value || "All Municipalities/Cities",
-      })),
-    [allLakes]
+  const provincesForFilter = useMemo(
+    () => [{ value: "", label: "All Provinces" }, ...provinceOptions],
+    [provinceOptions]
   );
 
   const classFilterOptions = useMemo(
@@ -820,71 +851,48 @@ function ManageLakesTab() {
         onClearAll={() => setAdv({})}
         fields={[
           {
-            id: "flows_status",
-            label: "Tributaries Status",
-            type: "select",
-            value: adv.flows_status ?? "",
-            onChange: (value) => setAdv((state) => ({ ...state, flows_status: value })),
-            options: [
-              { value: "", label: "All" },
-              { value: "present", label: "Exists" },
-              { value: "none", label: "None" },
-              { value: "unknown", label: "Not yet recorded" },
-            ],
-          },
-          {
-            id: "region",
-            label: "Region",
-            type: "select",
-            value: adv.region ?? "",
-            onChange: (value) => setAdv((state) => ({ ...state, region: value })),
-            options: regionOptions,
-          },
-          {
-            id: "province",
-            label: "Province",
-            type: "select",
-            value: adv.province ?? "",
-            onChange: (value) => setAdv((state) => ({ ...state, province: value })),
-            options: provinceOptions,
-          },
-          {
-            id: "municipality",
-            label: "Municipality/City",
-            type: "select",
-            value: adv.municipality ?? "",
-            onChange: (value) => setAdv((state) => ({ ...state, municipality: value })),
-            options: municipalityOptions,
-          },
-          {
-            id: "class_code",
-            label: "Water Body Classification",
-            type: "select",
-            value: adv.class_code ?? "",
-            onChange: (value) => setAdv((state) => ({ ...state, class_code: value })),
-            options: classFilterOptions,
-          },
-          {
-            id: "area_km2",
-            label: "Surface Area (km²)",
-            type: "number-range",
-            value: adv.area_km2 ?? [null, null],
-            onChange: (range) => setAdv((state) => ({ ...state, area_km2: range })),
-          },
-          {
-            id: "elevation_m",
-            label: "Surface Elevation (m)",
-            type: "number-range",
-            value: adv.elevation_m ?? [null, null],
-            onChange: (range) => setAdv((state) => ({ ...state, elevation_m: range })),
-          },
-          {
-            id: "mean_depth_m",
-            label: "Average Depth (m)",
-            type: "number-range",
-            value: adv.mean_depth_m ?? [null, null],
-            onChange: (range) => setAdv((state) => ({ ...state, mean_depth_m: range })),
-          },
+            type: 'group',
+            className: 'grid-4',
+            children: [
+              {
+                id: "flows_status",
+                label: "Tributaries Status",
+                type: "select",
+                value: adv.flows_status ?? "",
+                onChange: (value) => setAdv((state) => ({ ...state, flows_status: value })),
+                options: [
+                  { value: "", label: "All" },
+                  { value: "present", label: "Exists" },
+                  { value: "none", label: "None" },
+                  { value: "unknown", label: "Not yet recorded" },
+                ],
+              },
+              {
+                id: "region",
+                label: "Region",
+                type: "select",
+                value: adv.region ?? "",
+                onChange: (value) => setAdv((state) => ({ ...state, region: value })),
+                options: regionsForFilter,
+              },
+              {
+                id: "province",
+                label: "Province",
+                type: "select",
+                value: adv.province ?? "",
+                onChange: (value) => setAdv((state) => ({ ...state, province: value })),
+                options: provincesForFilter,
+              },
+              {
+                id: "class_code",
+                label: "Water Body Classification",
+                type: "select",
+                value: adv.class_code ?? "",
+                onChange: (value) => setAdv((state) => ({ ...state, class_code: value })),
+                options: classFilterOptions,
+              },
+            ]
+          }
         ]}
       />
 
@@ -895,11 +903,15 @@ function ManageLakesTab() {
             tableId={TABLE_ID}
             columns={visibleColumns}
             data={lakes}
-            pageSize={5}
             actions={actions}
             resetSignal={resetSignal}
             loading={loading}
             loadingLabel={loading ? 'Loading lakes…' : null}
+            serverSide={true}
+            pagination={{ page: pagination.page, totalPages: pagination.lastPage }}
+            onPageChange={handlePageChange}
+            sort={sort}
+            onSortChange={handleSortChange}
           />
         </div>
       </div>

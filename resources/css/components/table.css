@@ -234,16 +234,20 @@
 
 .advanced-filters-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); /* ← prevents overlap */
-  align-items: start;              /* avoid overlap with tall controls */
-  gap: 10px;
+  grid-template-columns: repeat(4, 1fr);
+  align-items: start;
+  gap: 16px;
 }
 
 .af-field {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  min-width: 0;                    /* ← prevent overflow in grid cell */
+  min-width: 0;
+}
+
+.af-field.full-width {
+  grid-column: 1 / -1;
 }
 .af-field > span {
   font-size: 0.85rem;
@@ -435,10 +439,3 @@
   width: 16px;
   height: 16px;
 }
-
-
-
-
-
-
-

@@ -14,61 +14,133 @@ use Illuminate\Support\Str;
 
 class LakeController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        // Lightweight response caching + ETag to speed up initial paint and revalidation
-        $ver = (int) Cache::get('ver:lakes', 1);
-        $etag = 'W/"lakes-v' . $ver . '"';
+        $query = Lake::query()->with(['watershed:id,name', 'waterQualityClass:code,name']);
 
-        // Short-circuit 304 when client matches current version
-        $ifNoneMatch = request()->headers->get('If-None-Match');
-        if ($ifNoneMatch && trim($ifNoneMatch) === $etag) {
-            return response('', 304)
-                ->header('ETag', $etag)
-                ->header('Cache-Control', 'public, max-age=300');
+        // Search query
+        if ($request->has('q')) {
+            $search = strtolower($request->query('q'));
+            $query->where(function ($q) use ($search) {
+                $q->where(DB::raw('LOWER(name)'), 'like', "%{$search}%")
+                    ->orWhere(DB::raw('LOWER(alt_name)'), 'like', "%{$search}%");
+            });
         }
 
-        $cacheKey = 'lakes:list:v' . $ver;
-        $ttl = now()->addMinutes(10);
-        $payload = Cache::remember($cacheKey, $ttl, function () {
-            $rows = Lake::select(
-                'id','watershed_id','name','alt_name','region','province','municipality',
-                'surface_area_km2','elevation_m','mean_depth_m','class_code','coordinates','created_at','updated_at',
-                'flows_status'
-            )->with(['watershed:id,name','waterQualityClass:code,name'])->orderBy('name')->get();
+        // Advanced Filters
+        if ($request->has('adv')) {
+            $advFilters = $request->query('adv');
+            if (is_string($advFilters)) {
+                try {
+                    $advFilters = json_decode($advFilters, true);
+                } catch (\Exception $e) {
+                    $advFilters = [];
+                }
+            }
 
-            return $rows->map(function($lake){
-                $arr = $lake->toArray();
-                // Provide legacy single-value compatibility (region, province, municipality)
-                // but return comma-separated string for forms and keep full list as *_list
-                if (is_array($arr['region'])) {
-                    $arr['region_list'] = $arr['region'];
-                    $arr['region'] = count($arr['region']) ? implode(', ', $arr['region']) : null;
+            if (is_array($advFilters)) {
+                $driver = DB::getDriverName();
+
+                if (!empty($advFilters['region'])) {
+                    $region = $advFilters['region'];
+                    $query->where(function($q) use ($region, $driver) {
+                        if ($driver === 'pgsql') {
+                            $q->whereRaw("(jsonb_typeof(region) = 'array' AND region @> ?::jsonb)", [json_encode([$region])])
+                              ->orWhereRaw("(jsonb_typeof(region) <> 'array' AND region::text = ?)", [$region]);
+                        } else {
+                            $q->whereJsonContains('region', $region)->orWhere('region', $region);
+                        }
+                    });
                 }
-                if (is_array($arr['province'])) {
-                    $arr['province_list'] = $arr['province'];
-                    $arr['province'] = count($arr['province']) ? implode(', ', $arr['province']) : null;
+                if (!empty($advFilters['province'])) {
+                    $province = $advFilters['province'];
+                    $query->where(function($q) use ($province, $driver) {
+                        if ($driver === 'pgsql') {
+                            $q->whereRaw("(jsonb_typeof(province) = 'array' AND province @> ?::jsonb)", [json_encode([$province])])
+                              ->orWhereRaw("(jsonb_typeof(province) <> 'array' AND province::text = ?)", [$province]);
+                        } else {
+                            $q->whereJsonContains('province', $province)->orWhere('province', $province);
+                        }
+                    });
                 }
-                if (is_array($arr['municipality'])) {
-                    $arr['municipality_list'] = $arr['municipality'];
-                    $arr['municipality'] = count($arr['municipality']) ? implode(', ', $arr['municipality']) : null;
+                if (!empty($advFilters['municipality'])) {
+                    $query->where('municipality', $advFilters['municipality']);
                 }
-                // Extract lat/lon from coordinates geom
-                $latLon = $lake->lat_lon;
-                if ($latLon) {
-                    $arr['lat'] = $latLon[0];
-                    $arr['lon'] = $latLon[1];
-                } else {
-                    $arr['lat'] = null;
-                    $arr['lon'] = null;
+                if (!empty($advFilters['class_code'])) {
+                    $query->where('class_code', $advFilters['class_code']);
                 }
-                return $arr;
-            })->toArray();
+                if (!empty($advFilters['flows_status'])) {
+                    $query->where('flows_status', $advFilters['flows_status']);
+                }
+                if (isset($advFilters['area_km2']) && is_array($advFilters['area_km2'])) {
+                    if ($advFilters['area_km2'][0] !== null) $query->where('surface_area_km2', '>=', $advFilters['area_km2'][0]);
+                    if ($advFilters['area_km2'][1] !== null) $query->where('surface_area_km2', '<=', $advFilters['area_km2'][1]);
+                }
+                if (isset($advFilters['elevation_m']) && is_array($advFilters['elevation_m'])) {
+                    if ($advFilters['elevation_m'][0] !== null) $query->where('elevation_m', '>=', $advFilters['elevation_m'][0]);
+                    if ($advFilters['elevation_m'][1] !== null) $query->where('elevation_m', '<=', $advFilters['elevation_m'][1]);
+                }
+                if (isset($advFilters['mean_depth_m']) && is_array($advFilters['mean_depth_m'])) {
+                    if ($advFilters['mean_depth_m'][0] !== null) $query->where('mean_depth_m', '>=', $advFilters['mean_depth_m'][0]);
+                    if ($advFilters['mean_depth_m'][1] !== null) $query->where('mean_depth_m', '<=', $advFilters['mean_depth_m'][1]);
+                }
+            }
+        }
+
+        // Sorting
+        $sortBy = $request->query('sort_by', 'name');
+        $sortDir = $request->query('sort_dir', 'asc');
+
+        // Whitelist columns that can be sorted
+        $sortableColumns = [
+            'name', 'alt_name', 'region', 'province', 'municipality',
+            'classification', 'surface_area_km2', 'elevation_m', 'mean_depth_m',
+            'flows_status', 'watershed', 'created_at', 'updated_at'
+        ];
+
+        if (!in_array($sortBy, $sortableColumns)) {
+            $sortBy = 'name';
+        }
+
+        if (!in_array($sortDir, ['asc', 'desc'])) {
+            $sortDir = 'asc';
+        }
+
+        if ($sortBy === 'watershed') {
+            $query->leftJoin('watersheds', 'lakes.watershed_id', '=', 'watersheds.id')
+                  ->orderBy('watersheds.name', $sortDir)
+                  ->select('lakes.*'); // Avoid column name conflicts
+        } elseif ($sortBy === 'classification') {
+            $query->leftJoin('water_quality_classes', 'lakes.class_code', '=', 'water_quality_classes.code')
+                  ->orderBy('water_quality_classes.name', $sortDir)
+                  ->select('lakes.*');
+        } else {
+            $query->orderBy($sortBy, $sortDir);
+        }
+
+        // Pagination
+        $perPage = $request->query('per_page', 10);
+        $paginated = $query->paginate($perPage);
+
+        // Normalize multi-location fields in the paginated result
+        $paginated->getCollection()->transform(function ($lake) {
+            $arr = $lake->toArray();
+            if (is_array($arr['region'])) {
+                $arr['region_list'] = $arr['region'];
+                $arr['region'] = count($arr['region']) ? implode(', ', $arr['region']) : null;
+            }
+            if (is_array($arr['province'])) {
+                $arr['province_list'] = $arr['province'];
+                $arr['province'] = count($arr['province']) ? implode(', ', $arr['province']) : null;
+            }
+            if (is_array($arr['municipality'])) {
+                $arr['municipality_list'] = $arr['municipality'];
+                $arr['municipality'] = count($arr['municipality']) ? implode(', ', $arr['municipality']) : null;
+            }
+            return $arr;
         });
 
-        return response()->json($payload)
-            ->header('ETag', $etag)
-            ->header('Cache-Control', 'public, max-age=300');
+        return $paginated;
     }
 
     public function show(Lake $lake)
@@ -231,6 +303,64 @@ class LakeController extends Controller
             'image_path' => $path,
             'message' => 'Image uploaded',
         ], 201);
+    }
+
+    public function getProvinceOptions()
+    {
+        $provinces = Lake::whereNotNull('province')->pluck('province');
+        $uniqueProvinces = collect();
+
+        $provinces->each(function ($item) use ($uniqueProvinces) {
+            if (is_string($item)) {
+                $decoded = json_decode($item, true);
+                if (is_array($decoded)) {
+                    foreach ($decoded as $p) {
+                        $uniqueProvinces->push(trim($p));
+                    }
+                } else {
+                    $parts = explode(',', $item);
+                    foreach ($parts as $p) {
+                        $uniqueProvinces->push(trim($p));
+                    }
+                }
+            } elseif (is_array($item)) {
+                foreach ($item as $p) {
+                    $uniqueProvinces->push(trim($p));
+                }
+            }
+        });
+
+        $sorted = $uniqueProvinces->unique()->filter()->sort()->values();
+        return response()->json($sorted);
+    }
+
+    public function getRegionOptions()
+    {
+        $regions = Lake::whereNotNull('region')->pluck('region');
+        $uniqueRegions = collect();
+
+        $regions->each(function ($item) use ($uniqueRegions) {
+            if (is_string($item)) {
+                $decoded = json_decode($item, true);
+                if (is_array($decoded)) {
+                    foreach ($decoded as $r) {
+                        $uniqueRegions->push(trim($r));
+                    }
+                } else {
+                    $parts = explode(',', $item);
+                    foreach ($parts as $r) {
+                        $uniqueRegions->push(trim($r));
+                    }
+                }
+            } elseif (is_array($item)) {
+                foreach ($item as $r) {
+                    $uniqueRegions->push(trim($r));
+                }
+            }
+        });
+
+        $sorted = $uniqueRegions->unique()->filter()->sort()->values();
+        return response()->json($sorted);
     }
     
     public function publicGeo()

@@ -20,7 +20,7 @@ export default function TableLayout({
   tableId = "lv-table",
   columns = [],
   data = [],
-  pageSize = 10,
+  // pageSize = 10, // Replaced by server-side pagination
   actions = [],
   disableActionsWhen = null, // function(row) => boolean
   resetSignal = 0,
@@ -29,6 +29,12 @@ export default function TableLayout({
   hidePager = false,
   loading = false,
   loadingLabel = null,
+  // Server-side props
+  serverSide = false,
+  pagination = { page: 1, totalPages: 1 },
+  onPageChange = () => {},
+  sort = { id: null, dir: 'asc' },
+  onSortChange = () => {},
 }) {
   const enableColumnPicker = !!columnPicker;
   const columnPickerConfig = typeof columnPicker === "object" && columnPicker !== null ? columnPicker : {};
@@ -244,85 +250,25 @@ export default function TableLayout({
     document.addEventListener("mouseup", onUp);
   };
 
-  // Pagination
-  const [page, setPage] = useState(1);
+  // Pagination (client-side state removed)
+  // const [page, setPage] = useState(1);
   
-  // Sorting (smart typing + persistence)
+  // Sorting (client-side state and logic removed)
   const SORT_KEY = `${tableId}::sort`;
-  const [sort, setSort] = useState(() => {
-    try {
-      const raw = localStorage.getItem(SORT_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && parsed.id && (parsed.dir === 'asc' || parsed.dir === 'desc')) return parsed;
-      }
-    } catch {}
-    return { id: null, dir: 'asc' };
-  });
+  // const [sort, setSort] = useState(() => { ... });
+  // useEffect(() => { ... });
+  // const getSortValue = useCallback((row, col) => { ... });
+  // const cmp = useCallback((a, b, col) => { ... });
+  // const sorted = useMemo(() => { ... });
 
-  useEffect(() => {
-    try { localStorage.setItem(SORT_KEY, JSON.stringify(sort)); } catch {}
-  }, [sort]);
+  // Data is now passed directly
+  const paged = data;
+  const page = serverSide ? pagination.page : 1; // fallback for client-side
+  const totalPages = serverSide ? pagination.totalPages : 1;
 
-  const getSortValue = useCallback((row, col) => {
-    if (!col) return undefined;
-    try {
-      if (typeof col.sortValue === 'function') return col.sortValue(row._raw ?? row, row);
-      if (col.accessor) return row[col.accessor];
-      if (typeof col.render === 'function') {
-        const v = col.render(row._raw ?? row, row);
-        if (v == null) return v;
-        if (typeof v === 'string' || typeof v === 'number' || v instanceof Date) return v;
-        return String(v);
-      }
-    } catch {}
-    return undefined;
-  }, []);
-
-  const cmp = useCallback((a, b, col) => {
-    const av = getSortValue(a, col);
-    const bv = getSortValue(b, col);
-
-    if (av == null && bv == null) return 0;
-    if (av == null) return -1;
-    if (bv == null) return 1;
-
-    const numA = typeof av === 'number' ? av : (typeof av === 'string' && av.trim() !== '' && !isNaN(Number(av)) ? Number(av) : null);
-    const numB = typeof bv === 'number' ? bv : (typeof bv === 'string' && bv.trim() !== '' && !isNaN(Number(bv)) ? Number(bv) : null);
-    if (numA !== null && numB !== null) return numA - numB;
-
-    const dateA = av instanceof Date ? av : (typeof av === 'string' && !isNaN(Date.parse(av)) ? new Date(av) : null);
-    const dateB = bv instanceof Date ? bv : (typeof bv === 'string' && !isNaN(Date.parse(bv)) ? new Date(bv) : null);
-    if (dateA && dateB) return dateA - dateB;
-
-    const sa = String(av).toLowerCase();
-    const sb = String(bv).toLowerCase();
-    if (sa < sb) return -1;
-    if (sa > sb) return 1;
-    return 0;
-  }, [getSortValue]);
-
-  const sorted = useMemo(() => {
-    if (!sort.id) return data;
-    const col = normalizedCols.find(c => c.id === sort.id);
-    if (!col) return data;
-    const copy = data.slice();
-    copy.sort((a, b) => {
-      const r = cmp(a, b, col);
-      return sort.dir === 'asc' ? r : -r;
-    });
-    return copy;
-  }, [data, sort, normalizedCols, cmp]);
-
-  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
-  const paged = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return sorted.slice(start, start + pageSize);
-  }, [sorted, page, pageSize]);
-
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [totalPages, page]);
+  // useEffect(() => {
+  //   if (page > totalPages) setPage(totalPages);
+  // }, [totalPages, page]);
 
   const getCellContent = (row, col) => {
     if (col.render) return col.render(row._raw ?? row, row);
@@ -423,11 +369,11 @@ export default function TableLayout({
                       type="button"
                       className={`lv-th-label lv-sortable ${sort.id === col.id ? 'is-sorted' : ''}`}
                       onClick={() => {
-                        setPage(1);
-                        setSort((prev) => {
-                          if (prev.id !== col.id) return { id: col.id, dir: 'asc' };
-                          return { id: col.id, dir: prev.dir === 'asc' ? 'desc' : 'asc' };
-                        });
+                        if (serverSide) {
+                          onSortChange(col.id);
+                        } else {
+                          // client-side sorting logic can be re-added here if needed
+                        }
                       }}
                       title="Sort"
                       aria-label={`Sort by ${col.header}`}
@@ -510,11 +456,11 @@ export default function TableLayout({
 
       {!hidePager && (
         <div className="lv-table-pager">
-          <button className="pill-btn ghost sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+          <button className="pill-btn ghost sm" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>
             {"< Prev"}
           </button>
             <span className="pager-text">Page {page} of {totalPages}</span>
-          <button className="pill-btn ghost sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+          <button className="pill-btn ghost sm" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>
             {"Next >"}
           </button>
         </div>
