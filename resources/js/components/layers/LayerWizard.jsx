@@ -18,6 +18,7 @@ import {
 import { createLayer, fetchLakeOptions, fetchWatershedOptions } from "../../lib/layers";
 import { alertSuccess, alertError, showLoading, closeLoading } from "../../lib/alerts";
 import { parseSpatialFile, ACCEPTED_EXT_REGEX } from "../../utils/parsers";
+import shp from 'shpjs';
 import PolygonChooser from '../../components/PolygonChooser';
 import FileDropzone from './FileDropzone';
 import PreviewMap from './PreviewMap';
@@ -365,17 +366,51 @@ export default function LayerWizard({
   };
 
   const handleFile = async (file) => {
-    if (!file) return;
+    if (!file) return false;
+
+    const lower = String(file.name || '').toLowerCase();
+
+    // If ZIP, do an early in-browser validation to ensure it contains shapefile layers
+    if (lower.endsWith('.zip')) {
+      try {
+        const buf = await file.arrayBuffer();
+        let gj = await shp(buf);
+        if (!gj || typeof gj !== 'object') throw new Error('Invalid shapefile contents');
+        if (!gj.type && !gj.features) {
+          const all = [];
+          for (const key of Object.keys(gj)) {
+            const layer = gj[key];
+            if (layer && Array.isArray(layer.features)) all.push(...layer.features);
+          }
+          gj = { type: 'FeatureCollection', features: all };
+        }
+        if (!gj.features || !Array.isArray(gj.features) || gj.features.length === 0) {
+          await alertError('Invalid ZIP', 'ZIP contains no shapefile layers or no geometries. Please upload a ZIP containing a valid .shp/.dbf pair.');
+          return false;
+        }
+        // success: handle parsed GeoJSON and let caller know this was accepted
+        handleUploadGeoJSON(gj, file.name);
+        return true;
+      } catch (e) {
+        console.error('[LayerWizard] Invalid shapefile zip', e);
+        await alertError('Invalid ZIP', 'This ZIP file does not contain a valid shapefile. Please upload a .zip that contains a .shp/.dbf pair.');
+        return false;
+      }
+    }
+
     if (!acceptedExt.test(file.name)) {
       setError("Only .geojson, .json, .kml, .zip (shapefile), or .gpkg are supported.");
-      return;
+      return false;
     }
     try {
       const gj = await parseSpatialFile(file);
       handleUploadGeoJSON(gj, file.name);
+      return true;
     } catch (e) {
       console.error('[LayerWizard] Failed to parse file', e);
       setError(e?.message || "Failed to parse file.");
+      await alertError('Failed to parse file', e?.message || 'Failed to parse file.');
+      return false;
     }
   };
 
@@ -553,7 +588,6 @@ export default function LayerWizard({
           </div>
           <div className="dashboard-card-body">
             <div className="info-row" style={{ marginBottom: 8 }}>
-              <FiInfo /> The map shows a <strong>WGS84 (EPSG:4326)</strong> preview. Your original geometry will be saved with the detected SRID.
             </div>
             <PreviewMap
               geometry={wdata.previewGeom}

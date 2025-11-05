@@ -8,7 +8,7 @@ import Swal from 'sweetalert2';
 import 'sweetalert2/dist/sweetalert2.min.css';
 import FileDropzone from '../../components/layers/FileDropzone';
 
-// Superadmin page: manage uploaded population raster source files (GeoTIFF / ZIP). 
+// Superadmin page: manage uploaded population raster source files (GeoTIFF). 
 // Ingestion into PostGIS + registration with population functions is out-of-scope here.
 export default function AdminPopulationData() {
   const [rows, setRows] = useState([]);
@@ -193,7 +193,7 @@ export default function AdminPopulationData() {
           </div>
         </div>
         <div style={{ fontSize: 13, color: '#475569', maxWidth: 760, marginTop: -12 }}>
-            Manage uploaded source raster files (GeoTIFF / ZIP) for population density & counts. After upload, a separate ingestion step should register
+            Manage uploaded source raster files (GeoTIFF) for population density & counts. After upload, a separate ingestion step should register
             the dataset in PostGIS so it becomes available to heatmap and estimation functions.
         </div>
       </div>
@@ -215,7 +215,7 @@ export default function AdminPopulationData() {
             />
           </div>
           <div className="lv-field-row" style={{ display: 'grid', gap: 6 }}>
-            <FileDropzone accept=".tif,.tiff,.zip" onFile={setFile} selectedFile={file} dropText="Drop a raster file here or click to select" acceptedText="Accepted: .tif, .tiff, .zip (zipped GeoTIFF)" />
+            <FileDropzone accept=".tif,.tiff" onFile={setFile} selectedFile={file} dropText="Drop a raster file here or click to select" acceptedText="Accepted: .tif, .tiff" />
             <div style={{ fontSize: 11, color: '#64748b' }}>Large files may take a moment to finish transferring; keep this tab open.</div>
           </div>
           <div className="lv-field-row" style={{ display: 'grid', gap: 6 }}>
