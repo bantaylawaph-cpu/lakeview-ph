@@ -691,7 +691,7 @@ export function useWQTests({ variant, tableId, initialLakes = [], initialTests =
       search={{ value: q, onChange: setQ, placeholder: isAdmin ? 'ID, station, sampler, method, organization…' : 'ID, station, sampler, method…' }}
       filters={[]}
       columnPicker={{ columns: baseColumns.map((c) => ({ id: c.id, label: c.header })), visibleMap, onVisibleChange: (next) => setVisibleMap(next) }}
-      onResetWidths={() => setResetSignal((x) => x + 1)}
+      onResetWidths={() => { setResetSignal((x) => x + 1); setSort({ id: 'sampled_at', dir: 'desc' }); try { localStorage.removeItem(SORT_KEY); } catch {} }}
       onRefresh={doRefresh}
       onToggleFilters={() => setFiltersOpen((v) => !v)}
       filtersBadgeCount={[

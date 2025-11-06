@@ -71,9 +71,9 @@ export function useManageLakesTabLogic() {
   const [sort, setSort] = useState(() => {
     try {
       const raw = localStorage.getItem(SORT_KEY);
-      return raw ? JSON.parse(raw) : { id: "name", dir: "asc" };
+      return raw ? JSON.parse(raw) : { id: "created_at", dir: "desc" };
     } catch {
-      return { id: "name", dir: "asc" };
+      return { id: "created_at", dir: "desc" };
     }
   });
 
@@ -206,10 +206,12 @@ export function useManageLakesTabLogic() {
       localStorage.removeItem(VIS_KEY);
       localStorage.removeItem(ADV_KEY);
       localStorage.removeItem(SEARCH_KEY);
+      localStorage.removeItem(SORT_KEY);
     } catch {}
     setVisibleMap(defaultsVisible);
     setAdv({});
     setQuery("");
+  setSort({ id: "created_at", dir: "desc" });
     triggerResetWidths();
   }, [defaultsVisible]);
 

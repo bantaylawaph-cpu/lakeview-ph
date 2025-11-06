@@ -23,7 +23,7 @@ export default function ManageWatershedsTab() {
         }}
         filters={[]}
         columnPicker={{ columns: s.columns, visibleMap: s.visibleMap, onVisibleChange: s.setVisibleMap }}
-        onResetWidths={s.triggerResetWidths}
+  onResetWidths={() => { s.triggerResetWidths(); try { localStorage.removeItem(s.TABLE_ID + '::sort'); } catch {}; s.setSort && s.setSort({ id: 'name', dir: 'asc' }); }}
         onRefresh={s.handleRefresh}
         onAdd={s.openCreate}
         onToggleFilters={undefined}

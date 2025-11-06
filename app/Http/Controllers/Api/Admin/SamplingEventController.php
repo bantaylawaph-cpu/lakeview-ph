@@ -151,15 +151,15 @@ class SamplingEventController extends Controller
             $query->where('sampling_events.created_by_user_id', (int) $request->input('created_by_user_id'));
         }
 
-        // Text search: match station, lake, or organization names (via subqueries to avoid joins)
+        // Text search: match station, lake, or organization names using joined columns
         if ($request->filled('q')) {
-            $q = trim((string) $request->input('q'));
-            if ($q !== '') {
-                $like = '%'.mb_strtolower($q).'%';
+            $qtxt = trim((string) $request->input('q'));
+            if ($qtxt !== '') {
+                $like = '%'.mb_strtolower($qtxt).'%';
                 $query->where(function ($qq) use ($like) {
-                    $qq->orWhereRaw("LOWER(COALESCE((SELECT s.name FROM stations s WHERE s.id = sampling_events.station_id), '')) LIKE ?", [$like])
-                        ->orWhereRaw("LOWER(COALESCE((SELECT l.name FROM lakes l WHERE l.id = sampling_events.lake_id), '')) LIKE ?", [$like])
-                        ->orWhereRaw("LOWER(COALESCE((SELECT t.name FROM tenants t WHERE t.id = sampling_events.organization_id), '')) LIKE ?", [$like]);
+                    $qq->orWhereRaw('LOWER(s.name) LIKE ?', [$like])
+                        ->orWhereRaw('LOWER(l.name) LIKE ?', [$like])
+                        ->orWhereRaw('LOWER(t.name) LIKE ?', [$like]);
                 });
             }
         }
@@ -173,12 +173,12 @@ class SamplingEventController extends Controller
         $sortDir = strtolower((string) $request->query('sort_dir', 'desc')) === 'asc' ? 'asc' : 'desc';
         // Map UI column ids to database expressions
         $sortMap = [
-            'organization' => DB::raw('(SELECT t.name FROM tenants t WHERE t.id = sampling_events.organization_id)'),
-            'lake_name' => DB::raw('(SELECT l.name FROM lakes l WHERE l.id = sampling_events.lake_id)'),
-            'station_name' => DB::raw('(SELECT s.name FROM stations s WHERE s.id = sampling_events.station_id)'),
+            'organization' => 't.name',
+            'lake_name' => 'l.name',
+            'station_name' => 's.name',
             'status' => 'sampling_events.status',
-            'logged_by' => DB::raw('(SELECT u.name FROM users u WHERE u.id = sampling_events.created_by_user_id)'),
-            'updated_by' => DB::raw('(SELECT u2.name FROM users u2 WHERE u2.id = sampling_events.updated_by_user_id)'),
+            'logged_by' => 'u.name',
+            'updated_by' => 'u2.name',
             'logged_at' => 'sampling_events.created_at',
             'updated_at' => 'sampling_events.updated_at',
             // Derived from sampled_at
@@ -406,15 +406,21 @@ class SamplingEventController extends Controller
     protected function eventListQuery()
     {
         return SamplingEvent::query()
-            ->select('sampling_events.*')
-            // Coordinates and names via correlated subqueries to avoid join-heavy COUNT(*)
-            ->addSelect(DB::raw('(SELECT ST_Y(s.geom_point) FROM stations s WHERE s.id = sampling_events.station_id) as latitude'))
-            ->addSelect(DB::raw('(SELECT ST_X(s.geom_point) FROM stations s WHERE s.id = sampling_events.station_id) as longitude'))
-            ->addSelect(DB::raw("COALESCE((SELECT s.name FROM stations s WHERE s.id = sampling_events.station_id), '') AS station_name"))
-            ->addSelect(DB::raw("COALESCE((SELECT l.name FROM lakes l WHERE l.id = sampling_events.lake_id), '') AS lake_name"))
-            ->addSelect(DB::raw("COALESCE((SELECT t.name FROM tenants t WHERE t.id = sampling_events.organization_id), '') AS organization_name"))
-            ->addSelect(DB::raw("COALESCE((SELECT u.name FROM users u WHERE u.id = sampling_events.created_by_user_id), '') AS created_by_name"))
-            ->addSelect(DB::raw("COALESCE((SELECT u2.name FROM users u2 WHERE u2.id = sampling_events.updated_by_user_id), '') AS updated_by_name"))
+            ->leftJoin('stations as s', 's.id', '=', 'sampling_events.station_id')
+            ->leftJoin('lakes as l', 'l.id', '=', 'sampling_events.lake_id')
+            ->leftJoin('tenants as t', 't.id', '=', 'sampling_events.organization_id')
+            ->leftJoin('users as u', 'u.id', '=', 'sampling_events.created_by_user_id')
+            ->leftJoin('users as u2', 'u2.id', '=', 'sampling_events.updated_by_user_id')
+            ->select([
+                'sampling_events.*',
+                DB::raw('ST_Y(s.geom_point) as latitude'),
+                DB::raw('ST_X(s.geom_point) as longitude'),
+                DB::raw("COALESCE(s.name,'') as station_name"),
+                DB::raw("COALESCE(l.name,'') as lake_name"),
+                DB::raw("COALESCE(t.name,'') as organization_name"),
+                DB::raw("COALESCE(u.name,'') as created_by_name"),
+                DB::raw("COALESCE(u2.name,'') as updated_by_name"),
+            ])
             ->with([
                 'organization:id,name',
                 'lake:id,name,class_code',

@@ -25,7 +25,7 @@ function ManageLakesTab() {
         }}
         filters={[]}
         columnPicker={{ columns: s.baseColumns, visibleMap: s.visibleMap, onVisibleChange: s.setVisibleMap }}
-        onResetWidths={() => { s.triggerResetWidths(); s.restoreDefaults(); }}
+  onResetWidths={() => { s.triggerResetWidths(); s.restoreDefaults(); try { localStorage.removeItem(s.TABLE_ID + '::sort'); } catch {}; s.setSort && s.setSort({ id: 'name', dir: 'asc' }); }}
         onRefresh={s.fetchLakes}
         onAdd={s.openCreate}
         onToggleFilters={() => s.setFiltersOpen((value) => !value)}

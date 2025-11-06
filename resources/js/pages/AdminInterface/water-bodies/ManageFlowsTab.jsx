@@ -19,7 +19,7 @@ export default function ManageFlowsTab() {
         search={{ value: s.query, onChange: s.setQuery, placeholder: 'Search tributaries by lake, name, or source...' }}
         filters={[]}
         columnPicker={{ columns: s.columns, visibleMap: s.visibleMap, onVisibleChange: s.setVisibleMap }}
-        onResetWidths={s.triggerResetWidths}
+  onResetWidths={() => { s.triggerResetWidths(); try { localStorage.removeItem(s.TABLE_ID + '::sort'); } catch {}; s.setSort && s.setSort({ id: 'flow_type', dir: 'asc' }); }}
         onRefresh={s.fetchRows}
         onAdd={s.openCreate}
         onToggleFilters={() => s.setFiltersOpen((v) => !v)}

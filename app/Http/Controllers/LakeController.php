@@ -27,10 +27,14 @@ class LakeController extends Controller
         } catch (\Throwable $e) { /* ignore cache errors */ }
 
         $query = Lake::query()
+            ->leftJoin('watersheds as w', 'w.id', '=', 'lakes.watershed_id')
+            ->leftJoin('water_quality_classes as wqc', 'wqc.code', '=', 'lakes.class_code')
             ->select([
-                'id','watershed_id','name','alt_name','region','province','municipality',
-                'surface_area_km2','elevation_m','mean_depth_m','class_code','flows_status',
-                'created_at','updated_at'
+                'lakes.id','lakes.watershed_id','lakes.name','lakes.alt_name','lakes.region','lakes.province','lakes.municipality',
+                'lakes.surface_area_km2','lakes.elevation_m','lakes.mean_depth_m','lakes.class_code','lakes.flows_status',
+                'lakes.created_at','lakes.updated_at',
+                DB::raw('w.name as watershed_name'),
+                DB::raw('wqc.name as classification_name'),
             ])
             ->with(['watershed:id,name', 'waterQualityClass:code,name']);
 
@@ -130,19 +134,11 @@ class LakeController extends Controller
         }
 
         if ($sortBy === 'watershed') {
-            // Avoid JOIN just for ordering so pagination count() stays cheap
-            $query->orderBy(
-                DB::raw('(SELECT w.name FROM watersheds w WHERE w.id = lakes.watershed_id)'),
-                $sortDir
-            );
+            $query->orderBy('w.name', $sortDir);
         } elseif ($sortBy === 'classification') {
-            // Avoid JOIN just for ordering so pagination count() stays cheap
-            $query->orderBy(
-                DB::raw('(SELECT c.name FROM water_quality_classes c WHERE c.code = lakes.class_code)'),
-                $sortDir
-            );
+            $query->orderBy('wqc.name', $sortDir);
         } else {
-            $query->orderBy($sortBy, $sortDir);
+            $query->orderBy('lakes.' . $sortBy, $sortDir);
         }
 
         // Pagination

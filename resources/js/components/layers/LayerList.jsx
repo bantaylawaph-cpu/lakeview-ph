@@ -1,9 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { FiLayers, FiLoader, FiEye, FiTrash2, FiEdit2 } from "react-icons/fi";
+import { FiLayers, FiEye, FiTrash2, FiEdit2 } from "react-icons/fi";
 
-import Modal from "../Modal";
-import { confirm, alertError, alertSuccess, alertWarning, showLoading, closeLoading } from "../../lib/alerts";
-import { fetchLayersPaged, fetchAllLayers, toggleLayerVisibility, deleteLayer, updateLayer } from "../../lib/layers";
+import { confirm, alertError, alertSuccess, showLoading, closeLoading } from "../../lib/alerts";
+import { fetchLayersPaged, toggleLayerVisibility, deleteLayer, updateLayer } from "../../lib/layers";
 import TableLayout from "../../layouts/TableLayout";
 import TableToolbar from "../table/TableToolbar";
 import FilterPanel from "../table/FilterPanel";
@@ -56,12 +55,10 @@ function LayerList({
   const [fBodyType, setFBodyType] = useState(""); // '', 'lake', 'watershed'
   const [fVisibility, setFVisibility] = useState(""); // '', 'public','admin'
   const [fDownloadableOnly, setFDownloadableOnly] = useState(""); // '', 'yes', 'no'
-  // Default layer concept removed (1 layer per body)
-  const [fDefaultOnly, setFDefaultOnly] = useState(""); // retained for backward-compat; no-op
   const [fCreatedBy, setFCreatedBy] = useState(""); // '' or specific creator
 
   // Column visibility management
-  const defaultVisible = useMemo(() => ({ name: true, body: true, visibility: true, downloadable: true, creator: false, area: false, updated: false }), []);
+  const defaultVisible = useMemo(() => ({ name: true, body: true, visibility: true, downloadable: true, creator: false, updated: false }), []);
   const [visibleMap, setVisibleMap] = useState(defaultVisible);
 
   const [editOpen, setEditOpen] = useState(false);
@@ -101,7 +98,6 @@ function LayerList({
   }, [layers]);
 
   const [previewLayer, setPreviewLayer] = useState(null);
-  const viewMapRef = React.useRef(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   
   const handlePreviewClick = async (row) => {
@@ -253,21 +249,6 @@ function LayerList({
 
   // No body options needed; table shows all layers by default
 
-  const doToggleVisibility = async (row) => {
-  if (allowedVisibilityValues.length < 2) return; // read-only context
-  if (currentUserRole && currentUserRole !== 'superadmin') return; // guard
-    try {
-  showLoading('Updating visibility', 'Please wait…');
-      await toggleLayerVisibility(row, allowedVisibilityValues);
-      await refresh();
-    } catch (e) {
-      console.error('[LayerList] Toggle visibility failed', e);
-      await alertError('Failed to toggle visibility', e?.message || '');
-    } finally {
-      closeLoading();
-    }
-  };
-
   const doDelete = async (target) => {
   if (currentUserRole !== 'superadmin') return; // reflect backend permissions
     const id = target && typeof target === 'object' ? target.id : target;
@@ -291,12 +272,10 @@ function LayerList({
     }
   };
 
-  // Default toggling removed
-
   // Server-side filters applied; show current page as-is
   const filtered = useMemo(() => layers, [layers]);
 
-  const filtersBadgeCount = (fBodyType ? 1 : 0) + (fVisibility ? 1 : 0) + (fDownloadableOnly ? 1 : 0) + (fDefaultOnly ? 1 : 0) + (fCreatedBy ? 1 : 0);
+  const filtersBadgeCount = (fBodyType ? 1 : 0) + (fVisibility ? 1 : 0) + (fDownloadableOnly ? 1 : 0) + (fCreatedBy ? 1 : 0);
 
   const columns = useMemo(() => {
     const arr = [];
@@ -306,7 +285,6 @@ function LayerList({
     if (visibleMap.downloadable) arr.push({ id: 'downloadable', header: 'Downloadable', render: (r) => (r.is_downloadable ? 'Yes' : 'No'), sortValue: (r) => (r.is_downloadable ? 1 : 0), width: 120 });
   // Default column removed (one layer per body)
     if (visibleMap.creator) arr.push({ id: 'creator', header: 'Created by', render: (r) => formatCreator(r) });
-  if (visibleMap.area) arr.push({ id: 'area', header: 'Surface Area (km²)', render: (r) => (r.area_km2 ?? '-'), sortValue: (r) => (typeof r.area_km2 === 'number' ? r.area_km2 : -1), width: 120 });
     if (visibleMap.updated) arr.push({ id: 'updated', header: 'Updated', render: (r) => (r.updated_at ? new Date(r.updated_at).toLocaleString() : '-'), sortValue: (r) => (r.updated_at || ''), width: 200 });
     return arr;
   }, [visibleMap]);
@@ -342,7 +320,6 @@ function LayerList({
     { id: 'downloadable', header: 'Downloadable' },
   // Default Layer column removed
     { id: 'creator', header: 'Created by' },
-  { id: 'area', header: 'Surface Area (km²)' },
     { id: 'updated', header: 'Updated' },
   ], visibleMap, onVisibleChange: (m) => setVisibleMap(m) };
 
@@ -373,7 +350,6 @@ function LayerList({
       { value: 'yes', label: 'Yes' },
       { value: 'no', label: 'No' },
     ]},
-    // Default filter removed
     { id: 'created_by', label: 'Created by', type: 'select', value: fCreatedBy, onChange: setFCreatedBy, options: [
       { value: '', label: 'All' },
       ...uniqueCreators.map(c => ({ value: c, label: c }))
@@ -399,7 +375,6 @@ function LayerList({
               setFBodyType("");
               setFVisibility("");
               setFDownloadableOnly("");
-              // default-only filter removed
               setFCreatedBy("");
             }}
           />
