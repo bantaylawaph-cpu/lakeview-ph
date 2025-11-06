@@ -476,7 +476,20 @@ export function useWQTests({ variant, tableId, initialLakes = [], initialTests =
             invalidateHttpCache('/admin/sample-events');
             await alertSuccess('Deleted', 'The test was removed.');
           } catch (e) {
-            await alertError('Delete failed', e?.message || 'Please try again.');
+            const status = e?.response?.status || e?.status || null;
+            const rawMsg = e?.response?.data?.message || e?.message || '';
+            const isNotFound = status === 404 || /No query results for model/i.test(String(rawMsg));
+            if (isNotFound) {
+              // Treat as already removed; clean up UI and notify user gently
+              setTests((prev) => prev.filter((t) => t.id !== row.id));
+              try { invalidateHttpCache(basePath); } catch {}
+              await alertSuccess('Already deleted', 'This test was already removed. The list has been refreshed.');
+            } else {
+              const friendly = /cannot delete published/i.test(rawMsg)
+                ? 'You cannot delete a published test.'
+                : (status === 403 ? 'You do not have permission to delete this test.' : (rawMsg || 'Please try again.'));
+              await alertError('Delete not allowed', friendly);
+            }
           } finally {
             closeLoading();
           }
@@ -524,7 +537,20 @@ export function useWQTests({ variant, tableId, initialLakes = [], initialTests =
             setTests((prev) => prev.filter((t) => t.id !== row.id));
             await alertSuccess('Deleted', 'The test was removed.');
           } catch (e) {
-            await alertError('Delete failed', e?.message || 'Please try again.');
+            const status = e?.response?.status || e?.status || null;
+            const rawMsg = e?.response?.data?.message || e?.message || '';
+            const isNotFound = status === 404 || /No query results for model/i.test(String(rawMsg));
+            if (isNotFound) {
+              // Treat as already removed; clean up UI and notify user gently
+              setTests((prev) => prev.filter((t) => t.id !== row.id));
+              try { invalidateHttpCache(basePath); } catch {}
+              await alertSuccess('Already deleted', 'This test was already removed. The list has been refreshed.');
+            } else {
+              const friendly = /cannot delete published/i.test(rawMsg)
+                ? 'You cannot delete a published test.'
+                : (status === 403 ? 'You do not have permission to delete this test.' : (rawMsg || 'Please try again.'));
+              await alertError('Delete not allowed', friendly);
+            }
           } finally {
             closeLoading();
           }
@@ -542,7 +568,7 @@ export function useWQTests({ variant, tableId, initialLakes = [], initialTests =
         setEditing(false);
         setOpen(true);
       } },
-      { label: 'Edit', title: 'Edit', icon: <FiEdit2 />, visible: (row) => Boolean(currentUserId && String(row.created_by_user_id) === String(currentUserId)), onClick: async (row) => {
+  { label: 'Edit', title: 'Edit', icon: <FiEdit2 />, visible: (row) => Boolean(currentUserId && String(row.created_by_user_id) === String(currentUserId) && row?.status !== 'public'), onClick: async (row) => {
         try { closeLoading(); } catch {}
         try { showLoading('Loading', 'Preparing edit form…'); } catch {}
         try { await sleep(150); } catch {}
@@ -551,7 +577,7 @@ export function useWQTests({ variant, tableId, initialLakes = [], initialTests =
         setEditing(true);
         setOpen(true);
       } },
-      { label: 'Delete', title: 'Delete', type: 'delete', icon: <FiTrash2 />, visible: (row) => Boolean(currentUserId && String(row.created_by_user_id) === String(currentUserId)), onClick: async (row) => {
+      { label: 'Delete', title: 'Delete', type: 'delete', icon: <FiTrash2 />, visible: (row) => Boolean(currentUserId && String(row.created_by_user_id) === String(currentUserId) && row?.status !== 'public'), onClick: async (row) => {
         // brief pre-confirm loader
         try { closeLoading(); } catch {}
         try { showLoading('Loading', 'Preparing delete…'); } catch {}
@@ -568,7 +594,21 @@ export function useWQTests({ variant, tableId, initialLakes = [], initialTests =
           setTests((prev) => prev.filter((t) => t.id !== row.id));
           await alertSuccess('Deleted', 'The test was removed.');
         } catch (e) {
-          await alertError('Delete failed', e?.message || 'Please try again.');
+          // Friendlier messaging for permission or not-found errors
+          const status = e?.response?.status || e?.status || null;
+          const rawMsg = e?.response?.data?.message || e?.message || '';
+          const isNotFound = status === 404 || /No query results for model/i.test(String(rawMsg));
+          if (isNotFound) {
+            // Already deleted by someone else; clean up and inform gently
+            setTests((prev) => prev.filter((t) => t.id !== row.id));
+            try { invalidateHttpCache(basePath); } catch {}
+            await alertSuccess('Already deleted', 'This test was already removed. The list has been refreshed.');
+          } else {
+            const friendly = /cannot delete published/i.test(rawMsg)
+              ? 'You cannot delete a published test.'
+              : (status === 403 ? 'You do not have permission to delete this test.' : (rawMsg || 'Please try again.'));
+            await alertError('Delete not allowed', friendly);
+          }
         } finally {
           closeLoading();
         }

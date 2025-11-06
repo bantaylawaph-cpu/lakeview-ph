@@ -148,10 +148,18 @@ export default function OrgWQTestModal({
           results: normalizedResults,
         });
       } catch (e) {
-  if (!mounted) return;
-  setError(e);
-  // Fallback: keep whatever we had from the list
-  setSampleEvent(record || null);
+        if (!mounted) return;
+        setError(e);
+        const status = e?.response?.status || e?.status || null;
+        const rawMsg = e?.response?.data?.message || e?.message || '';
+        const isNotFound = status === 404 || /No query results for model/i.test(String(rawMsg));
+        if (isNotFound) {
+          await (await import('../../lib/alerts')).alertWarning('Not found', 'This test no longer exists. It may have been deleted.');
+          onClose?.();
+          return;
+        }
+        // Fallback: keep whatever we had from the list
+        setSampleEvent(record || null);
       } finally {
         if (mounted) setLoading(false);
       }
@@ -313,7 +321,18 @@ export default function OrgWQTestModal({
         await alertSuccess('Saved', 'Sampling event updated successfully.');
         onClose?.();
       } catch (e) {
-        await alertError('Save failed', e?.message || 'Please try again.');
+        const status = e?.response?.status || e?.status || null;
+        const rawMsg = e?.response?.data?.message || e?.message || '';
+        const isNotFound = status === 404 || /No query results for model/i.test(String(rawMsg));
+        if (isNotFound) {
+          await alertError('Not found', 'This test no longer exists. It may have been deleted in another session.');
+          onClose?.();
+        } else {
+          let friendly = rawMsg || 'Please try again.';
+          if (/cannot publish/i.test(rawMsg)) friendly = 'You do not have permission to publish tests.';
+          else if (status === 403) friendly = 'You do not have permission to save these changes.';
+          await alertError('Save not allowed', friendly);
+        }
       } finally {
         // ensure we close loader in any case
         closeLoading();
