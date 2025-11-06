@@ -43,7 +43,7 @@ export default function OrgWQTests({ initialLakes = [], initialTests = [], param
     <div className="dashboard-content">
       <DashboardHeader
         icon={<FiDroplet />}
-        title="Water Quality Tests"
+        title="Water Quality Records"
         description="Browse, filter, and manage water quality test records for this organization."
       />
       <div className="dashboard-card-body">

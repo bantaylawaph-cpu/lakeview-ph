@@ -8,6 +8,9 @@ import { cachedGet, invalidateHttpCache } from "../../../lib/httpCache";
 import { confirm, alertSuccess, alertError, showLoading, closeLoading } from "../../../lib/alerts";
 import ParameterForm from "../../../components/ParameterForm";
 
+// Small utility to briefly show the loader for snappy UX
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const UNIT_OPTIONS = [
   { value: "mg/L", label: "mg/L" },
   { value: "°C", label: "°C" },
@@ -137,12 +140,20 @@ function ParametersTab() {
     }));
   }, [filtered]);
 
-  const openCreateModal = () => {
+  const openCreateModal = async () => {
+    try { closeLoading(); } catch {}
+    try { showLoading('Loading', 'Preparing form…'); } catch {}
+    try { await sleep(150); } catch {}
+    closeLoading();
     setModalForm({ ...emptyForm });
     setEditOpen(true);
   };
 
-  const openEditModal = (row) => {
+  const openEditModal = async (row) => {
+    try { closeLoading(); } catch {}
+    try { showLoading('Loading', 'Preparing edit form…'); } catch {}
+    try { await sleep(150); } catch {}
+    closeLoading();
     setModalForm({
       code: row.code || "",
       name: row.name || "",
@@ -167,15 +178,29 @@ function ParametersTab() {
   }, []);
 
   const deleteGridRow = async (row) => {
+    // Quick pre-confirm loader for snappy feedback
+    try { closeLoading(); } catch {}
+    try { showLoading('Loading', 'Preparing delete…'); } catch {}
+    try { await sleep(150); } catch {}
+    closeLoading();
+
     const ok = await confirm({ title: 'Delete parameter?', text: `Delete ${row.code}?`, confirmButtonText: 'Delete' });
     if (!ok) return;
+
+    // Optional pre-check with loader
     try {
+      try { showLoading('Loading', 'Checking related records…'); } catch {}
       const used = await hasSamplingEventsForParameter(row.id);
+      closeLoading();
       if (used) {
         await alertError('Delete not allowed', `Cannot delete "${row.code}" because there are sampling events that used this parameter.`);
         return;
       }
-    } catch (_) {}
+    } catch (_) {
+      // Ensure any loader is closed
+      try { closeLoading(); } catch {}
+    }
+
     try {
       showLoading('Deleting parameter', 'Please wait…');
       await api(`/admin/parameters/${row.id}`, { method: "DELETE" });

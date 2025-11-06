@@ -6,6 +6,9 @@ import { api } from "../../../lib/api";
 import { cachedGet, invalidateHttpCache } from "../../../lib/httpCache";
 import { confirm, alertSuccess, alertError, showLoading, closeLoading } from "../../../lib/alerts";
 
+// Small utility to briefly show the loader for snappy UX
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const emptyStandard = {
   code: "",
   name: "",
@@ -81,6 +84,7 @@ function StandardsTab() {
       notes: (row.notes || "").trim() || null,
     };
     try {
+      try { closeLoading(); } catch {}
       if (row.__id) {
   showLoading('Saving standard', 'Please wait…');
         await api(`/admin/wq-standards/${row.__id}`, { method: "PUT", body: payload });
@@ -112,20 +116,28 @@ function StandardsTab() {
       setNewRows((prev) => prev.filter((rid) => rid !== row.id));
       return;
     }
+    // Quick pre-confirm loader for snappy feedback
+    try { closeLoading(); } catch {}
+    try { showLoading('Loading', 'Preparing delete…'); } catch {}
+    try { await sleep(150); } catch {}
+    closeLoading();
     // Confirm deletion
     const ok = await confirm({ title: 'Delete standard?', text: `Delete ${row.code}?`, confirmButtonText: 'Delete' });
     if (!ok) return;
     // Guard: prevent deletion if there are sampling events using this standard
     try {
+      try { showLoading('Loading', 'Checking related records…'); } catch {}
       const resEv = await api(`/admin/sample-events?applied_standard_id=${encodeURIComponent(row.__id)}&per_page=1`);
       const arrEv = Array.isArray(resEv?.data) ? resEv.data : Array.isArray(resEv) ? resEv : [];
       const hasEvents = (Array.isArray(arrEv) && arrEv.length > 0) || (resEv?.meta && typeof resEv.meta.total === 'number' && resEv.meta.total > 0);
+      closeLoading();
       if (hasEvents) {
         await alertError('Delete not allowed', `Cannot delete "${row.code}" because there are sampling events that used this standard.`);
         return;
       }
     } catch (_) {
       // Ignore pre-check failures; backend will still enforce constraints
+      try { closeLoading(); } catch {}
     }
     try {
   showLoading('Deleting standard', 'Please wait…');

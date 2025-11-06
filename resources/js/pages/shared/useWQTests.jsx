@@ -7,7 +7,10 @@ import { FiEye, FiEdit2, FiTrash2 } from "react-icons/fi";
 import { api } from "../../lib/api";
 import { cachedGet, invalidateHttpCache } from "../../lib/httpCache";
 import { fetchLakeOptions } from "../../lib/layers";
-import { alertSuccess, alertError, alertWarning, confirm as swalConfirm } from "../../lib/alerts";
+import { alertSuccess, alertError, alertWarning, confirm as swalConfirm, showLoading, closeLoading } from "../../lib/alerts";
+
+// small utility to create a brief UX delay for loader visibility
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function startOfDay(iso) {
   if (!iso) return null;
@@ -444,23 +447,132 @@ export function useWQTests({ variant, tableId, initialLakes = [], initialTests =
   const actions = useMemo(() => {
     if (isAdmin) {
       return [
-        { label: 'View', title: 'View', icon: <FiEye />, onClick: async (row) => { try { const res = await api(`/admin/sample-events/${row.id}`); setSelected(res.data); setOpen(true); } catch (e) { await alertError('Failed', 'Could not load event details.'); } } },
-        { label: 'Delete', title: 'Delete', type: 'delete', icon: <FiTrash2 />, onClick: async (row) => { const ok = await swalConfirm({ title: 'Delete this test?', text: 'This cannot be undone.', icon: 'warning', confirmButtonText: 'Delete' }); if (!ok) return; try { await api(`/admin/sample-events/${row.id}`, { method: 'DELETE' }); setTests((prev) => prev.filter((t) => t.id !== row.id)); invalidateHttpCache('/admin/sample-events'); await alertSuccess('Deleted', 'The test was removed.'); } catch (e) { await alertError('Delete failed', e?.message || 'Please try again.'); } } },
+        { label: 'View', title: 'View', icon: <FiEye />, onClick: async (row) => {
+          try { closeLoading(); } catch {}
+          try { showLoading('Loading', 'Fetching test…'); } catch {}
+          try {
+            const res = await api(`/admin/sample-events/${row.id}`);
+            closeLoading();
+            setSelected(res.data);
+            setEditing(false);
+            setOpen(true);
+          } catch (e) {
+            try { closeLoading(); } catch {}
+            await alertError('Failed', 'Could not load event details.');
+          }
+        } },
+        { label: 'Delete', title: 'Delete', type: 'delete', icon: <FiTrash2 />, onClick: async (row) => {
+          // brief pre-confirm loader
+          try { closeLoading(); } catch {}
+          try { showLoading('Loading', 'Preparing delete…'); } catch {}
+          try { await sleep(150); } catch {}
+          closeLoading();
+          const ok = await swalConfirm({ title: 'Delete this test?', text: 'This cannot be undone.', icon: 'warning', confirmButtonText: 'Delete' });
+          if (!ok) return;
+          try {
+            showLoading('Deleting test', 'Please wait…');
+            await api(`/admin/sample-events/${row.id}`, { method: 'DELETE' });
+            setTests((prev) => prev.filter((t) => t.id !== row.id));
+            invalidateHttpCache('/admin/sample-events');
+            await alertSuccess('Deleted', 'The test was removed.');
+          } catch (e) {
+            await alertError('Delete failed', e?.message || 'Please try again.');
+          } finally {
+            closeLoading();
+          }
+        } },
       ];
     }
     if (isOrg) {
       const basePath = currentTenantId ? `/org/${currentTenantId}/sample-events` : '/admin/sample-events';
       return [
-        { label: 'View', title: 'View', icon: <FiEye />, onClick: (row) => { setSelected(row); setEditing(false); setOpen(true); } },
-        { label: 'Edit', title: 'Edit', icon: <FiEdit2 />, onClick: async (row) => { const canPublish = currentUserRole === 'org_admin' || currentUserRole === 'superadmin'; if (!(canPublish || (currentUserId && row.created_by_user_id === currentUserId))) { await alertError('Permission denied', 'You cannot edit this test.'); return; } setSelected(row); setEditing(true); setOpen(true); } },
-        { label: 'Delete', title: 'Delete', type: 'delete', icon: <FiTrash2 />, onClick: async (row) => { const ok = await swalConfirm({ title: 'Delete this test?', text: 'This cannot be undone.', icon: 'warning', confirmButtonText: 'Delete' }); if (!ok) return; try { await api(`${basePath}/${row.id}`, { method: 'DELETE' }); try { invalidateHttpCache(basePath); } catch {} setTests((prev) => prev.filter((t) => t.id !== row.id)); await alertSuccess('Deleted', 'The test was removed.'); } catch (e) { await alertError('Delete failed', e?.message || 'Please try again.'); } } },
+        { label: 'View', title: 'View', icon: <FiEye />, onClick: async (row) => {
+          try { closeLoading(); } catch {}
+          try { showLoading('Loading', 'Preparing view…'); } catch {}
+          try { await sleep(150); } catch {}
+          closeLoading();
+          setSelected(row);
+          setEditing(false);
+          setOpen(true);
+        } },
+        { label: 'Edit', title: 'Edit', icon: <FiEdit2 />, onClick: async (row) => {
+          const canPublish = currentUserRole === 'org_admin' || currentUserRole === 'superadmin';
+          if (!(canPublish || (currentUserId && row.created_by_user_id === currentUserId))) {
+            await alertError('Permission denied', 'You cannot edit this test.');
+            return;
+          }
+          try { closeLoading(); } catch {}
+          try { showLoading('Loading', 'Preparing edit form…'); } catch {}
+          try { await sleep(150); } catch {}
+          closeLoading();
+          setSelected(row);
+          setEditing(true);
+          setOpen(true);
+        } },
+        { label: 'Delete', title: 'Delete', type: 'delete', icon: <FiTrash2 />, onClick: async (row) => {
+          // brief pre-confirm loader
+          try { closeLoading(); } catch {}
+          try { showLoading('Loading', 'Preparing delete…'); } catch {}
+          try { await sleep(150); } catch {}
+          closeLoading();
+          const ok = await swalConfirm({ title: 'Delete this test?', text: 'This cannot be undone.', icon: 'warning', confirmButtonText: 'Delete' });
+          if (!ok) return;
+          try {
+            showLoading('Deleting test', 'Please wait…');
+            await api(`${basePath}/${row.id}`, { method: 'DELETE' });
+            try { invalidateHttpCache(basePath); } catch {}
+            setTests((prev) => prev.filter((t) => t.id !== row.id));
+            await alertSuccess('Deleted', 'The test was removed.');
+          } catch (e) {
+            await alertError('Delete failed', e?.message || 'Please try again.');
+          } finally {
+            closeLoading();
+          }
+        } },
       ];
     }
     // contrib
     return [
-      { label: 'View', title: 'View', icon: <FiEye />, onClick: (row) => { setSelected(row); setEditing(false); setOpen(true); } },
-      { label: 'Edit', title: 'Edit', icon: <FiEdit2 />, visible: (row) => Boolean(currentUserId && String(row.created_by_user_id) === String(currentUserId)), onClick: async (row) => { setSelected(row); setEditing(true); setOpen(true); } },
-      { label: 'Delete', title: 'Delete', type: 'delete', icon: <FiTrash2 />, visible: (row) => Boolean(currentUserId && String(row.created_by_user_id) === String(currentUserId)), onClick: async (row) => { const ok = await swalConfirm({ title: 'Delete this test?', text: 'This cannot be undone.', icon: 'warning', confirmButtonText: 'Delete' }); if (!ok) return; try { if (!currentOrgId) return; const basePath = `/contrib/${currentOrgId}/sample-events`; await api(`${basePath}/${row.id}`, { method: 'DELETE' }); try { invalidateHttpCache(basePath); } catch {} setTests((prev) => prev.filter((t) => t.id !== row.id)); await alertSuccess('Deleted', 'The test was removed.'); } catch (e) { await alertError('Delete failed', e?.message || 'Please try again.'); } } },
+      { label: 'View', title: 'View', icon: <FiEye />, onClick: async (row) => {
+        try { closeLoading(); } catch {}
+        try { showLoading('Loading', 'Preparing view…'); } catch {}
+        try { await sleep(150); } catch {}
+        closeLoading();
+        setSelected(row);
+        setEditing(false);
+        setOpen(true);
+      } },
+      { label: 'Edit', title: 'Edit', icon: <FiEdit2 />, visible: (row) => Boolean(currentUserId && String(row.created_by_user_id) === String(currentUserId)), onClick: async (row) => {
+        try { closeLoading(); } catch {}
+        try { showLoading('Loading', 'Preparing edit form…'); } catch {}
+        try { await sleep(150); } catch {}
+        closeLoading();
+        setSelected(row);
+        setEditing(true);
+        setOpen(true);
+      } },
+      { label: 'Delete', title: 'Delete', type: 'delete', icon: <FiTrash2 />, visible: (row) => Boolean(currentUserId && String(row.created_by_user_id) === String(currentUserId)), onClick: async (row) => {
+        // brief pre-confirm loader
+        try { closeLoading(); } catch {}
+        try { showLoading('Loading', 'Preparing delete…'); } catch {}
+        try { await sleep(150); } catch {}
+        closeLoading();
+        const ok = await swalConfirm({ title: 'Delete this test?', text: 'This cannot be undone.', icon: 'warning', confirmButtonText: 'Delete' });
+        if (!ok) return;
+        try {
+          if (!currentOrgId) return;
+          const basePath = `/contrib/${currentOrgId}/sample-events`;
+          showLoading('Deleting test', 'Please wait…');
+          await api(`${basePath}/${row.id}`, { method: 'DELETE' });
+          try { invalidateHttpCache(basePath); } catch {}
+          setTests((prev) => prev.filter((t) => t.id !== row.id));
+          await alertSuccess('Deleted', 'The test was removed.');
+        } catch (e) {
+          await alertError('Delete failed', e?.message || 'Please try again.');
+        } finally {
+          closeLoading();
+        }
+      } },
     ];
   }, [isAdmin, isOrg, currentTenantId, currentUserRole, currentUserId, isContrib, currentOrgId]);
 

@@ -24,6 +24,9 @@ const DEFAULT_VISIBILITY_OPTIONS = [
 
 const getVisibilityLabel = (value) => VISIBILITY_LABELS[value] || value || "Unknown";
 
+// small utility to create a brief UX delay for loader visibility
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 function LayerList({
   allowActivate = true,
   allowToggleVisibility = true,
@@ -101,8 +104,11 @@ function LayerList({
   const viewMapRef = React.useRef(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   
-  const handlePreviewClick = (row) => {
+  const handlePreviewClick = async (row) => {
     if (!row) return;
+    // quick loading before opening preview
+    try { closeLoading(); } catch {}
+    try { showLoading('Loading', 'Preparing preview…'); } catch {}
 
     // Try to parse geometry and update viewport immediately (like MapPage.applyOverlayByLayerId)
     if (row?.geom_geojson) {
@@ -134,6 +140,8 @@ function LayerList({
 
     // Attach a token so React remounts the GeoJSON even if the same id is clicked
     setPreviewLayer({ ...row, _previewToken: Date.now() });
+    try { await sleep(150); } catch {}
+    closeLoading();
     setPreviewOpen(true);
   };
 
@@ -264,6 +272,11 @@ function LayerList({
   if (currentUserRole !== 'superadmin') return; // reflect backend permissions
     const id = target && typeof target === 'object' ? target.id : target;
     const name = target && typeof target === 'object' ? target.name : null;
+    // quick pre-confirm loader for consistent UX
+    try { closeLoading(); } catch {}
+    try { showLoading('Loading', 'Preparing delete…'); } catch {}
+    try { await sleep(150); } catch {}
+    closeLoading();
     if (!(await confirm({ title: 'Delete this layer?', text: 'This cannot be undone.', confirmButtonText: 'Delete' }))) return;
     try {
   showLoading('Deleting layer', 'Please wait…');
@@ -303,12 +316,16 @@ function LayerList({
       label: 'View', title: 'View on map', icon: <FiEye />, onClick: (row) => handlePreviewClick(row),
     },
     {
-      label: 'Edit', title: 'Edit metadata', icon: <FiEdit2 />, onClick: (row) => {
+      label: 'Edit', title: 'Edit metadata', icon: <FiEdit2 />, onClick: async (row) => {
         const initialEditVisibility = (() => {
           const current = ['organization', 'organization_admin'].includes(row.visibility) ? 'admin' : row.visibility;
           if (allowedVisibilityValues.includes(current)) return current;
           return normalizedVisibilityOptions[0]?.value || 'public';
         })();
+        try { closeLoading(); } catch {}
+        try { showLoading('Loading', 'Preparing edit form…'); } catch {}
+        try { await sleep(150); } catch {}
+        closeLoading();
         setEditRow(row);
         setEditOpen(true);
       }, visible: () => currentUserRole === 'superadmin'
