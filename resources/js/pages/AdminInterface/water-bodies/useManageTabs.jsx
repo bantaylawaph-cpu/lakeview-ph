@@ -441,6 +441,9 @@ export function useManageLakesTabLogic() {
       setLoading(true);
       setErrorMsg("");
       try {
+        // Defensive: clear any prior stuck loading
+  try { closeLoading(); } catch {}
+  showLoading('Loading', 'Fetching lake details…');
         const detail = await api(`/lakes/${targetId}`);
         let geometry = null;
         if (detail?.geom_geojson) {
@@ -491,6 +494,7 @@ export function useManageLakesTabLogic() {
         resetViewport();
       } finally {
         setLoading(false);
+        closeLoading();
         setViewOpen(true);
       }
     },
@@ -509,6 +513,8 @@ export function useManageLakesTabLogic() {
     setLoading(true);
     setErrorMsg("");
     try {
+  try { closeLoading(); } catch {}
+  showLoading('Loading', 'Preparing edit form…');
       const detail = await api(`/lakes/${source.id}`);
       // If lake has geometry but no lat/lon, calculate from centroid
       if (detail.geom_geojson && (!detail.lat || !detail.lon)) {
@@ -546,6 +552,7 @@ export function useManageLakesTabLogic() {
       setErrorMsg("Failed to load lake details for editing.");
     } finally {
       setLoading(false);
+      closeLoading();
     }
   }, []);
 
@@ -557,6 +564,8 @@ export function useManageLakesTabLogic() {
         try {
           setLoading(true);
           setErrorMsg("");
+          try { closeLoading(); } catch {}
+          showLoading('Loading', 'Checking related records…');
           const id = target.id;
           let detail = null;
           try { detail = await api(`/lakes/${encodeURIComponent(id)}`); } catch {}
@@ -576,6 +585,7 @@ export function useManageLakesTabLogic() {
           if (hasFlows) reasons.push('inlet/outlet tributary point(s)');
           if (hasLayers) reasons.push('published GIS layer(s)');
           if (linkedWatershedId) reasons.push(linkedWatershedName ? `linked watershed (${linkedWatershedName})` : 'a linked watershed');
+          closeLoading();
           if (reasons.length) {
             const ok = await confirm({ title: 'Related records detected', text: `This lake has ${reasons.join(', ')}. Deleting the lake may affect related data. Delete anyway?`, confirmButtonText: 'Delete' });
             if (!ok) { setLoading(false); return; }
@@ -596,6 +606,7 @@ export function useManageLakesTabLogic() {
           } finally { closeLoading(); setLoading(false); }
         } catch (err) {
           try {
+            closeLoading();
             const ok = await confirm({ title: 'Delete lake?', text: `Delete "${target.name}"?`, confirmButtonText: 'Delete' });
             if (!ok) return;
             setLoading(true); setErrorMsg('');
@@ -820,7 +831,14 @@ export function useManageWatershedsTabLogic() {
   const visibleColumns = useMemo(() => columns.filter((col) => visibleMap[col.id] !== false), [columns, visibleMap]);
 
   const openCreate = () => { setFormMode("create"); setFormInitial({ name: "", description: "" }); setFormOpen(true); };
-  const openEdit = (row) => { const target = row?._raw ?? row; setFormMode("edit"); setFormInitial({ id: target?.id, name: target?.name ?? "", description: target?.description ?? "" }); setFormOpen(true); };
+  const openEdit = async (row) => {
+    const target = row?._raw ?? row;
+  try { try { closeLoading(); } catch {}; showLoading('Loading', 'Preparing edit form…'); } catch {}
+    setFormMode("edit");
+    setFormInitial({ id: target?.id, name: target?.name ?? "", description: target?.description ?? "" });
+    setFormOpen(true);
+    closeLoading();
+  };
   const openDelete = (row) => { const target = row?._raw ?? row; handleDelete(target); };
 
   const loadPreview = useCallback(async (rawRow) => {
@@ -876,10 +894,13 @@ export function useManageWatershedsTabLogic() {
     if (!target?.id) return;
     let hasLayers = false;
     try {
+  try { closeLoading(); } catch {}
+  showLoading('Loading', 'Checking related records…');
       const res = await api(`/layers?body_type=watershed&body_id=${encodeURIComponent(target.id)}&per_page=1`);
       const arr = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
       if (Array.isArray(arr) && arr.length > 0) hasLayers = true; else if (res?.meta && typeof res.meta.total === 'number' && res.meta.total > 0) hasLayers = true;
     } catch {}
+    closeLoading();
     if (hasLayers) {
       const okLayers = await confirm({ title: 'Related records detected', text: `This watershed has published GIS layer(s). Deleting the watershed may affect related data. Delete anyway?`, confirmButtonText: 'Delete' });
       if (!okLayers) return;
@@ -895,7 +916,11 @@ export function useManageWatershedsTabLogic() {
   };
 
   const handleRefresh = async () => { await loadWatersheds(); };
-  const handleView = useCallback(async (row) => { const target = row?._raw ?? row; await loadPreview(target); setViewOpen(true); }, [loadPreview]);
+  const handleView = useCallback(async (row) => {
+    const target = row?._raw ?? row;
+  try { try { closeLoading(); } catch {}; showLoading('Loading', 'Loading preview…'); await loadPreview(target); } finally { closeLoading(); }
+    setViewOpen(true);
+  }, [loadPreview]);
 
   const actions = useMemo(() => [ { label: 'View', title: 'View', icon: <FiEye />, onClick: handleView }, { label: 'Edit', title: 'Edit', icon: <FiEdit2 />, onClick: openEdit, type: 'edit' }, { label: 'Delete', title: 'Delete', icon: <FiTrash2 />, onClick: openDelete, type: 'delete' }, ], []);
 
@@ -993,9 +1018,21 @@ export function useManageFlowsTabLogic() {
   const handleSortChange = (colId) => { setSort(s => ({ id: colId, dir: s.id === colId && s.dir === 'asc' ? 'desc' : 'asc' })); };
 
   const openCreate = () => { setFormMode('create'); setFormInitial({}); setFormOpen(true); };
-  const openEdit = (row) => { const src = row?._raw ?? row; setFormMode('edit'); setFormInitial(src); setFormOpen(true); };
+  const openEdit = async (row) => {
+    const src = row?._raw ?? row;
+  try { try { closeLoading(); } catch {}; showLoading('Loading', 'Preparing edit form…'); } catch {}
+    setFormMode('edit');
+    setFormInitial(src);
+    setFormOpen(true);
+    closeLoading();
+  };
   const openDelete = async (row) => {
     const src = row?._raw ?? row; if (!src) return;
+    try { closeLoading(); } catch {}
+    // Brief loading to keep UX consistent with other actions
+    try { showLoading('Loading', 'Preparing delete…'); } catch {}
+    await new Promise((r) => setTimeout(r, 200));
+    closeLoading();
     const ok = await confirm({ title: 'Delete tributary?', text: `Delete "${src.name || 'this tributary'}"?`, confirmButtonText: 'Delete' });
     if (!ok) return;
     try { showLoading('Deleting tributary', 'Please wait…'); await api(`/lake-flows/${src.id}`, { method: 'DELETE' }); invalidateHttpCache(['/lake-flows', '/lakes']); await alertSuccess('Deleted', `"${src.name || 'Tributary'}" has been deleted successfully.`); fetchRows(); } catch (e) { await alertError('Delete failed', e.message || 'Failed to delete tributary'); } finally { closeLoading(); }
@@ -1009,11 +1046,19 @@ export function useManageFlowsTabLogic() {
   const viewFlow = useCallback(async (row) => {
     const src = row?._raw ?? row; if (!src) return;
     setViewFeature(null); setViewFlowPoint(null);
-    try { const lakeId = src.lake_id ?? src._raw?.lake_id ?? src.lake_id; const lakeResp = await api(`/lakes/${lakeId}`); const geom = lakeResp?.geom_geojson ? (typeof lakeResp.geom_geojson === 'string' ? JSON.parse(lakeResp.geom_geojson) : lakeResp.geom_geojson) : null; if (geom) { const feature = { type: 'Feature', properties: { id: lakeResp.id, name: lakeResp.name || '' }, geometry: geom }; setViewFeature(feature); } } catch {}
-    const lat = src.latitude ?? src.lat ?? (src._raw && (src._raw.latitude ?? src._raw.lat));
-    const lon = src.longitude ?? src.lon ?? (src._raw && (src._raw.longitude ?? src._raw.lon));
-    if (lat && lon) setViewFlowPoint({ lat: Number(lat), lon: Number(lon), ...src });
-    setViewOpen(true);
+    try {
+  try { closeLoading(); } catch {}
+  showLoading('Loading', 'Fetching lake and point…');
+      const lakeId = src.lake_id ?? src._raw?.lake_id ?? src.lake_id; const lakeResp = await api(`/lakes/${lakeId}`);
+      const geom = lakeResp?.geom_geojson ? (typeof lakeResp.geom_geojson === 'string' ? JSON.parse(lakeResp.geom_geojson) : lakeResp.geom_geojson) : null;
+      if (geom) { const feature = { type: 'Feature', properties: { id: lakeResp.id, name: lakeResp.name || '' }, geometry: geom }; setViewFeature(feature); }
+      const lat = src.latitude ?? src.lat ?? (src._raw && (src._raw.latitude ?? src._raw.lat));
+      const lon = src.longitude ?? src.lon ?? (src._raw && (src._raw.longitude ?? src._raw.lon));
+      if (lat && lon) setViewFlowPoint({ lat: Number(lat), lon: Number(lon), ...src });
+    } finally {
+      closeLoading();
+      setViewOpen(true);
+    }
   }, []);
 
   const submit = async (payload) => {
