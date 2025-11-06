@@ -15,6 +15,11 @@ return Application::configure(basePath: dirname(__DIR__))
         // Global middleware
         $middleware->append([\App\Http\Middleware\InitAuditContext::class]);
 
+        // Enable lightweight SQL profiling in debug/local only (use env here; config may not be booted yet)
+        if (env('APP_DEBUG', false)) {
+            $middleware->append([\App\Http\Middleware\QueryProfiler::class]);
+        }
+
         // Route middleware aliases (Kernel.php replacement in Laravel 12)
         $middleware->alias([
             'tenant.scoped' => \App\Http\Middleware\TenantScope::class,

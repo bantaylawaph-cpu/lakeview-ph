@@ -71,8 +71,7 @@ class LayerController extends Controller
         $include = collect(explode(',', (string) $request->query('include')))
             ->map(fn($s) => trim($s))->filter()->values();
 
-        $query = Layer::query()
-            ->leftJoin('users', 'users.id', '=', 'layers.uploaded_by');
+        $query = Layer::query();
 
         // Optional scoping by body
         $bt = $request->query('body_type');
@@ -104,7 +103,11 @@ class LayerController extends Controller
         }
         $createdBy = $request->query('created_by');
         if ($createdBy !== null && $createdBy !== '') {
-            $query->whereRaw("LOWER(COALESCE(users.name, '')) = ?", [strtolower(trim($createdBy))]);
+            // match on uploader's name without joining
+            $query->whereRaw(
+                "LOWER(COALESCE((SELECT u.name FROM users u WHERE u.id = layers.uploaded_by LIMIT 1), '')) = ?",
+                [strtolower(trim($createdBy))]
+            );
         }
 
         // Search
@@ -113,15 +116,15 @@ class LayerController extends Controller
             $query->where(function ($qq) use ($needle) {
                 $qq->whereRaw("LOWER(COALESCE(layers.name, '')) LIKE ?", [$needle])
                    ->orWhereRaw("LOWER(COALESCE(layers.notes, '')) LIKE ?", [$needle])
-                   ->orWhereRaw("LOWER(COALESCE(users.name, '')) LIKE ?", [$needle])
+                   ->orWhereRaw("LOWER(COALESCE((SELECT u.name FROM users u WHERE u.id = layers.uploaded_by LIMIT 1), '')) LIKE ?", [$needle])
                    ->orWhereRaw("LOWER(COALESCE(layers.body_type, '')) LIKE ?", [$needle])
                    ->orWhereRaw("LOWER(COALESCE(layers.visibility, '')) LIKE ?", [$needle]);
             });
         }
 
         // Base select
-        $query->select('layers.*'); // includes is_downloadable
-        $query->addSelect(DB::raw("COALESCE(users.name, '') AS uploaded_by_name"));
+    $query->select('layers.*'); // includes is_downloadable
+    $query->addSelect(DB::raw("COALESCE((SELECT u.name FROM users u WHERE u.id = layers.uploaded_by LIMIT 1), '') AS uploaded_by_name"));
 
         if ($include->contains('geom'))   $query->selectRaw('ST_AsGeoJSON(geom)  AS geom_geojson');
     if ($include->contains('bounds')) $query->selectRaw('ST_AsGeoJSON(ST_Envelope(geom))  AS bbox_geojson');
@@ -134,8 +137,9 @@ class LayerController extends Controller
             'visibility' => 'layers.visibility',
             'downloadable' => 'layers.is_downloadable',
             'is_downloadable' => 'layers.is_downloadable',
-            'creator' => 'users.name',
-            'uploaded_by_name' => 'users.name',
+            // use subquery to avoid join in COUNT(*)
+            'creator' => DB::raw("(SELECT u.name FROM users u WHERE u.id = layers.uploaded_by)"),
+            'uploaded_by_name' => DB::raw("(SELECT u.name FROM users u WHERE u.id = layers.uploaded_by)"),
             'updated' => 'layers.updated_at',
             'updated_at' => 'layers.updated_at',
             'created_at' => 'layers.created_at',

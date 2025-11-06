@@ -107,13 +107,17 @@ class LakeController extends Controller
         }
 
         if ($sortBy === 'watershed') {
-            $query->leftJoin('watersheds', 'lakes.watershed_id', '=', 'watersheds.id')
-                  ->orderBy('watersheds.name', $sortDir)
-                  ->select('lakes.*'); // Avoid column name conflicts
+            // Avoid JOIN just for ordering so pagination count() stays cheap
+            $query->orderBy(
+                DB::raw('(SELECT w.name FROM watersheds w WHERE w.id = lakes.watershed_id)'),
+                $sortDir
+            );
         } elseif ($sortBy === 'classification') {
-            $query->leftJoin('water_quality_classes', 'lakes.class_code', '=', 'water_quality_classes.code')
-                  ->orderBy('water_quality_classes.name', $sortDir)
-                  ->select('lakes.*');
+            // Avoid JOIN just for ordering so pagination count() stays cheap
+            $query->orderBy(
+                DB::raw('(SELECT c.name FROM water_quality_classes c WHERE c.code = lakes.class_code)'),
+                $sortDir
+            );
         } else {
             $query->orderBy($sortBy, $sortDir);
         }
