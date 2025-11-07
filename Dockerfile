@@ -37,13 +37,16 @@ RUN apt-get update \
  && docker-php-ext-enable opcache \
  && rm -rf /var/lib/apt/lists/*
 
-# PHP Opcache tuning for production
+# Prefer IPv4 for outbound connections (Render often has limited IPv6 egress)
+RUN printf "\n# Prefer IPv4 DNS results\nprecedence ::ffff:0:0/96  100\n" >> /etc/gai.conf
+
+# PHP Opcache tuning for production (larger cache, no timestamp checks)
 RUN set -eux; \
    printf "opcache.enable=1\n" \
       "opcache.enable_cli=0\n" \
-      "opcache.memory_consumption=192\n" \
+      "opcache.memory_consumption=256\n" \
       "opcache.interned_strings_buffer=16\n" \
-      "opcache.max_accelerated_files=20000\n" \
+      "opcache.max_accelerated_files=50000\n" \
       "opcache.save_comments=1\n" \
       "opcache.validate_timestamps=0\n" \
       > /usr/local/etc/php/conf.d/opcache.ini
@@ -53,10 +56,28 @@ RUN set -eux; \
    printf "upload_max_filesize=128M\npost_max_size=128M\nmemory_limit=512M\nmax_file_uploads=50\nmax_input_time=300\n" > /usr/local/etc/php/conf.d/uploads.ini
 
 # Enable Apache modules and set DocumentRoot to public/
-RUN a2enmod rewrite headers \
+RUN a2enmod rewrite headers deflate expires \
  && sed -ri 's!DocumentRoot /var/www/html!DocumentRoot /var/www/html/public!g' /etc/apache2/sites-available/000-default.conf \
  && sed -ri 's!<Directory /var/www/>!<Directory /var/www/html/public/>!g' /etc/apache2/apache2.conf \
  && sed -ri 's!AllowOverride None!AllowOverride All!g' /etc/apache2/apache2.conf
+
+# Apache: compression and long-term caching for static assets
+RUN set -eux; \
+  printf "<IfModule mod_deflate.c>\n" \
+     "  AddOutputFilterByType DEFLATE text/plain text/html text/xml text/css application/xml application/xhtml+xml application/rss+xml application/javascript application/x-javascript application/json image/svg+xml\n" \
+     "  DeflateCompressionLevel 6\n" \
+     "</IfModule>\n" \
+     > /etc/apache2/conf-available/compression.conf; \
+  printf "<IfModule mod_expires.c>\n" \
+     "  ExpiresActive On\n" \
+     "  ExpiresDefault \"access plus 1 day\"\n" \
+     "  <Location /build>\n" \
+     "    ExpiresDefault \"access plus 1 year\"\n" \
+     "    Header set Cache-Control \"public, max-age=31536000, immutable\"\n" \
+     "  </Location>\n" \
+     "</IfModule>\n" \
+     > /etc/apache2/conf-available/cache-control.conf; \
+  a2enconf compression cache-control
 
 WORKDIR /var/www/html
 

@@ -524,7 +524,7 @@ export default function AdminAuditLogsPage() {
 					<TableLayout
 							tableId={TABLE_ID}
 							columns={visibleColumns}
-							data={normalized.filter(r => {
+								data={normalized.filter(r => {
 								// Basic text search on summary
 								if (q) {
 									const summaryText = columns[0].render(r) || '';
@@ -558,6 +558,8 @@ export default function AdminAuditLogsPage() {
 								return true;
 							})}
 							pageSize={perPage}
+							virtualize={true}
+							rowHeight={48}
 							actions={actions}
 							resetSignal={0}
 							columnPicker={false}

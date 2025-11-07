@@ -1,4 +1,4 @@
-import React, { Suspense } from "react";
+import React, { Suspense, lazy } from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 
@@ -6,16 +6,16 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 // AboutData is displayed as a modal from MapPage
 // AboutPage is displayed as a modal from MapPage
 import MapPage from "./pages/PublicInterface/MapPage";
-import KycPage from "./pages/PublicInterface/KycPage";
+const KycPage = lazy(() => import("./pages/PublicInterface/KycPage"));
 // UserManual is displayed as a modal from MapPage
 // DataPrivacyDisclaimer is now a modal inside MapPage
 // KYC page is available as a dedicated route as well
 
 // 📊 Dashboards (Role-based)
-import AdminDashboard from "./pages/AdminInterface/AdminDashboard";
-import OrgDashboard from "./pages/OrgInterface/OrgDashboard";
-import ContributorDashboard from "./pages/ContributorInterface/ContributorDashboard.jsx";
-import AdminOrgApplications from "./pages/AdminInterface/AdminOrgApplications.jsx";
+const AdminDashboard = lazy(() => import("./pages/AdminInterface/AdminDashboard"));
+const OrgDashboard = lazy(() => import("./pages/OrgInterface/OrgDashboard"));
+const ContributorDashboard = lazy(() => import("./pages/ContributorInterface/ContributorDashboard.jsx"));
+const AdminOrgApplications = lazy(() => import("./pages/AdminInterface/AdminOrgApplications.jsx"));
 // import UserDashboard from "./pages/user/UserDashboard"; // add later if needed
 
 // 🎨 Global Styles

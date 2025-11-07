@@ -28,6 +28,10 @@ export default function TableLayout({
   hidePager = false,
   loading = false,
   loadingLabel = null,
+  // Virtualization (windowing) for large lists
+  virtualize = false,
+  rowHeight = 44,
+  overscan = 8,
   // Server-side props
   serverSide = false,
   pagination = { page: 1, totalPages: 1 },
@@ -342,6 +346,33 @@ export default function TableLayout({
 
   const showToolbarRow = Boolean(toolbarSlots.left || toolbarSlots.right || columnPickerControl);
 
+  // Virtualization state: track scrollTop and viewport height of the scroller
+  const scrollerRef = useRef(null);
+  const [viewportH, setViewportH] = useState(0);
+  const [scrollTop, setScrollTop] = useState(0);
+
+  useEffect(() => {
+    if (!virtualize) return;
+    const el = scrollerRef.current;
+    if (!el) return;
+    const measure = () => setViewportH(el.clientHeight || 0);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    const onScroll = () => setScrollTop(el.scrollTop || 0);
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => { try { ro.disconnect(); } catch {} el.removeEventListener('scroll', onScroll); };
+  }, [virtualize]);
+
+  // Compute windowed slice
+  const total = paged.length;
+  const estPerView = viewportH > 0 ? Math.ceil(viewportH / rowHeight) : 20;
+  const startIdx = virtualize ? Math.max(0, Math.floor(scrollTop / rowHeight) - overscan) : 0;
+  const endIdx = virtualize ? Math.min(total, Math.ceil((scrollTop + viewportH) / rowHeight) + overscan) : total;
+  const topSpacer = virtualize ? startIdx * rowHeight : 0;
+  const bottomSpacer = virtualize ? Math.max(0, (total - endIdx) * rowHeight) : 0;
+  const visibleRows = virtualize ? paged.slice(startIdx, endIdx) : paged;
+
   return (
     <div className="lv-table-wrap" style={{ position: 'relative' }} aria-busy={loading ? 'true' : 'false'}>
       {showToolbarRow && (
@@ -375,7 +406,7 @@ export default function TableLayout({
         </div>
       )}
 
-      <div className="lv-table-scroller">
+      <div className="lv-table-scroller" ref={scrollerRef}>
         <table className="lv-table">
           <thead>
             <tr>
@@ -422,7 +453,10 @@ export default function TableLayout({
           </thead>
 
           <tbody>
-            {paged.map((row, idx) => (
+            {virtualize && total > 0 && (
+              <tr aria-hidden="true"><td colSpan={displayColumns.length + (actions?.length ? 1 : 0)} style={{ height: `${topSpacer}px`, padding: 0, border: 0 }} /></tr>
+            )}
+            {visibleRows.map((row, idx) => (
               <tr key={row.id ?? idx}>
                 {displayColumns.map((col) => (
                   <td
@@ -461,6 +495,9 @@ export default function TableLayout({
                 ) : null}
               </tr>
             ))}
+            {virtualize && total > 0 && (
+              <tr aria-hidden="true"><td colSpan={displayColumns.length + (actions?.length ? 1 : 0)} style={{ height: `${bottomSpacer}px`, padding: 0, border: 0 }} /></tr>
+            )}
 
             {!paged.length && (
               <tr>
