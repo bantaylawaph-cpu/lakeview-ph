@@ -24,6 +24,9 @@ RUN npm run build
 # ---------- Stage 2: PHP + Apache ----------
 FROM php:8.2-apache-bookworm
 
+# Cache-buster arg to force rebuild of this stage when troubleshooting networking
+ARG NO_CACHE_TS=20251108
+
 # System packages and PHP extensions
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
@@ -38,7 +41,10 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 # Prefer IPv4 for outbound connections (Render often has limited IPv6 egress)
-RUN printf "\n# Prefer IPv4 DNS results\nprecedence ::ffff:0:0/96  100\n" >> /etc/gai.conf
+# Ensure the precedence rule is active (uncomment if present; append if absent)
+RUN set -eux; \
+   sed -i 's/^#\s*precedence ::ffff:0:0\/96\s\+100/precedence ::ffff:0:0\/96  100/' /etc/gai.conf || true; \
+   (grep -q '^precedence ::ffff:0:0/96\s\+100' /etc/gai.conf || echo '\n# Prefer IPv4 DNS results\nprecedence ::ffff:0:0/96  100' >> /etc/gai.conf)
 
 # PHP Opcache tuning for production (larger cache, no timestamp checks)
 RUN set -eux; \
