@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import Modal from "../Modal";
 import { api } from "../../lib/api";
 import { alertSuccess, alertError, showLoading, closeLoading } from "../../lib/alerts";
@@ -62,6 +62,8 @@ export default function OrgWQTestModal({
   const [mapVersion, setMapVersion] = useState(0);
   const [stationOptions, setStationOptions] = useState([]);
   const [standards, setStandards] = useState([]);
+  // Lightweight in-memory caches (persist only for session lifetime)
+  const cacheRef = useRef({ standards: null, stations: new Map() });
 
   const formatDepth = (d) => {
     const n = Number(d);
@@ -180,6 +182,13 @@ export default function OrgWQTestModal({
         const lakeId = sampleEvent?.lake_id || record?.lake_id;
         if (!lakeId) { setStationOptions([]); return; }
         const orgId = sampleEvent?.organization_id || record?.organization_id;
+        const cacheKey = `${lakeId}:${orgId || ''}`;
+        // Use cached stations if fresh (TTL 2 minutes)
+        const cached = cacheRef.current.stations.get(cacheKey);
+        if (cached && (Date.now() - cached.ts < 120_000)) {
+          setStationOptions(cached.value);
+          return;
+        }
         const qs = `?lake_id=${encodeURIComponent(lakeId)}${orgId ? `&organization_id=${encodeURIComponent(orgId)}` : ''}`;
         const res = await api(`/admin/stations${qs}`);
         const list = Array.isArray(res?.data) ? res.data : [];
@@ -189,6 +198,7 @@ export default function OrgWQTestModal({
           lat: s.latitude ?? s.lat ?? null,
           lng: s.longitude ?? s.lng ?? null,
         }));
+        cacheRef.current.stations.set(cacheKey, { ts: Date.now(), value: normalized });
         setStationOptions(normalized);
       } catch (_) {
         if (mounted) setStationOptions([]);
@@ -203,9 +213,17 @@ export default function OrgWQTestModal({
     (async () => {
       try {
         if (!open) return;
+        // Standards rarely change; cache aggressively (TTL 10 minutes)
+        const cached = cacheRef.current.standards;
+        if (cached && (Date.now() - cached.ts < 600_000)) {
+            setStandards(cached.value);
+            return;
+        }
         const res = await api('/options/wq-standards');
         const rows = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
-        if (mounted) setStandards(rows);
+        if (!mounted) return;
+        cacheRef.current.standards = { ts: Date.now(), value: rows };
+        setStandards(rows);
       } catch (_) {
         if (mounted) setStandards([]);
       }

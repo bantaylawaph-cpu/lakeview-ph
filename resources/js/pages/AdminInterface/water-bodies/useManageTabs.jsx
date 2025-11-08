@@ -49,6 +49,8 @@ export function useManageLakesTabLogic() {
   const ADV_KEY = `${TABLE_ID}::filters_advanced`;
   const SEARCH_KEY = `${TABLE_ID}::search`;
   const SORT_KEY = `${TABLE_ID}::sort`;
+  // Prefer cursor pagination for better performance on large datasets when sorting by created_at DESC
+  const useCursorMode = true;
 
   const [query, setQuery] = useState(() => {
     try {
@@ -68,6 +70,8 @@ export function useManageLakesTabLogic() {
 
   const [lakes, setLakes] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, perPage: 5, total: 0, lastPage: 1 });
+  // Maintain cursor tokens per "page" for forward/back navigation
+  const lakesCursorMapRef = useRef({ 1: null });
   const [sort, setSort] = useState(() => {
     try {
       const raw = localStorage.getItem(SORT_KEY);
@@ -308,17 +312,35 @@ export function useManageLakesTabLogic() {
     setErrorMsg("");
     try {
       const params = new URLSearchParams();
-      params.append("page", pagination.page);
       params.append("per_page", pagination.perPage);
-      params.append("sort_by", sort.id);
-      params.append("sort_dir", sort.dir);
+      const eligibleForCursor = useCursorMode && sort.id === 'created_at' && String(sort.dir).toLowerCase() === 'desc';
+      if (eligibleForCursor) {
+        params.append('mode', 'cursor');
+        const cursor = lakesCursorMapRef.current[pagination.page] || '';
+        if (cursor) params.append('cursor', String(cursor));
+      } else {
+        params.append("page", pagination.page);
+        params.append("sort_by", sort.id);
+        params.append("sort_dir", sort.dir);
+      }
       if (query) params.append("q", query);
       if (Object.keys(adv).length > 0) params.append("adv", JSON.stringify(adv));
 
-      const data = await api(`/lakes?${params.toString()}`, { auth: false });
-      const list = Array.isArray(data.data) ? data.data : [];
+      // Use short TTL cache to collapse duplicate requests from rapid UI changes
+      const data = await cachedGet(`/lakes?${params.toString()}`, { ttlMs: 30 * 1000 });
+      const list = Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []);
       setLakes(normalizeRows(list));
-      setPagination({ page: data.current_page, perPage: data.per_page, total: data.total, lastPage: data.last_page });
+      if (eligibleForCursor) {
+        const nextCursor = data?.next_cursor ?? data?.meta?.next_cursor ?? null;
+        if (nextCursor) {
+          lakesCursorMapRef.current[pagination.page + 1] = nextCursor;
+          setPagination((prev) => ({ ...prev, page: pagination.page, lastPage: pagination.page + 1, total: prev.total }));
+        } else {
+          setPagination((prev) => ({ ...prev, page: pagination.page, lastPage: pagination.page, total: prev.total }));
+        }
+      } else {
+        setPagination({ page: data.current_page, perPage: data.per_page, total: data.total, lastPage: data.last_page });
+      }
     } catch (err) {
       console.error("[ManageLakesTab] Failed to load lakes", err);
       setLakes([]);
@@ -336,8 +358,16 @@ export function useManageLakesTabLogic() {
   }, [fetchWatersheds, fetchClasses, fetchProvinces, fetchRegions]);
 
   useEffect(() => {
-    setPagination((prev) => (prev.page === 1 ? prev : { ...prev, page: 1 }));
+    // Reset to first page on filter changes and clear cursor map
+    lakesCursorMapRef.current = { 1: null };
+    setPagination((prev) => ({ ...prev, page: 1, lastPage: 1 }));
   }, [query, adv]);
+
+  useEffect(() => {
+    // Changing sort should also reset cursor map; cursor only valid for created_at DESC
+    lakesCursorMapRef.current = { 1: null };
+    setPagination((prev) => ({ ...prev, page: 1, lastPage: 1 }));
+  }, [sort.id, sort.dir]);
 
   useEffect(() => {
     const t = setTimeout(() => fetchLakes(), 300);
@@ -1005,7 +1035,8 @@ export function useManageFlowsTabLogic() {
     setLoading(true); setErrorMsg('');
     try {
       const params = { page: pagination.page, per_page: pagination.perPage, sort_by: sort.id, sort_dir: sort.dir, q: query, type: adv.flow_type || '', lake_id: adv.lake_id || '' };
-      const res = await api('/lake-flows', { params });
+      // Use cachedGet with short TTL to avoid duplicate rapid requests when filters change quickly
+      const res = await cachedGet(`/lake-flows?${new URLSearchParams(params).toString()}`, { ttlMs: 30 * 1000 });
       const list = Array.isArray(res.data) ? res.data : [];
       setRows(list.map(r => ({ id:r.id, lake: r.lake?.name || r.lake_name || r.lake_id, flow_type:r.flow_type, name: r.name||'', source:r.source||'', is_primary:!!r.is_primary, latitude:r.latitude??null, longitude:r.longitude??null, updated_at:r.updated_at||null, _raw:r })));
       setPagination({ page: res.current_page, perPage: res.per_page, total: res.total, lastPage: res.last_page });

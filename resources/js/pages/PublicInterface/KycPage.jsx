@@ -75,12 +75,13 @@ export default function KycPage({ embedded = true, open = true, onClose }) {
       if (!user) { return; }
       setLoading(true);
       try {
-        // Parallel fetch with caching
+        // Fetch minimal set first: primary application + count, and only fetch full list if count > 1.
         const doMine = async () => {
           if (cacheRef.current.mine && (Date.now() - cacheRef.current.mine.ts < 60_000)) return cacheRef.current.mine.value;
           const res = await api.get('/org-applications/mine', { signal: controllerMine.signal });
-          cacheRef.current.mine = { ts: Date.now(), value: res?.data || null };
-          return cacheRef.current.mine.value;
+          const val = res?.data || null;
+          cacheRef.current.mine = { ts: Date.now(), value: val };
+          return val;
         };
         const doCount = async () => {
           if (cacheRef.current.mineCount && (Date.now() - cacheRef.current.mineCount.ts < 60_000)) return cacheRef.current.mineCount.value;
@@ -89,18 +90,24 @@ export default function KycPage({ embedded = true, open = true, onClose }) {
           cacheRef.current.mineCount = { ts: Date.now(), value: v };
           return v;
         };
-        const doAll = async () => {
-          if (cacheRef.current.mineAll && (Date.now() - cacheRef.current.mineAll.ts < 120_000)) return cacheRef.current.mineAll.value;
-          const all = await api.get('/org-applications/mine/all', { signal: controllerAll.signal });
-          const val = all?.data || [];
-          cacheRef.current.mineAll = { ts: Date.now(), value: val };
-          return val;
-        };
-        const [mineRes, countRes, allRes] = await Promise.allSettled([doMine(), doCount(), doAll()]);
+        const [mineRes, countRes] = await Promise.allSettled([doMine(), doCount()]);
         if (!mounted) return;
         if (mineRes.status === 'fulfilled') setMyApplication(mineRes.value);
         if (countRes.status === 'fulfilled') setMyAppCount(countRes.value);
-        if (allRes.status === 'fulfilled') setMyApplications(allRes.value);
+        // Only load "all" if > 1 applications (saves an extra request for majority case).
+        if (countRes.status === 'fulfilled' && countRes.value > 1) {
+          const doAll = async () => {
+            if (cacheRef.current.mineAll && (Date.now() - cacheRef.current.mineAll.ts < 120_000)) return cacheRef.current.mineAll.value;
+            const all = await api.get('/org-applications/mine/all', { signal: controllerAll.signal });
+            const val = all?.data || [];
+            cacheRef.current.mineAll = { ts: Date.now(), value: val };
+            return val;
+          };
+          try {
+            const allRes = await doAll();
+            if (mounted) setMyApplications(allRes);
+          } catch {/* silent */}
+        }
       } catch { /* silent */ }
       finally { if (mounted) setLoading(false); }
     })();

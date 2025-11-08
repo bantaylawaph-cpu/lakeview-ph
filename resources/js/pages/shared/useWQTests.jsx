@@ -53,6 +53,9 @@ export function useWQTests({ variant, tableId, initialLakes = [], initialTests =
   const [resetSignal, setResetSignal] = useState(0);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  // Cursor pagination support (keyset on sampled_at DESC, id DESC)
+  const useCursorMode = true; // enable keyset pagination by default for performance
+  const cursorMapRef = React.useRef({ 1: null }); // page -> cursor token (cursor for page p means "start after" token for that page)
   // Sorting (client-side on current page data)
   const SORT_KEY = `${tableId || 'wqtests'}::sort`;
   const [sort, setSort] = useState(() => {
@@ -255,7 +258,7 @@ export function useWQTests({ variant, tableId, initialLakes = [], initialTests =
     setMembers(Array.from(map.values()));
   }, [isContrib, membersFetchForbidden, tests]);
 
-  // Fetch tests (server-side pagination)
+  // Fetch tests (server-side pagination with cursor when enabled)
   useEffect(() => {
     let mounted = true;
     const gated = isAdmin || (isOrg ? !!authLoaded : !!authLoaded) || (isContrib ? !!authLoaded : true);
@@ -267,10 +270,19 @@ export function useWQTests({ variant, tableId, initialLakes = [], initialTests =
       try {
         const params = new URLSearchParams();
         params.set('per_page', '10');
-        params.set('page', String(page));
-        if (sort && sort.id) {
-          params.set('sort_by', String(sort.id));
-          params.set('sort_dir', sort.dir === 'asc' ? 'asc' : 'desc');
+        if (useCursorMode) {
+          params.set('mode', 'cursor');
+          const cursor = cursorMapRef.current[page] || '';
+          if (cursor) params.set('cursor', String(cursor));
+          // Force server sort to canonical cursor order
+          params.delete('sort_by');
+          params.delete('sort_dir');
+        } else {
+          params.set('page', String(page));
+          if (sort && sort.id) {
+            params.set('sort_by', String(sort.id));
+            params.set('sort_dir', sort.dir === 'asc' ? 'asc' : 'desc');
+          }
         }
         if (isAdmin) {
           if (organizationId) params.set('organization_id', String(organizationId));
@@ -302,16 +314,28 @@ export function useWQTests({ variant, tableId, initialLakes = [], initialTests =
             ? `/org/${currentTenantId}/sample-events`
             : `/contrib/${currentOrgId}/sample-events`;
 
-  const res = await cachedGet(`${basePath}?${params.toString()}`, { ttlMs: 2 * 60 * 1000 });
+        const res = await cachedGet(`${basePath}?${params.toString()}`, { ttlMs: 2 * 60 * 1000 });
         if (!mounted) return;
         const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : (Array.isArray(res?.data?.data) ? res.data.data : []);
         setTests(list);
-        const cp = res?.current_page ?? 1; const lp = res?.last_page ?? 1;
-        setTotalPages(Number(lp) || 1);
-        if (Number(cp) > Number(lp)) setPage(Number(lp) || 1);
-        else if (Number(cp) !== Number(page)) setPage(Number(cp) || 1);
+        if (useCursorMode) {
+          // Maintain synthetic totalPages to enable Next button if next_cursor exists
+          const nextCursor = res?.next_cursor ?? res?.meta?.next_cursor ?? null;
+          // Store cursor token for the next page
+          if (nextCursor) {
+            cursorMapRef.current[page + 1] = nextCursor;
+            setTotalPages(page + 1);
+          } else {
+            setTotalPages(page);
+          }
+        } else {
+          const cp = res?.current_page ?? 1; const lp = res?.last_page ?? 1;
+          setTotalPages(Number(lp) || 1);
+          if (Number(cp) > Number(lp)) setPage(Number(lp) || 1);
+          else if (Number(cp) !== Number(page)) setPage(Number(cp) || 1);
+        }
       } catch (e) {
-        if (mounted) { setTests([]); setTotalPages(1); if (page !== 1) setPage(1); }
+        if (mounted) { setTests([]); setTotalPages(1); if (page !== 1) setPage(1); cursorMapRef.current = { 1: null }; }
       } finally {
         if (mounted) setLoading(false);
       }
@@ -321,7 +345,12 @@ export function useWQTests({ variant, tableId, initialLakes = [], initialTests =
 
   // Reset to first page on filter changes
   useEffect(() => {
-    if (isAdmin || (authLoaded && (isOrg || isContrib))) setPage(1);
+    if (isAdmin || (authLoaded && (isOrg || isContrib))) {
+      // Reset cursor map on filter changes
+      cursorMapRef.current = { 1: null };
+      setTotalPages(1);
+      setPage(1);
+    }
   }, [isAdmin, authLoaded, lakeId, status, memberId, organizationId, dateFrom, dateTo, year, quarter, month, q]);
 
   // Dynamic Y/Q/M options
@@ -619,7 +648,11 @@ export function useWQTests({ variant, tableId, initialLakes = [], initialTests =
     try {
       const params = new URLSearchParams();
       params.set('per_page', '10');
-      params.set('page', '1');
+      if (useCursorMode) {
+        params.set('mode', 'cursor');
+      } else {
+        params.set('page', '1');
+      }
       if (isAdmin) {
         if (organizationId) params.set('organization_id', String(organizationId));
       }
@@ -673,7 +706,10 @@ export function useWQTests({ variant, tableId, initialLakes = [], initialTests =
       }
       if (lakesOpts.status === 'fulfilled') setLakes(Array.isArray(lakesOpts.value) ? lakesOpts.value : []);
       if (paramsRes.status === 'fulfilled') setParamCatalog(Array.isArray(paramsRes.value) ? paramsRes.value : []);
+      // Reset cursor map and paging
+      cursorMapRef.current = { 1: null };
       setResetSignal((x) => x + 1);
+      setTotalPages(1);
       setPage(1);
     } catch (e) {
       // log only

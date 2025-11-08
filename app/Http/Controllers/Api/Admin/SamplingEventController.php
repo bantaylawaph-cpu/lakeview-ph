@@ -460,8 +460,7 @@ class SamplingEventController extends Controller
                 DB::raw("COALESCE(t.name,'') as organization_name"),
                 DB::raw("COALESCE(u.name,'') as created_by_name"),
             ]);
-            // Only need result count in slim mode
-            $base->withCount('results');
+            // Intentionally omit withCount('results') to avoid extra subquery cost in slim cursor mode
         } else {
             $base->select([
                 'sampling_events.*',
