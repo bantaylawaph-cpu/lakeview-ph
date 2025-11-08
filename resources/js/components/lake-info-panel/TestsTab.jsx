@@ -229,8 +229,7 @@ export default function TestsTab({ lake, onJumpToStation }) {
           <div className="insight-card" key={t.id}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-          <div style={{ fontSize: 13, fontWeight: 700 }}>{t.sampled_at ? new Date(t.sampled_at).toLocaleString() : '–'}</div>
-          <div style={{ fontSize: 11, opacity: 0.7 }}>{t.sampled_at ? '(local time)' : ''}</div>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>{t.sampled_at ? new Date(t.sampled_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '–'}</div>
                 <div style={{ fontSize: 12, opacity: 0.9, marginTop: 4 }}>{t.station?.name || 'Station: –'}</div>
                 <div style={{ fontSize: 12, opacity: 0.8, marginTop: 2 }}>{t.organization_name || t.organization?.name || 'Dataset Source'}</div>
               </div>

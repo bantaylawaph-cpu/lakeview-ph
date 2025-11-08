@@ -29,6 +29,8 @@ export default function useTimeSeriesData({ events, selectedParam, selectedStati
   const thr = useParamThresholds({ paramCode, appliedStandardId, classCode: classForSelectedLake || undefined });
   const chartData = useMemo(() => {
     if (!selectedParam) return null;
+    // Defer building datasets until thresholds finished loading to avoid overlay flash
+    if (thr.loading) return null;
     const parseDate = parseIsoDate;
     const bucketKey = makeBucketKey;
     const bucketSortKey = sortBucketKey;
@@ -160,7 +162,7 @@ export default function useTimeSeriesData({ events, selectedParam, selectedStati
     }
 
     return { labels, datasets, meta: { standards: [{ code: thr?.code || null, min: thr?.min ?? null, max: thr?.max ?? null }].filter(s => s.code || s.min != null || s.max != null) } };
-  }, [events, selectedParam, JSON.stringify(selectedStations), bucket, timeRange, dateFrom, dateTo, seriesMode, classForSelectedLake, depthSelection, appliedStandardId, thr.min, thr.max, thr.code]);
+  }, [events, selectedParam, JSON.stringify(selectedStations), bucket, timeRange, dateFrom, dateTo, seriesMode, classForSelectedLake, depthSelection, appliedStandardId, thr.min, thr.max, thr.code, thr.loading]);
 
-  return chartData;
+  return { chartData, loadingThresholds: thr.loading };
 }

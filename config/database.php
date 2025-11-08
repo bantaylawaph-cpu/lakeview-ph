@@ -97,8 +97,10 @@ return [
             'prefix' => '',
             'prefix_indexes' => true,
             'search_path' => 'public',
-            // For Supabase/managed Postgres use 'require'.
-            'sslmode' => env('DB_SSLMODE', 'require'),
+            // SSL mode: production/Supabase defaults to 'require'; local falls back to 'prefer' unless overridden.
+            // If you run a local Postgres without SSL and saw "server does not support SSL, but SSL was required",
+            // either set DB_SSLMODE=prefer (or disable) in .env, or rely on this fallback behavior.
+            'sslmode' => env('DB_SSLMODE', env('APP_ENV') === 'local' ? 'prefer' : 'require'),
             // PDO options: prefer disabling persistent by default; enable emulate prepares when behind PgBouncer (txn mode)
             'options' => extension_loaded('pdo_pgsql') ? array_filter([
                 // Persistent client connections to PgBouncer are optional; default off to avoid exhausting client slots

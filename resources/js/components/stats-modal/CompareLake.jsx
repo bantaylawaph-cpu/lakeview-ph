@@ -319,7 +319,7 @@ function CompareLake({
 
   // removed: time-series chart options (Compare is bar-only)
 
-  const barData = useCompareBarData({ eventsA: eventsAAll, eventsB: eventsBAll, bucket, selectedYears, depth: depthSelection, selectedParam, lakeA, lakeB, lakeOptions });
+  const { barData, loadingThresholds: compareThrLoading } = useCompareBarData({ eventsA: eventsAAll, eventsB: eventsBAll, bucket, selectedYears, depth: depthSelection, selectedParam, lakeA, lakeB, lakeOptions });
 
   // Compare is bar-only; no time-series range state to correct
 
@@ -465,7 +465,7 @@ function CompareLake({
           {/* Summary panels removed per design: Samples / Mean / Median are not shown in CompareLake */}
 
   <div className="wq-chart" style={{ height: 300, borderRadius: 8, background: 'transparent', border: '1px solid rgba(255,255,255,0.06)', padding: 8 }}>
-        {applied && barData && Array.isArray(barData.datasets) && barData.datasets.length ? (
+  {applied && !compareThrLoading && barData && Array.isArray(barData.datasets) && barData.datasets.length ? (
           (() => {
             const bd = { ...barData, datasets: colorizeDatasets(barData.datasets) };
             const paramMeta = (paramList || []).find(p => String(p.key || p.id || p.code) === String(selectedParam));
@@ -502,6 +502,10 @@ function CompareLake({
             };
             return <Bar key={`bar-${selectedParam}-${lakeA}-${lakeB}`} ref={chartRef} data={bd} options={options} />;
           })()
+        ) : compareThrLoading && applied ? (
+          <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <LoadingSpinner inline label="Loading thresholds…" color="#fff" />
+          </div>
         ) : (
           <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <span style={{ opacity: 0.9 }}>{loading ? 'Loading…' : 'Fill all fields and click Apply to generate the chart.'}</span>

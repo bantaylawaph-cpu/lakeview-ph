@@ -8,6 +8,7 @@ export default function useCompareBarData({ eventsA = [], eventsB = [], bucket =
   const { current } = useCurrentStandard();
   const [thrA, setThrA] = useState({ min: null, max: null, code: null });
   const [thrB, setThrB] = useState({ min: null, max: null, code: null });
+  const [thrLoading, setThrLoading] = useState(false);
 
   // Try to resolve a parameter code from either events list (fallback to selectedParam as-is)
   const paramCode = useMemo(() => {
@@ -30,7 +31,8 @@ export default function useCompareBarData({ eventsA = [], eventsB = [], bucket =
     let abort = false;
     (async () => {
       try {
-        if (!current?.id || !paramCode) { setThrA({ min: null, max: null, code: null }); setThrB({ min: null, max: null, code: null }); return; }
+        if (!current?.id || !paramCode) { setThrA({ min: null, max: null, code: null }); setThrB({ min: null, max: null, code: null }); setThrLoading(false); return; }
+        setThrLoading(true);
         const classA = lakeA ? lakeClass(lakeOptions, lakeA) : null;
         const classB = lakeB ? lakeClass(lakeOptions, lakeB) : null;
         const [a, b] = await Promise.all([
@@ -40,23 +42,25 @@ export default function useCompareBarData({ eventsA = [], eventsB = [], bucket =
         if (abort) return;
         setThrA(a || { min: null, max: null, code: current?.code || null });
         setThrB(b || { min: null, max: null, code: current?.code || null });
+        setThrLoading(false);
       } catch {
         if (abort) return;
         setThrA({ min: null, max: null, code: current?.code || null });
         setThrB({ min: null, max: null, code: current?.code || null });
+        setThrLoading(false);
       }
     })();
     return () => { abort = true; };
   }, [current?.id, current?.code, paramCode, lakeA, lakeB, JSON.stringify(lakeOptions)]);
 
-  return useMemo(() => {
+  const memo = useMemo(() => {
     const years = Array.isArray(selectedYears) ? selectedYears.map(String) : [];
     const lakes = [];
     if (lakeA) lakes.push({ id: lakeA, events: eventsA });
     if (lakeB) lakes.push({ id: lakeB, events: eventsB });
     const lakeLabels = lakes.map((lk) => lakeName(lakeOptions, lk.id) || String(lk.id));
-
-    if (!selectedParam || !years.length || lakes.length === 0) return { labels: lakeLabels, datasets: [] };
+    if (thrLoading) return { labels: lakeLabels, datasets: [], meta: { thresholdsLoading: true } };
+    if (!selectedParam || !years.length || lakes.length === 0) return { labels: lakeLabels, datasets: [], meta: { thresholdsLoading: false } };
 
     const parse = parseIsoDate;
 
@@ -230,6 +234,8 @@ export default function useCompareBarData({ eventsA = [], eventsB = [], bucket =
     yearsFromKeys.forEach((y) => { const hue = yearHue.get(String(y)) ?? 200; yearColors[String(y)] = `hsla(${hue}, 70%, 55%, 0.9)`; });
     const yearIndexObj = {}; Array.from(yearIndexMap.entries()).forEach(([y, idxs]) => { yearIndexObj[y] = idxs; });
 
-    return { labels: lakeLabels, datasets, meta: { years, standards, bucket, periodInfo, yearIndexMap: yearIndexObj, yearColors, yearOrder: yearsFromKeys } };
-  }, [eventsA, eventsB, bucket, selectedYears, depth, selectedParam, lakeA, lakeB, lakeOptions, thrA?.min, thrA?.max, thrB?.min, thrB?.max, thrA?.code, thrB?.code]);
+    return { labels: lakeLabels, datasets, meta: { years, standards, bucket, periodInfo, yearIndexMap: yearIndexObj, yearColors, yearOrder: yearsFromKeys, thresholdsLoading: false } };
+  }, [eventsA, eventsB, bucket, selectedYears, depth, selectedParam, lakeA, lakeB, lakeOptions, thrA?.min, thrA?.max, thrB?.min, thrB?.max, thrA?.code, thrB?.code, thrLoading]);
+
+  return { barData: memo, loadingThresholds: thrLoading };
 }

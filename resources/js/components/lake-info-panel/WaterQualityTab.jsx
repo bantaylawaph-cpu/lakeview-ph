@@ -239,7 +239,7 @@ function WaterQualityTab({ lake }) {
   }, [visibleTests]);
 
   // Pass the lake's class code so thresholds resolve for the correct class under the current standard
-  const seriesByParameter = useMultiParamTimeSeriesData({ events: visibleTests, bucket, classCode: lake?.class_code || undefined });
+  const { seriesByParameter, loadingThresholds } = useMultiParamTimeSeriesData({ events: visibleTests, bucket, classCode: lake?.class_code || undefined });
 
   if (initialLoading) {
     return (
@@ -296,13 +296,13 @@ function WaterQualityTab({ lake }) {
           <StationSelect options={stations} value={station} onChange={(e) => setStation(e.target.value)} includeAllOption={true} allValue="" allLabel="All Stations" showPlaceholder={false} style={{ padding: '6px 8px', height: 'auto' }} />
         </div>
       </div>
-      {loading && (
+      {(loading || loadingThresholds) && (
         <div style={{ margin: '2px 0 8px 0' }}>
           <LoadingSpinner label="Loading data..." color="#fff" />
         </div>
       )}
 
-      {!loading && !hasAny && (
+      {!(loading || loadingThresholds) && !hasAny && (
         <div className="insight-card">
           <p style={{ margin: 0 }}><em>No published tests yet for this lake.</em></p>
         </div>

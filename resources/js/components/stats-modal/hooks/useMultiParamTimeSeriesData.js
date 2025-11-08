@@ -8,6 +8,7 @@ import { fetchParamThresholds } from './useParamThresholds';
 export default function useMultiParamTimeSeriesData({ events, bucket, classCode }) {
   const { current } = useCurrentStandard();
   const [thrByCode, setThrByCode] = useState({});
+  const [thrLoading, setThrLoading] = useState(false);
 
   // Derive unique parameter codes present in events to prefetch thresholds
   const paramCodes = useMemo(() => {
@@ -24,7 +25,8 @@ export default function useMultiParamTimeSeriesData({ events, bucket, classCode 
   useEffect(() => {
     let abort = false;
     (async () => {
-      if (!current?.id || !paramCodes.length) { setThrByCode({}); return; }
+      if (!current?.id || !paramCodes.length) { setThrByCode({}); setThrLoading(false); return; }
+      setThrLoading(true);
       const pairs = await Promise.all(paramCodes.map(async (code) => {
         const thr = await fetchParamThresholds({ paramCode: code, appliedStandardId: current.id, classCode: classCode || undefined });
         return [code, thr];
@@ -33,11 +35,14 @@ export default function useMultiParamTimeSeriesData({ events, bucket, classCode 
       const next = {};
       pairs.forEach(([code, thr]) => { next[String(code)] = thr || { min: null, max: null, code: current?.code || null }; });
       setThrByCode(next);
+      setThrLoading(false);
     })();
     return () => { abort = true; };
   }, [current?.id, current?.code, JSON.stringify(paramCodes), classCode]);
   const seriesByParameter = useMemo(() => {
     if (!Array.isArray(events) || events.length === 0) return [];
+    // Wait until thresholds loaded so initial render includes overlay lines (eliminates flash)
+    if (thrLoading) return [];
 
     const parseDate = (iso) => { try { return new Date(iso); } catch { return null; } };
     const bucketKey = (d, mode) => {
@@ -201,7 +206,7 @@ export default function useMultiParamTimeSeriesData({ events, bucket, classCode 
     // Sort parameters by name (fallback to code)
     out.sort((a,b) => String(a.name || a.code).localeCompare(String(b.name || b.code)));
     return out;
-  }, [events, bucket, thrByCode]);
+  }, [events, bucket, thrByCode, thrLoading]);
 
-  return seriesByParameter;
+  return { seriesByParameter, loadingThresholds: thrLoading };
 }

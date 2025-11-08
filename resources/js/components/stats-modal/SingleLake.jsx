@@ -101,7 +101,7 @@ export default function SingleLake({
   const nameForSelectedLake = useMemo(() => lakeName(lakeOptions, selectedLake) || String(selectedLake || '') || '', [lakeOptions, selectedLake]);
   const classForSelectedLake = useMemo(() => lakeClass(lakeOptions, selectedLake) || selectedClass || '', [lakeOptions, selectedLake, selectedClass]);
   const { current: currentStd } = useCurrentStandard();
-  const chartData = useTimeSeriesData({ events, selectedParam, selectedStations, bucket, timeRange, dateFrom, dateTo, seriesMode, classForSelectedLake, depthSelection: selectedDepth, appliedStandardId: currentStd?.id });
+  const { chartData, loadingThresholds: tsThresholdsLoading } = useTimeSeriesData({ events, selectedParam, selectedStations, bucket, timeRange, dateFrom, dateTo, seriesMode, classForSelectedLake, depthSelection: selectedDepth, appliedStandardId: currentStd?.id });
   const depthProfile = useDepthProfileData({ events, selectedParam, selectedStations, bucket });
   // Correlation removed
   // derive depth options for selectedParam from events
@@ -565,7 +565,11 @@ export default function SingleLake({
               })()
             )
           ) : chartType === 'time' ? (
-            chartData && chartData.datasets && chartData.datasets.length ? (
+            tsThresholdsLoading ? (
+              <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <LoadingSpinner inline label="Loading thresholds…" color="#fff" />
+              </div>
+            ) : chartData && chartData.datasets && chartData.datasets.length ? (
               (() => {
                 // Merge overlay when available
                 let datasets = chartData.datasets.slice();
