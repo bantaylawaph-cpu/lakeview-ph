@@ -42,7 +42,8 @@ class SamplingEventController extends Controller
 
         $context = $this->resolveTenantMembership($request, ['org_admin', 'contributor'], $requestedTenant, false);
 
-        $query = $this->eventListQuery();
+    $isCursor = ($request->query('mode') === 'cursor') || $request->filled('cursor');
+    $query = $this->eventListQuery($isCursor);
 
         $publicOnly = false;
 
@@ -171,7 +172,6 @@ class SamplingEventController extends Controller
         // Server-side sorting
         $sortBy = (string) $request->query('sort_by', 'month_day');
         $sortDir = strtolower((string) $request->query('sort_dir', 'desc')) === 'asc' ? 'asc' : 'desc';
-        // Map UI column ids to database expressions
         $sortMap = [
             'organization' => 't.name',
             'lake_name' => 'l.name',
@@ -181,14 +181,48 @@ class SamplingEventController extends Controller
             'updated_by' => 'u2.name',
             'logged_at' => 'sampling_events.created_at',
             'updated_at' => 'sampling_events.updated_at',
-            // Derived from sampled_at
             'year' => DB::raw('EXTRACT(YEAR FROM sampling_events.sampled_at)'),
             'quarter' => DB::raw('EXTRACT(QUARTER FROM sampling_events.sampled_at)'),
-            'month_day' => 'sampling_events.sampled_at', // primary sampling date
+            'month_day' => 'sampling_events.sampled_at',
             'sampled_at' => 'sampling_events.sampled_at',
         ];
-
         $expr = $sortMap[$sortBy] ?? 'sampling_events.sampled_at';
+
+        if ($isCursor) {
+            // Force canonical ordering for keyset pagination
+            $query->orderByDesc('sampling_events.sampled_at')->orderByDesc('sampling_events.id');
+            if ($cursor = $request->query('cursor')) {
+                $parts = explode(':', $cursor, 2);
+                if (count($parts) === 2) {
+                    [$cSampled, $cId] = $parts;
+                    if (strtotime($cSampled) !== false && ctype_digit($cId)) {
+                        $query->where(function ($w) use ($cSampled, $cId) {
+                            $w->where('sampling_events.sampled_at', '<', $cSampled)
+                              ->orWhere(function ($w2) use ($cSampled, $cId) {
+                                  $w2->where('sampling_events.sampled_at', $cSampled)
+                                     ->where('sampling_events.id', '<', (int) $cId);
+                              });
+                        });
+                    }
+                }
+            }
+            $rows = $query->limit($perPage + 1)->get();
+            $hasNext = $rows->count() > $perPage;
+            $nextCursor = null;
+            if ($hasNext) {
+                $last = $rows[$perPage - 1];
+                $nextCursor = $last->sampled_at.':'.$last->id;
+                $rows = $rows->slice(0, $perPage)->values();
+            }
+            return response()->json([
+                'data' => $rows,
+                'meta' => [
+                    'per_page' => $perPage,
+                    'next_cursor' => $nextCursor,
+                    'mode' => 'cursor'
+                ]
+            ]);
+        }
 
         $events = $query
             ->when($expr instanceof \Illuminate\Database\Query\Expression, function ($q) use ($expr, $sortDir) {
@@ -198,8 +232,6 @@ class SamplingEventController extends Controller
             })
             ->orderBy('sampling_events.id', 'desc')
             ->paginate($perPage);
-
-        // Return paginator directly for standard Laravel pagination structure
         return $events;
     }
 
@@ -403,15 +435,35 @@ class SamplingEventController extends Controller
         ]);
     }
 
-    protected function eventListQuery()
+    protected function eventListQuery(bool $slim = false)
     {
-        return SamplingEvent::query()
+        $base = SamplingEvent::query()
             ->leftJoin('stations as s', 's.id', '=', 'sampling_events.station_id')
             ->leftJoin('lakes as l', 'l.id', '=', 'sampling_events.lake_id')
             ->leftJoin('tenants as t', 't.id', '=', 'sampling_events.organization_id')
             ->leftJoin('users as u', 'u.id', '=', 'sampling_events.created_by_user_id')
-            ->leftJoin('users as u2', 'u2.id', '=', 'sampling_events.updated_by_user_id')
-            ->select([
+            ->leftJoin('users as u2', 'u2.id', '=', 'sampling_events.updated_by_user_id');
+
+        if ($slim) {
+            // Minimal columns for list performance
+            $base->select([
+                'sampling_events.id',
+                'sampling_events.organization_id',
+                'sampling_events.lake_id',
+                'sampling_events.station_id',
+                'sampling_events.sampled_at',
+                'sampling_events.status',
+                DB::raw('ST_Y(s.geom_point) as latitude'),
+                DB::raw('ST_X(s.geom_point) as longitude'),
+                DB::raw("COALESCE(s.name,'') as station_name"),
+                DB::raw("COALESCE(l.name,'') as lake_name"),
+                DB::raw("COALESCE(t.name,'') as organization_name"),
+                DB::raw("COALESCE(u.name,'') as created_by_name"),
+            ]);
+            // Only need result count in slim mode
+            $base->withCount('results');
+        } else {
+            $base->select([
                 'sampling_events.*',
                 DB::raw('ST_Y(s.geom_point) as latitude'),
                 DB::raw('ST_X(s.geom_point) as longitude'),
@@ -430,6 +482,8 @@ class SamplingEventController extends Controller
                 'updatedBy:id,name',
             ])
             ->withCount('results');
+        }
+        return $base;
     }
 
     protected function eventDetailQuery()

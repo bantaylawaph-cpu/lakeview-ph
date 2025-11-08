@@ -61,6 +61,9 @@ class LayerController extends Controller
             'created_by'  => 'nullable|string',
             'q'           => 'nullable|string',
             'include'     => 'nullable|string',
+            // Cursor pagination (optional)
+            'mode'        => 'nullable|string|in:cursor',
+            'cursor'      => 'nullable|string', // format: created_at ISO8601 + ":" + id
             // Pagination + sorting
             'page'        => 'nullable|integer|min:1',
             'per_page'    => 'nullable|integer|min:1|max:100',
@@ -103,9 +106,9 @@ class LayerController extends Controller
         }
         $createdBy = $request->query('created_by');
         if ($createdBy !== null && $createdBy !== '') {
-            // match on uploader's name without joining
+            // Use joined uploader column for exact match
             $query->whereRaw(
-                "LOWER(COALESCE((SELECT u.name FROM users u WHERE u.id = layers.uploaded_by LIMIT 1), '')) = ?",
+                "LOWER(COALESCE(u_uploaded.name, '')) = ?",
                 [strtolower(trim($createdBy))]
             );
         }
@@ -116,7 +119,7 @@ class LayerController extends Controller
             $query->where(function ($qq) use ($needle) {
                 $qq->whereRaw("LOWER(COALESCE(layers.name, '')) LIKE ?", [$needle])
                    ->orWhereRaw("LOWER(COALESCE(layers.notes, '')) LIKE ?", [$needle])
-                   ->orWhereRaw("LOWER(COALESCE((SELECT u.name FROM users u WHERE u.id = layers.uploaded_by LIMIT 1), '')) LIKE ?", [$needle])
+                   ->orWhereRaw("LOWER(COALESCE(u_uploaded.name, '')) LIKE ?", [$needle])
                    ->orWhereRaw("LOWER(COALESCE(layers.body_type, '')) LIKE ?", [$needle])
                    ->orWhereRaw("LOWER(COALESCE(layers.visibility, '')) LIKE ?", [$needle]);
             });
@@ -124,11 +127,27 @@ class LayerController extends Controller
 
         // Join uploader once (faster than per-row subquery) and base select
         $query->leftJoin('users as u_uploaded', 'u_uploaded.id', '=', 'layers.uploaded_by');
-        $query->select('layers.*'); // includes is_downloadable
-        $query->addSelect(DB::raw("COALESCE(u_uploaded.name, '') AS uploaded_by_name"));
 
-        if ($include->contains('geom'))   $query->selectRaw('ST_AsGeoJSON(geom)  AS geom_geojson');
-    if ($include->contains('bounds')) $query->selectRaw('ST_AsGeoJSON(ST_Envelope(geom))  AS bbox_geojson');
+        // Standard (offset) pagination retains legacy column selection for compatibility.
+        // Cursor mode uses a slim projection unless explicitly requested.
+        $isCursor = ($request->query('mode') === 'cursor') || $request->filled('cursor');
+        if (!$isCursor) {
+            $query->select('layers.*');
+            $query->addSelect(DB::raw("COALESCE(u_uploaded.name, '') AS uploaded_by_name"));
+            if ($include->contains('geom'))   $query->selectRaw('ST_AsGeoJSON(geom)  AS geom_geojson');
+            if ($include->contains('bounds')) $query->selectRaw('ST_AsGeoJSON(ST_Envelope(geom))  AS bbox_geojson');
+        } else {
+            // Slim selection for faster page loads
+            $cols = [
+                'layers.id','layers.name','layers.visibility','layers.is_downloadable',
+                'layers.body_type','layers.body_id','layers.created_at','layers.updated_at'
+            ];
+            if ($include->contains('notes')) { $cols[] = 'layers.notes'; }
+            $query->select($cols);
+            $query->addSelect(DB::raw("COALESCE(u_uploaded.name, '') AS uploaded_by_name"));
+            if ($include->contains('geom'))   $query->selectRaw('ST_AsGeoJSON(geom)  AS geom_geojson');
+            if ($include->contains('bounds')) $query->selectRaw('ST_AsGeoJSON(ST_Envelope(geom))  AS bbox_geojson');
+        }
 
         // Sorting (default newest first)
         $allowedSort = [
@@ -153,7 +172,50 @@ class LayerController extends Controller
             $query->orderByDesc('layers.created_at');
         }
 
-        // Pagination
+        // Cursor pagination branch (keyset) for performance on deep pages
+        if ($isCursor) {
+            $perPage = (int)($request->query('per_page') ?: 25);
+            if ($perPage < 1) $perPage = 25;
+            if ($perPage > 100) $perPage = 100;
+            // Enforce ordering for keyset (created_at desc, id desc)
+            // Override any user-provided sort for cursor mode to keep logic simple & efficient.
+            $query->orderByDesc('layers.created_at')->orderByDesc('layers.id');
+            if ($cursor = $request->query('cursor')) {
+                // Expect format ISO8601|id OR created_at|id separated by ':'
+                $parts = explode(':', $cursor, 2);
+                if (count($parts) === 2) {
+                    [$cCreated, $cId] = $parts;
+                    // Basic validation: created_at parseable & id numeric
+                    if (strtotime($cCreated) !== false && ctype_digit($cId)) {
+                        $query->where(function ($w) use ($cCreated, $cId) {
+                            $w->where('layers.created_at', '<', $cCreated)
+                              ->orWhere(function ($w2) use ($cCreated, $cId) {
+                                  $w2->where('layers.created_at', $cCreated)
+                                     ->where('layers.id', '<', (int)$cId);
+                              });
+                        });
+                    }
+                }
+            }
+            $rows = $query->limit($perPage + 1)->get();
+            $hasNext = $rows->count() > $perPage;
+            $nextCursor = null;
+            if ($hasNext) {
+                $last = $rows[$perPage - 1];
+                $nextCursor = $last->created_at.':'.$last->id;
+                $rows = $rows->slice(0, $perPage)->values();
+            }
+            return response()->json([
+                'data' => $rows,
+                'meta' => [
+                    'per_page' => $perPage,
+                    'next_cursor' => $nextCursor,
+                    'mode' => 'cursor'
+                ]
+            ]);
+        }
+
+        // Legacy offset pagination path
         $perPage = (int)($request->query('per_page') ?: 15);
         if ($perPage < 1) $perPage = 15;
         if ($perPage > 100) $perPage = 100;
