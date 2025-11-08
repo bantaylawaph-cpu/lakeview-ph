@@ -49,8 +49,8 @@ export function useManageLakesTabLogic() {
   const ADV_KEY = `${TABLE_ID}::filters_advanced`;
   const SEARCH_KEY = `${TABLE_ID}::search`;
   const SORT_KEY = `${TABLE_ID}::sort`;
-  // Prefer cursor pagination for better performance on large datasets when sorting by created_at DESC
-  const useCursorMode = true;
+  // Cursor pagination removed globally; use legacy offset pagination only
+  const useCursorMode = false; // retained for minimal code changes (fixed false)
 
   const [query, setQuery] = useState(() => {
     try {
@@ -70,8 +70,7 @@ export function useManageLakesTabLogic() {
 
   const [lakes, setLakes] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, perPage: 5, total: 0, lastPage: 1 });
-  // Maintain cursor tokens per "page" for forward/back navigation
-  const lakesCursorMapRef = useRef({ 1: null });
+  // Removed cursor map state
   const [sort, setSort] = useState(() => {
     try {
       const raw = localStorage.getItem(SORT_KEY);
@@ -313,16 +312,9 @@ export function useManageLakesTabLogic() {
     try {
       const params = new URLSearchParams();
       params.append("per_page", pagination.perPage);
-      const eligibleForCursor = useCursorMode && sort.id === 'created_at' && String(sort.dir).toLowerCase() === 'desc';
-      if (eligibleForCursor) {
-        params.append('mode', 'cursor');
-        const cursor = lakesCursorMapRef.current[pagination.page] || '';
-        if (cursor) params.append('cursor', String(cursor));
-      } else {
-        params.append("page", pagination.page);
-        params.append("sort_by", sort.id);
-        params.append("sort_dir", sort.dir);
-      }
+      params.append("page", pagination.page);
+      params.append("sort_by", sort.id);
+      params.append("sort_dir", sort.dir);
       if (query) params.append("q", query);
       if (Object.keys(adv).length > 0) params.append("adv", JSON.stringify(adv));
 
@@ -330,19 +322,8 @@ export function useManageLakesTabLogic() {
       const data = await cachedGet(`/lakes?${params.toString()}`, { ttlMs: 30 * 1000 });
       const list = Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []);
       setLakes(normalizeRows(list));
-      if (eligibleForCursor) {
-        const nextCursor = data?.meta?.next_cursor ?? data?.next_cursor ?? null;
-        if (nextCursor) {
-          lakesCursorMapRef.current[pagination.page + 1] = nextCursor;
-          setPagination((prev) => ({ ...prev, page: pagination.page, perPage: prev.perPage, lastPage: pagination.page + 1, total: prev.total }));
-        } else {
-          // No next cursor; keep lastPage as current page to hide next navigation
-          setPagination((prev) => ({ ...prev, page: pagination.page, perPage: prev.perPage, lastPage: pagination.page, total: prev.total }));
-        }
-      } else {
-        // Legacy offset pagination path
-        setPagination({ page: data.current_page, perPage: data.per_page, total: data.total, lastPage: data.last_page });
-      }
+      // Legacy offset pagination path only
+      setPagination({ page: data.current_page, perPage: data.per_page, total: data.total, lastPage: data.last_page });
     } catch (err) {
       console.error("[ManageLakesTab] Failed to load lakes", err);
       setLakes([]);
@@ -360,15 +341,13 @@ export function useManageLakesTabLogic() {
   }, [fetchWatersheds, fetchClasses, fetchProvinces, fetchRegions]);
 
   useEffect(() => {
-    // Reset to first page on filter changes and clear cursor map
-    lakesCursorMapRef.current = { 1: null };
-    setPagination((prev) => ({ ...prev, page: 1, lastPage: 1 }));
+    // Reset to first page on filter changes
+    setPagination((prev) => ({ ...prev, page: 1 }));
   }, [query, adv]);
 
   useEffect(() => {
-    // Changing sort should also reset cursor map; cursor only valid for created_at DESC
-    lakesCursorMapRef.current = { 1: null };
-    setPagination((prev) => ({ ...prev, page: 1, lastPage: 1 }));
+    // Changing sort resets to first page
+    setPagination((prev) => ({ ...prev, page: 1 }));
   }, [sort.id, sort.dir]);
 
   useEffect(() => {

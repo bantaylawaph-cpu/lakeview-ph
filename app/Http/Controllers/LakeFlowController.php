@@ -53,46 +53,7 @@ class LakeFlowController extends Controller
             $q->where('is_primary', filter_var($primary, FILTER_VALIDATE_BOOLEAN));
         }
 
-        $isCursor = ($request->query('mode') === 'cursor') || $request->filled('cursor');
-
-        if ($isCursor) {
-            // Canonical keyset ordering: updated_at DESC, id DESC
-            $q->orderByDesc('updated_at')->orderByDesc('id');
-
-            // Apply cursor if provided; format: ISO8601|timestamp:id
-            if ($cursor = $request->query('cursor')) {
-                $parts = explode(':', $cursor, 2);
-                if (count($parts) === 2) {
-                    [$cUpdated, $cId] = $parts;
-                    // Accept both ISO8601 strings and SQL timestamps
-                    if (strtotime($cUpdated) !== false && ctype_digit($cId)) {
-                        $q->where(function ($w) use ($cUpdated, $cId) {
-                            $w->where('updated_at', '<', $cUpdated)
-                              ->orWhere(function ($w2) use ($cUpdated, $cId) {
-                                  $w2->where('updated_at', $cUpdated)
-                                     ->where('id', '<', (int) $cId);
-                              });
-                        });
-                    }
-                }
-            }
-
-            $perPage = (int) $request->query('per_page', 10);
-            if ($perPage <= 0) $perPage = 10;
-            if ($perPage > 100) $perPage = 100;
-
-            $rows = $q->limit($perPage + 1)->get();
-            $hasNext = $rows->count() > $perPage;
-            $nextCursor = null;
-            if ($hasNext) {
-                $last = $rows[$perPage - 1];
-                $nextCursor = ($last->updated_at ? $last->updated_at->format('Y-m-d H:i:s') : now()->format('Y-m-d H:i:s')).':'.$last->id;
-                $rows = $rows->slice(0, $perPage)->values();
-            }
-
-            $data = $rows->map(fn($r) => $this->serialize($r));
-            return response()->json(['data' => $data, 'meta' => ['per_page' => $perPage, 'next_cursor' => $nextCursor, 'mode' => 'cursor']]);
-        }
+        // Cursor pagination removed; use legacy offset pagination
 
         // Sort (legacy offset pagination)
         $sortBy = $request->query('sort_by', 'lake_id');
@@ -108,7 +69,7 @@ class LakeFlowController extends Controller
             $q->orderBy('lake_id')->orderByDesc('is_primary')->orderBy('flow_type')->orderBy('id');
         }
 
-        // Pagination (legacy)
+    // Pagination (legacy)
         $perPage = $request->query('per_page', 10);
         $flows = $q->paginate($perPage);
 

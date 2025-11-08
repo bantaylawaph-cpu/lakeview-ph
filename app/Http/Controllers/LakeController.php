@@ -117,28 +117,8 @@ class LakeController extends Controller
             }
         }
 
-    $isCursor = ($request->query('mode') === 'cursor') || $request->filled('cursor');
-
-        if ($isCursor) {
-            // Force canonical ordering for keyset pagination: created_at DESC, id DESC
-            $query->orderByDesc('lakes.created_at')->orderByDesc('lakes.id');
-            // Apply cursor boundary if provided: cursor format created_at:id
-            if ($cursor = $request->query('cursor')) {
-                $parts = explode(':', $cursor, 2);
-                if (count($parts) === 2) {
-                    [$cCreated, $cId] = $parts;
-                    if (strtotime($cCreated) !== false && ctype_digit($cId)) {
-                        $query->where(function ($w) use ($cCreated, $cId) {
-                            $w->where('lakes.created_at', '<', $cCreated)
-                              ->orWhere(function ($w2) use ($cCreated, $cId) {
-                                  $w2->where('lakes.created_at', $cCreated)
-                                     ->where('lakes.id', '<', (int)$cId);
-                              });
-                        });
-                    }
-                }
-            }
-        } else {
+        // Cursor pagination removed globally; always use legacy offset sorting logic
+        {
             // Sorting (legacy offset pagination path)
             $sortBy = $request->query('sort_by', 'name');
             $sortDir = $request->query('sort_dir', 'asc');
@@ -158,35 +138,7 @@ class LakeController extends Controller
             }
         }
 
-        // Cursor pagination branch
-        if ($isCursor) {
-            $perPage = (int) $request->query('per_page', 10);
-            if ($perPage <= 0) $perPage = 10; if ($perPage > 100) $perPage = 100;
-            $rows = $query->limit($perPage + 1)->get();
-            $hasNext = $rows->count() > $perPage;
-            $nextCursor = null;
-            if ($hasNext) {
-                $last = $rows[$perPage - 1];
-                $nextCursor = $last->created_at.':'.$last->id;
-                $rows = $rows->slice(0, $perPage)->values();
-            }
-            // Normalize multi-location fields
-            $normalized = $rows->map(function ($lake) {
-                $arr = $lake->toArray();
-                if (is_array($arr['region'])) { $arr['region_list'] = $arr['region']; $arr['region'] = count($arr['region']) ? implode(', ', $arr['region']) : null; }
-                if (is_array($arr['province'])) { $arr['province_list'] = $arr['province']; $arr['province'] = count($arr['province']) ? implode(', ', $arr['province']) : null; }
-                if (is_array($arr['municipality'])) { $arr['municipality_list'] = $arr['municipality']; $arr['municipality'] = count($arr['municipality']) ? implode(', ', $arr['municipality']) : null; }
-                return $arr;
-            })->values();
-            $payload = [
-                'data' => $normalized,
-                'meta' => [ 'per_page' => $perPage, 'next_cursor' => $nextCursor, 'mode' => 'cursor' ]
-            ];
-            try { if (isset($cacheKey)) Cache::put($cacheKey, $payload, now()->addSeconds(15)); } catch (\Throwable $e) {}
-            return response()->json($payload);
-        }
-
-        // Offset pagination path
+        // Offset pagination path only
         $perPage = $request->query('per_page', 10);
         $paginated = $query->paginate($perPage);
 

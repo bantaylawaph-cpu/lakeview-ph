@@ -41,9 +41,8 @@ class SamplingEventController extends Controller
         $requestedTenant = $requestedTenant !== null ? (int) $requestedTenant : null;
 
         $context = $this->resolveTenantMembership($request, ['org_admin', 'contributor'], $requestedTenant, false);
-
-    $isCursor = ($request->query('mode') === 'cursor') || $request->filled('cursor');
-    $query = $this->eventListQuery($isCursor);
+        // Cursor mode removed globally; always use standard list query (full projection)
+        $query = $this->eventListQuery(false);
 
         $publicOnly = false;
 
@@ -188,41 +187,7 @@ class SamplingEventController extends Controller
         ];
         $expr = $sortMap[$sortBy] ?? 'sampling_events.sampled_at';
 
-        if ($isCursor) {
-            // Force canonical ordering for keyset pagination
-            $query->orderByDesc('sampling_events.sampled_at')->orderByDesc('sampling_events.id');
-            if ($cursor = $request->query('cursor')) {
-                $parts = explode(':', $cursor, 2);
-                if (count($parts) === 2) {
-                    [$cSampled, $cId] = $parts;
-                    if (strtotime($cSampled) !== false && ctype_digit($cId)) {
-                        $query->where(function ($w) use ($cSampled, $cId) {
-                            $w->where('sampling_events.sampled_at', '<', $cSampled)
-                              ->orWhere(function ($w2) use ($cSampled, $cId) {
-                                  $w2->where('sampling_events.sampled_at', $cSampled)
-                                     ->where('sampling_events.id', '<', (int) $cId);
-                              });
-                        });
-                    }
-                }
-            }
-            $rows = $query->limit($perPage + 1)->get();
-            $hasNext = $rows->count() > $perPage;
-            $nextCursor = null;
-            if ($hasNext) {
-                $last = $rows[$perPage - 1];
-                $nextCursor = $last->sampled_at.':'.$last->id;
-                $rows = $rows->slice(0, $perPage)->values();
-            }
-            return response()->json([
-                'data' => $rows,
-                'meta' => [
-                    'per_page' => $perPage,
-                    'next_cursor' => $nextCursor,
-                    'mode' => 'cursor'
-                ]
-            ]);
-        }
+        // Cursor pagination removed; proceed with legacy offset pagination
 
         $events = $query
             ->when($expr instanceof \Illuminate\Database\Query\Expression, function ($q) use ($expr, $sortDir) {
