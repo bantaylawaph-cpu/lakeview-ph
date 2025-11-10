@@ -4,8 +4,10 @@ set -e
 # Move to app root (Dockerfile already sets WORKDIR, but be safe)
 cd /var/www/html
 
-echo "[start] Clearing config cache (safe if not cached)"
+echo "[start] Clearing caches (config, app)"
+# Full clear sequence to avoid stale env/driver after redeploy
 php artisan config:clear || true
+php artisan cache:clear || true
 
 echo "[start] Running database migrations (idempotent)"
 php artisan migrate --force || true
@@ -15,6 +17,7 @@ php artisan storage:link || true
 
 # Cache framework artifacts for performance (after successful migrations)
 echo "[start] Caching config, routes, and views"
+# Rebuild config cache after clears/migrations so new env vars take effect
 php artisan config:cache || true
 php artisan route:cache || true
 php artisan view:cache || true
