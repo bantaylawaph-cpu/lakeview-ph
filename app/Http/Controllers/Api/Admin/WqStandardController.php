@@ -117,6 +117,9 @@ class WqStandardController extends Controller
 
     protected function ensureCurrentConsistency(int $currentId): void
     {
-        WqStandard::where('id', '!=', $currentId)->update(['is_current' => false]);
+        // Use a PostgreSQL boolean literal to avoid integer 0/1 binding
+        // (bulk updates bypass model mutators/casts).
+        WqStandard::where('id', '!=', $currentId)
+            ->update(['is_current' => DB::raw('false')]);
     }
 }
