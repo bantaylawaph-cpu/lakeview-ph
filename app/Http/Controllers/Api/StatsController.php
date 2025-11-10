@@ -11,10 +11,10 @@ class StatsController extends Controller
 {
     /**
      * POST /api/stats/thresholds
-     * Returns threshold metadata for a parameter given an explicit class and optional standard.
+     * Returns threshold metadata for a parameter given an optional class and optional standard.
      * Request:
      *   parameter_code (required) string
-     *   class_code (required) string
+     *   class_code (optional) string
      *   applied_standard_id (optional) int
      * Response: { evaluation_type: 'min'|'max'|'range'|null, threshold_min?: number, threshold_max?: number, standard_code?: string, applied_standard_id_used?: number }
      */
@@ -22,7 +22,7 @@ class StatsController extends Controller
     {
         $data = $request->validate([
             'parameter_code' => 'required|string',
-            'class_code' => 'required|string',
+            'class_code' => 'nullable|string',
             'applied_standard_id' => 'nullable|integer|exists:wq_standards,id',
         ]);
 
@@ -31,7 +31,9 @@ class StatsController extends Controller
             ->first();
         if (!$param) return response()->json(['error' => 'Parameter not found'], 404);
 
-        $class = $data['class_code'];
+    // Treat missing or empty class_code as null so we can fall back to non-class rows
+    $class = isset($data['class_code']) ? trim((string)$data['class_code']) : null;
+    if ($class === '') $class = null;
         $requestedStdId = $data['applied_standard_id'] ?? null;
         // Since client explicitly provides class_code, do not fallback to no-class rows unless necessary
         $thrRow = self::findThresholdRow($param->id, $class, $requestedStdId, /* allowClassFallback */ true);
@@ -374,7 +376,8 @@ class StatsController extends Controller
     private static function findThresholdRow(int $parameterId, ?string $class, ?int $requestedStdId, bool $allowClassFallback = true)
     {
         $base = function($withClass) use ($parameterId, $class){
-            $q = \DB::table('parameter_thresholds as pt')
+            // Use facade import (DB) for clarity instead of global \DB
+            $q = DB::table('parameter_thresholds as pt')
                 ->leftJoin('wq_standards as ws','pt.standard_id','=','ws.id')
                 ->where('pt.parameter_id',$parameterId);
             if ($withClass && $class) $q->whereRaw('LOWER(pt.class_code)=?', [strtolower($class)]);

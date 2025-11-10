@@ -106,7 +106,7 @@ export default function ValuesTable({ result, lakes, lakeId, compareValue, showA
               <tbody>
                 {slice(events).map((ev,i)=>(
                   <tr key={i} style={{ borderBottom:'1px solid rgba(255,255,255,0.02)' }}>
-                    <td style={{ padding:'6px 8px', fontSize:12 }}>{ev.sampled_at || ''}</td>
+                    <td style={{ padding:'6px 8px', fontSize:12 }}>{(ev.sampled_at || '').split(' ')[0] || ''}</td>
                     <td style={{ padding:'6px 8px', fontSize:12 }}>{lakeName(ev.lake_id)}</td>
                     <td style={{ padding:'6px 8px', fontSize:12 }}>{ev.station_name ?? (ev.station_id ?? '')}</td>
                     <td style={{ padding:'6px 8px', fontSize:12 }}>{ev.value != null ? fmt(ev.value) : ''}</td>
