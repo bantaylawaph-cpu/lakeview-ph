@@ -50,6 +50,10 @@ class WqStandardController extends Controller
         $this->ensureSuperAdmin();
 
         $data = $this->validatePayload($request);
+        // Hard cast booleans to avoid Postgres integer literal mismatch ("0" vs false)
+        if (array_key_exists('is_current', $data)) {
+            $data['is_current'] = (bool) $data['is_current'];
+        }
 
         $standard = DB::transaction(function () use ($data) {
             $standard = WqStandard::create($data);
@@ -74,6 +78,9 @@ class WqStandardController extends Controller
         $this->ensureSuperAdmin();
 
         $data = $this->validatePayload($request, $wqStandard->id);
+        if (array_key_exists('is_current', $data)) {
+            $data['is_current'] = (bool) $data['is_current'];
+        }
 
         DB::transaction(function () use ($wqStandard, $data) {
             $wqStandard->update($data);
@@ -95,12 +102,17 @@ class WqStandardController extends Controller
 
     protected function validatePayload(Request $request, ?int $id = null): array
     {
-        return $request->validate([
+        $out = $request->validate([
             'code' => ['required', 'string', 'max:255', Rule::unique('wq_standards', 'code')->ignore($id)],
             'name' => ['nullable', 'string', 'max:255'],
             'is_current' => ['sometimes', 'boolean'],
             // priority and notes removed
         ]);
+        // Normalize string/integer forms ("0","1",0,1) into real booleans for safety.
+        if (array_key_exists('is_current', $out)) {
+            $out['is_current'] = filter_var($out['is_current'], FILTER_VALIDATE_BOOLEAN);
+        }
+        return $out;
     }
 
     protected function ensureCurrentConsistency(int $currentId): void

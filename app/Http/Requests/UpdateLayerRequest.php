@@ -15,16 +15,23 @@ class UpdateLayerRequest extends FormRequest
     {
         return [
             'name'        => 'sometimes|string|max:255',
-            'type'        => 'sometimes|string|max:64',
-            'category'    => 'sometimes|nullable|string|max:64',
             'srid'        => 'sometimes|nullable|integer|min:0',
-            'visibility'  => 'sometimes|string|in:admin,public,organization_admin',
+            'visibility'  => 'sometimes|string|in:public,admin,organization,organization_admin',
             'is_downloadable' => 'sometimes|boolean',
             'notes'       => 'sometimes|nullable|string',
-            'source_type' => 'sometimes|string|in:geojson,json,shp,kml,gpkg,wkt',
+            'source_type' => 'sometimes|string|in:geojson,kml,shp,gpkg',
 
             // Optional geometry replacement
             'geom_geojson' => 'sometimes|string',
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('is_downloadable')) {
+            $this->merge([
+                'is_downloadable' => filter_var($this->input('is_downloadable'), FILTER_VALIDATE_BOOLEAN),
+            ]);
+        }
     }
 }

@@ -14,19 +14,25 @@ class StoreLayerRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'body_type'   => 'required|string|in:lake,watershed',
-            'body_id'     => 'required|integer|min:1',
-            'name'        => 'required|string|max:255',
-            'type'        => 'nullable|string|max:64',
-            'category'    => 'nullable|string|max:64',
-            'srid'        => 'nullable|integer|min:0',
-            'visibility'  => 'nullable|string|in:admin,public,organization_admin',
-            'is_downloadable' => 'nullable|boolean',
-            'notes'       => 'nullable|string',
-            'source_type' => 'nullable|string|in:geojson,json,shp,kml,gpkg,wkt',
-
-            // The geometry payload (Polygon or MultiPolygon), or a Feature with geometry
-            'geom_geojson' => 'required|string',
+            'body_type'      => 'required|string|in:lake,watershed',
+            'body_id'        => 'required|integer|min:1',
+            'name'           => 'required|string|max:255',
+            'srid'           => 'nullable|integer|min:1',
+            'visibility'     => 'nullable|string|in:public,admin,organization,organization_admin',
+            'is_downloadable'=> 'nullable|boolean',
+            'notes'          => 'nullable|string',
+            'source_type'    => 'nullable|string|in:geojson,kml,shp,gpkg',
+            // The geometry payload (Polygon or MultiPolygon) or Feature with geometry
+            'geom_geojson'   => 'nullable|string',
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('is_downloadable')) {
+            $this->merge([
+                'is_downloadable' => filter_var($this->input('is_downloadable'), FILTER_VALIDATE_BOOLEAN),
+            ]);
+        }
     }
 }
