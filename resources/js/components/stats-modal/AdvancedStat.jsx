@@ -86,9 +86,9 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
 
   const allowedTests = React.useMemo(() => {
     if (inferredTest === 'one-sample') {
-      return paramHasRange ? ['diagnostic_one','shapiro_wilk','tost','tost_wilcoxon'] : ['diagnostic_one','shapiro_wilk','t_one_sample','wilcoxon_signed_rank','sign_test'];
+      return paramHasRange ? ['diagnostic_one','tost','tost_wilcoxon'] : ['diagnostic_one','t_one_sample','wilcoxon_signed_rank','sign_test'];
     }
-    return ['diagnostic_two','shapiro_wilk','t_student','t_welch','levene','mann_whitney','mood_median_test'];
+    return ['diagnostic_two','t_student','t_welch','mann_whitney','mood_median_test'];
   }, [inferredTest, paramHasRange]);
 
   useEffect(() => {
