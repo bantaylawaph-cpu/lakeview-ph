@@ -117,19 +117,60 @@ export function buildInterpretation({
   // removed: compliance classifier and small sample caveat (not used in simplified text)
 
   // ------------------------------------------------------------------
-  // 1. Normality (Shapiro–Wilk)
+  // 1. Normality (Shapiro–Wilk) or Diagnostic
   // ------------------------------------------------------------------
-  if (result.test_used === 'shapiro_wilk' || result.type === 'one-sample-normality') {
+  if (result.test_used === 'shapiro_wilk' || result.type === 'one-sample-normality' || result.test_used === 'diagnostic_one') {
+    // One-sample normality
     if (!Number.isFinite(p)) return '';
-    return (p < alpha)
-      ? join([
-          `There is enough statistical evidence to suggest that the ${paramLabel} of ${lake1Label} deviates from normality`,
-          'Use non-parametric tests: Wilcoxon signed-rank (one-sample), Mann–Whitney U or Mood’s median (two-sample); consider robust methods where appropriate'
-        ])
-      : join([
-          `There is not enough statistical evidence to suggest that the ${paramLabel} of ${lake1Label} deviates from normality`,
-          'Parametric tests are reasonable: one-sample t-test; Student’s t-test or Welch (two-sample); for equivalence, TOST t-test'
-        ]);
+    const isRange = paramEval === 'range';
+    if (p < alpha) {
+      // Non-normal
+      const advice = isRange
+        ? 'Run Equivalence TOST Wilcoxon test.'
+        : 'Run Wilcoxon signed-rank test or Sign test.';
+      return join([
+        `There is enough statistical evidence to suggest that the ${paramLabel} of ${lake1Label} deviates from normality`,
+        advice
+      ]);
+    } else {
+      // Normal
+      const advice = isRange
+        ? 'Run Equivalence TOST t-test.'
+        : 'Run One-sample t-test.';
+      return join([
+        `There is not enough statistical evidence to suggest that the ${paramLabel} of ${lake1Label} deviates from normality`,
+        advice
+      ]);
+    }
+  } else if (result.test_used === 'diagnostic_two' || result.type === 'two-sample-diagnostic') {
+    // Two-sample diagnostic: Shapiro + Levene
+    const p1 = toNum(result.p1);
+    const p2 = toNum(result.p2);
+    const pLevene = toNum(result.p_levene);
+    const normal1 = result.normal1 != null ? !!result.normal1 : (p1 != null ? p1 >= alpha : null);
+    const normal2 = result.normal2 != null ? !!result.normal2 : (p2 != null ? p2 >= alpha : null);
+    const equalVar = result.equal_variances != null ? !!result.equal_variances : (pLevene != null ? pLevene >= alpha : null);
+    const bothNormal = normal1 === true && normal2 === true;
+    const lake1Normal = normal1 === true ? `There is not enough statistical evidence to suggest that the ${paramLabel} of ${lake1Label} deviates from normality` : `There is enough statistical evidence to suggest that the ${paramLabel} of ${lake1Label} deviates from normality`;
+    const lake2Normal = normal2 === true ? `There is not enough statistical evidence to suggest that the ${paramLabel} of ${lake2Name} deviates from normality` : `There is enough statistical evidence to suggest that the ${paramLabel} of ${lake2Name} deviates from normality`;
+    const varEqual = equalVar === true ? 'There is not enough statistical evidence to suggest that variances differ' : 'There is enough statistical evidence to suggest that variances differ';
+    let advice = '';
+    if (bothNormal) {
+      advice = equalVar === true ? 'Run Student t-test.' : 'Run Welch t-test.';
+    } else {
+      advice = 'Run Mann–Whitney U test or Mood median test.';
+    }
+    return join([lake1Normal, lake2Normal, varEqual, advice]);
+  } else if (result.test_used === 'shapiro_wilk' && twoSample) {
+    // Two-sample Shapiro (individual)
+    const p1 = toNum(result.p1);
+    const p2 = toNum(result.p2);
+    const normal1 = result.normal1 != null ? !!result.normal1 : (p1 != null ? p1 >= alpha : null);
+    const normal2 = result.normal2 != null ? !!result.normal2 : (p2 != null ? p2 >= alpha : null);
+    const lake1Normal = normal1 === true ? `There is not enough statistical evidence to suggest that the ${paramLabel} of ${lake1Label} deviates from normality` : `There is enough statistical evidence to suggest that the ${paramLabel} of ${lake1Label} deviates from normality`;
+    const lake2Normal = normal2 === true ? `There is not enough statistical evidence to suggest that the ${paramLabel} of ${lake2Name} deviates from normality` : `There is enough statistical evidence to suggest that the ${paramLabel} of ${lake2Name} deviates from normality`;
+    const advice = (normal1 && normal2) ? 'Parametric tests (Student’s t-test or Welch’s t-test) are reasonable for comparing means.' : 'Use non-parametric tests: Mann–Whitney U or Mood’s median test for comparing distributions.';
+    return join([lake1Normal, lake2Normal, advice]);
   }
 
   // ------------------------------------------------------------------

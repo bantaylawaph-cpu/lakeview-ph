@@ -2,6 +2,8 @@
 
 const LABELS = {
   shapiro_wilk: 'Shapiro–Wilk normality test',
+  diagnostic_one: 'Shapiro–Wilk normality test',
+  diagnostic_two: 'Shapiro–Wilk + Levene Variance test',
   t_one_sample: 'One-sample t-test',
   wilcoxon_signed_rank: 'Wilcoxon signed-rank',
   sign_test: 'Sign test',

@@ -8,9 +8,9 @@ function normalize(base, extra={}) {
 
 export async function runOneSample({ selectedTest, values, mu0, alpha, evalType, thrMin, thrMax, alt }) {
   const alternative = alt || 'two-sided';
-  if (selectedTest === 'shapiro_wilk') {
+  if (selectedTest === 'shapiro_wilk' || selectedTest === 'diagnostic_one') {
     const r = await shapiroWilkAsync(values, alpha);
-    return normalize(r, { type:'one-sample-normality', test_used:'shapiro_wilk', sample_values: values, evaluation_type: evalType || null });
+    return normalize(r, { type:'one-sample-normality', test_used:selectedTest, sample_values: values, evaluation_type: evalType || null });
   }
   if (selectedTest === 'wilcoxon_signed_rank') {
     const r = await wilcoxonSignedRankAsync(values, Number(mu0), alpha, alternative);
@@ -40,6 +40,45 @@ export async function runOneSample({ selectedTest, values, mu0, alpha, evalType,
 }
 
 export async function runTwoSample({ selectedTest, sample1, sample2, alpha, evalType }) {
+  if (selectedTest === 'diagnostic_two') {
+    const r1 = await shapiroWilkAsync(sample1, alpha);
+    const r2 = await shapiroWilkAsync(sample2, alpha);
+    const rLevene = await leveneTwoSampleAsync(sample1, sample2, alpha, 'median');
+    return normalize({
+      type: 'two-sample-diagnostic',
+      test_used: 'diagnostic_two',
+      sample1_values: sample1,
+      sample2_values: sample2,
+      evaluation_type: evalType || null,
+      W1: r1.W,
+      p1: r1.p_value,
+      normal1: r1.normal,
+      W2: r2.W,
+      p2: r2.p_value,
+      normal2: r2.normal,
+      equal_variances: rLevene.equal_variances,
+      p_levene: rLevene.p_value,
+      alpha: r1.alpha ?? alpha
+    });
+  }
+  if (selectedTest === 'shapiro_wilk') {
+    const r1 = await shapiroWilkAsync(sample1, alpha);
+    const r2 = await shapiroWilkAsync(sample2, alpha);
+    return normalize({
+      type: 'two-sample-normality',
+      test_used: 'shapiro_wilk',
+      sample1_values: sample1,
+      sample2_values: sample2,
+      evaluation_type: evalType || null,
+      W1: r1.W,
+      p1: r1.p_value,
+      normal1: r1.normal,
+      W2: r2.W,
+      p2: r2.p_value,
+      normal2: r2.normal,
+      alpha: r1.alpha ?? alpha
+    });
+  }
   if (selectedTest === 'levene') {
     const r = await leveneTwoSampleAsync(sample1, sample2, alpha, 'median');
     return normalize(r, { type:'two-sample-variance', test_used:'levene', sample1_values: sample1, sample2_values: sample2, evaluation_type: evalType || null });

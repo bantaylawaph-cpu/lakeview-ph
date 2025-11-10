@@ -39,6 +39,8 @@ export default function ResultPanel({ result, paramCode, paramOptions, classCode
 
   const testKind = (()=>{
     const t = (result.test_used || result.type || '').toLowerCase();
+    if (t.includes('diagnostic_one')) return 'diagnostic_one';
+    if (t.includes('diagnostic_two')) return 'diagnostic_two';
     if (t.includes('shapiro')) return 'shapiro';
     if (t.includes('levene')) return 'levene';
     if (t === 'tost' || t.includes('tost_t') || (('p1' in result) && ('p2' in result))) return 'tost_t';
@@ -101,12 +103,55 @@ export default function ResultPanel({ result, paramCode, paramOptions, classCode
     if (value != null) pushTip('Parameter Guideline', value, 'Guideline used for evaluation based on the selected standard.');
   };
 
-  if (testKind === 'shapiro') {
+  const twoSample = (('n1' in result) && ('n2' in result)) || (Array.isArray(result.sample1_values) && Array.isArray(result.sample2_values));
+
+  if (testKind === 'diagnostic_one') {
+    // One-sample diagnostic: Shapiro-Wilk
     const n = ('n' in result) ? result.n : (oneStats ? oneStats.n : null);
     if (n != null) pushTip('N', fmt(n), 'Number of values used in the test.');
     if ('W' in result) pushTip('W statistic', fmt(result.W), 'Test statistic for Shapiro–Wilk; closer to 1 suggests more normal.');
     if ('p_value' in result) pushTip('p-value', renderP(result.p_value), 'Probability of seeing data this non-normal if data were normal.');
     if ('normal' in result) pushTip('Normal?', fmtYesNo(result.normal), '“Yes” if no non-normality detected at α.');
+    addCommonAlpha();
+  } else if (testKind === 'diagnostic_two') {
+    // Two-sample diagnostic: Shapiro-Wilk + Levene
+    const n1 = stats1 ? stats1.n : (Array.isArray(result.sample1_values) ? result.sample1_values.length : null);
+    const n2 = stats2 ? stats2.n : (Array.isArray(result.sample2_values) ? result.sample2_values.length : null);
+    if (n1 != null) pushTip(`N (${primaryLakeName})`, fmt(n1), `Number of values in ${primaryLakeName}.`);
+    if (n2 != null) pushTip(`N (${secondaryLakeName})`, fmt(n2), `Number of values in ${secondaryLakeName}.`);
+    // Normality
+    if ('W1' in result) pushTip(`W (${primaryLakeName})`, fmt(result.W1), `Shapiro–Wilk statistic for ${primaryLakeName}; closer to 1 suggests more normal.`);
+    if ('p1' in result) pushTip(`p-value (${primaryLakeName})`, renderP(result.p1), `Normality p-value for ${primaryLakeName}.`);
+    if ('normal1' in result) pushTip(`Normal? (${primaryLakeName})`, fmtYesNo(result.normal1), `“Yes” if no non-normality detected at α for ${primaryLakeName}.`);
+    if ('W2' in result) pushTip(`W (${secondaryLakeName})`, fmt(result.W2), `Shapiro–Wilk statistic for ${secondaryLakeName}; closer to 1 suggests more normal.`);
+    if ('p2' in result) pushTip(`p-value (${secondaryLakeName})`, renderP(result.p2), `Normality p-value for ${secondaryLakeName}.`);
+    if ('normal2' in result) pushTip(`Normal? (${secondaryLakeName})`, fmtYesNo(result.normal2), `“Yes” if no non-normality detected at α for ${secondaryLakeName}.`);
+    // Variance
+    if ('equal_variances' in result) pushTip('Variances equal?', fmtYesNo(result.equal_variances), '“Yes” if no variance difference detected at α.');
+    if ('p_levene' in result) pushTip('Levene p-value', renderP(result.p_levene), 'Probability of seeing this variance difference if variances were equal.');
+    addCommonAlpha();
+  } else if (testKind === 'shapiro') {
+    if (twoSample) {
+      // Two-sample Shapiro: normality check for each group
+      const n1 = stats1 ? stats1.n : (Array.isArray(result.sample1_values) ? result.sample1_values.length : null);
+      const n2 = stats2 ? stats2.n : (Array.isArray(result.sample2_values) ? result.sample2_values.length : null);
+      if (n1 != null) pushTip(`N (${primaryLakeName})`, fmt(n1), `Number of values in ${primaryLakeName}.`);
+      if (n2 != null) pushTip(`N (${secondaryLakeName})`, fmt(n2), `Number of values in ${secondaryLakeName}.`);
+      // Assume backend provides W1, p1 for group 1, W2, p2 for group 2, or similar
+      if ('W1' in result) pushTip(`W (${primaryLakeName})`, fmt(result.W1), `Shapiro–Wilk statistic for ${primaryLakeName}; closer to 1 suggests more normal.`);
+      if ('p1' in result) pushTip(`p-value (${primaryLakeName})`, renderP(result.p1), `Normality p-value for ${primaryLakeName}.`);
+      if ('normal1' in result) pushTip(`Normal? (${primaryLakeName})`, fmtYesNo(result.normal1), `“Yes” if no non-normality detected at α for ${primaryLakeName}.`);
+      if ('W2' in result) pushTip(`W (${secondaryLakeName})`, fmt(result.W2), `Shapiro–Wilk statistic for ${secondaryLakeName}; closer to 1 suggests more normal.`);
+      if ('p2' in result) pushTip(`p-value (${secondaryLakeName})`, renderP(result.p2), `Normality p-value for ${secondaryLakeName}.`);
+      if ('normal2' in result) pushTip(`Normal? (${secondaryLakeName})`, fmtYesNo(result.normal2), `“Yes” if no non-normality detected at α for ${secondaryLakeName}.`);
+    } else {
+      // One-sample Shapiro
+      const n = ('n' in result) ? result.n : (oneStats ? oneStats.n : null);
+      if (n != null) pushTip('N', fmt(n), 'Number of values used in the test.');
+      if ('W' in result) pushTip('W statistic', fmt(result.W), 'Test statistic for Shapiro–Wilk; closer to 1 suggests more normal.');
+      if ('p_value' in result) pushTip('p-value', renderP(result.p_value), 'Probability of seeing data this non-normal if data were normal.');
+      if ('normal' in result) pushTip('Normal?', fmtYesNo(result.normal), '“Yes” if no non-normality detected at α.');
+    }
     addCommonAlpha();
   } else if (testKind === 'levene') {
     // N per lake

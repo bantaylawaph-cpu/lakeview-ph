@@ -86,9 +86,9 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
 
   const allowedTests = React.useMemo(() => {
     if (inferredTest === 'one-sample') {
-      return paramHasRange ? ['shapiro_wilk','tost','tost_wilcoxon'] : ['shapiro_wilk','t_one_sample','wilcoxon_signed_rank','sign_test'];
+      return paramHasRange ? ['diagnostic_one','shapiro_wilk','tost','tost_wilcoxon'] : ['diagnostic_one','shapiro_wilk','t_one_sample','wilcoxon_signed_rank','sign_test'];
     }
-    return ['t_student','t_welch','levene','mann_whitney','mood_median_test'];
+    return ['diagnostic_two','shapiro_wilk','t_student','t_welch','levene','mann_whitney','mood_median_test'];
   }, [inferredTest, paramHasRange]);
 
   useEffect(() => {
@@ -231,7 +231,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
       else if (mu0 != null) hasThreshold = true;
       
       if (!hasThreshold) {
-        const isThresholdComparison = inferredTest === 'one-sample' && compareValue && String(compareValue).startsWith('class:') && selectedTest !== 'shapiro_wilk';
+        const isThresholdComparison = inferredTest === 'one-sample' && compareValue && String(compareValue).startsWith('class:') && selectedTest !== 'shapiro_wilk' && selectedTest !== 'diagnostic_one';
         if (isThresholdComparison) {
           alertError('No Threshold Available', 'No threshold exists for this parameter under the selected standard. Please select a different parameter or standard.');
           setLoading(false);
