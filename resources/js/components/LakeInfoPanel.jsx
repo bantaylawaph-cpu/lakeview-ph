@@ -25,10 +25,12 @@ function LakeInfoPanel({
   onToggleWatershed,
   showWatershed = false,
   canToggleWatershed = false,
+  isLoadingWatershed = false,
   // Nominatim/OSM outline feature removed
   authUser = null,
   onToggleFlows,
   showFlows = false,
+  isLoadingFlows = false,
   flows = [],            // pass through from MapPage
   onJumpToFlow,          // callback to focus map on a flow
   hasHeatLayer = false,
@@ -182,11 +184,13 @@ function LakeInfoPanel({
             showWatershed={showWatershed}
             canToggleWatershed={canToggleWatershed}
             onToggleWatershed={onToggleWatershed}
+            isLoadingWatershed={isLoadingWatershed}
             onOpenFeedback={() => setFeedbackOpen(true)}
             flows={flows}
             showFlows={showFlows}
             onToggleFlows={onToggleFlows}
             onJumpToFlow={onJumpToFlow}
+            isLoadingFlows={isLoadingFlows}
           />
         )}
         {activeTab === "water" && hasSampling !== false && (

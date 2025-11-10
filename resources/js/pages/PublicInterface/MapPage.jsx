@@ -170,6 +170,9 @@ function MapPage() {
 
   const { publicFC, activeFilters, applyFilters, baseKey: lakesBaseKey } = usePublicLakes();
 
+  const [isLoadingWatershed, setIsLoadingWatershed] = useState(false);
+  const [isLoadingFlows, setIsLoadingFlows] = useState(false);
+
   const {
     selectedLake, selectedLakeId, watershedToggleOn,
     lakeOverlayFeature, watershedOverlayFeature, lakeLayers, lakeActiveLayerId,
@@ -177,7 +180,7 @@ function MapPage() {
     selectLakeFeature, applyOverlayByLayerId, handlePanelToggleWatershed, resetToActive,
     applyWatershedGeometry,
     baseIsPoint,
-  } = useLakeSelection({ publicFC, mapRef, setPanelOpen: setLakePanelOpen });
+  } = useLakeSelection({ publicFC, mapRef, setPanelOpen: setLakePanelOpen, setIsLoadingWatershed });
 
   const searchApi = usePublicSearch({ mapRef, publicFC, selectLakeFeature, setLakePanelOpen });
 
@@ -384,6 +387,8 @@ function MapPage() {
   flows={flows}
   onJumpToFlow={jumpToFlow}
   hasHeatLayer={hasHeatLayer}
+  isLoadingWatershed={isLoadingWatershed}
+  isLoadingFlows={isLoadingFlows}
   />
 
       <SearchBar

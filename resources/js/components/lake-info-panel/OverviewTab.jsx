@@ -1,8 +1,6 @@
 import React, { useMemo, useEffect, useState } from "react";
 import { FiMap, FiInfo } from 'react-icons/fi';
 import LoadingSpinner from "../LoadingSpinner";
-import { api } from "../../lib/api";
-import cache from "../../lib/storageCache";
 import { normalizeNumStr, shiftDecimalStr } from "../../utils/conversions";
 
 const fmtNum = (v, suffix = "", digits = 2) => {
@@ -92,40 +90,6 @@ function OverviewTab({
   const elevationStr = useMemo(() => fmtNum(lake?.elevation_m, " m", 1), [lake]);
   const meanDepthStr = useMemo(() => fmtNum(lake?.mean_depth_m, " m", 1), [lake]);
 
-  const [denrClassLabel, setDenrClassLabel] = useState(null);
-
-  useEffect(() => {
-    let mounted = true;
-    if (!lake || !lake.class_code) { setDenrClassLabel(null); return () => { mounted = false; } };
-
-    (async () => {
-      try {
-        // If the lake already includes the relation, use the class name
-        if (lake?.water_quality_class?.name) {
-          if (mounted) setDenrClassLabel(lake.water_quality_class.name);
-          return;
-        }
-
-        const key = 'options:wq-classes';
-        const TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
-        let list = cache.get(key, { maxAgeMs: TTL });
-        if (!list) {
-          const res = await api('/options/water-quality-classes');
-          list = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
-          if (Array.isArray(list)) cache.set(key, list, { ttlMs: TTL });
-        }
-        const found = (list || []).find((c) => String(c.code) === String(lake.class_code) || String(c.id) === String(lake.class_code));
-        if (!mounted) return;
-  if (found) setDenrClassLabel(found.name);
-  else setDenrClassLabel(lake.class_code || null);
-      } catch (e) {
-        if (mounted) setDenrClassLabel(lake.class_code || null);
-      }
-    })();
-
-    return () => { mounted = false; };
-  }, [lake?.class_code, lake?.water_quality_class]);
-
   // Flows/Tributaries tri-state status from API: 'unknown' | 'none' | 'present'
   const flowsStatus = lake?.flows_status || 'unknown';
   // Separate inflows / outflows, keep stable references (only meaningful when present)
@@ -213,7 +177,7 @@ function OverviewTab({
             </button>
           )}
           {showToggle && isLoadingWatershed && (
-            <LoadingSpinner size={16} color="#fff" inline={true} />
+            <LoadingSpinner size={16} color="#fff" inline={true} label="" />
           )}
         </div>
 
@@ -228,7 +192,7 @@ function OverviewTab({
 
         <div><strong>Water Body Classification:</strong></div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-          <div title={denrClassLabel || lake?.denr_classification || ''} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{denrClassLabel || lake?.denr_classification || '–'}</div>
+          <div title={lake?.water_quality_class?.name || lake?.denr_classification || lake?.class_code || ''} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lake?.water_quality_class?.name || lake?.denr_classification || lake?.class_code || '–'}</div>
           <a
             href="https://water.emb.gov.ph/?page_id=849"
             target="_blank"
@@ -289,7 +253,7 @@ function OverviewTab({
                 </button>
               )}
               {showFlowToggle && isLoadingFlows && (
-                <LoadingSpinner size={16} color="#fff" inline={true} />
+                <LoadingSpinner size={16} color="#fff" inline={true} label="" />
               )}
             </div>
 

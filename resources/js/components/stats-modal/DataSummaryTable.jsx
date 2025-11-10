@@ -39,7 +39,7 @@ export default function DataSummaryTable({ open, onClose, initialLake = '', init
   const [lakeId, setLakeId] = useState(initialLake);
   const [orgId, setOrgId] = useState(initialOrg);
   const [lakeOptions, setLakeOptions] = useState([]);
-  const { orgOptions, stationsByOrg, allStations } = useStationsCache(lakeId);
+  const { orgOptions, stationsByOrg, allStations, loading: stationsLoading } = useStationsCache(lakeId);
   const stationsList = useMemo(() => (!orgId ? (allStations || []) : (stationsByOrg?.[String(orgId)] || [])), [orgId, allStations, stationsByOrg]);
   const [selectedStation, setSelectedStation] = useState('');
   const [selectedYear, setSelectedYear] = useState('');
@@ -499,23 +499,37 @@ export default function DataSummaryTable({ open, onClose, initialLake = '', init
 
           <div className="ds-field org">
             <div className="ds-label">Dataset Source</div>
-            <OrgSelect options={orgOptions || []} value={orgId} onChange={(e) => setOrgId(e.target.value)} disabled={!lakeId} required={false} placeholder="Select a dataset" />
+            <OrgSelect options={orgOptions || []} value={orgId} onChange={(e) => setOrgId(e.target.value)} disabled={!lakeId} required={false} placeholder="Select a dataset" loading={stationsLoading} />
           </div>
 
           <div className="ds-field station">
             <div className="ds-label">Station</div>
-            <select className="pill-btn" value={selectedStation} onChange={(e) => setSelectedStation(e.target.value)} disabled={!lakeId || !orgId}>
-              <option value="">Select a station</option>
-              {stationOptions.length > 0 ? stationOptions.map(opt => (<option key={opt.id} value={opt.id}>{opt.name}</option>)) : stationsList.map(s => (<option key={s} value={s}>{s}</option>))}
-            </select>
+            <div style={{ position: 'relative' }}>
+              <select className="pill-btn" value={selectedStation} onChange={(e) => setSelectedStation(e.target.value)} disabled={!lakeId || !orgId || loading} style={{ paddingRight: loading ? 44 : 12 }}>
+                <option value="">Select a station</option>
+                {stationOptions.length > 0 ? stationOptions.map(opt => (<option key={opt.id} value={opt.id}>{opt.name}</option>)) : stationsList.map(s => (<option key={s} value={s}>{s}</option>))}
+              </select>
+              {loading ? (
+                <div style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)' }}>
+                  <LoadingSpinner inline size={16} label="" />
+                </div>
+              ) : null}
+            </div>
           </div>
 
           <div className="ds-field year">
             <div className="ds-label">Year</div>
-            <select className="pill-btn" value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} disabled={!lakeId || !orgId}>
-              <option value="">Select a year</option>
-              {yearOptions.map(y => (<option key={y} value={y}>{y}</option>))}
-            </select>
+            <div style={{ position: 'relative' }}>
+              <select className="pill-btn" value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} disabled={!lakeId || !orgId || loading} style={{ paddingRight: loading ? 44 : 12 }}>
+                <option value="">Select a year</option>
+                {yearOptions.map(y => (<option key={y} value={y}>{y}</option>))}
+              </select>
+              {loading ? (
+                <div style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)' }}>
+                  <LoadingSpinner inline size={16} label="" />
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
 

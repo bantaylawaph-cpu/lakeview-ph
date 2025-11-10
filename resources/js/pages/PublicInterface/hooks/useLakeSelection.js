@@ -12,7 +12,7 @@ const getLakeIdFromFeature = (feat) => {
   return feat?.id ?? p.id ?? p.lake_id ?? p.lakeId ?? p.lakeID ?? null;
 };
 
-export function useLakeSelection({ publicFC, mapRef, setPanelOpen, setFilterWatershedId }) {
+export function useLakeSelection({ publicFC, mapRef, setPanelOpen, setFilterWatershedId, setIsLoadingWatershed }) {
   const [selectedLake, setSelectedLake] = useState(null);
   const [selectedLakeId, setSelectedLakeId] = useState(null);
   const [selectedLakeName, setSelectedLakeName] = useState(null);
@@ -195,6 +195,7 @@ export function useLakeSelection({ publicFC, mapRef, setPanelOpen, setFilterWate
     if (!checked) { setWatershedOverlayFeature(null); return; }
     if (!selectedWatershedId) { setWatershedToggleOn(false); return; }
     try {
+      setIsLoadingWatershed?.(true);
       // Phase 1: fast path from cache
   const candidatesCached = await fetchPublicLayers({ bodyType: 'watershed', bodyId: selectedWatershedId });
   let target = candidatesCached?.[0];
@@ -211,7 +212,10 @@ export function useLakeSelection({ publicFC, mapRef, setPanelOpen, setFilterWate
         }
       } catch (_) { /* ignore */ }
     } catch (err) { console.warn('[useLakeSelection] toggle watershed failed', err); setWatershedToggleOn(false); }
-  }, [selectedWatershedId, applyOverlayByLayerId]);
+    finally {
+      setIsLoadingWatershed?.(false);
+    }
+  }, [selectedWatershedId, applyOverlayByLayerId, setIsLoadingWatershed]);
 
   const resetToActive = useCallback(() => {
     setWatershedToggleOn(false);
