@@ -14,25 +14,18 @@ export function buildInterpretation({
 }) {
   if (!result) return '';
 
-  // ---------------------------------------------------------------------
-  // Helper utilities (refactored)
-  // ---------------------------------------------------------------------
-  // removed: SMALL_N threshold (caveat text removed)
-  // removed: sci/safe/p-value formatting helpers (no longer used in simplified text)
   const join = (parts) => parts.filter(Boolean).map(s => s.trim()).filter(Boolean).map(s => /[.!?]$/.test(s)? s : s + '.').join(' ');
   const toNum = (x) => (x != null && x !== '' && !Number.isNaN(Number(x)) ? Number(x) : null);
 
   const pMeta = (paramOptions || []).find(pp => [pp.code, pp.key, pp.id].some(x => String(x) === String(paramCode)));
   const paramLabel = pMeta?.label || pMeta?.name || pMeta?.display_name || String(paramCode || 'parameter');
 
-  // Normalize parameter evaluation_type (DB pretty label -> canonical)
   const paramEvalRaw = (pMeta?.evaluation_type || pMeta?.evaluationType || '').toLowerCase();
   const paramEval = paramEvalRaw.startsWith('max') ? 'max'
     : paramEvalRaw.startsWith('min') ? 'min'
     : paramEvalRaw.startsWith('range') ? 'range'
     : null;
 
-  // Direction derivation (higherIsWorse true = higher values harmful)
   const higherIsWorse = (() => {
     if (paramEval === 'max') return true;
     if (paramEval === 'min') return false;
@@ -47,7 +40,6 @@ export function buildInterpretation({
     return null; // range or unknown
   })();
 
-  // Threshold resolution (reuse logic but simplified)
   const resolveThreshold = () => {
     const minVal = toNum(result.threshold_min);
     const maxVal = toNum(result.threshold_max);
@@ -69,9 +61,7 @@ export function buildInterpretation({
 
   const alpha = Number(result.alpha != null ? result.alpha : (1 - Number(cl || '0.95')));
   const p = toNum(result.p_value);
-  // derive significance inline where needed using p < alpha
 
-  // Central tendency (one or two sample)
   const computeStats = (arr) => {
     if (!Array.isArray(arr)) return null;
     const xs = arr.map(Number).filter(Number.isFinite);
@@ -91,8 +81,6 @@ export function buildInterpretation({
   const centralMetric = (result.test_used && /wilcoxon|sign/i.test(result.test_used)) ? 'median' : (mean != null ? 'mean' : 'median');
   const centralValue = centralMetric === 'mean' ? mean : median;
 
-  // Treat as two-sample if explicit n1/n2 provided OR if both sample1_values & sample2_values arrays exist.
-  // Mood's median test previously lacked n1/n2 so it was being misclassified as one-sample.
   const twoSample = (('n1' in result) && ('n2' in result)) || (Array.isArray(result.sample1_values) && Array.isArray(result.sample2_values));
   let stats1=null, stats2=null;
   if (twoSample) {
@@ -101,7 +89,6 @@ export function buildInterpretation({
     stats1 = s1; stats2 = s2;
   }
 
-  // Lake name helpers
   const lakeNameById = (id) => {
     if (String(id) === 'custom') return 'Custom dataset';
     const lk = lakes.find(l => String(l.id) === String(id));
@@ -114,7 +101,6 @@ export function buildInterpretation({
   const lake1Label = (String(lakeId) === 'custom') ? 'the custom dataset' : lake1Name;
 
   // Compliance classification
-  // removed: compliance classifier and small sample caveat (not used in simplified text)
 
   // ------------------------------------------------------------------
   // 1. Normality (Shapiro–Wilk) or Diagnostic
@@ -128,19 +114,21 @@ export function buildInterpretation({
       const advice = isRange
         ? 'Run Equivalence TOST Wilcoxon test.'
         : 'Run Wilcoxon signed-rank test or Sign test.';
-      return join([
+      const suggested = isRange ? ['tost_wilcoxon'] : ['wilcoxon_signed_rank','sign_test'];
+      return { text: join([
         `There is enough statistical evidence to suggest that the ${paramLabel} of ${lake1Label} deviates from normality`,
         advice
-      ]);
+      ]), suggestedTests: suggested };
     } else {
       // Normal
       const advice = isRange
         ? 'Run Equivalence TOST t-test.'
         : 'Run One-sample t-test.';
-      return join([
+      const suggested = isRange ? ['tost'] : ['t_one_sample'];
+      return { text: join([
         `There is not enough statistical evidence to suggest that the ${paramLabel} of ${lake1Label} deviates from normality`,
         advice
-      ]);
+      ]), suggestedTests: suggested };
     }
   } else if (result.test_used === 'diagnostic_two' || result.type === 'two-sample-diagnostic') {
     // Two-sample diagnostic: Shapiro + Levene
@@ -155,12 +143,15 @@ export function buildInterpretation({
     const lake2Normal = normal2 === true ? `There is not enough statistical evidence to suggest that the ${paramLabel} of ${lake2Name} deviates from normality` : `There is enough statistical evidence to suggest that the ${paramLabel} of ${lake2Name} deviates from normality`;
     const varEqual = equalVar === true ? 'There is not enough statistical evidence to suggest that variances differ' : 'There is enough statistical evidence to suggest that variances differ';
     let advice = '';
+    let suggested = [];
     if (bothNormal) {
       advice = equalVar === true ? 'Run Student t-test.' : 'Run Welch t-test.';
+      suggested = equalVar === true ? ['t_student'] : ['t_welch'];
     } else {
       advice = 'Run Mann–Whitney U test or Mood median test.';
+      suggested = ['mann_whitney','mood_median_test'];
     }
-    return join([lake1Normal, lake2Normal, varEqual, advice]);
+    return { text: join([lake1Normal, lake2Normal, varEqual, advice]), suggestedTests: suggested };
   } else if (result.test_used === 'shapiro_wilk' && twoSample) {
     // Two-sample Shapiro (individual)
     const p1 = toNum(result.p1);

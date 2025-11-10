@@ -185,14 +185,19 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
   useEffect(() => { setParamEvaluationType(evalTypeHook || null); }, [evalTypeHook]);
 
   const run = async () => {
+    await doRun(selectedTest);
+  };
+
+  // Shared runner used by UI run and suggested-test runner
+  const doRun = async (testToUse) => {
     setLoading(true); setError(null); setResult(null); setShowExactP(false);
     if (!lakeId) { alertError('Missing Lake', 'Please select a Primary Lake before running the test.'); setLoading(false); return; }
     const isCustom = String(lakeId) === 'custom';
     if (!isCustom && !organizationId) { alertError('Missing Dataset Source', 'Please select a Dataset Source before running the test.'); setLoading(false); return; }
-  if (inferredTest !== 'two-sample' && !appliedStandardId) { alertError('Missing Applied Standard', 'Please select an Applied Standard before running the test.'); setLoading(false); return; }
+    if (inferredTest !== 'two-sample' && !appliedStandardId) { alertError('Missing Applied Standard', 'Please select an Applied Standard before running the test.'); setLoading(false); return; }
     if (!paramCode) { alertError('Missing Parameter', 'Please select a Parameter before running the test.'); setLoading(false); return; }
-    if (!selectedTest) { alertError('Missing Test', 'Please select a Test before running the test.'); setLoading(false); return; }
-    if (!allowedTests.includes(selectedTest)) { alertError('Invalid Test Selection', 'The selected test is not applicable for the current comparison mode.'); setLoading(false); return; }
+    if (!testToUse) { alertError('Missing Test', 'Please select a Test before running the test.'); setLoading(false); return; }
+    if (!allowedTests.includes(testToUse)) { alertError('Invalid Test Selection', 'The selected test is not applicable for the current comparison mode.'); setLoading(false); return; }
     if (inferredTest === 'two-sample') {
       if (!compareValue || !String(compareValue).startsWith('lake:')) { alertError('Missing Comparison Lake', 'For two-sample tests, please select a lake to compare against.'); setLoading(false); return; }
       if (!secondaryOrganizationId) { alertError('Missing Secondary Dataset Source', 'Please select a Secondary Dataset Source for the comparison lake.'); setLoading(false); return; }
@@ -205,7 +210,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
     try {
       const { computed } = await runAdvancedStat({
         inferredTest,
-        selectedTest,
+        selectedTest: testToUse,
         paramCode,
         lakeId,
         compareValue,
@@ -220,7 +225,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
         cl,
         customValues,
       });
-      
+
       const minVal = computed.threshold_min != null ? Number(computed.threshold_min) : null;
       const maxVal = computed.threshold_max != null ? Number(computed.threshold_max) : null;
       const mu0 = computed.mu0 != null ? Number(computed.mu0) : null;
@@ -229,16 +234,16 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
       else if (minVal != null) hasThreshold = true;
       else if (maxVal != null) hasThreshold = true;
       else if (mu0 != null) hasThreshold = true;
-      
+
       if (!hasThreshold) {
-        const isThresholdComparison = inferredTest === 'one-sample' && compareValue && String(compareValue).startsWith('class:') && selectedTest !== 'shapiro_wilk' && selectedTest !== 'diagnostic_one';
+        const isThresholdComparison = inferredTest === 'one-sample' && compareValue && String(compareValue).startsWith('class:') && testToUse !== 'shapiro_wilk' && testToUse !== 'diagnostic_one';
         if (isThresholdComparison) {
           alertError('No Threshold Available', 'No threshold exists for this parameter under the selected standard. Please select a different parameter or standard.');
           setLoading(false);
           return;
         }
       }
-      
+
       setResult(computed);
       alertSuccess('Test Result', 'Computed statistical test successfully.');
     } catch (e) {
@@ -259,6 +264,12 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
         alertError('Test Error', e?.message || 'Failed');
       }
     } finally { setLoading(false); }
+  };
+
+  const runSuggested = async (testKey) => {
+    // set selected test visually then execute
+    try { setSelectedTest(testKey); } catch (_) {}
+    await doRun(testKey);
   };
 
   const clearAll = () => {
@@ -414,6 +425,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
           setShowAllValues={setShowAllValues}
           showExactP={showExactP}
           setShowExactP={setShowExactP}
+          onRunSuggested={runSuggested}
         />
       </div>
     )}

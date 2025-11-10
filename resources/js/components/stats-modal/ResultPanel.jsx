@@ -2,11 +2,11 @@ import React from 'react';
 import ValuesTable from './ValuesTable';
 import buildInterpretation from './interpretation';
 import { fmt, sci } from './formatters';
-import { testLabelFromResult } from './utils/testLabels';
+import { testLabelFromResult, testLabelFromCode } from './utils/testLabels';
 import { lakeName } from './utils/shared';
 import { FiEye, FiEyeOff } from 'react-icons/fi';
 
-export default function ResultPanel({ result, paramCode, paramOptions, classCode, lakes, cl, lakeId, compareValue, showAllValues, setShowAllValues, showExactP, setShowExactP }) {
+export default function ResultPanel({ result, paramCode, paramOptions, classCode, lakes, cl, lakeId, compareValue, showAllValues, setShowAllValues, showExactP, setShowExactP, onRunSuggested }) {
   if (!result) return null;
 
   const gridItems = [];
@@ -261,6 +261,8 @@ export default function ResultPanel({ result, paramCode, paramOptions, classCode
   }
 
   const finalInterpretation = buildInterpretation({ result, paramCode, paramOptions, classCode, lakes, cl, fmt, sci, lakeId, compareValue });
+  // finalInterpretation may be a string or an object { text, suggestedTests }
+  const interpObj = (finalInterpretation && typeof finalInterpretation === 'object') ? finalInterpretation : { text: finalInterpretation, suggestedTests: null };
   const ciLine = (r) => (r.ci_lower != null && r.ci_upper != null ? <div>CI ({Math.round((r.ci_level||0)*100)}%): [{fmt(r.ci_lower)}, {fmt(r.ci_upper)}]</div> : null);
 
   // Add universal summary lines: p vs alpha and statistical decision
@@ -357,7 +359,34 @@ export default function ResultPanel({ result, paramCode, paramOptions, classCode
       {ciLine(result)}
       <div style={{ marginTop:8, padding:8, background:'rgba(255,255,255,0.02)', borderRadius:6 }}>
         <strong>Interpretation:</strong>
-        <div style={{ marginTop:6 }}>{finalInterpretation}</div>
+        <div style={{ marginTop:6 }}>{interpObj.text}</div>
+        {Array.isArray(interpObj.suggestedTests) && interpObj.suggestedTests.length ? (
+          <div style={{ marginTop:8 }}>
+            <div style={{ fontSize:13, marginBottom:6 }}>Suggested Test/s:</div>
+            <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+              {interpObj.suggestedTests.map((code)=> (
+                <button
+                  key={code}
+                  type="button"
+                  onClick={()=>onRunSuggested && onRunSuggested(code)}
+                  style={{
+                    padding: 0,
+                    margin: 0,
+                    border: 'none',
+                    background: 'transparent',
+                    textDecoration: 'underline',
+                    cursor: 'pointer',
+                    color: 'inherit',
+                    fontSize: 13,
+                    lineHeight: '20px'
+                  }}
+                >
+                  {testLabelFromCode(code)}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
       <ValuesTable result={result} lakes={lakes} lakeId={lakeId} compareValue={compareValue} showAllValues={showAllValues} setShowAllValues={setShowAllValues} fmt={fmt} />
     </div>
