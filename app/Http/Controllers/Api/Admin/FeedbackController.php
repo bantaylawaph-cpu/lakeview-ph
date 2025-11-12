@@ -104,16 +104,21 @@ class FeedbackController extends Controller
         $rows = $q->paginate($request->integer('per_page', 20));
         // Transform attachment image paths to fully qualified public URLs for frontend preview reliability.
         $rows->getCollection()->transform(function ($fb) {
+            // images: safe copy-modify-assign
             $imgs = is_array($fb->images) ? $fb->images : [];
             $fb->images = array_map(fn($p) => $this->publicImageUrl((string)$p), $imgs);
-            // Also enrich metadata.files paths with url for possible future frontend use.
-            if (is_array($fb->metadata) && isset($fb->metadata['files']) && is_array($fb->metadata['files'])) {
-                foreach ($fb->metadata['files'] as &$f) {
+
+            // metadata.files: avoid by-reference modification on Eloquent cast attributes
+            $meta = is_array($fb->metadata) ? $fb->metadata : [];
+            if (isset($meta['files']) && is_array($meta['files'])) {
+                $files = $meta['files'];
+                foreach ($files as $i => $f) {
                     if (isset($f['path']) && !isset($f['url'])) {
-                        $f['url'] = $this->publicImageUrl((string)$f['path']);
+                        $files[$i]['url'] = $this->publicImageUrl((string)$f['path']);
                     }
                 }
-                unset($f);
+                $meta['files'] = $files;
+                $fb->metadata = $meta; // reassign after mutation
             }
             return $fb;
         });
@@ -125,13 +130,17 @@ class FeedbackController extends Controller
         $feedback->load(['user:id,name,email','tenant:id,name','lake:id,name']);
         // Transform images to public URLs
         $feedback->images = array_map(fn($p) => $this->publicImageUrl((string)$p), is_array($feedback->images) ? $feedback->images : []);
-        if (is_array($feedback->metadata) && isset($feedback->metadata['files']) && is_array($feedback->metadata['files'])) {
-            foreach ($feedback->metadata['files'] as &$f) {
+        // metadata.files: copy-modify-assign to avoid indirect modification errors
+        $meta = is_array($feedback->metadata) ? $feedback->metadata : [];
+        if (isset($meta['files']) && is_array($meta['files'])) {
+            $files = $meta['files'];
+            foreach ($files as $i => $f) {
                 if (isset($f['path']) && !isset($f['url'])) {
-                    $f['url'] = $this->publicImageUrl((string)$f['path']);
+                    $files[$i]['url'] = $this->publicImageUrl((string)$f['path']);
                 }
             }
-            unset($f);
+            $meta['files'] = $files;
+            $feedback->metadata = $meta;
         }
         return response()->json(['data' => $feedback]);
     }
