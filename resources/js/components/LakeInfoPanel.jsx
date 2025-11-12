@@ -139,6 +139,8 @@ function LakeInfoPanel({
     <div className={panelClass}>
       {/* Header */}
       <div className="lake-info-header">
+        {/* small visual handle for bottom-sheet affordance on mobile */}
+        <div className="panel-handle" aria-hidden="true" />
         <div>
           <div style={{ display:'flex', alignItems:'center', gap:8 }}>
             <h2 className="lake-info-title" style={{ marginBottom: 2 }}>

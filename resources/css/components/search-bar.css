@@ -18,7 +18,10 @@
 /* Suggestions dropdown container positioning relative to bar */
 .search-bar { position: absolute; }
 @media (max-width: 520px) {
-  .search-bar { left: 8px; right: 8px; }
+  /* On very small screens, avoid stretching fully to the right edge so
+     top-right map controls (layer/base-map switch) remain tappable. Leave
+     space on the right equal to control width + margin (approx 72px). */
+  .search-bar { left: 8px; right: 72px; max-width: calc(100% - 80px); }
 }
 .search-bar .search-input-wrap {
   position: relative;

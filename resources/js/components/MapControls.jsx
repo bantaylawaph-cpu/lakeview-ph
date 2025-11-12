@@ -60,10 +60,10 @@ function MapControls({ defaultCenter = [12.8797, 121.7740], defaultZoom = 6, def
     <>
       {/* Floating Controls */}
       <div className="map-controls">
-        <button className="btn-floating" onClick={() => setStatsOpen(true)} title="Open stats" aria-label="Open stats">
+        <button className="btn-floating stats-btn" onClick={() => setStatsOpen(true)} title="Open stats" aria-label="Open stats">
           <FiBarChart2 className="icon-layer" />
         </button>
-        <button className="btn-floating" onClick={() => setTableOpen(true)} title="Open table" aria-label="Open table">
+        <button className="btn-floating table-btn" onClick={() => setTableOpen(true)} title="Open table" aria-label="Open table">
           <FaTable className="icon-layer" />
         </button>
         <button

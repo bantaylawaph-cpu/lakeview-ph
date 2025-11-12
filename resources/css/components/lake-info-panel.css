@@ -87,3 +87,65 @@
   box-shadow: 0 2px 6px rgba(0,0,0,0.25);
 }
 .insight-card h4 { margin: 0 0 6px 0; font-size: 14px; color: #ffeb3b; }
+
+/* Mobile: convert right-side panel into a bottom sheet that slides up */
+@media (max-width: 900px) {
+  .lake-info-panel {
+    /* Make the bottom-sheet span the full viewport height on mobile */
+    --lake-info-panel-height: 100vh; /* visible height when open (full screen) */
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: var(--lake-info-panel-height);
+    top: auto;
+    /* position off-canvas by the same height so the 'open' class can set bottom:0 */
+    bottom: calc(-1 * var(--lake-info-panel-height));
+    border-top-left-radius: 16px;
+    border-top-right-radius: 16px;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    box-shadow: 0 -8px 20px rgba(0,0,0,0.35);
+    transition: bottom 0.35s ease, opacity 0.35s ease, transform 0.35s ease;
+    padding-bottom: env(safe-area-inset-bottom); /* respect notches */
+  }
+  .lake-info-panel.open { bottom: 0; right: 0; opacity: 1; }
+  .lake-info-panel.closing { bottom: calc(-1 * var(--lake-info-panel-height)); right: 0; opacity: 0; }
+  .lake-info-header { padding: 10px 12px; }
+  .lake-info-image { height: 140px; }
+  .lake-info-content { padding: 12px; }
+}
+
+/* Mobile landscape: reduce bottom-sheet height and make handle more prominent */
+@media (orientation: landscape) and (max-width: 1200px) {
+  .lake-info-panel {
+    /* Use full viewport height in landscape on small devices as well so the sheet
+       consistently fills the screen when opened. */
+    --lake-info-panel-height: 100vh;
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: var(--lake-info-panel-height);
+    top: auto;
+    bottom: calc(-1 * var(--lake-info-panel-height));
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  /* Ensure the open/closing states in landscape use bottom positioning (slide up) */
+  .lake-info-panel.open { bottom: 0; right: 0; opacity: 1; }
+  .lake-info-panel.closing { bottom: calc(-1 * var(--lake-info-panel-height)); right: 0; opacity: 0; }
+  .lake-info-image { height: 110px; }
+}
+
+/* A small grabber/handle at the top of the bottom sheet for affordance */
+.lake-info-panel .panel-handle {
+  width: 36px;
+  height: 5px;
+  background: rgba(255,255,255,0.35);
+  border-radius: 999px;
+  margin: 6px auto 8px auto;
+}
+
+/* Make sure the header area accommodates the handle */
+.lake-info-header { position: relative; }
+.lake-info-header .panel-handle { position: absolute; left: 50%; transform: translateX(-50%); top: -10px; }

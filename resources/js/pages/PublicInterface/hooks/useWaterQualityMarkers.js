@@ -25,7 +25,7 @@ export function useWaterQualityMarkers(mapRef) {
             const popupContent = `
               <div style="font-size: 14px; color: #000;">
                 <strong>${m.label || 'Station'}</strong><br>
-                <button onclick="window.dispatchEvent(new CustomEvent('lv-open-data-summary', { detail: { lakeId: '${m.lakeId}', orgId: '${m.orgId}', stationId: '${m.stationId}' } }))" style="margin-top: 5px; padding: 4px 8px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer;">View Station Data</button>
+                <button class="view-station-btn" onclick="window.dispatchEvent(new CustomEvent('lv-open-data-summary', { detail: { lakeId: '${m.lakeId}', orgId: '${m.orgId}', stationId: '${m.stationId}' } }))" style="margin-top: 5px; padding: 4px 8px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer;">View Station Data</button>
               </div>
             `;
             cm.bindPopup(popupContent);
@@ -52,7 +52,7 @@ export function useWaterQualityMarkers(mapRef) {
             const popupContent = `
               <div style="font-size: 14px; color: #000;">
                 <strong>${m.label || 'Station'}</strong><br>
-                <button onclick="window.dispatchEvent(new CustomEvent('lv-open-data-summary', { detail: { lakeId: '${m.lakeId}', orgId: '${m.orgId}', stationId: '${m.stationId}' } }))" style="margin-top: 5px; padding: 4px 8px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer;">View Station Data</button>
+                <button class="view-station-btn" onclick="window.dispatchEvent(new CustomEvent('lv-open-data-summary', { detail: { lakeId: '${m.lakeId}', orgId: '${m.orgId}', stationId: '${m.stationId}' } }))" style="margin-top: 5px; padding: 4px 8px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer;">View Station Data</button>
               </div>
             `;
             cm.bindPopup(popupContent);
