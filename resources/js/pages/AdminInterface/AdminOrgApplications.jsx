@@ -336,6 +336,23 @@ export default function AdminOrgApplications() {
                       style={{ display: 'grid', gap: 8, padding: 14 }}
                     >
                       <div style={{ fontWeight: 600, fontSize: 15 }}>{app.tenant?.name || 'Unknown org'}</div>
+                      {/* Status directly below title */}
+                      <div>
+                        {(() => {
+                          const baseStatus = app?.status;
+                          const color = {
+                            pending_kyc: '#3b82f6', // show as Pending Org Review color
+                            pending_org_review: '#3b82f6',
+                            approved: '#22c55e',
+                            needs_changes: '#eab308',
+                            rejected: '#ef4444',
+                          }[baseStatus] || '#64748b';
+                          const label = String(statusLabel(baseStatus) || '').trim() || '—';
+                          return (
+                            <span style={{ background: `${color}22`, color, padding: '2px 8px', borderRadius: 999, fontSize: 12 }}>{label}</span>
+                          );
+                        })()}
+                      </div>
                       <div className="muted" style={{ fontSize: 13 }}>Desired role: {app.desired_role || '—'}</div>
                       <div className="muted" style={{ fontSize: 13 }}>
                         Applied: {app.created_at ? new Date(app.created_at).toLocaleString(undefined, {

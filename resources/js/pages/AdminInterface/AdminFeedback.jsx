@@ -62,6 +62,7 @@ function AttachmentsModal({ open, onClose, item }) {
       title={`Attachments for #${item.id}`}
       width={860}
       ariaLabel="Attachments dialog"
+      bodyClassName="modern-scrollbar"
     >
       {imgs.length === 0 ? (
         <div className="muted">No attachments.</div>
@@ -224,7 +225,7 @@ function FeedbackDetailModal({ open, onClose, item, onSave }) {
       title={`Feedback #${item.id}`}
       width={980}
       ariaLabel="Feedback detail dialog"
-      bodyClassName="feedback-detail-body"
+      bodyClassName="feedback-detail-body modern-scrollbar"
     >
       <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 16 }}>
         {/* Left: content + preview */}

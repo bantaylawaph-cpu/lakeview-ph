@@ -11,9 +11,32 @@ use Illuminate\Support\Facades\Validator;
 
 class FeedbackController extends Controller
 {
+    /**
+     * Build a publicly accessible URL for a stored feedback attachment path.
+     * Uses the public disk by default; falls back to asset('storage/...').
+     * This mirrors KYC doc URL logic so the frontend no longer depends on a storage symlink existing.
+     */
+    protected function publicImageUrl(string $relativePath): string
+    {
+        $disk = env('FEEDBACK_IMAGES_DISK', 'public');
+        try {
+            if (\Storage::disk($disk)->exists($relativePath)) {
+                // Prefer direct URL if supported
+                if (method_exists(\Storage::disk($disk), 'url')) {
+                    $u = \Storage::disk($disk)->url($relativePath);
+                    if (is_string($u) && str_starts_with($u, 'http')) {
+                        return $u;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // swallow and fallback
+        }
+        return asset('storage/'.$relativePath);
+    }
     public function index(Request $request)
     {
-    $q = Feedback::query()->with(['user:id,name,email','tenant:id,name','lake:id,name']);
+        $q = Feedback::query()->with(['user:id,name,email','tenant:id,name','lake:id,name']);
 
         if ($status = $request->query('status')) {
             $q->where('status', $status);
@@ -65,12 +88,37 @@ class FeedbackController extends Controller
         $q->orderByDesc('created_at');
 
         $rows = $q->paginate($request->integer('per_page', 20));
+        // Transform attachment image paths to fully qualified public URLs for frontend preview reliability.
+        $rows->getCollection()->transform(function ($fb) {
+            $imgs = is_array($fb->images) ? $fb->images : [];
+            $fb->images = array_map(fn($p) => $this->publicImageUrl((string)$p), $imgs);
+            // Also enrich metadata.files paths with url for possible future frontend use.
+            if (is_array($fb->metadata) && isset($fb->metadata['files']) && is_array($fb->metadata['files'])) {
+                foreach ($fb->metadata['files'] as &$f) {
+                    if (isset($f['path']) && !isset($f['url'])) {
+                        $f['url'] = $this->publicImageUrl((string)$f['path']);
+                    }
+                }
+                unset($f);
+            }
+            return $fb;
+        });
         return response()->json($rows);
     }
 
     public function show(Feedback $feedback)
     {
-    $feedback->load(['user:id,name,email','tenant:id,name','lake:id,name']);
+        $feedback->load(['user:id,name,email','tenant:id,name','lake:id,name']);
+        // Transform images to public URLs
+        $feedback->images = array_map(fn($p) => $this->publicImageUrl((string)$p), is_array($feedback->images) ? $feedback->images : []);
+        if (is_array($feedback->metadata) && isset($feedback->metadata['files']) && is_array($feedback->metadata['files'])) {
+            foreach ($feedback->metadata['files'] as &$f) {
+                if (isset($f['path']) && !isset($f['url'])) {
+                    $f['url'] = $this->publicImageUrl((string)$f['path']);
+                }
+            }
+            unset($f);
+        }
         return response()->json(['data' => $feedback]);
     }
 

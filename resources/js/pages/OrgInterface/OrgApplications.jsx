@@ -3,9 +3,8 @@ import api, { me as fetchMe } from "../../lib/api";
 import { cachedGet, invalidateHttpCache } from "../../lib/httpCache";
 import TableToolbar from "../../components/table/TableToolbar";
 import TableLayout from "../../layouts/TableLayout";
-import { FiCheck, FiX, FiAlertCircle, FiFileText, FiClipboard, FiInfo } from 'react-icons/fi';
+import { FiCheck, FiX, FiAlertCircle, FiClipboard, FiInfo } from 'react-icons/fi';
 import DashboardHeader from '../../components/DashboardHeader';
-import KycDocsModal from '../../components/KycDocsModal';
 import KycProfileModal from '../../components/KycProfileModal';
 import Modal from "../../components/Modal";
 
@@ -28,7 +27,6 @@ export default function OrgApplications() {
   const [visibleMap, setVisibleMap] = useState({
     id: true,
     user: true,
-    documents: true,
     desired_role: true,
     status: true,
     actions: true,
@@ -53,7 +51,6 @@ export default function OrgApplications() {
 
   const COLUMNS = useMemo(() => ([
     { id: "user", header: "User" },
-    { id: "documents", header: "Documents" },
     { id: "desired_role", header: "Desired Role" },
     { id: "status", header: "Status" },
     { id: "actions", header: "Actions" },
@@ -147,7 +144,6 @@ export default function OrgApplications() {
   }
 
   // Build TableLayout columns, normalized data, and actions (mirror admin table UX)
-  const [docUser, setDocUser] = useState({ id: null, tenantId: null });
   const [profileUserId, setProfileUserId] = useState(null);
   const [statusInfoOpen, setStatusInfoOpen] = useState(false);
 
@@ -174,21 +170,6 @@ export default function OrgApplications() {
         >{raw.user?.name}</button>
       </div>
     ), width: 180 },
-    { id: 'documents', header: 'Documents', render: (raw) => (
-      <button
-        className="pill-btn ghost sm"
-        onClick={async () => {
-          try {
-            const me = await fetchMe({ maxAgeMs: 60 * 1000 });
-            const tenantId = me?.tenant_id;
-            setDocUser({ id: raw.user?.id, tenantId });
-          } catch {}
-        }}
-        title="View KYC documents"
-      >
-        <FiFileText /> View
-      </button>
-    ), width: 120 },
     { id: 'desired_role', header: 'Desired Role', render: (raw) => (
       <div>{roleLabel(raw.desired_role)}</div>
     ), width: 160 },
@@ -264,7 +245,6 @@ export default function OrgApplications() {
             hidePager={false}
             pageSize={15}
           />
-          <KycDocsModal open={!!docUser.id} onClose={() => setDocUser({ id: null, tenantId: null })} userId={docUser.id} orgTenantId={docUser.tenantId} />
           <KycProfileModal open={!!profileUserId} onClose={() => setProfileUserId(null)} userId={profileUserId} orgTenantId={orgTenantId} />
           <Modal
             open={decisionModal.open}
