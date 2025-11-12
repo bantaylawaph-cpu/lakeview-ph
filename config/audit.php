@@ -23,6 +23,10 @@ return [
             'identity' => ['name','alt_name']
         ],
         App\Models\Layer::class => [],
+        App\Models\LakeFlow::class => [
+            // include natural identifiers to help UI/entity_name resolution
+            'identity' => ['name','alt_name','lake_id']
+        ],
         App\Models\Station::class => [],
         App\Models\SamplingEvent::class => [
             // include lake_id in update snapshots so UI/backend can resolve lake name even if lake_id wasn't dirty

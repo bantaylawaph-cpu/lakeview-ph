@@ -16,6 +16,26 @@ const ADV_KEY = `${TABLE_ID}::filters_advanced`;
 
 const fmt = (s) => (s ? new Date(s).toLocaleString() : '—');
 
+// Humanize helpers
+const humanize = (s) => {
+  if (!s) return '';
+  // convert snake_case or camelCase to Title Case
+  const spaced = s.replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2');
+  return spaced.replace(/\b\w/g, (c) => c.toUpperCase());
+};
+
+const formatAction = (a) => {
+  if (!a) return '';
+  switch (a) {
+    case 'created': return 'Created';
+    case 'updated': return 'Updated';
+    case 'deleted': return 'Deleted';
+    case 'force_deleted': return 'Force Deleted';
+    case 'restored': return 'Restored';
+    default: return humanize(a);
+  }
+};
+
 // Helper to extract lake name from row or payloads
 const extractLakeName = (r) => {
   if (!r) return null;
@@ -92,11 +112,11 @@ export default function OrgAuditLogsPage() {
     return params;
   };
 
-  const fetchLogs = async (params={}) => {
+  const fetchLogs = async (params={}, opts={}) => {
     if (!effectiveTenantId) return; // need a tenant for org route
     setLoading(true); setError(null);
     try {
-  const res = await cachedGet(`/org/${effectiveTenantId}/audit-logs`, { params, ttlMs: 2 * 60 * 1000 });
+  const res = await cachedGet(`/org/${effectiveTenantId}/audit-logs`, { params, ttlMs: opts.force ? 0 : (2 * 60 * 1000) });
   // NOTE: api.get returns the parsed JSON body. For Laravel paginator, this is an object
   // with top-level pagination keys and a `data` array. Do not access `res.data` here.
   const body = res;
@@ -193,6 +213,15 @@ export default function OrgAuditLogsPage() {
 
   const columns = useMemo(() => {
     const truncate = (s, max=60) => (s && s.length > max ? s.slice(0,max)+'…' : s);
+    const modelNameMap = {
+      'LakeFlow': 'Tributary',
+      'SamplingEvent': 'Sampling Event',
+      'ParameterThreshold': 'Parameter Threshold',
+      'WqStandard': 'WQ Standard',
+      'OrgApplication': 'Organization Application',
+      'KycProfile': 'KYC Profile',
+      'Tenant': 'Organization',
+    };
     return [
       { id: 'summary', header: 'Summary', render: r => {
         const actor = r.actor_name || 'User';
@@ -207,18 +236,44 @@ export default function OrgAuditLogsPage() {
           default: verb = (r.action || 'Did').replace(/\b\w/g,c=>c.toUpperCase());
         }
         const base = modelBase;
+        // Always append timestamp if available
+        const ts = r.event_at ? ` at ${fmt(r.event_at)}` : '';
         if (base === 'SamplingEvent') {
-          const nm = r.entity_name || extractLakeName(r);
-          const lakeLabel = nm ? truncate(nm) : null;
-          return lakeLabel
-            ? `${actor} ${verb} Sampling Event of ${lakeLabel} at ${fmt(r.event_at)}`
-            : `${actor} ${verb} Sampling Event at ${fmt(r.event_at)}`;
+          const lakeNm = r.entity_name || extractLakeName(r);
+          const lakeLabel = lakeNm ? truncate(lakeNm) : null;
+          const sampledDate = (() => {
+            const raw = (r.after && r.after.sampled_at) || (r.before && r.before.sampled_at) || null;
+            if (!raw) return null; try { return new Date(raw).toLocaleDateString(); } catch { return raw; }
+          })();
+          let core = `${actor} ${verb} Sampling Event`;
+          if (sampledDate) core += ` (${sampledDate})`;
+          if (lakeLabel) core += ` for ${lakeLabel}`;
+          return `${core}${ts}`;
         }
-        if (r.entity_name) return `${actor} ${verb} ${truncate(r.entity_name)}`;
+        if (base === 'Layer') {
+          const layerName = r.entity_name || (r.after && r.after.name) || (r.before && r.before.name) || 'Layer';
+          const scanLake = (obj) => {
+            if (!obj || typeof obj !== 'object') return null;
+            for (const k of Object.keys(obj)) {
+              const v = obj[k];
+              if (typeof v === 'string' && /lake/i.test(k) && v.trim()) return v.trim();
+              if (v && typeof v === 'object' && v.name && /lake/i.test(k)) return String(v.name).trim();
+            }
+            return null;
+          };
+          const lakeNm = scanLake(r.after) || scanLake(r.before) || null;
+            let core = `${actor} ${verb} ${truncate(layerName)} layer`;
+            if (lakeNm) core += ` for ${truncate(lakeNm)}`;
+            return `${core}${ts}`;
+        }
+        if (r.entity_name) return `${actor} ${verb} ${truncate(r.entity_name)}${ts}`;
         const idTag = r.model_id ? `${modelBase}#${r.model_id}` : modelBase;
-        return `${actor} ${verb} ${idTag}`;
+        return `${actor} ${verb} ${idTag}${ts}`;
       }, width: 560 },
-      { id: 'target', header: 'Target', render: r => (r.model_type ? r.model_type.split('\\').pop() : 'Record'), width: 140 },
+      { id: 'target', header: 'Target', render: r => {
+        const base = r.model_type ? r.model_type.split('\\').pop() : 'Record';
+        return modelNameMap[base] || base;
+      }, width: 140 },
       { id: 'actions', header: 'Action', width: 80, render: r => (
         <button className="pill-btn ghost sm" title="View Details" onClick={() => openDetail(r)} style={{ display:'flex', alignItems:'center', gap:4 }}>
           <FiEye />
@@ -326,7 +381,7 @@ export default function OrgAuditLogsPage() {
               search={{ value:q, onChange: setQ, placeholder:'Search Logs...' }}
               filters={[]}
               columnPicker={columnPickerAdapter}
-              onRefresh={()=> fetchLogs(buildParams())}
+              onRefresh={()=> fetchLogs(buildParams(), { force: true })}
               onToggleFilters={()=> setShowAdvanced(s=>!s)}
               filtersBadgeCount={activeAdvCount}
             />
@@ -381,17 +436,42 @@ export default function OrgAuditLogsPage() {
             <h3 style={{ margin:0, fontSize:'1rem' }}>Event</h3>
             <div style={{ display:'grid', rowGap:6, fontSize:13.5 }}>
               <div><strong style={{ width:110, display:'inline-block' }}>User:</strong> {detailRow.actor_name || 'User'}</div>
-              <div><strong style={{ width:110, display:'inline-block' }}>Action:</strong> {detailRow.action}</div>
+              <div><strong style={{ width:110, display:'inline-block' }}>Role:</strong> {humanize(detailRow.actor_role || '') || '—'}</div>
+              <div><strong style={{ width:110, display:'inline-block' }}>Action:</strong> {formatAction(detailRow.action)}</div>
               <div><strong style={{ width:110, display:'inline-block' }}>Entity:</strong> {
                 (() => {
                   const base = detailRow.model_type ? detailRow.model_type.split('\\').pop() : 'Record';
                   if (base === 'SamplingEvent') {
-                    const nm = detailRow.entity_name || extractLakeName(detailRow);
-                    return nm ? `Sampling Event of ${nm}` : 'Sampling Event';
+                    const lakeNm = detailRow.entity_name || extractLakeName(detailRow);
+                    const sampledDate = (() => {
+                      const raw = (detailRow.after && detailRow.after.sampled_at) || (detailRow.before && detailRow.before.sampled_at) || null;
+                      if (!raw) return null; try { return new Date(raw).toLocaleDateString(); } catch { return raw; }
+                    })();
+                    let text = 'Sampling Event';
+                    if (sampledDate) text += ` (${sampledDate})`;
+                    if (lakeNm) text += ` for ${lakeNm}`;
+                    return text;
                   }
-                  return detailRow.entity_name ? detailRow.entity_name : base;
+                  if (base === 'Layer') {
+                    const layerName = detailRow.entity_name || (detailRow.after && detailRow.after.name) || (detailRow.before && detailRow.before.name) || 'Layer';
+                    const scanLake = (obj) => {
+                      if (!obj || typeof obj !== 'object') return null;
+                      for (const k of Object.keys(obj)) {
+                        const v = obj[k];
+                        if (typeof v === 'string' && /lake/i.test(k) && v.trim()) return v.trim();
+                        if (v && typeof v === 'object' && v.name && /lake/i.test(k)) return String(v.name).trim();
+                      }
+                      return null;
+                    };
+                    const lakeNm = scanLake(detailRow.after) || scanLake(detailRow.before) || null;
+                    return `${layerName} layer${lakeNm ? ` for ${lakeNm}` : ''}`;
+                  }
+                  // If entity_name present, strip trailing " #<id>" if appended in the payload
+                  const raw = detailRow.entity_name || base;
+                  return String(raw).replace(/\s+#\d+$/, '');
                 })()
-              }{detailRow.model_id ? ` #${detailRow.model_id}` : ''}</div>
+              }</div>
+              <div><strong style={{ width:110, display:'inline-block' }}>Organization:</strong> {detailRow.tenant_name || detailRow.tenant_id || '—'}</div>
               <div><strong style={{ width:110, display:'inline-block' }}>Timestamp:</strong> {fmt(detailRow.event_at)}</div>
             </div>
           </div>
