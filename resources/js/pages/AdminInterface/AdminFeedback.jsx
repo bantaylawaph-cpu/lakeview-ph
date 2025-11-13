@@ -37,9 +37,28 @@ function AttachmentsModal({ open, onClose, item }) {
     const fileUrls = files
       .map(f => (typeof f?.url === 'string' ? f.url : (typeof f?.path === 'string' ? f.path : null)))
       .filter(Boolean);
+    // Normalize each candidate to a canonical key (strip protocol + host, ensure leading segment preserved)
+    const toCanonical = (raw) => {
+      if (!raw || typeof raw !== 'string') return '';
+      try {
+        if (raw.startsWith('http')) {
+          const url = new URL(raw);
+          return url.pathname.replace(/^\//,'');
+        }
+      } catch { /* ignore */ }
+      return raw.replace(/^\//,'');
+    };
     const combined = [...base, ...fileUrls];
     const seen = new Set();
-    return combined.filter(u => { if (seen.has(u)) return false; seen.add(u); return true; });
+    const out = [];
+    for (const c of combined) {
+      const key = toCanonical(c);
+      if (!key) continue;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(c);
+    }
+    return out;
   }, [item]);
   React.useEffect(() => {
     if (open) setSel(0);
@@ -716,14 +735,21 @@ export default function AdminFeedback() {
                       );
                     }
                     if (col === 'docs') {
-                      // Show a view button if there are any attachments from either images or metadata.files
-                      const imageCount = Array.isArray(r.images) ? r.images.length : 0;
+                      // Deduplicate based on canonical path like in modal
+                      const toCanonical = (raw) => {
+                        if (!raw || typeof raw !== 'string') return '';
+                        try { if (raw.startsWith('http')) { const u = new URL(raw); return u.pathname.replace(/^\//,''); } } catch {}
+                        return raw.replace(/^\//,'');
+                      };
+                      const baseImgs = Array.isArray(r.images) ? r.images.filter(x => typeof x === 'string') : [];
                       const metaFiles = Array.isArray(r?.metadata?.files) ? r.metadata.files : [];
-                      const fileCount = metaFiles.length;
-                      const total = imageCount + fileCount;
-                      if (total <= 0) {
-                        return (<td key={col} className="lv-td" style={{ fontSize:12 }}>—</td>);
-                      }
+                      const metaPaths = metaFiles.map(f => (typeof f?.url === 'string' ? f.url : (typeof f?.path === 'string' ? f.path : null))).filter(Boolean);
+                      const combined = [...baseImgs, ...metaPaths];
+                      const seen = new Set();
+                      const unique = [];
+                      for (const c of combined) { const key = toCanonical(c); if (!key || seen.has(key)) continue; seen.add(key); unique.push(c); }
+                      const total = unique.length;
+                      if (total <= 0) return (<td key={col} className="lv-td" style={{ fontSize:12 }}>—</td>);
                       return (
                         <td key={col} className="lv-td" style={{ fontSize:12 }}>
                           <button

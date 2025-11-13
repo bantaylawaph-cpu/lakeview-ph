@@ -139,7 +139,10 @@ class FeedbackController extends Controller
         $uid = $userId ? ('u'.$userId.'-') : '';
         $rand = Str::lower(Str::random(5));
         $name = $uid.$slug.'-'.$stamp.'-'.$rand.($ext ? ('.'.$ext) : '');
-        return $file->storeAs('feedback', $name, 'public');
+        // Select disk (env override) – defaults to FEEDBACK_IMAGES_DISK or fallback to public if not configured
+        $disk = env('FEEDBACK_IMAGES_DISK') ?: 'public';
+        // Ensure prefix path; S3 will treat this as part of the object key
+        return $file->storeAs('feedback', $name, $disk);
     }
 
     private function mapTypeToCategory($typeOrCategory): ?string
