@@ -54,6 +54,17 @@ const ContextMenu = ({ map, onMeasureDistance, onMeasureArea, onElevationProfile
     };
   }, [map]);
 
+  // When the menu is shown, prevent clicks/scrolls inside it from reaching the map.
+  useEffect(() => {
+    const node = menuRef.current;
+    if (!node) return;
+    try {
+      // Stop Leaflet from receiving click/scroll events from the menu
+      L.DomEvent.disableClickPropagation(node);
+      L.DomEvent.disableScrollPropagation(node);
+    } catch {}
+  }, [position]);
+
   const handleCopyCoords = () => {
     if (latlng) {
       (async () => {
@@ -117,6 +128,10 @@ const ContextMenu = ({ map, onMeasureDistance, onMeasureArea, onElevationProfile
           className="context-menu glass-panel"
           style={{ top: position.y, left: position.x, position: "absolute" }}
           ref={menuRef}
+          // Ensure interactions within the menu don't bubble to the map
+          onMouseDown={(e) => { e.stopPropagation(); }}
+          onClick={(e) => { e.stopPropagation(); }}
+          onContextMenu={(e) => { e.stopPropagation(); }}
         >
           <li
             className="context-item"
