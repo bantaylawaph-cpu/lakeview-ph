@@ -34,7 +34,20 @@ function AttachmentsModal({ open, onClose, item }) {
     if (open) setSel(0);
   }, [open, item]);
   if (!open || !item) return null;
-  const imgs = Array.isArray(item.images) ? item.images : [];
+  // Build a combined list of attachment sources from images and metadata.files (url or path)
+  const imgs = React.useMemo(() => {
+    const base = Array.isArray(item.images) ? item.images.filter(x => typeof x === 'string') : [];
+    const files = Array.isArray(item?.metadata?.files) ? item.metadata.files : [];
+    const fileUrls = files
+      .map(f => (typeof f?.url === 'string' ? f.url : (typeof f?.path === 'string' ? f.path : null)))
+      .filter(Boolean);
+    const combined = [...base, ...fileUrls];
+    // de-duplicate while preserving order
+    const seen = new Set();
+    return combined.filter(u => {
+      if (seen.has(u)) return false; seen.add(u); return true;
+    });
+  }, [item]);
   const count = imgs.length;
   const getFileName = (src) => {
     try {
@@ -422,6 +435,24 @@ export default function AdminFeedback() {
 
   useEffect(() => { fetchData({ page:1 }); }, [search, status, category, roleFilter]);
 
+  // Auto-refresh the list periodically when the tab is visible
+  useEffect(() => {
+    let timer = null;
+    const intervalMs = 30000; // 30 seconds
+    const tick = async () => {
+      try {
+        if (document.visibilityState === 'visible') {
+          try { invalidateHttpCache('/admin/feedback'); } catch {}
+          await fetchData({ page: 1 });
+        }
+      } finally {
+        timer = setTimeout(tick, intervalMs);
+      }
+    };
+    timer = setTimeout(tick, intervalMs);
+    return () => { if (timer) clearTimeout(timer); };
+  }, [fetchData]);
+
   const openDetail = (row) => { setSelected(row); setDetailOpen(true); };
   const handleSaved = (updated) => {
     setRows(prev => prev.map(r => r.id === updated.id ? { ...r, ...updated } : r));
@@ -520,7 +551,7 @@ export default function AdminFeedback() {
         search={{ value: search, onChange: setSearch, placeholder: 'Search Feedback...' }}
         columnPicker={{ columns: COLUMNS, visibleMap, onVisibleChange: setVisibleMap }}
         onToggleFilters={() => setShowFilters(v => !v)}
-        onRefresh={() => fetchData({ page: 1 })}
+        onRefresh={() => { try { invalidateHttpCache('/admin/feedback'); } catch {} fetchData({ page: 1 }); }}
       />
 
       {showFilters && (
@@ -688,15 +719,12 @@ export default function AdminFeedback() {
                       );
                     }
                     if (col === 'docs') {
-                      const fromLakePanel = !!r.lake?.id;
-                      const hasDocs = Array.isArray(r.images) && r.images.length > 0;
-                      // Requirement:
-                      // - Remove button if feedback is from the sidebar (i.e., not from lake panel)
-                      // - In lake info panel, show button only if there are attachments; otherwise show nothing
-                      if (!fromLakePanel) {
-                        return (<td key={col} className="lv-td" style={{ fontSize:12 }}>—</td>);
-                      }
-                      if (!hasDocs) {
+                      // Show a view button if there are any attachments from either images or metadata.files
+                      const imageCount = Array.isArray(r.images) ? r.images.length : 0;
+                      const metaFiles = Array.isArray(r?.metadata?.files) ? r.metadata.files : [];
+                      const fileCount = metaFiles.length;
+                      const total = imageCount + fileCount;
+                      if (total <= 0) {
                         return (<td key={col} className="lv-td" style={{ fontSize:12 }}>—</td>);
                       }
                       return (
@@ -704,9 +732,9 @@ export default function AdminFeedback() {
                           <button
                             className="pill-btn ghost sm"
                             onClick={() => { setDocsItem(r); setDocsOpen(true); }}
-                            title={`View attachments (${r.images.length})`}
+                            title={`View attachments (${total})`}
                           >
-                            <FiFileText /> View ({r.images.length})
+                            <FiFileText /> View ({total})
                           </button>
                         </td>
                       );
