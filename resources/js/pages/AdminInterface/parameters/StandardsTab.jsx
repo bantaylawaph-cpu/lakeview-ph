@@ -56,7 +56,21 @@ function StandardsTab() {
   }, [fetchStandards, page]);
 
   const updateGridCell = (key, field, value) => {
-    setGridEdits((prev) => ({ ...prev, [key]: { ...prev[key], [field]: value } }));
+    setGridEdits((prev) => {
+      const next = { ...prev, [key]: { ...prev[key], [field]: value } };
+      // If this edit sets a standard to current, clear current on other rows
+      if (field === "is_current" && value === true) {
+        const otherIds = [...standards.map((s) => s.id), ...newRows];
+        otherIds.forEach((id) => {
+          if (String(id) !== String(key)) {
+            const entry = next[id] || {};
+            // Ensure other rows are explicitly set to false in the overlay so the grid shows only one Current
+            next[id] = { ...entry, is_current: false };
+          }
+        });
+      }
+      return next;
+    });
   };
 
   const gridRows = useMemo(() => {
@@ -85,6 +99,43 @@ function StandardsTab() {
     };
     try {
       try { closeLoading(); } catch {}
+      // Guard: if updating, avoid saving when nothing changed
+      if (row.__id) {
+        const orig = standards.find((s) => String(s.id) === String(row.__id));
+        if (orig) {
+          const origNormalized = {
+            code: String(orig.code || "").trim(),
+            name: (orig.name || "") ? String(orig.name).trim() : null,
+            is_current: !!orig.is_current,
+            notes: (orig.notes || "") ? String(orig.notes).trim() : null,
+          };
+          const payloadNormalized = {
+            code: payload.code,
+            name: payload.name,
+            is_current: payload.is_current,
+            notes: payload.notes,
+          };
+          const unchanged =
+            origNormalized.code === payloadNormalized.code &&
+            origNormalized.name === payloadNormalized.name &&
+            origNormalized.is_current === payloadNormalized.is_current &&
+            origNormalized.notes === payloadNormalized.notes;
+          if (unchanged) {
+            await alertError("No changes", "No changes detected for this standard.");
+            return;
+          }
+
+          // Prevent turning off the only current standard without selecting another.
+          if (origNormalized.is_current === true && payloadNormalized.is_current === false) {
+            const anotherEditedTrue = Object.entries(gridEdits).some(([k, v]) => String(k) !== String(row.id) && v && v.is_current === true);
+            const anotherExistingTrue = standards.some((s) => String(s.id) !== String(row.__id) && !!s.is_current);
+            if (!anotherEditedTrue && !anotherExistingTrue) {
+              await alertError("Invalid change", "At least one standard must be marked Current. Set another standard to Current before turning this one off.");
+              return;
+            }
+          }
+        }
+      }
       if (row.__id) {
   showLoading('Saving standard', 'Please wait…');
         await api(`/admin/wq-standards/${row.__id}`, { method: "PUT", body: payload });

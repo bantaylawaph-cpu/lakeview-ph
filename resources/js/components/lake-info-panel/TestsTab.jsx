@@ -202,7 +202,6 @@ export default function TestsTab({ lake, onJumpToStation }) {
   return (
     <div>
       <div style={{ display: 'grid', gap: 8 }}>
-        <div style={{ fontSize: 12, color: '#ddd' }}>Markers are shown on the map while this tab is open.</div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'end', marginBottom: 6 }}>
             <div className="form-group" style={{ flex: 1, minWidth: 0 }}>
               <label style={{ fontSize: 11, marginBottom: 2, color: '#fff' }}>Dataset Source</label>
@@ -219,6 +218,7 @@ export default function TestsTab({ lake, onJumpToStation }) {
               </select>
             </div>
           </div>
+          <div style={{ fontSize: 12, color: '#ddd' }}>Click on the Station markers to see their data.</div>
           {loading && (
             <div style={{ margin: '2px 0 8px 0' }}>
               <LoadingSpinner label="Loading tests…" color="#fff" />

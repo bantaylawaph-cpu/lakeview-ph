@@ -573,6 +573,11 @@ function CompareLake({
       </div>
         </div>
       </div>
+      {currentStd && (currentStd.name || currentStd.code) ? (
+        <div style={{ marginTop: 6, fontSize: 12, color: '#ddd', opacity: 0.9 }}>
+          Parameter thresholds are based on {currentStd.name || currentStd.code} guidelines.
+        </div>
+      ) : null}
       <InfoModal open={infoOpen} onClose={() => setInfoOpen(false)} title={infoContent.title} sections={infoContent.sections} />
     </div>
   );

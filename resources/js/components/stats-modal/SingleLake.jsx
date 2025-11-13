@@ -398,9 +398,9 @@ export default function SingleLake({
                   onClose={() => setStationsOpen(false)}
                   stations={stationsList}
                   value={selectedStations}
-                  // allow selecting all stations in time-series mode
-                  maxSelected={chartType === 'time' ? (stationsList?.length || 9999) : 3}
-                  showLimitLabel={chartType !== 'time'}
+                  // allow selecting all stations in time-series and depth-profile modes
+                  maxSelected={(chartType === 'time' || chartType === 'depth') ? (stationsList?.length || 9999) : 3}
+                  showLimitLabel={!(chartType === 'time' || chartType === 'depth')}
                   onChange={(next) => { onStationsChange(next); setApplied(false); }}
                 />
               </div>
@@ -641,6 +641,11 @@ export default function SingleLake({
       </div>
       </div>
       </div>
+      {currentStd && (currentStd.name || currentStd.code) ? (
+        <div style={{ marginTop: 6, fontSize: 12, color: '#ddd', opacity: 0.9 }}>
+          Parameter thresholds are based on {currentStd.name || currentStd.code} guidelines.
+        </div>
+      ) : null}
       {/* Trend result (concise statement) */}
       {chartType === 'time' && trendEnabled && applied && smk && (
         (() => {

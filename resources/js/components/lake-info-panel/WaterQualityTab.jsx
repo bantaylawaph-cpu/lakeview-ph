@@ -19,6 +19,7 @@ import { buildGraphExplanation } from "../utils/graphExplain";
 import useMultiParamTimeSeriesData from "../stats-modal/hooks/useMultiParamTimeSeriesData";
 import OrgSelect from '../stats-modal/ui/OrgSelect';
 import StationSelect from '../stats-modal/ui/StationSelect';
+import useCurrentStandard from "../stats-modal/hooks/useCurrentStandard";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
@@ -30,6 +31,7 @@ import LoadingSpinner from "../LoadingSpinner";
  */
 function WaterQualityTab({ lake }) {
   const lakeId = lake?.id ?? null;
+  const { current: currentStd } = useCurrentStandard();
   const [orgs, setOrgs] = useState([]); // {id,name}
   const [orgId, setOrgId] = useState("");
   const [stations, setStations] = useState([]); // [name]
@@ -251,7 +253,6 @@ function WaterQualityTab({ lake }) {
 
   return (
     <>
-      <div style={{ fontSize: 12, color: '#ddd', marginBottom: 6 }}>Markers are shown on the map while this tab is open.</div>
   <div style={{ display: 'grid', gridTemplateColumns: 'auto auto 1fr 1fr auto', alignItems: 'end', gap: 6, marginBottom: 6, overflow: 'hidden' }}>
         {/* Year Range */}
         <div className="form-group" style={{ minWidth: 180 }}>
@@ -296,6 +297,12 @@ function WaterQualityTab({ lake }) {
           <StationSelect options={stations} value={station} onChange={(e) => setStation(e.target.value)} includeAllOption={true} allValue="" allLabel="All Stations" showPlaceholder={false} style={{ padding: '6px 8px', height: 'auto' }} />
         </div>
       </div>
+      <div style={{ fontSize: 12, color: '#ddd', marginBottom: 6 }}>Click on the Station markers to see their data</div>
+      {currentStd && (currentStd.name || currentStd.code) ? (
+        <div style={{ fontSize: 12, color: '#ddd', marginBottom: 6 }}>
+          Parameter thresholds are based on {currentStd.name || currentStd.code} guidelines.
+        </div>
+      ) : null}
       {(loading || loadingThresholds) && (
         <div style={{ margin: '2px 0 8px 0' }}>
           <LoadingSpinner label="Loading data..." color="#fff" />

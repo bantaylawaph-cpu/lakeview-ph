@@ -384,14 +384,19 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
       </div>
     </div>
 
-      <div style={{ marginTop:10, display:'flex', justifyContent:'flex-end', alignItems:'center', gap:8 }}>
-      <div style={{ display:'flex', gap:8, marginLeft: 'auto' }}>
-        <button ref={gearBtnRef} aria-label="Advanced options" title="Advanced options" className="pill-btn" onClick={toggleGearPopover} style={{ padding:'6px 10px', display:'inline-flex', alignItems:'center', justifyContent:'center' }}>
-          <FiSettings size={16} />
-        </button>
-  <button className="pill-btn liquid" onClick={run} style={{ padding:'6px 10px' }}>{loading ? 'Running...' : 'Run Test'}</button>
+      <div style={{ marginTop:10, display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}>
+        {currentStd && (currentStd.name || currentStd.code) ? (
+          <div style={{ fontSize: 12, color: '#ddd', opacity: 0.95 }}>
+            Parameter thresholds are based on {currentStd.name || currentStd.code} guidelines.
+          </div>
+        ) : (<div />)}
+        <div style={{ display:'flex', gap:8 }}>
+          <button ref={gearBtnRef} aria-label="Advanced options" title="Advanced options" className="pill-btn" onClick={toggleGearPopover} style={{ padding:'6px 10px', display:'inline-flex', alignItems:'center', justifyContent:'center' }}>
+            <FiSettings size={16} />
+          </button>
+          <button className="pill-btn liquid" onClick={run} style={{ padding:'6px 10px' }}>{loading ? 'Running...' : 'Run Test'}</button>
+        </div>
       </div>
-    </div>
 
     <Popover anchorRef={gearBtnRef} open={showGearPopover} onClose={closeGearPopover} minWidth={320}>
       <YearClPopover
