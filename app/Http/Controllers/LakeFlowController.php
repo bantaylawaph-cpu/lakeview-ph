@@ -103,6 +103,10 @@ class LakeFlowController extends Controller
             $data['coordinates'] = DB::raw("ST_SetSRID(ST_MakePoint($lon,$lat),4326)");
             // latitude/longitude columns removed; derive on the fly when serializing
         }
+        // Normalize boolean into SQL boolean literal to avoid Postgres type-mismatch
+        if (array_key_exists('is_primary', $data)) {
+            $data['is_primary'] = $data['is_primary'] ? DB::raw('TRUE') : DB::raw('FALSE');
+        }
         $data['created_by'] = Auth::id();
         $flow = LakeFlow::create($data);
         $flow->load(['lake:id,name','creator:id,name']);
@@ -126,6 +130,10 @@ class LakeFlowController extends Controller
         if ($lat !== null && $lon !== null) {
             $data['coordinates'] = DB::raw("ST_SetSRID(ST_MakePoint($lon,$lat),4326)");
             // latitude/longitude columns removed; derive on the fly when serializing
+        }
+        // Normalize boolean into SQL boolean literal to avoid Postgres type-mismatch
+        if (array_key_exists('is_primary', $data)) {
+            $data['is_primary'] = $data['is_primary'] ? DB::raw('TRUE') : DB::raw('FALSE');
         }
         $flow->update($data);
         $flow->load(['lake:id,name','creator:id,name']);

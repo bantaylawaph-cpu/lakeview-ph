@@ -29,6 +29,7 @@ import FlowsLayer from "../../components/FlowsLayer";
 import { useAuthRole } from "./hooks/useAuthRole";
 import { usePublicLakes } from "./hooks/usePublicLakes";
 import { useLakeSelection } from "./hooks/useLakeSelection";
+import { fetchPublicLayers } from "../../lib/layers";
 import { usePopulationHeatmap } from "./hooks/usePopulationHeatmap";
 import { useWaterQualityMarkers } from "./hooks/useWaterQualityMarkers";
 import usePublicSearch from "./hooks/usePublicSearch";
@@ -172,6 +173,7 @@ function MapPage() {
 
   const [isLoadingWatershed, setIsLoadingWatershed] = useState(false);
   const [isLoadingFlows, setIsLoadingFlows] = useState(false);
+  const [watershedHasLayer, setWatershedHasLayer] = useState(false);
 
   const {
     selectedLake, selectedLakeId, watershedToggleOn,
@@ -236,6 +238,25 @@ function MapPage() {
       if (!ids.has(String(k))) delete flowsRef.current[k];
     }
   }, [flows]);
+
+  // Determine whether the selected watershed has at least one public layer.
+  useEffect(() => {
+    let abort = false;
+    (async () => {
+      const wsId = selectedLake?.watershed_id ?? selectedLake?.watershedId;
+      if (!wsId) { setWatershedHasLayer(false); return; }
+      try {
+        setIsLoadingWatershed(true);
+        const rows = await fetchPublicLayers({ bodyType: 'watershed', bodyId: wsId });
+        if (!abort) setWatershedHasLayer(Array.isArray(rows) && rows.length > 0);
+      } catch (e) {
+        if (!abort) setWatershedHasLayer(false);
+      } finally {
+        if (!abort) setIsLoadingWatershed(false);
+      }
+    })();
+    return () => { abort = true; };
+  }, [selectedLake?.watershed_id, selectedLake?.watershedId]);
 
   const jumpToFlow = (flow) => {
     if (!flow || !mapRef.current) return;
@@ -379,7 +400,7 @@ function MapPage() {
           await applyOverlayByLayerId(layer.id, { fit: true });
         }}
         showWatershed={watershedToggleOn}
-        canToggleWatershed={Boolean(selectedLake?.watershed_id || selectedLake?.watershedId)}
+        canToggleWatershed={Boolean((selectedLake?.watershed_id || selectedLake?.watershedId) && watershedHasLayer)}
         onToggleWatershed={handlePanelToggleWatershed}
           authUser={authUser}
   onToggleFlows={(checked)=>setShowFlows(checked)}
