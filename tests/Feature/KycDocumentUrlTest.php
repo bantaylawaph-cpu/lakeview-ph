@@ -8,8 +8,7 @@ use App\Http\Controllers\Api\KycProfileController;
 
 class KycDocumentUrlTest extends TestCase
 {
-    /** @test */
-    public function doc_public_url_uses_disk_and_falls_back_to_asset()
+    public function test_public_url_uses_disk_and_falls_back_to_asset()
     {
     $disk = env('KYC_DOCS_DISK', config('filesystems.default', 'public'));
         Storage::fake($disk);

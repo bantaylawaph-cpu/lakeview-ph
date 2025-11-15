@@ -19,7 +19,6 @@ class KpiController extends Controller
         $roles = [Role::ORG_ADMIN, Role::CONTRIBUTOR];
         $count = User::query()
             ->where('tenant_id', $tenant)
-            ->where('is_active', true)
             ->whereHas('role', fn($q) => $q->whereIn('name', $roles))
             ->count();
         return response()->json(['count' => $count]);

@@ -19,7 +19,6 @@ class UpdateUserRequest extends FormRequest
             'password' => ['nullable','string','min:8','confirmed'],
             'role' => ['required', Rule::in([Role::PUBLIC, Role::CONTRIBUTOR, Role::ORG_ADMIN, Role::SUPERADMIN])],
             'tenant_id' => ['nullable','integer','exists:tenants,id'],
-            'is_active' => ['nullable','boolean'],
         ];
     }
 

@@ -92,6 +92,8 @@ Route::middleware(['auth:sanctum','role:superadmin'])->prefix('admin')->group(fu
     Route::put('/tenants/{tenant}',      [TenantController::class, 'update'])->whereNumber('tenant');
     Route::delete('/tenants/{tenant}',   [TenantController::class, 'destroy'])->whereNumber('tenant');
     Route::post('/tenants/{id}/restore', [TenantController::class, 'restore'])->whereNumber('id');
+    Route::delete('/tenants/{tenant}/hard', [TenantController::class, 'hardDelete'])->whereNumber('tenant');
+    Route::get('/tenants/{tenant}/audit', [TenantController::class, 'audit'])->whereNumber('tenant');
 
     
 

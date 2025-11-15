@@ -9,7 +9,6 @@ import api, { me as fetchMe } from "../../lib/api";
 import { cachedGet, invalidateHttpCache } from "../../lib/httpCache";
 import Modal from "../../components/Modal";
 import TableToolbar from "../../components/table/TableToolbar";
-import FilterPanel from "../../components/table/FilterPanel";
 import TableLayout from "../../layouts/TableLayout";
 
 // Constants
@@ -17,21 +16,15 @@ const CONTRIBUTOR_ROLE_ID = 3;
 const FIXED_ROLE = 'contributor';
 const TABLE_ID = 'org-contributors';
 const VIS_KEY = `${TABLE_ID}::visible`;
-const ADV_KEY = `${TABLE_ID}::filters_advanced`;
 
 // Initial form values
-const emptyContributor = { name: '', email: '', password: '', role: FIXED_ROLE, status: 'active' };
+const emptyContributor = { name: '', email: '', password: '', role: FIXED_ROLE };
 
-// Normalize API users -> table rows
+// Normalize API users -> table rows (only used fields)
 const normalizeContributors = (rows = []) => rows.map(u => ({
   id: u.id,
   name: u.name || '',
   email: u.email || '',
-  // keep a machine-friendly lowercase status for filtering, and a human-friendly label for display
-  status: (u.active === false || u.disabled || (typeof u.status === 'string' && u.status.toLowerCase() === 'inactive')) ? 'inactive' : 'active',
-  status_label: (u.active === false || u.disabled || (typeof u.status === 'string' && u.status.toLowerCase() === 'inactive')) ? 'Inactive' : 'Active',
-  joined_at: u.joined_at ? new Date(u.joined_at).toLocaleString() : (u.created_at ? new Date(u.created_at).toLocaleString() : '—'),
-  joined_raw: u.joined_at || u.created_at || null,
   _raw: u,
 }));
 
@@ -47,23 +40,8 @@ export default function OrgMembers() {
   // Search
   const [q, setQ] = useState('');
 
-  // Advanced filters (persisted)
-  const [fStatus, setFStatus] = useState(() => { try { return qp.get('status') || JSON.parse(localStorage.getItem(ADV_KEY) || '{}').status || ''; } catch { return ''; } });
-  const [showAdvanced, setShowAdvanced] = useState(false);
-
-  // Additional filter inputs (name/email/date-range) used by client-side filtering
-  // These were missing and caused a ReferenceError in the filter effect.
-  const [fName, setFName] = useState("");
-  const [fEmail, setFEmail] = useState("");
-  const [fJoinedRange, setFJoinedRange] = useState([null, null]);
-
-  // Persist advanced filters
-  useEffect(() => {
-    try { localStorage.setItem(ADV_KEY, JSON.stringify({ status: fStatus })); } catch {}
-  }, [fStatus]);
-
-  // Column visibility (only 4 columns)
-  const defaultsVisible = useMemo(() => ({ name: true, email: true, status: true, joined_at: true }), []);
+  // Column visibility
+  const defaultsVisible = useMemo(() => ({ name: true, email: true }), []);
   const [visibleMap, setVisibleMap] = useState(() => { try { const raw = localStorage.getItem(VIS_KEY); return raw ? JSON.parse(raw) : defaultsVisible; } catch { return defaultsVisible; } });
   useEffect(() => { try { localStorage.setItem(VIS_KEY, JSON.stringify(visibleMap)); } catch {} }, [visibleMap]);
 
@@ -74,33 +52,24 @@ export default function OrgMembers() {
   const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
 
-  // Build base columns similar to adminUsers but limited
+  // Build base columns
   const baseColumns = useMemo(() => [
     { id: 'name', header: 'Name', accessor: 'name' },
     { id: 'email', header: 'Email', accessor: 'email', width: 240 },
-  { id: 'status', header: 'Status', accessor: 'status_label', width: 120 },
-    { id: 'joined_at', header: 'Joined', accessor: 'joined_at', width: 170 },
   ], []);
   const visibleColumns = useMemo(() => baseColumns.filter(c => visibleMap[c.id] !== false), [baseColumns, visibleMap]);
 
   const toast = (title, icon='success') => Swal.fire({ toast:true, position:'top-end', timer:1600, showConfirmButton:false, icon, title });
   const unwrap = (res) => (res?.data ?? res);
 
-  // Fetch contributors (no server pagination assumed)
+  // Fetch contributors
   const fetchContributors = async (tid) => {
     setLoading(true); setError(null);
     try {
       const res = unwrap(await cachedGet(`/org/${tid}/users`, { ttlMs: 5 * 60 * 1000 }));
       const list = Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : res?.data?.data || []);
       const contribs = list.filter(u => (u.role_id === CONTRIBUTOR_ROLE_ID) || (u.role === FIXED_ROLE));
-      const mapped = contribs.map(u => ({
-        id: u.id,
-        name: u.name || '',
-        email: u.email || '',
-        status: (u.active === false || u.disabled) ? 'inactive' : 'active',
-        joined_at: u.created_at || u.pivot?.created_at || null,
-      }));
-      setRows(mapped);
+      setRows(contribs);
     } catch (e) {
       console.error('Failed to load contributors', e);
       setError(e?.response?.data?.message || 'Failed to load contributors');
@@ -132,9 +101,7 @@ export default function OrgMembers() {
       const u = res?.data ?? res;
       setMode('edit');
       setEditingId(u.id);
-      const isActive = Object.prototype.hasOwnProperty.call(u, 'is_active') ? !!u.is_active : (u.active !== false && !u.disabled);
-      const status = isActive ? 'active' : 'inactive';
-      setInitial({ name: u.name || '', email: u.email || '', password: '', role: FIXED_ROLE, status });
+      setInitial({ name: u.name || '', email: u.email || '', password: '', role: FIXED_ROLE });
       setOpen(true);
     } catch (e) {
       Swal.fire('Failed to load contributor', e?.response?.data?.message || '', 'error');
@@ -148,15 +115,12 @@ export default function OrgMembers() {
   const submitForm = async (payload) => {
     if (!tenantId) return;
     const verb = mode === 'edit' ? 'Update' : 'Create';
-    const active = payload.status !== 'inactive';
-    const body = { name: payload.name, email: payload.email, role: FIXED_ROLE, role_id: CONTRIBUTOR_ROLE_ID, tenant_id: tenantId, active };
-    // Include is_active and disabled for backend compatibility
-    body.is_active = !!active;
-    body.disabled = !active;
+    const body = { name: payload.name, email: payload.email };
     if (payload.password) {
       body.password = payload.password;
       if (payload.password_confirmation) body.password_confirmation = payload.password_confirmation;
     }
+
     const { isConfirmed } = await Swal.fire({ title: `${verb} contributor?`, text: payload.email, icon:'question', showCancelButton:true, confirmButtonText: verb, confirmButtonColor:'#2563eb' });
     if (!isConfirmed) return;
     setSaving(true);
@@ -200,16 +164,7 @@ export default function OrgMembers() {
   // Normalized rows (for TableLayout)
   const normalized = useMemo(() => normalizeContributors(rows), [rows]);
 
-  // Advanced filter definitions (adapted from adminUsers -> name/email/status/date-range)
-  const advancedFields = [
-    { id: 'status', label: 'Status', type: 'select', value: fStatus, onChange: v => setFStatus(v), options: [ { value:'', label:'All Statuses' }, { value:'active', label:'Active' }, { value:'inactive', label:'Inactive' } ] },
-  ];
-
-  const clearAdvanced = () => { setFStatus(''); };
-
-  const activeAdvCount = [fStatus?1:0].reduce((a,b)=>a+b,0);
-
-  // Apply search & filters client-side
+  // Apply search client-side
   const debounceRef = useRef(null);
   const [filtered, setFiltered] = useState([]);
   useEffect(() => { setFiltered(normalized); }, [normalized]);
@@ -217,26 +172,15 @@ export default function OrgMembers() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       const term = q.trim().toLowerCase();
-      const [from, to] = fJoinedRange;
-      const fromTs = from ? new Date(from).getTime() : null;
-      const toTs = to ? new Date(to).getTime() : null;
       setFiltered(normalized.filter(r => {
         if (term && !(r.name.toLowerCase().includes(term) || r.email.toLowerCase().includes(term))) return false;
-        if (fName && !r.name.toLowerCase().includes(fName.toLowerCase())) return false;
-        if (fEmail && !r.email.toLowerCase().includes(fEmail.toLowerCase())) return false;
-        if (fStatus && r.status !== fStatus) return false;
-        if ((fromTs || toTs) && r.joined_raw) {
-          const jt = new Date(r.joined_raw).getTime();
-          if (fromTs && jt < fromTs) return false;
-          if (toTs && jt > toTs) return false;
-        }
         return true;
       }));
-    }, 350);
+    }, 300);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [q, fStatus, normalized]);
+  }, [q, normalized]);
 
-  // Column picker adapter (like adminUsers)
+  // Column picker adapter
   const columnPickerAdapter = {
     columns: baseColumns.map(c => ({ id: c.id, header: c.header })),
     visibleMap,
@@ -255,14 +199,11 @@ export default function OrgMembers() {
       <div className="card" style={{ padding:12, borderRadius:12, marginBottom:12 }}>
         <TableToolbar
           tableId={TABLE_ID}
-            search={{ value: q, onChange: (val) => setQ(val), placeholder: 'Search Members...' }}
-            filters={[]}
-            columnPicker={columnPickerAdapter}
-            onRefresh={reload}
-            onToggleFilters={() => setShowAdvanced(s => !s)}
-            filtersBadgeCount={activeAdvCount}
+          search={{ value: q, onChange: (val) => setQ(val), placeholder: 'Search Members...' }}
+          filters={[]}
+          columnPicker={columnPickerAdapter}
+          onRefresh={reload}
         />
-        <FilterPanel open={showAdvanced} fields={advancedFields} onClearAll={clearAdvanced} />
         {error && <div className="lv-error" style={{ marginTop:8, color:'#b91c1c' }}>{error}</div>}
       </div>
 
@@ -306,13 +247,6 @@ export default function OrgMembers() {
           <label className="lv-field" style={{ gridColumn:'2/3' }}>
             <span>{mode==='edit' ? 'Confirm New Password' : 'Confirm Password *'}</span>
             <input type="password" required={mode!=='edit'} value={initial.password_confirmation||''} onChange={(e)=>setInitial(i=>({...i,password_confirmation:e.target.value}))} />
-          </label>
-          <label className="lv-field" style={{ gridColumn:'1/2' }}>
-            <span>Status *</span>
-            <select value={initial.status} onChange={(e)=>setInitial(i=>({...i,status:e.target.value}))} required>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
           </label>
         </form>
       </Modal>

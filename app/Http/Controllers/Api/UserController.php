@@ -97,7 +97,6 @@ class UserController extends Controller
                     'id' => $u->tenant->id,
                     'name' => $u->tenant->name,
                 ] : null,
-                'is_active' => $u->is_active,
                 'email_verified_at' => optional($u->email_verified_at)->toIso8601String(),
                 'created_at' => optional($u->created_at)->toIso8601String(),
                 'updated_at' => optional($u->updated_at)->toIso8601String(),
@@ -172,7 +171,7 @@ class UserController extends Controller
         $user->password = Hash::make($data['password']);
         $user->role_id = $roleRow->id;
         $user->tenant_id = $data['tenant_id'] ?? null;
-        $user->is_active = true;
+        // Status deprecated: do not set is_active
         $user->save();
 
         return response()->json(['data' => $this->resource($user->fresh(['role','tenant']))], 201);
@@ -192,7 +191,6 @@ class UserController extends Controller
             'password' => ['nullable','string','min:8','confirmed'],
             'role' => ['required', Rule::in($roleNames)],
             'tenant_id' => ['nullable','integer','exists:tenants,id'],
-            'is_active' => ['nullable','boolean'],
             'reason' => ['nullable','string','max:500']
         ]);
 
@@ -219,9 +217,7 @@ class UserController extends Controller
         }
         $user->role_id = $roleRow->id;
         $user->tenant_id = $data['tenant_id'] ?? null;
-        if (array_key_exists('is_active', $data)) {
-            $user->is_active = (bool)$data['is_active'];
-        }
+        // Status deprecated: ignore is_active updates
         $user->save();
 
         // Audit log if role or tenant changed
@@ -257,7 +253,6 @@ class UserController extends Controller
                 'id' => $u->tenant->id,
                 'name' => $u->tenant->name,
             ] : null,
-            'is_active' => $u->is_active,
             'email_verified_at' => optional($u->email_verified_at)->toIso8601String(),
             'created_at' => optional($u->created_at)->toIso8601String(),
             'updated_at' => optional($u->updated_at)->toIso8601String(),

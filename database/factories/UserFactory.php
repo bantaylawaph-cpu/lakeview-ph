@@ -32,7 +32,6 @@ class UserFactory extends Factory
             // role_id & tenant_id assigned via states so seeding/tests control scope explicitly
             'role_id' => null,
             'tenant_id' => null,
-            'is_active' => true,
         ];
     }
 
@@ -54,10 +53,7 @@ class UserFactory extends Factory
         return $this->state(fn() => ['tenant_id' => $tenant->id]);
     }
 
-    public function inactive(): static
-    {
-        return $this->state(fn() => ['is_active' => false]);
-    }
+    // Status removed: no inactive state
 
     /**
      * Indicate that the model's email address should be unverified.

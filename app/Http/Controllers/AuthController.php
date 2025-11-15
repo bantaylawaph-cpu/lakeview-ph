@@ -29,7 +29,6 @@ class AuthController extends Controller
             'password' => Hash::make($data['password']),
             'tenant_id' => $data['tenant_id'] ?? null,
             'role_id' => $roleId,
-            'is_active' => true,
         ]);
 
         return response()->json(['data' => $user], 201);
@@ -45,9 +44,7 @@ class AuthController extends Controller
         if (!$user || !Hash::check($data['password'], $user->password)) {
             throw ValidationException::withMessages(['email' => ['The provided credentials are incorrect.']]);
         }
-        if (!$user->is_active) {
-            throw ValidationException::withMessages(['email' => ['Account is inactive.']]);
-        }
+        // Note: account active/inactive status deprecated; do not block login here.
         $token = $user->createToken('api')->plainTextToken;
         // Eager load role & tenant for consistency with /auth/me
         $user->loadMissing(['role:id,name,scope','tenant:id,name']);

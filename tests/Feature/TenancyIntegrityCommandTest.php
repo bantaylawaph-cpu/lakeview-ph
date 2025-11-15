@@ -44,7 +44,6 @@ class TenancyIntegrityCommandTest extends TestCase
             'password' => bcrypt('password'),
             'role_id' => $orgAdminRoleId,
             'tenant_id' => null,
-            'is_active' => 1,
             'created_at' => now(),
             'updated_at' => now(),
         ]);

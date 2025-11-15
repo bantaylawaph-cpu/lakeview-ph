@@ -12,13 +12,13 @@ const ROLE_LABELS = {
 
 export default function AdminUsersForm({
   formId = "lv-admin-user-form",
-  initialValues = { name: "", email: "", password: "", role: "", tenant_id: "", active: true },
+  initialValues = { name: "", email: "", password: "", role: "", tenant_id: "" },
   mode = "create",          // 'create' | 'edit'
   saving = false,           // not used here, but handy if you want inline spinners
   onSubmit,
   onCancel,                 // called from parent footer
 }) {
-  const [form, setForm] = useState({ ...initialValues, tenant_id: initialValues.tenant_id || "", active: initialValues.active ?? true });
+  const [form, setForm] = useState({ ...initialValues, tenant_id: initialValues.tenant_id || "" });
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [roleOptions, setRoleOptions] = useState([]);
   const [tenants, setTenants] = useState([]);
@@ -45,7 +45,7 @@ export default function AdminUsersForm({
 
 
   useEffect(() => {
-    setForm({ ...initialValues, tenant_id: initialValues.tenant_id || "", active: initialValues.active ?? true });
+    setForm({ ...initialValues, tenant_id: initialValues.tenant_id || "" });
     setPasswordConfirmation("");
   }, [initialValues]);
 
@@ -66,9 +66,7 @@ export default function AdminUsersForm({
     if (form.role !== "") {
       payload.role = form.role;
     }
-    if (typeof form.active === 'boolean') {
-      payload.active = form.active;
-    }
+    // Status removed: do not include active/is_active
     // If org-scoped role, include tenant_id
     if (["org_admin", "contributor"].includes(form.role) && form.tenant_id) {
       payload.tenant_id = form.tenant_id;
@@ -94,18 +92,7 @@ export default function AdminUsersForm({
         />
       </label>
 
-      {/* Active status selector */}
-      <label className="lv-field" style={{ gridColumn: '1/2' }}>
-        <span>Status*</span>
-        <select
-          value={form.active ? 'active' : 'inactive'}
-          onChange={(e) => setForm(f => ({ ...f, active: e.target.value === 'active' }))}
-          required
-        >
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-        </select>
-      </label>
+      {/* Status selector removed */}
 
       <label className="lv-field" style={{ gridColumn: '2/3' }}>
         <span>Email*</span>

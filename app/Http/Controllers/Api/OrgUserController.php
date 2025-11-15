@@ -71,7 +71,6 @@ class OrgUserController extends Controller
 
         $user->role_id = $contributorRoleId; // force contributor
         $user->tenant_id = $tenant;
-        $user->is_active = true;
         $user->save();
 
         return response()->json([
@@ -90,7 +89,6 @@ class OrgUserController extends Controller
             'name' => ['sometimes','string','max:255'],
             'email' => ['sometimes','email','max:255', Rule::unique('users','email')->ignore($user->id)],
             'password' => ['sometimes','nullable','string','min:8'],
-            'is_active' => ['sometimes','boolean'],
         ]);
 
         if ($user->tenant_id !== $tenant) {
@@ -100,7 +98,6 @@ class OrgUserController extends Controller
         if (array_key_exists('name', $data)) $user->name = $data['name'];
         if (array_key_exists('email', $data)) $user->email = $data['email'];
         if (!empty($data['password'])) $user->password = Hash::make($data['password']);
-        if (array_key_exists('is_active', $data)) $user->is_active = (bool)$data['is_active'];
         $user->save();
 
         return response()->json(['message' => 'Updated','user' => $user->fresh(['role'])]);
