@@ -21,7 +21,6 @@ class UserResource extends JsonResource
                     'slug' => $this->tenant->slug,
                 ] : null;
             }),
-            'is_active' => $this->is_active,
             'email_verified_at' => optional($this->email_verified_at)->toIso8601String(),
             'created_at' => optional($this->created_at)->toIso8601String(),
             'updated_at' => optional($this->updated_at)->toIso8601String(),

@@ -21,16 +21,14 @@ class UserObserver
     {
         $origRoleId = $user->getOriginal('role_id');
         $origTenant = $user->getOriginal('tenant_id');
-        $origActive = $user->getOriginal('is_active');
 
         $roleChanged = $origRoleId !== $user->role_id;
         $tenantChanged = $origTenant !== $user->tenant_id;
-        $activeChanged = (bool)$origActive !== (bool)$user->is_active;
 
-        if ($roleChanged || $activeChanged) {
+        if ($roleChanged) {
             $this->forgetAdminUsers();
         }
-        if ($tenantChanged || $roleChanged || $activeChanged) {
+        if ($tenantChanged || $roleChanged) {
             if ($origTenant) $this->forgetOrgMembers((int) $origTenant);
             if ($user->tenant_id) $this->forgetOrgMembers((int) $user->tenant_id);
         }

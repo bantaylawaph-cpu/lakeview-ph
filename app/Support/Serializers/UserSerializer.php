@@ -27,7 +27,6 @@ class UserSerializer
             'role_scope' => $user->role?->scope,
             'tenant_id'  => $user->tenant_id,
             'tenant'     => $user->tenant?->name,
-            'is_active'  => $user->is_active,
             'created_at' => $user->created_at,
             'updated_at' => $user->updated_at,
         ];

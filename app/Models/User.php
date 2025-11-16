@@ -18,7 +18,6 @@ class User extends Authenticatable
         'password',
         'role_id',
         'tenant_id',
-        'is_active'
     ];
 
     protected $hidden = [
@@ -28,7 +27,6 @@ class User extends Authenticatable
 
     protected $casts = [
         'email_verified_at' => 'datetime',
-        'is_active' => 'boolean',
     ];
 
     // Relationships

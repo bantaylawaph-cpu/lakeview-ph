@@ -341,6 +341,25 @@ export const removeTenantAdmin = (tenantId, userId) =>
     method: "DELETE",
   });
 
+// ---- Organization (Tenant) listing & management revamp ----
+export const listTenants = (params = {}) =>
+  api(`/admin/tenants${buildQuery(params)}`);
+
+export const getTenant = (tenantId, params = {}) =>
+  api(`/admin/tenants/${tenantId}${buildQuery(params)}`);
+
+export const updateTenant = (tenantId, payload) =>
+  api(`/admin/tenants/${tenantId}`, { method: 'PUT', body: payload });
+
+export const softDeleteTenant = (tenantId) =>
+  api(`/admin/tenants/${tenantId}`, { method: 'DELETE' });
+
+export const restoreTenant = (tenantId) =>
+  api(`/admin/tenants/${tenantId}/restore`, { method: 'POST' });
+
+export const hardDeleteTenant = (tenantId, reason = '') =>
+  api(`/admin/tenants/${tenantId}/hard`, { method: 'DELETE', body: { reason } });
+
 // --- Exports ---------------------------------------------------------------
 const api = client;         // default export is the function client
 export default api;

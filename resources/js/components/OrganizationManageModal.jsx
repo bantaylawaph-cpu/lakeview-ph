@@ -1,20 +1,57 @@
 
 import React, { useEffect, useState } from "react";
-import { FiEdit2, FiTrash2 } from 'react-icons/fi';
 import api from "../lib/api";
 import { cachedGet, invalidateHttpCache } from "../lib/httpCache";
 import Modal from "./Modal";
 import Swal from "sweetalert2";
 import LoadingSpinner from "./LoadingSpinner";
+import OrganizationForm from "./OrganizationForm";
 
 export default function OrganizationManageModal({ org, open, onClose }) {
-	const [activeTab, setActiveTab] = useState("members");
+	const [activeTab, setActiveTab] = useState("overview");
+	const [orgDetail, setOrgDetail] = useState(null);
 	const [members, setMembers] = useState([]); // org_admin + contributor
 	const [publicUsers, setPublicUsers] = useState([]);
 	const [loading, setLoading] = useState(false);
 	const [editing, setEditing] = useState(null); // user being edited
 	const [editForm, setEditForm] = useState({ name: "", email: "" });
 	const [saving, setSaving] = useState(false);
+	const [settingsForm, setSettingsForm] = useState({ name: "", contact_email: "" });
+	const [settingsSaving, setSettingsSaving] = useState(false);
+
+	// Audit removed
+
+	const loadOrgDetail = async () => {
+		if (!org?.id) return;
+		try {
+			const res = await api.get(`/admin/tenants/${org.id}`);
+			// Laravel returns { data: { ..tenant.. } }, ensure we unwrap
+			const tenant = res?.data?.data ?? res?.data ?? res;
+			setOrgDetail(tenant);
+			setSettingsForm({
+				name: tenant.name || "",
+				contact_email: tenant.contact_email || "",
+			});
+		} catch { /* ignore */ }
+	};
+
+	const formatApiError = (e) => {
+		if (!e) return 'Unknown error';
+		const resp = e.response;
+		if (!resp) return e.message || 'Network error';
+		const data = resp.data || {};
+		if (typeof data.message === 'string' && data.message.length) return data.message;
+		if (data.errors && typeof data.errors === 'object') {
+			for (const k of Object.keys(data.errors)) {
+				const val = data.errors[k];
+				if (Array.isArray(val) && val.length) return val.join(' ');
+				if (typeof val === 'string') return val;
+			}
+		}
+		return resp.statusText || `HTTP ${resp.status}`;
+	};
+
+	// Overview now always shows edit form directly (no separate summary state)
 
 	// Client-side filters
 	const [memberRoleFilter, setMemberRoleFilter] = useState(""); // '', 'org_admin', 'contributor'
@@ -22,7 +59,10 @@ export default function OrganizationManageModal({ org, open, onClose }) {
 	const [publicNameFilter, setPublicNameFilter] = useState("");
 
 	useEffect(() => {
-		if (open && org) fetchTabs();
+		if (open && org) {
+			loadOrgDetail();
+			if (activeTab === 'members' || activeTab === 'public') fetchTabs();
+		}
 		// eslint-disable-next-line
 	}, [open, org, activeTab]);
 
@@ -46,6 +86,8 @@ export default function OrganizationManageModal({ org, open, onClose }) {
 			setLoading(false);
 		}
 	};
+
+	// Audit fetch removed
 
 	// Remove org admin
 	const handleRemove = async (user) => {
@@ -132,6 +174,26 @@ export default function OrganizationManageModal({ org, open, onClose }) {
 		}
 	};
 
+	// Settings save
+	const submitSettings = async (e) => {
+		e.preventDefault();
+		setSettingsSaving(true);
+		try {
+			await api.put(`/admin/tenants/${org.id}`, {
+				name: settingsForm.name,
+				contact_email: settingsForm.contact_email || null,
+			});
+			await loadOrgDetail();
+				Swal.fire('Saved','Settings updated.','success');
+		} catch (e) {
+				Swal.fire('Failed', formatApiError(e), 'error');
+		} finally {
+			setSettingsSaving(false);
+		}
+	};
+
+	// Feature flags removed.
+
 	// Public user -> add as contributor
 	const addAsContributor = async (user) => {
 		try {
@@ -171,15 +233,36 @@ export default function OrganizationManageModal({ org, open, onClose }) {
 			}
 		>
 			{/* Tabs */}
-			<div className="lv-tabs" style={{ display:'flex', gap:8, marginBottom:12 }}>
+			<div className="lv-tabs" style={{ display:'flex', gap:8, marginBottom:12, flexWrap:'wrap' }}>
+				<button className={`pill-btn ${activeTab==='overview'?'primary':''}`} onClick={()=>setActiveTab('overview')}>Overview</button>
 				<button className={`pill-btn ${activeTab==='members'?'primary':''}`} onClick={()=>setActiveTab('members')}>Members</button>
 				<button className={`pill-btn ${activeTab==='public'?'primary':''}`} onClick={()=>setActiveTab('public')}>Public Users</button>
+				<button className={`pill-btn ${activeTab==='settings'?'primary':''}`} onClick={()=>setActiveTab('settings')}>Settings</button>
 			</div>
-			<div className="lv-modal-section" style={{ minHeight: 360, background: '#f8fafc', borderRadius: 12, padding: 16, boxShadow: '0 2px 8px #0001', marginBottom: 0 }}>
+			<div className="lv-modal-section modern-scrollbar" style={{ minHeight: 360, maxHeight: 480, overflowY:'auto', background: '#f8fafc', borderRadius: 12, padding: 16, boxShadow: '0 2px 8px #0001', marginBottom: 0 }}>
 				{loading ? (
 					<div style={{ padding: 24 }}><LoadingSpinner label="Loading…" /></div>
 				) : (
 					<>
+						{activeTab === 'overview' && (
+							<div style={{ display:'grid', gap:12 }}>
+								<h3 style={{ margin:0 }}>Edit Organization</h3>
+								{orgDetail ? (
+									<div style={{ padding:12, background:'#fff', borderRadius:8 }}>
+										<OrganizationForm inline initialData={orgDetail} onSubmit={async (payload) => {
+											try {
+												await api.put(`/admin/tenants/${org.id}`, payload);
+												await loadOrgDetail();
+												try { invalidateHttpCache('/admin/tenants'); } catch {}
+												Swal.fire('Saved','Organization updated.','success');
+											} catch (e) {
+												Swal.fire('Failed', formatApiError(e), 'error');
+											}
+										}} />
+									</div>
+								) : <div style={{ color:'#555' }}>Loading…</div>}
+							</div>
+						)}
 						{activeTab === 'members' && (
 							<div style={{ overflowX:'auto' }}>
 								{/* Filters */}
@@ -263,6 +346,26 @@ export default function OrganizationManageModal({ org, open, onClose }) {
 								</table>
 							</div>
 						)}
+						{activeTab === 'settings' && (
+							<form onSubmit={submitSettings} style={{ display:'grid', gap:16, maxWidth:520 }}>
+								<h3 style={{ margin:0 }}>Settings</h3>
+								<label className="lv-field">
+									<span>Name</span>
+									<input value={settingsForm.name} onChange={e=>setSettingsForm(f=>({ ...f, name:e.target.value }))} required />
+								</label>
+								<label className="lv-field">
+									<span>Contact Email</span>
+									<input type="email" value={settingsForm.contact_email} onChange={e=>setSettingsForm(f=>({ ...f, contact_email:e.target.value }))} placeholder="org@example.com" />
+								</label>
+								{/* Status removed from settings UI (deprecated) */}
+								{/* Feature flags UI removed */}
+								<div style={{ display:'flex', gap:8 }}>
+									<button type="submit" className="pill-btn primary" disabled={settingsSaving}>{settingsSaving ? 'Saving…' : 'Save Settings'}</button>
+								</div>
+								{/* Danger Zone removed */}
+							</form>
+						)}
+						{/* Audit tab removed */}
 					</>
 				)}
 			</div>
@@ -296,3 +399,5 @@ export default function OrganizationManageModal({ org, open, onClose }) {
 		</Modal>
 	);
 }
+
+// DangerHardDelete removed

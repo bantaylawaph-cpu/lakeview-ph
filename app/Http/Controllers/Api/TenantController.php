@@ -22,16 +22,11 @@ class TenantController extends Controller
     public function index(Request $request)
     {
         $q            = trim((string) $request->query('q', ''));
-        $perPage      = max(1, min((int) $request->query('per_page', 15), 200));
+        // Per-page capped at 100 for performance
+        $perPage      = max(1, min((int) $request->query('per_page', 15), 100));
         $withDeleted  = (bool) $request->query('with_deleted', false);
         // Active filter (supports either 'active' or 'is_active')
-        $activeParam  = $request->query('active');
-        if ($activeParam === null) { $activeParam = $request->query('is_active'); }
-        $activeFilter = null;
-        if ($activeParam !== null) {
-            // Accept true/false, '1'/'0', 'true'/'false'
-            $activeFilter = filter_var($activeParam, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
-        }
+        // Status (active) deprecated: ignore active/is_active filters
 
         // Advanced filter params (mirroring adminUsers pattern)
         $fName        = trim((string) $request->query('name', ''));
@@ -46,7 +41,7 @@ class TenantController extends Controller
 
         $qb = Tenant::query()
             ->when($withDeleted, fn($w) => $w->withTrashed())
-            ->when($activeFilter !== null, fn($w) => $w->where('active', $activeFilter))
+            // active filter removed
             // Global free-text q across name/slug
             ->when($q !== '', function ($w) use ($q) {
                 $p = "%{$q}%";
@@ -70,9 +65,19 @@ class TenantController extends Controller
 
         $paginator = $qb->paginate($perPage);
 
-        $paginator->getCollection()->transform(function (Tenant $t) {
-            return $this->tenantResource($t);
-        });
+        // Transform including core contact fields (status deprecated; omit 'active')
+        $paginator->getCollection()->transform(fn (Tenant $t) => [
+            'id'            => $t->id,
+            'name'          => $t->name,
+            'slug'          => $t->slug,
+            'type'          => $t->type,
+            'phone'         => $t->phone,
+            'address'       => $t->address,
+            'contact_email' => $t->contact_email,
+            'deleted_at'    => optional($t->deleted_at)->toIso8601String(),
+            'created_at'    => optional($t->created_at)->toIso8601String(),
+            'updated_at'    => optional($t->updated_at)->toIso8601String(),
+        ]);
 
         return response()->json($paginator);
     }
@@ -98,7 +103,6 @@ class TenantController extends Controller
             'contact_email' => 'nullable|email|max:255',
             'phone'         => 'nullable|string|max:255',
             'address'       => 'nullable|string|max:500',
-            'active'        => 'sometimes|boolean',
         ]);
         $tenant = Tenant::create($data);
         return response()->json(['data' => $this->tenantResource($tenant)], 201);
@@ -116,7 +120,6 @@ class TenantController extends Controller
             'contact_email' => 'sometimes|nullable|email|max:255',
             'phone'         => 'sometimes|nullable|string|max:255',
             'address'       => 'sometimes|nullable|string|max:500',
-            'active'        => 'sometimes|boolean',
         ]);
         $tenant->fill($data);
         $tenant->save();
@@ -130,20 +133,96 @@ class TenantController extends Controller
     public function destroy(Request $request, Tenant $tenant)
     {
         $this->requireSuperAdmin($request);
-        $force = (bool) $request->query('force', false);
-        // Always block delete when users still attached (safer by default)
-        $usersCount = $tenant->users()->count();
-        if ($usersCount > 0) {
+        // Soft delete only; prevent if users still attached
+        if ($tenant->users()->count() > 0) {
             throw ValidationException::withMessages(['tenant' => ['Cannot delete: users still belong to this organization. Detach users first.']]);
         }
-        if ($force) {
-            // Hard delete (bypass soft delete) as requested for admin Force Delete
-            $tenant->forceDelete();
-        } else {
-            // Soft-delete fallback (not exposed in UI but kept for safety)
-            $tenant->delete();
-        }
+        $tenant->delete();
+        // Basic audit log (extend with dedicated audit model if needed)
+        \Log::info('Tenant soft deleted', ['tenant_id' => $tenant->id, 'actor' => $request->user()?->id]);
+        // Return 204 (no content) to align with REST semantics; tests expect assertNoContent()
         return response()->json([], 204);
+    }
+
+    /**
+     * POST /api/admin/tenants/{id}/restore
+     * Restore a previously soft-deleted tenant.
+     */
+    public function restore(Request $request, $id)
+    {
+        $this->requireSuperAdmin($request);
+        $tenant = Tenant::withTrashed()->findOrFail((int)$id);
+        if (!$tenant->trashed()) {
+            throw ValidationException::withMessages(['tenant' => ['Tenant is not deleted.']]);
+        }
+        $tenant->restore();
+        \Log::info('Tenant restored', ['tenant_id' => $tenant->id, 'actor' => $request->user()?->id]);
+        return response()->json(['data' => $this->tenantResource($tenant)], 200);
+    }
+
+    /**
+     * DELETE /api/admin/tenants/{tenant}/hard
+     * Trigger asynchronous hard delete via queue.
+     */
+    public function hardDelete(Request $request, $tenant)
+    {
+        $this->requireSuperAdmin($request);
+        // Resolve including trashed records
+        $tenantModel = Tenant::withTrashed()->findOrFail((int)$tenant);
+        if (!$tenantModel->trashed()) {
+            // Require soft delete first for safety
+            throw ValidationException::withMessages(['tenant' => ['Hard delete requires tenant to be soft-deleted first.']]);
+        }
+        $reason = trim((string) $request->input('reason', ''));
+        \App\Jobs\TenantHardDeleteJob::dispatch($tenantModel->id, $request->user()->id, $reason);
+        return response()->json(['status' => 'queued'], 202);
+    }
+
+    /**
+     * GET /api/admin/tenants/{tenant}/audit
+     * Return recent audit log entries for this tenant model changes.
+     */
+    public function audit(Request $request, Tenant $tenant)
+    {
+        $this->requireSuperAdmin($request); // limit audit visibility for now
+        // Query last 50 audit entries for this tenant model, join users for actor info
+        $raw = DB::table('audit_logs as a')
+            ->leftJoin('users as u', 'u.id', '=', 'a.actor_id')
+            ->where('a.model_type', Tenant::class)
+            ->where('a.model_id', (string)$tenant->id)
+            ->orderByDesc('a.event_at')
+            ->limit(50)
+            ->get([
+                'a.id','a.event_at','a.actor_id','a.action','a.diff_keys',
+                DB::raw("COALESCE(u.name, '') as actor_name"),
+                DB::raw("COALESCE(u.email, '') as actor_email")
+            ]);
+
+        // Normalize + parse diff_keys if JSON
+        $rows = $raw->map(function ($r) {
+            $diff = $r->diff_keys;
+            $parsed = null;
+            if (is_string($diff) && $diff !== '') {
+                $trim = ltrim($diff);
+                if ($trim[0] === '{' || $trim[0] === '[') {
+                    try { $parsed = json_decode($diff, true, 512, JSON_THROW_ON_ERROR); } catch (\Throwable $e) { $parsed = null; }
+                } else {
+                    // treat comma-separated list
+                    $parts = array_filter(array_map('trim', explode(',', $diff)));
+                    if ($parts) $parsed = $parts;
+                }
+            }
+            return [
+                'id'          => $r->id,
+                'event_at'    => $r->event_at,
+                'action'      => $r->action,
+                'actor_id'    => $r->actor_id,
+                'actor_name'  => $r->actor_name ?: null,
+                'actor_email' => $r->actor_email ?: null,
+                'diff'        => $parsed,
+            ];
+        });
+        return response()->json(['data' => $rows]);
     }
 
     // List organization admins for a tenant
@@ -153,7 +232,7 @@ class TenantController extends Controller
         $admins = User::where('tenant_id', $tenant->id)
             ->whereHas('role', fn($q) => $q->where('name', Role::ORG_ADMIN))
             ->orderBy('name')
-            ->get(['id','name','email','is_active','tenant_id','role_id']);
+            ->get(['id','name','email','tenant_id','role_id']);
         return response()->json(['data' => $admins]);
     }
 
@@ -255,7 +334,6 @@ class TenantController extends Controller
             'phone'         => $t->phone,
             'address'       => $t->address,
             'contact_email' => $t->contact_email,
-            'active'        => (bool) $t->active,
             'deleted_at'    => optional($t->deleted_at)->toIso8601String(),
             'created_at'    => optional($t->created_at)->toIso8601String(),
             'updated_at'    => optional($t->updated_at)->toIso8601String(),

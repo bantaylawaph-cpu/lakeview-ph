@@ -183,7 +183,6 @@ class EmailOtpController extends Controller
             'email_verified_at' => now(),
             'role_id'           => $publicRoleId,   // expected default role
             'tenant_id'         => null,            // enforce null for system role
-            'is_active'         => true,
         ]);
 
         // Issue token (match your “remember me” durations)
