@@ -212,7 +212,7 @@ export function buildInterpretation({
     if (!Number.isFinite(p)) return '';
     const primary = (p < alpha)
       ? `There is statistical evidence that the typical level (${centralLabel}) is ${direction} the guideline`
-      : `No strong statistical evidence that the typical level (${centralLabel}) differs from the guideline`;
+      : `No strong statistical evidence that the typical level (${centralLabel}) exceeds the guideline`;
 
     // Compliance framing
     const therefore = (() => {

@@ -177,6 +177,14 @@ export default function ResultPanel({ result, paramCode, paramOptions, classCode
     // Parameter guideline replacing threshold label
     pushGuidelineIfPresent(result.mu0);
     if ('p_value' in result) pushTip('p-value', renderP(result.p_value), 'Probability of seeing a mean this far from μ0 if there were no real difference.');
+    // Alternative hypothesis (direction)
+    try {
+      const altRaw = (result.alternative != null ? result.alternative : result.alt);
+      const altNorm = (typeof altRaw === 'string' && altRaw.trim()) ? altRaw.trim().toLowerCase().replace('_','-') : 'two-sided';
+      const altPretty = (altNorm === 'two sided') ? 'two-sided' : altNorm;
+      const tipAlt = 'Direction of the hypothesis: greater (> guideline), less (< guideline), two-sided (≠ guideline).';
+      pushTip('Alternative', altPretty, tipAlt);
+    } catch {}
     addCommonAlpha();
   } else if (testKind === 't_two') {
     const n1 = ('n1' in result) ? result.n1 : (stats1 ? stats1.n : null);
@@ -197,6 +205,14 @@ export default function ResultPanel({ result, paramCode, paramOptions, classCode
     // Parameter guideline replacing threshold label
     pushGuidelineIfPresent(result.mu0);
     if ('p_value' in result) pushTip('p-value', renderP(result.p_value), 'Probability of seeing ranks this extreme if the true median were μ0.');
+    // Alternative hypothesis (direction)
+    try {
+      const altRaw = (result.alternative != null ? result.alternative : result.alt);
+      const altNorm = (typeof altRaw === 'string' && altRaw.trim()) ? altRaw.trim().toLowerCase().replace('_','-') : 'two-sided';
+      const altPretty = (altNorm === 'two sided') ? 'two-sided' : altNorm;
+      const tipAlt = 'Direction of the hypothesis: greater (> guideline), less (< guideline), two-sided (≠ guideline).';
+      pushTip('Alternative', altPretty, tipAlt);
+    } catch {}
     addCommonAlpha();
   } else if (testKind === 'sign') {
     if ('n' in result) pushTip('N (effective)', fmt(result.n), 'Number of values not exactly equal to the threshold.');
@@ -207,6 +223,14 @@ export default function ResultPanel({ result, paramCode, paramOptions, classCode
     // Parameter guideline replacing threshold label
     pushGuidelineIfPresent(result.mu0);
     if ('p_value' in result) pushTip('p-value', renderP(result.p_value), 'Probability of this split if the true median were μ0.');
+    // Alternative hypothesis (direction)
+    try {
+      const altRaw = (result.alternative != null ? result.alternative : result.alt);
+      const altNorm = (typeof altRaw === 'string' && altRaw.trim()) ? altRaw.trim().toLowerCase().replace('_','-') : 'two-sided';
+      const altPretty = (altNorm === 'two sided') ? 'two-sided' : altNorm;
+      const tipAlt = 'Direction of the hypothesis: greater (> guideline), less (< guideline), two-sided (≠ guideline).';
+      pushTip('Alternative', altPretty, tipAlt);
+    } catch {}
     addCommonAlpha();
   } else if (testKind === 'mannwhitney') {
     const n1 = ('n1' in result) ? result.n1 : (stats1 ? stats1.n : null);

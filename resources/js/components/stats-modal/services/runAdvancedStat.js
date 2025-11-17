@@ -116,7 +116,8 @@ export default async function runAdvancedStat({
         else if (evalType === 'max') mu0 = thrMax != null ? thrMax : thrMin;
         else mu0 = thrMax != null ? thrMax : thrMin;
         if (selectedTest === 't_one_sample' || selectedTest === 'wilcoxon_signed_rank' || selectedTest === 'sign_test') {
-          if (evalType === 'min') alt = 'greater'; else if (evalType === 'max') alt = 'less';
+          // Reversed rule: use 'less' for 'min' thresholds, 'greater' for 'max'
+          if (evalType === 'min') alt = 'less'; else if (evalType === 'max') alt = 'greater';
         }
       }
       computed = await runOneSample({ selectedTest, values, mu0, alpha, evalType, thrMin, thrMax, alt });
