@@ -120,7 +120,6 @@ function ThresholdsTab() {
         unit: edit.unit ?? base?.unit ?? param?.unit ?? "",
         min_value: edit.min_value ?? (base?.min_value ?? ""),
         max_value: edit.max_value ?? (base?.max_value ?? ""),
-        notes: edit.notes ?? base?.notes ?? "",
         __id: edit.__id ?? base?.id ?? null,
         _base: base,
       };
@@ -142,15 +141,40 @@ function ThresholdsTab() {
       unit: row.unit || null,
       min_value: row.min_value === "" ? null : Number(row.min_value),
       max_value: row.max_value === "" ? null : Number(row.max_value),
-      notes: (row.notes || "").trim() || null,
     };
+
+    // If both numeric values are null, treat this save as a delete
+    const bothNull = payload.min_value == null && payload.max_value == null;
+    if (bothNull) {
+      // If there's an existing record, delete it on the server
+      if (row.__id) {
+        try {
+          showLoading('Deleting threshold', 'Please wait…');
+          await api(`/admin/parameter-thresholds/${row.__id}`, { method: "DELETE" });
+          setGridEdits((prev) => ({ ...prev, [row.class_code]: {} }));
+          invalidateHttpCache('/admin/parameter-thresholds');
+          await fetchThresholds();
+          await alertSuccess('Deleted', `Threshold for ${row.class_code} deleted.`);
+        } catch (err) {
+          console.error("Failed to delete threshold during save", err);
+          await alertError('Delete failed', err?.message || 'Failed to delete threshold');
+        } finally {
+          closeLoading();
+        }
+      } else {
+        // New (unsaved) row with no values — just clear edits locally
+        setGridEdits((prev) => ({ ...prev, [row.class_code]: {} }));
+      }
+      return;
+    }
+
     try {
       if (row.__id) {
-  showLoading('Saving threshold', 'Please wait…');
+        showLoading('Saving threshold', 'Please wait…');
         await api(`/admin/parameter-thresholds/${row.__id}`, { method: "PUT", body: payload });
         await alertSuccess("Saved", `Updated ${row.class_code} threshold.`);
       } else {
-  showLoading('Creating threshold', 'Please wait…');
+        showLoading('Creating threshold', 'Please wait…');
         await api(`/admin/parameter-thresholds`, { method: "POST", body: payload });
         await alertSuccess("Created", `Saved ${row.class_code} threshold.`);
       }
@@ -187,70 +211,82 @@ function ThresholdsTab() {
     }
   };
 
-  const gridColumns = useMemo(() => [
-    {
-      id: "class_code",
-      header: "Class",
-      width: 120,
-      render: (row) => row.class_name,
-      disableToggle: true,
-      alwaysVisible: true,
-    },
-    {
-      id: "unit",
-      header: "Unit",
-      width: 140,
-      render: (row) => (
-        // Unit is a display-only cell (not an editable field)
-        <div style={{ padding: '6px 8px', color: '#111827' }}>{row.unit ?? ""}</div>
-      ),
-    },
-    {
-      id: "min_value",
-      header: "Min",
-      width: 120,
-      render: (row) => (
-        <input
-          type="number"
-          step="any"
-          value={row.min_value ?? ""}
-          placeholder="Numeric value (leave blank to unset)"
-          title="Enter a numeric minimum value; leave blank to unset"
-          onChange={(e) => updateGridCell(row.class_code, "min_value", e.target.value)}
-          style={{ width: "100%" }}
-        />
-      ),
-    },
-    {
-      id: "max_value",
-      header: "Max",
-      width: 120,
-      render: (row) => (
-        <input
-          type="number"
-          step="any"
-          value={row.max_value ?? ""}
-          placeholder="Numeric value (leave blank to unset)"
-          title="Enter a numeric maximum value; leave blank to unset"
-          onChange={(e) => updateGridCell(row.class_code, "max_value", e.target.value)}
-          style={{ width: "100%" }}
-        />
-      ),
-    },
-    {
-      id: "notes",
-      header: "Notes",
-      defaultHidden: true,
-      render: (row) => (
-        <input
-          type="text"
-          value={row.notes ?? ""}
-          onChange={(e) => updateGridCell(row.class_code, "notes", e.target.value)}
-          style={{ width: "100%" }}
-        />
-      ),
-    },
-  ], []);
+  const selectedParameter = useMemo(() => {
+    return parameters.find((p) => String(p.id) === String(gridParamId));
+  }, [parameters, gridParamId]);
+
+  const { showMin, showMax } = useMemo(() => {
+    const evalType = (selectedParameter?.evaluation_type || "").toLowerCase();
+    if (evalType.includes("max") && !evalType.includes("range")) {
+      return { showMin: false, showMax: true };
+    }
+    if (evalType.includes("min") && !evalType.includes("range")) {
+      return { showMin: true, showMax: false };
+    }
+    // Default and 'range' show both
+    return { showMin: true, showMax: true };
+  }, [selectedParameter]);
+
+  const gridColumns = useMemo(() => {
+    const cols = [
+      {
+        id: "class_code",
+        header: "Class",
+        width: 120,
+        render: (row) => row.class_name,
+        disableToggle: true,
+        alwaysVisible: true,
+      },
+      {
+        id: "unit",
+        header: "Unit",
+        width: 140,
+        render: (row) => (
+          <div style={{ padding: '6px 8px', color: '#111827' }}>{row.unit ?? ""}</div>
+        ),
+      },
+    ];
+
+    if (showMin) {
+      cols.push({
+        id: "min_value",
+        header: "Min",
+        width: 120,
+        render: (row) => (
+          <input
+            type="number"
+            step="any"
+            value={row.min_value ?? ""}
+            placeholder="Numeric value (leave blank to unset)"
+            title="Enter a numeric minimum value; leave blank to unset"
+            onChange={(e) => updateGridCell(row.class_code, "min_value", e.target.value)}
+            style={{ width: "100%" }}
+          />
+        ),
+      });
+    }
+
+    if (showMax) {
+      cols.push({
+        id: "max_value",
+        header: "Max",
+        width: 120,
+        render: (row) => (
+          <input
+            type="number"
+            step="any"
+            value={row.max_value ?? ""}
+            placeholder="Numeric value (leave blank to unset)"
+            title="Enter a numeric maximum value; leave blank to unset"
+            onChange={(e) => updateGridCell(row.class_code, "max_value", e.target.value)}
+            style={{ width: "100%" }}
+          />
+        ),
+      });
+    }
+
+    return cols;
+  }, [showMin, showMax]);
 
   // Removed filter panel configuration
 
@@ -303,7 +339,7 @@ function ThresholdsTab() {
               { label: "Save", type: "edit", icon: <FiSave />, onClick: (row) => saveGridRow(row) },
               { label: "Delete", type: "delete", icon: <FiTrash2 />, onClick: (row) => deleteGridRow(row) },
             ]}
-            columnPicker={{ label: "Columns", locked: ["class_code"], defaultHidden: ["notes"] }}
+            columnPicker={{ label: "Columns", locked: ["class_code"] }}
             loading={loading}
             loadingLabel="Loading thresholds…"
           />

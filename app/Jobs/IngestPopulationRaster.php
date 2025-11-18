@@ -337,7 +337,7 @@ class IngestPopulationRaster implements ShouldQueue
                 $cat = DB::selectOne("SELECT id FROM pop_dataset_catalog WHERE table_name = ?", [$tableName]);
                 $datasetId = $cat?->id;
                 if (!$datasetId) {
-                    DB::insert("INSERT INTO pop_dataset_catalog (year, table_name, is_enabled, is_default, created_at, updated_at) VALUES (?,?,?,?, now(), now())", [
+                    DB::insert("INSERT INTO pop_dataset_catalog (year, table_name, is_enabled, is_default, created_at, updated_at) VALUES (?,?,?::boolean,?::boolean, now(), now())", [
                         $year, $tableName, true, false
                     ]);
                     $datasetId = DB::getPdo()->lastInsertId();

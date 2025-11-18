@@ -390,22 +390,31 @@ class StatsController extends Controller
                 $thrRow = $base(false)->where('pt.standard_id',$requestedStdId)->first(['pt.*','ws.code as standard_code','ws.is_current']); 
                 $classFallback = (bool)$thrRow; 
             }
+            // STRICT MODE: If the client explicitly requested a standard id and no threshold row
+            // exists for that standard (with or without class fallback), do NOT fall back to
+            // another (possibly older/current) standard. Return null so the frontend omits lines.
+            if (!$thrRow) {
+                return null;
+            }
         }
-        if (!$thrRow) {
-            $thrRow = $base(true)
-                ->orderByDesc('ws.is_current')
-                ->orderByDesc('ws.id')
-                ->orderByRaw('pt.min_value IS NULL')
-                ->orderByRaw('pt.max_value IS NULL')
-                ->first(['pt.*','ws.code as standard_code','ws.is_current']);
-        }
-        if (!$thrRow && $class && $allowClassFallback) {
-            $thrRow = $base(false)
-                ->orderByDesc('ws.is_current')
-                ->orderByDesc('ws.id')
-                ->orderByRaw('pt.min_value IS NULL')
-                ->orderByRaw('pt.max_value IS NULL')
-                ->first(['pt.*','ws.code as standard_code','ws.is_current']);
+        // Fallback discovery only applies when no explicit standard was requested.
+        if (!$requestedStdId) {
+            if (!$thrRow) {
+                $thrRow = $base(true)
+                    ->orderByDesc('ws.is_current')
+                    ->orderByDesc('ws.id')
+                    ->orderByRaw('pt.min_value IS NULL')
+                    ->orderByRaw('pt.max_value IS NULL')
+                    ->first(['pt.*','ws.code as standard_code','ws.is_current']);
+            }
+            if (!$thrRow && $class && $allowClassFallback) {
+                $thrRow = $base(false)
+                    ->orderByDesc('ws.is_current')
+                    ->orderByDesc('ws.id')
+                    ->orderByRaw('pt.min_value IS NULL')
+                    ->orderByRaw('pt.max_value IS NULL')
+                    ->first(['pt.*','ws.code as standard_code','ws.is_current']);
+            }
         }
         return $thrRow;
     }
