@@ -2,7 +2,7 @@
 const infoSections = [
   {
     heading: 'About Advanced Statistics',
-    text: 'This tool helps you analyze lake water‑quality data. You can (1) check if a lake meets a guideline (compliance) or (2) compare two lakes for a specific parameter. It also offers quick diagnostic checks to guide which statistical test to choose.'
+    text: 'This tool helps you analyze lake water‑quality data. You can (1) screen a lake’s typical conditions against a guideline (one‑sample screening) or (2) compare two lakes for a specific parameter. It also offers quick diagnostic checks to guide which statistical test to choose.'
   },
   {
     heading: 'Two ways to compare',
@@ -12,14 +12,14 @@ const infoSections = [
     ]
   },
   {
-    heading: 'Compliance check (one‑sample)',
+    heading: 'Guideline screening (one‑sample)',
     bullets: [
-      'Goal: test a lake’s parameter against a guideline (minimum, maximum, or acceptable range).',
-      'One‑sample t‑test — checks if the mean differs from the guideline; best when data are roughly normal.',
-      'Wilcoxon Signed‑Rank — checks if the median differs from the guideline; robust to skew/outliers (non‑parametric).',
-      'Sign Test — very simple median check using only +/- signs; most robust but less statistical power.',
-      'Equivalence TOST t — checks if the mean is inside an acceptable range (needs both lower and upper limits).',
-      'Equivalence TOST Wilcoxon — like TOST but uses ranks/medians when data are not normal.'
+      'Goal: screen a lake’s parameter against a guideline (minimum, maximum, or target band).',
+      'One‑sample t‑test — assesses whether the typical level (mean) differs from the guideline; best when data are roughly normal.',
+      'Wilcoxon Signed‑Rank — assesses whether the typical level (median) differs from the guideline; robust to skew/outliers (non‑parametric).',
+      'Sign Test — simple median screening using only +/- signs; most robust but lower statistical power.',
+      'Equivalence TOST (t) — assesses whether the mean is within the target band (needs both lower and upper limits).',
+      'Equivalence TOST (Wilcoxon) — assesses whether the median is within the target band when data are not normal.'
     ]
   },
   {
@@ -45,8 +45,8 @@ const infoSections = [
     bullets: [
       'Significance: the tool compares p‑value to your chosen alpha (alpha = 1 − confidence level). If p < alpha, we say “there is enough statistical evidence.”',
       'Center of data: tests use either the mean (t‑tests) or the median/ranks (Wilcoxon, Mann‑Whitney, Mood’s).',
-      'Guidelines: the tool resolves a minimum, maximum, or range (or a single reference value) and explains compliance accordingly.',
-      'Equivalence (TOST): both the lower and upper tests must pass (p’s less than alpha) to conclude “within the acceptable range.”',
+      'Guidelines: the tool resolves a minimum, maximum, or range (or a single reference value) and explains screening results accordingly.',
+      'Equivalence (TOST): both the lower and upper tests must pass (p’s less than alpha) to conclude “within the target band.”',
       'Two‑lake comparisons: the text reports if one lake is higher/lower. If the parameter is “higher is worse,” the interpretation also points out which lake looks more favorable for that parameter.',
     ]
   }

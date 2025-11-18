@@ -195,12 +195,9 @@ export function buildInterpretation({
         if (Number.isFinite(pTost) && Number.isFinite(alpha)) isEquiv = pTost < alpha;
       }
       const primary = isEquiv === true
-        ? `There is enough statistical evidence to suggest that the ${centerWord} of ${paramLabel} in ${lake1Label} is within the acceptable range`
-        : `There is not enough statistical evidence to suggest that the ${centerWord} of ${paramLabel} in ${lake1Label} is within the acceptable range`;
-      const therefore = isEquiv === true
-        ? 'Therefore, this suggests compliance with the acceptable range.'
-        : 'Therefore, compliance with the acceptable range is not supported.';
-      return join([primary, therefore]);
+        ? `The typical level (${centerWord}) is statistically within the target band based on the guideline metrics for ${paramLabel}`
+        : `The typical level (${centerWord}) is not demonstrated to be within the target band based on the guideline metrics for ${paramLabel}`;
+      return join([primary]);
     }
 
     let direction = 'different from';
@@ -214,27 +211,27 @@ export function buildInterpretation({
     }
     if (!Number.isFinite(p)) return '';
     const primary = (p < alpha)
-      ? `There is enough statistical evidence to suggest that the ${centralLabel} of ${paramLabel} in ${lake1Label} is significantly ${direction} the guideline`
-      : `There is not enough statistical evidence to suggest that the ${centralLabel} of ${paramLabel} in ${lake1Label} is ${direction} the guideline`;
+      ? `There is statistical evidence that the typical level (${centralLabel}) is ${direction} the guideline`
+      : `No strong statistical evidence that the typical level (${centralLabel}) exceeds the guideline`;
 
     // Compliance framing
     const therefore = (() => {
       if (!thr) return null;
       if (thr.type === 'max') {
-        if (p < alpha && direction === 'above') return 'Therefore, this suggests non-compliance with the maximum guideline.';
-        if (p < alpha && (direction === 'below' || direction === 'different from')) return 'Therefore, this suggests compliance with the maximum guideline.';
-        return 'Therefore, there is not enough evidence to conclude exceedance of the maximum guideline.';
+        if (p < alpha && direction === 'above') return 'This indicates an exceedance relative to the maximum guideline.';
+        if (p < alpha && (direction === 'below' || direction === 'different from')) return 'This does not indicate an exceedance of the maximum guideline.';
+        return 'Insufficient evidence to indicate exceedance of the maximum guideline.';
       }
       if (thr.type === 'min') {
-        if (p < alpha && direction === 'below') return 'Therefore, this suggests non-compliance with the minimum guideline.';
-        if (p < alpha && (direction === 'above' || direction === 'different from')) return 'Therefore, this suggests compliance with the minimum guideline.';
-        return 'Therefore, there is not enough evidence to conclude falling below the minimum guideline.';
+        if (p < alpha && direction === 'below') return 'This indicates being below the minimum guideline.';
+        if (p < alpha && (direction === 'above' || direction === 'different from')) return 'This does not indicate being below the minimum guideline.';
+        return 'Insufficient evidence to indicate being below the minimum guideline.';
       }
       if (thr.type === 'range') {
         if (!Number.isFinite(centralValue)) return null;
-        if (centralValue < thr.min) return 'Therefore, this indicates being below the acceptable range (non-compliant).';
-        if (centralValue > thr.max) return 'Therefore, this indicates being above the acceptable range (non-compliant).';
-        return 'Therefore, this indicates being within the acceptable range (compliant).';
+        if (centralValue < thr.min) return 'This indicates being below the target band.';
+        if (centralValue > thr.max) return 'This indicates being above the target band.';
+        return 'This indicates being within the target band.';
       }
       return null;
     })();
