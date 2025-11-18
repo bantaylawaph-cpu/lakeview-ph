@@ -149,8 +149,8 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
     }
     setSubmitting(true); setError(''); setSuccess('');
     try {
-      // Show SweetAlert loading state while submitting
-      await Swal.fire({
+      // Show SweetAlert loading state while submitting (do not await)
+      Swal.fire({
         title: 'Submitting…',
         text: 'Please wait while we send your feedback.',
         allowOutsideClick: false,
@@ -181,6 +181,8 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
         setTTitle(false); setTMessage(false); setTCategory(false);
         resetForm();
         if (user) { setList(prev => [created, ...(prev||[])]); }
+        // Close loading dialog before showing the result
+        try { Swal.close(); } catch {}
         const text = user
           ? 'Feedback submitted. We will email updates; you can also track it in the list below.'
           : 'Feedback submitted.';
@@ -193,6 +195,8 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
         });
         setSuccess(''); // we rely on SweetAlert instead of inline success banner
       } else {
+        // Close loading dialog before showing the result
+        try { Swal.close(); } catch {}
         const text = user
           ? 'Feedback submitted. We will email updates; you can also track it in the list below.'
           : 'Feedback submitted.';
@@ -211,6 +215,8 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
       console.warn('[Feedback] submit failed', e2, parsed);
       const firstFieldError = parsed && parsed.errors && Object.values(parsed.errors).flat()[0];
       setError(parsed?.message || firstFieldError || 'Submission failed.');
+      // Close loading dialog before showing the error
+      try { Swal.close(); } catch {}
       await Swal.fire({
         title: 'Submission failed',
         text: parsed?.message || firstFieldError || 'Please try again.',

@@ -338,6 +338,11 @@ export default function KycPage({ embedded = true, open = true, onClose }) {
                   </select>
                   <div style={{ ...helpTextS, marginTop:4 }}>Pick the organization you want to join.</div>
                 </label>
+                {!tenantsLoading && (tenants || []).length === 0 && (
+                  <div className="lv-status-info" role="status" style={{ fontSize:12 }}>
+                    No organizations available right now. Please try again later or contact support.
+                  </div>
+                )}
                 {errors.tenant && <div style={{ color:'#b42318' }}>{errors.tenant}</div>}
 
                 <fieldset style={{ border:`1px solid ${legendBorder}`, borderRadius:8, padding:12 }}>
