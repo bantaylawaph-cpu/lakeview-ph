@@ -360,7 +360,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
         </div>
       ) : (
         <div style={{ gridColumn: '4 / span 1', minWidth:0 }}>
-          <StationSelect options={stationOptions} value={stationId} onChange={e=>{ setStationId(e.target.value); setResult(null); }} disabled={String(lakeId) === 'custom' || !organizationId || !compareValue || !String(compareValue).startsWith('class:')} loading={stationLoading} />
+          <StationSelect options={stationOptions} value={stationId} onChange={e=>{ setStationId(e.target.value); setResult(null); }} disabled={String(lakeId) === 'custom' || !organizationId || !compareValue || !String(compareValue).startsWith('class:')} loading={stationLoading} allLabel="All stations (pooled lake-wide)" includeAllOption={stationOptions.length > 1} />
         </div>
       )}
       <div style={{ gridColumn: '1 / span 1', minWidth:0, display:'flex', alignItems:'stretch' }}>
@@ -425,6 +425,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
           cl={cl}
           lakeId={lakeId}
           compareValue={compareValue}
+          stationId={stationId}
           showAllValues={showAllValues}
           setShowAllValues={setShowAllValues}
           showExactP={showExactP}
