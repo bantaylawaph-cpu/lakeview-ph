@@ -257,8 +257,18 @@ export default function LayerWizard({
     setGeocodeLoading(true);
     try {
       const url = `/api/geocode/nominatim?q=${encodeURIComponent(q)}&limit=${limit}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`Geocode failed: ${res.status}`);
+      const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      if (!res.ok) {
+        let errPayload = null;
+        try { errPayload = await res.json(); } catch (_) { /* ignore */ }
+        let reason = 'Geocode failed';
+        if (res.status === 429) reason = 'Rate limited. Please retry later.';
+        else if (res.status === 403) reason = 'Forbidden by upstream service.';
+        else if (res.status === 400) reason = errPayload?.error || 'Invalid query.';
+        else if (res.status >= 500) reason = 'Geocode service unavailable.';
+        const detail = errPayload?.message || errPayload?.error || '';
+        throw new Error(`${reason} (status ${res.status})${detail ? ': ' + detail : ''}`);
+      }
       const json = await res.json();
       return Array.isArray(json) ? json : [];
     } finally {
