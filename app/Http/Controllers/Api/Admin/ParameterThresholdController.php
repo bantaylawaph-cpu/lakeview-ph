@@ -85,7 +85,6 @@ class ParameterThresholdController extends Controller
             'standard_id' => ['nullable', 'integer', Rule::exists('wq_standards', 'id')],
             'min_value' => ['nullable', 'numeric'],
             'max_value' => ['nullable', 'numeric'],
-            'notes' => ['nullable', 'string'],
         ]);
     }
 }

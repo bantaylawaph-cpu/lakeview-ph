@@ -75,6 +75,13 @@ export default function AuditLogs({ scope = 'admin' }) {
   const [error, setError] = useState(null);
   const [q, setQ] = useState('');
 
+  // Lazy lookup maps for ParameterThreshold summaries
+  const [paramMap, setParamMap] = useState(() => new Map()); // id -> { name, code }
+  const [stdMap, setStdMap] = useState(() => new Map()); // id -> { code, name }
+  const [catalogsLoaded, setCatalogsLoaded] = useState(false);
+  // Cache for resolving threshold-specific metadata when payload lacks IDs
+  const [thresholdMap, setThresholdMap] = useState(() => new Map()); // id -> { parameter_id, paramName, standard_id, stdLabel }
+
   // Stable option catalogs (roles, tenants, entities) for admin; org only needs entities
   const [allRoles, setAllRoles] = useState([]);
   const [allTenants, setAllTenants] = useState([]); // { value, label }
@@ -236,6 +243,71 @@ export default function AuditLogs({ scope = 'admin' }) {
     } finally { setLoading(false); }
   };
 
+  // When logs include ParameterThreshold rows, fetch catalogs to resolve names
+  useEffect(() => {
+    const hasThresholds = rows.some(r => (r.model_type || '').split('\\').pop() === 'ParameterThreshold');
+    if (!hasThresholds || catalogsLoaded) return;
+    (async () => {
+      try {
+        const [paramsRes, stdsRes] = await Promise.all([
+          cachedGet('/admin/parameters', { ttlMs: 5 * 60 * 1000 }),
+          cachedGet('/admin/wq-standards', { ttlMs: 5 * 60 * 1000 }),
+        ]);
+        const pList = Array.isArray(paramsRes?.data) ? paramsRes.data : (Array.isArray(paramsRes) ? paramsRes : []);
+        const sList = Array.isArray(stdsRes?.data) ? stdsRes.data : (Array.isArray(stdsRes) ? stdsRes : []);
+        const pMap = new Map();
+        for (const p of pList) if (p && p.id != null) pMap.set(String(p.id), { name: p.name || p.code || `Parameter #${p.id}`, code: p.code || '' });
+        const sMap = new Map();
+        for (const s of sList) if (s && s.id != null) sMap.set(String(s.id), { code: s.code || s.name || `Standard #${s.id}`, name: s.name || s.code || '' , is_current: !!s.is_current });
+        setParamMap(pMap);
+        setStdMap(sMap);
+        setCatalogsLoaded(true);
+      } catch {/* ignore lookup errors */}
+    })();
+  }, [rows, catalogsLoaded]);
+
+  // Resolve missing ParameterThreshold details via API when payload lacks identifiers
+  useEffect(() => {
+    const pending = [];
+    for (const r of rows) {
+      const base = (r.model_type || '').split('\\').pop();
+      if (base !== 'ParameterThreshold') continue;
+      if (!r || thresholdMap.has(String(r.model_id))) continue;
+      const any = { ...(r.before || {}), ...(r.after || {}) };
+      const hasParamId = any.parameter_id != null;
+      const hasStdInfo = any.standard_id != null || any.standard_code || any.standard_name || (any.standard && (any.standard.code || any.standard.name));
+      if (!hasParamId || !hasStdInfo) {
+        pending.push(String(r.model_id));
+      }
+    }
+    if (pending.length === 0) return;
+    (async () => {
+      for (const id of pending.slice(0, 20)) { // safety bound
+        try {
+          const res = await cachedGet(`/admin/parameter-thresholds/${id}`, { ttlMs: 60 * 1000 });
+          const body = res?.data?.data || res?.data || res;
+          if (body && typeof body === 'object') {
+            const p = body.parameter || {};
+            const s = body.standard || {};
+            const paramId = body.parameter_id != null ? String(body.parameter_id) : (p.id != null ? String(p.id) : null);
+            const paramName = p.name || p.code || (paramId ? `Parameter #${paramId}` : 'Parameter');
+            const stdId = body.standard_id != null ? String(body.standard_id) : (s.id != null ? String(s.id) : null);
+            const stdLabel = s.code || s.name || (stdId ? `Standard #${stdId}` : ( (() => {
+              // null standard -> try current from stdMap
+              let current = null; for (const v of stdMap.values()) { if (v && v.is_current) { current = v; break; } }
+              return current ? (current.code || current.name || 'Default Standard') : 'Default Standard';
+            })() ));
+            setThresholdMap(prev => {
+              const next = new Map(prev);
+              next.set(String(id), { parameter_id: paramId, paramName, standard_id: stdId, stdLabel });
+              return next;
+            });
+          }
+        } catch {/* ignore per-row failure */}
+      }
+    })();
+  }, [rows, thresholdMap, stdMap]);
+
   // Compute and cache total/last_page when server doesn't provide meta.
   const ensureClientMeta = async (baseUrl, baseParams, currentPage, perPageVal, currentPageCount) => {
     try {
@@ -329,7 +401,7 @@ export default function AuditLogs({ scope = 'admin' }) {
       'LakeFlow': 'Tributary',
       'SamplingEvent': 'Sampling Event',
       'ParameterThreshold': 'Parameter Threshold',
-      'WqStandard': 'WQ Standard',
+      'WqStandard': 'Standard',
       'OrgApplication': 'Organization Application',
       'KycProfile': 'KYC Profile',
       'Tenant': 'Organization',
@@ -349,6 +421,42 @@ export default function AuditLogs({ scope = 'admin' }) {
           }
           const ts = r.event_at ? ` at ${fmt(r.event_at)}` : '';
           const base = modelBase;
+          if (base === 'ParameterThreshold') {
+            const after = r.after || {};
+            const before = r.before || {};
+            const any = { ...before, ...after };
+            // Try nested relation names first if present in payload
+            const paramId = any.parameter_id != null ? String(any.parameter_id) : null;
+            const paramFromMap = paramId && paramMap.get(paramId);
+            const thMeta = thresholdMap.get(String(r.model_id));
+            const paramName = (after.parameter && (after.parameter.name || after.parameter.code))
+              || (before.parameter && (before.parameter.name || before.parameter.code))
+              || any.parameter_name
+              || any.parameter_code
+              || (paramFromMap && (paramFromMap.name || paramFromMap.code))
+              || (thMeta && thMeta.paramName)
+              || (paramId ? `Parameter #${paramId}` : 'Parameter');
+            const stdLabel = (() => {
+              const stdObj = after.standard || before.standard || any.standard || null;
+              const stdId = any.standard_id != null ? String(any.standard_id) : null;
+              const stdFromMap = stdId && stdMap.get(stdId);
+              const thStd = thMeta && thMeta.stdLabel;
+              if (stdObj && (stdObj.code || stdObj.name)) return stdObj.code || stdObj.name;
+              if (any.standard_code) return any.standard_code;
+              if (any.standard_name) return any.standard_name;
+              if (stdFromMap && (stdFromMap.code || stdFromMap.name)) return stdFromMap.code || stdFromMap.name;
+              if (thStd) return thStd;
+              if (any.standard_id == null) {
+                // Try to show current standard code if available from catalog
+                let currentStd = null;
+                for (const v of stdMap.values()) { if (v && v.is_current) { currentStd = v; break; } }
+                if (currentStd && (currentStd.code || currentStd.name)) return currentStd.code || currentStd.name;
+                return 'Default Standard';
+              }
+              return `Standard #${any.standard_id}`;
+            })();
+            return `${actor} ${verb} the threshold for ${truncate(String(paramName))} in ${truncate(String(stdLabel))}${ts}`;
+          }
           if (base === 'SamplingEvent') {
             const lakeNm = r.entity_name || extractLakeName(r);
             const lakeLabel = lakeNm ? truncate(lakeNm) : null;
@@ -391,7 +499,7 @@ export default function AuditLogs({ scope = 'admin' }) {
         </button>
       )},
     ];
-  }, [isAdminScope]);
+  }, [isAdminScope, paramMap, stdMap, thresholdMap]);
 
   const visibleColumns = useMemo(() => columns.filter(c => visibleMap[c.id] !== false), [columns, visibleMap]);
 
@@ -598,7 +706,14 @@ export default function AuditLogs({ scope = 'admin' }) {
             <h3 style={{ margin: 0, fontSize: '1rem' }}>Event</h3>
             <div style={{ display:'grid', rowGap:6, fontSize:13.5 }}>
               <div><strong style={{ width:110, display:'inline-block' }}>User:</strong> {detailRow.actor_name || (isAdminScope ? 'System Admin' : 'User')}</div>
-              <div><strong style={{ width:110, display:'inline-block' }}>Role:</strong> {humanize(detailRow.actor_role || detailRow.actor?.role || '') || '—'}</div>
+              <div><strong style={{ width:110, display:'inline-block' }}>Role:</strong> {(() => {
+                const raw = detailRow.actor_role || detailRow.actor?.role || '';
+                const v = String(raw).toLowerCase().replace(/\s+/g,' ').trim();
+                if (v === 'superadmin' || v === 'super_admin' || v === 'super administrator') return 'Super Administrator';
+                if (v === 'org_admin' || v === 'orgadmin' || v === 'organization administrator' || v === 'organization_admin') return 'Organization Administrator';
+                if (v === 'contributor') return 'Contributor';
+                return humanize(raw) || '—';
+              })()}</div>
               <div><strong style={{ width:110, display:'inline-block' }}>Action:</strong> {formatAction(detailRow.action)}</div>
               <div><strong style={{ width:110, display:'inline-block' }}>Entity:</strong>{' '}
                 {(() => {

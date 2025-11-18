@@ -17,7 +17,6 @@ class ParameterThreshold extends Model
         'standard_id',
         'min_value',
         'max_value',
-        'notes',
     ];
 
     protected $casts = [
