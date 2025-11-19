@@ -59,6 +59,24 @@ export default function ResultPanel({ result, paramCode, paramOptions, classCode
   const testLabel = testLabelFromResult(result) || result.test_used || result.type;
   push('Test Selected', testLabel);
 
+  // Resolve station label for display: prefer event station names when available,
+  // otherwise use the selected `stationId` (skip if 'all').
+  let stationLabelForGrid = null;
+  if (stationId != null && String(stationId) !== '' && String(stationId) !== 'all') {
+    try {
+      const evs = Array.isArray(result?.events) ? result.events : [];
+      const names = new Set(evs.map(e => e?.station?.name || e?.station_name).filter(Boolean));
+      if (names.size === 1) stationLabelForGrid = Array.from(names)[0];
+      else {
+        const match = evs.find(e => String(e?.station?.id || e?.station_id || e?.station_name) === String(stationId));
+        stationLabelForGrid = match ? (match?.station?.name || match?.station_name || String(stationId)) : String(stationId);
+      }
+    } catch (_) {
+      stationLabelForGrid = String(stationId);
+    }
+  }
+  if (stationLabelForGrid) push('Station', stationLabelForGrid);
+
   const basicStats = (arr) => {
     if (!Array.isArray(arr)) return null;
     const xs = arr.map(Number).filter(Number.isFinite);
@@ -284,7 +302,7 @@ export default function ResultPanel({ result, paramCode, paramOptions, classCode
     addCommonAlpha();
   }
 
-  const finalInterpretation = buildInterpretation({ result, paramCode, paramOptions, classCode, lakes, cl, fmt, sci, lakeId, compareValue });
+  const finalInterpretation = buildInterpretation({ result, paramCode, paramOptions, classCode, lakes, cl, fmt, sci, lakeId, compareValue, stationId });
   // finalInterpretation may be a string or an object { text, suggestedTests }
   const interpObj = (finalInterpretation && typeof finalInterpretation === 'object') ? finalInterpretation : { text: finalInterpretation, suggestedTests: null };
   const ciLine = (r) => (r.ci_lower != null && r.ci_upper != null ? <div>CI ({Math.round((r.ci_level||0)*100)}%): [{fmt(r.ci_lower)}, {fmt(r.ci_upper)}]</div> : null);

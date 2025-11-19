@@ -10,7 +10,8 @@ export function buildInterpretation({
   fmt,
   sci,
   lakeId,
-  compareValue
+  compareValue,
+  stationId
 }) {
   if (!result) return '';
 
@@ -99,6 +100,26 @@ export function buildInterpretation({
   const lake2Name = lake2Id ? lakeNameById(lake2Id) : null;
   const lake2Label = lake2Name || 'Lake 2';
   const lake1Label = (String(lakeId) === 'custom') ? 'the custom dataset' : lake1Name;
+  // Resolve a human-readable station label: prefer event station names when available,
+  // otherwise fall back to the selected `stationId` (which may already be a name).
+  let stationLabel = null;
+  if (stationId != null && String(stationId) !== '' && String(stationId) !== 'all') {
+    // Try to infer from result.events if present
+    try {
+      const evs = Array.isArray(result?.events) ? result.events : [];
+      const names = new Set(evs.map(e => e?.station?.name || e?.station_name).filter(Boolean));
+      if (names.size === 1) {
+        stationLabel = Array.from(names)[0];
+      } else if (names.size > 1) {
+        // If events include multiple names but the stationId matches one, prefer that
+        const match = evs.find(e => String(e?.station?.id || e?.station_id || e?.station_name) === String(stationId));
+        if (match) stationLabel = match?.station?.name || match?.station_name || String(stationId);
+      }
+    } catch(_) {
+      // ignore
+    }
+    if (!stationLabel) stationLabel = String(stationId);
+  }
 
   // Compliance classification
 
@@ -197,7 +218,17 @@ export function buildInterpretation({
       const primary = isEquiv === true
         ? `The typical level (${centerWord}) is statistically within the target band based on the guideline metrics for ${paramLabel}`
         : `The typical level (${centerWord}) is not demonstrated to be within the target band based on the guideline metrics for ${paramLabel}`;
-      return join([primary]);
+      // Add a contextual second sentence mentioning parameter, lake and class
+      const cls = (() => {
+        if (classCode == null || classCode === '') return 'Class X';
+        const s = String(classCode).trim();
+        if (/^class\s+/i.test(s)) return s;
+        return `Class ${s}`;
+      })();
+      const secondary = isEquiv === true
+        ? (stationLabel ? `This implies that the usual condition of ${paramLabel} in ${lake1Label}'s ${stationLabel} station is within the target band for ${cls} lakes, meaning it typically meets the target standard.` : `This implies that the usual condition of ${paramLabel} in ${lake1Label} is within the target band for ${cls} lakes, meaning it typically meets the target standard.`)
+        : (stationLabel ? `This does not demonstrate that the usual condition of ${paramLabel} in ${lake1Label}'s ${stationLabel} station is within the target band for ${cls} lakes.` : `This does not demonstrate that the usual condition of ${paramLabel} in ${lake1Label} is within the target band for ${cls} lakes.`);
+      return join([primary, secondary]);
     }
 
     let direction = 'different from';
@@ -210,28 +241,51 @@ export function buildInterpretation({
       }
     }
     if (!Number.isFinite(p)) return '';
-    const primary = (p < alpha)
-      ? `There is statistical evidence that the typical level (${centralLabel}) is ${direction} the guideline`
-      : `No strong statistical evidence that the typical level (${centralLabel}) exceeds the guideline`;
+    let primary = '';
+    if (p < alpha) {
+      if (thr) {
+        if (thr.type === 'min') primary = `There is statistical evidence that the typical level (${centralLabel}) is below the minimum guideline`;
+        else if (thr.type === 'max') primary = `There is statistical evidence that the typical level (${centralLabel}) is above the maximum guideline`;
+        else if (thr.type === 'range') primary = `There is statistical evidence that the typical level (${centralLabel}) is outside the target band`;
+        else primary = `There is statistical evidence that the typical level (${centralLabel}) is ${direction} the guideline`;
+      } else {
+        primary = `There is statistical evidence that the typical level (${centralLabel}) is ${direction} the guideline`;
+      }
+    } else {
+      if (thr) {
+        if (thr.type === 'min') primary = `No strong statistical evidence that the typical level (${centralLabel}) is below the minimum guideline`;
+        else if (thr.type === 'max') primary = `No strong statistical evidence that the typical level (${centralLabel}) is above the maximum guideline`;
+        else if (thr.type === 'range') primary = `No strong statistical evidence that the typical level (${centralLabel}) is outside the target band`;
+        else primary = `No strong statistical evidence that the typical level (${centralLabel}) is ${direction} the guideline`;
+      } else {
+        primary = `No strong statistical evidence that the typical level (${centralLabel}) differs from the guideline`;
+      }
+    }
 
     // Compliance framing
     const therefore = (() => {
       if (!thr) return null;
+      const cls = (() => {
+        if (classCode == null || classCode === '') return 'Class X';
+        const s = String(classCode).trim();
+        if (/^class\s+/i.test(s)) return s;
+        return `Class ${s}`;
+      })();
       if (thr.type === 'max') {
-        if (p < alpha && direction === 'above') return 'This indicates an exceedance relative to the maximum guideline.';
-        if (p < alpha && (direction === 'below' || direction === 'different from')) return 'This does not indicate an exceedance of the maximum guideline.';
-        return 'Insufficient evidence to indicate exceedance of the maximum guideline.';
+        if (p < alpha && direction === 'above') return stationLabel ? `This implies that the usual condition of ${paramLabel} in ${lake1Label}'s ${stationLabel} station is above the maximum guideline for ${cls} lakes, meaning it typically exceeds the acceptable standard.` : `This implies that the usual condition of ${paramLabel} in ${lake1Label} is above the maximum guideline for ${cls} lakes, meaning it typically exceeds the acceptable standard.`;
+        if (p < alpha && (direction === 'below' || direction === 'different from')) return stationLabel ? `This does not indicate that the usual condition of ${paramLabel} in ${lake1Label}'s ${stationLabel} station exceeds the maximum guideline for ${cls} lakes.` : `This does not indicate that the usual condition of ${paramLabel} in ${lake1Label} exceeds the maximum guideline for ${cls} lakes.`;
+        return stationLabel ? `Insufficient evidence to indicate that the usual condition of ${paramLabel} in ${lake1Label}'s ${stationLabel} station exceeds the maximum guideline for ${cls} lakes.` : `Insufficient evidence to indicate that the usual condition of ${paramLabel} in ${lake1Label} exceeds the maximum guideline for ${cls} lakes.`;
       }
       if (thr.type === 'min') {
-        if (p < alpha && direction === 'below') return 'This indicates being below the minimum guideline.';
-        if (p < alpha && (direction === 'above' || direction === 'different from')) return 'This does not indicate being below the minimum guideline.';
-        return 'Insufficient evidence to indicate being below the minimum guideline.';
+        if (p < alpha && direction === 'below') return stationLabel ? `This implies that the usual condition of ${paramLabel} in ${lake1Label}'s ${stationLabel} station is below the minimum guideline for ${cls} lakes, meaning it typically does not meet the required standard.` : `This implies that the usual condition of ${paramLabel} in ${lake1Label} is below the minimum guideline for ${cls} lakes, meaning it typically does not meet the required standard.`;
+        if (p < alpha && (direction === 'above' || direction === 'different from')) return stationLabel ? `This does not indicate that the usual condition of ${paramLabel} in ${lake1Label}'s ${stationLabel} station is below the minimum guideline for ${cls} lakes.` : `This does not indicate that the usual condition of ${paramLabel} in ${lake1Label} is below the minimum guideline for ${cls} lakes.`;
+        return stationLabel ? `Insufficient evidence to indicate that the usual condition of ${paramLabel} in ${lake1Label}'s ${stationLabel} station is below the minimum guideline for ${cls} lakes.` : `Insufficient evidence to indicate that the usual condition of ${paramLabel} in ${lake1Label} is below the minimum guideline for ${cls} lakes.`;
       }
       if (thr.type === 'range') {
         if (!Number.isFinite(centralValue)) return null;
-        if (centralValue < thr.min) return 'This indicates being below the target band.';
-        if (centralValue > thr.max) return 'This indicates being above the target band.';
-        return 'This indicates being within the target band.';
+        if (centralValue < thr.min) return stationLabel ? `This implies that the usual condition of ${paramLabel} in ${lake1Label}'s ${stationLabel} station is below the target band for ${cls} lakes, meaning it typically does not meet the target standard.` : `This implies that the usual condition of ${paramLabel} in ${lake1Label} is below the target band for ${cls} lakes, meaning it typically does not meet the target standard.`;
+        if (centralValue > thr.max) return stationLabel ? `This implies that the usual condition of ${paramLabel} in ${lake1Label}'s ${stationLabel} station is above the target band for ${cls} lakes, meaning it typically exceeds the target band.` : `This implies that the usual condition of ${paramLabel} in ${lake1Label} is above the target band for ${cls} lakes, meaning it typically exceeds the target band.`;
+        return stationLabel ? `This implies that the usual condition of ${paramLabel} in ${lake1Label}'s ${stationLabel} station is within the target band for ${cls} lakes, meaning it typically meets the target standard.` : `This implies that the usual condition of ${paramLabel} in ${lake1Label} is within the target band for ${cls} lakes, meaning it typically meets the target standard.`;
       }
       return null;
     })();

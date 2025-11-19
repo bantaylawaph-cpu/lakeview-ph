@@ -313,7 +313,8 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
         await alertError('No results to export', 'Please run a test before exporting results to PDF.');
         return;
       }
-      const { css, bodyHtml, title } = buildAdvancedStatReport({ result, paramCode, paramOptions, lakes, lakeId, compareValue, cl });
+      const organizationLabel = orgOptions && orgOptions.length ? (orgOptions.find(o => String(o.id) === String(organizationId))?.name || '') : '';
+      const { css, bodyHtml, title } = buildAdvancedStatReport({ result, paramCode, paramOptions, lakes, lakeId, compareValue, cl, stationId, organizationId, organizationLabel, classCode });
       openPrintWindowWithStyle({ title, css, bodyHtml });
     } catch (e) {
       console.error('Export failed', e);

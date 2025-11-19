@@ -33,14 +33,22 @@ function escapeHtml(s) {
     .replace(/'/g, '&#39;');
 }
 
+function formatDateShort(dstr) {
+  if (!dstr) return '';
+  const d = new Date(dstr);
+  if (!d || Number.isNaN(d.getTime())) return String(dstr);
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+}
+
 function fmtPAlwaysCompact(p) {
   const n = Number(p);
   if (!Number.isFinite(n)) return '';
-  if (n > 0 && n < 0.001) return '&lt;0.001';
+  if (n > 0 && n < 0.001) return '<0.001';
   return sci(n);
 }
 
-export function buildAdvancedStatReport({ result, paramCode = '', paramOptions = [], lakes = [], lakeId = '', compareValue = '', cl = '0.95', title = '' }) {
+export function buildAdvancedStatReport({ result, paramCode = '', paramOptions = [], lakes = [], lakeId = '', compareValue = '', cl = '0.95', stationId = '', organizationId = '', organizationLabel = '', classCode = '', title = '' }) {
   // Print CSS: A4 portrait, white background
   const style = `
     @page { size: A4 portrait; margin: 16mm; }
@@ -307,6 +315,35 @@ export function buildAdvancedStatReport({ result, paramCode = '', paramOptions =
     push('Confidence Level (CL)', `${Math.round(clNum*100)}%`);
   }
 
+  // Add dataset / station summary rows (preferentially show human names)
+  // Determine dataset source name from events if possible
+  const datasetNameFromEvents = (() => {
+    if (!Array.isArray(result?.events)) return null;
+    for (const ev of result.events) {
+      const oid = ev.organization_id ?? ev.organization?.id ?? null;
+      const oname = ev.organization?.name || ev.organization_name || ev.organization_label || null;
+      if (String(oid || '') === String(organizationId || '') && oname) return oname;
+    }
+    // fallback: first event org name
+    const ev = result.events[0];
+    return ev ? (ev.organization?.name || ev.organization_name || ev.organization_label || null) : null;
+  })();
+  const datasetLabel = datasetNameFromEvents || (organizationId ? String(organizationId) : '');
+
+  // Determine station label: prefer station name fields from events, else use stationId or 'All Stations'
+  const stationLabel = (() => {
+    if (!stationId) return 'All Stations';
+    if (Array.isArray(result?.events) && result.events.length) {
+      const names = new Set(result.events.map(ev => (ev.station?.name || ev.station_name || ev.station_label || ev.station_id || '')).filter(Boolean));
+      if (names.size === 1) return Array.from(names)[0];
+      if (names.size > 1) return 'Multiple stations';
+    }
+    return stationId;
+  })();
+
+  if (datasetLabel) push('Dataset Source', datasetLabel);
+  if (stationLabel) push('Station', stationLabel);
+
   // Summary table HTML (Field/Value only; no Notes column)
   const summaryRowsHtml = items.map(it => `<tr><th>${escapeHtml(it.k)}</th><td>${escapeHtml(it.v)}</td></tr>`).join('');
 
@@ -316,7 +353,7 @@ export function buildAdvancedStatReport({ result, paramCode = '', paramOptions =
     : '';
 
   // Interpretation (reuse same builder)
-  const interpretation = buildInterpretation({ result, paramCode, paramOptions, lakes, cl, fmt, sci, lakeId, compareValue }) || '';
+  const interpretation = buildInterpretation({ result, paramCode, paramOptions, lakes, classCode, cl, fmt, sci, lakeId, compareValue, stationId, organizationId }) || '';
 
   // Data used section — always show all values
   let valuesSection = '';
@@ -325,7 +362,7 @@ export function buildAdvancedStatReport({ result, paramCode = '', paramOptions =
     const findStationName = (ev) => ev.station_name || ev.station_label || ev.station_id || '';
     const rowsHtml = result.events.map(ev => (
       `<tr>`+
-      `<td>${escapeHtml(ev.sampled_at || '')}</td>`+
+      `<td>${escapeHtml(formatDateShort(ev.sampled_at || ev.date))}</td>`+
       `<td>${escapeHtml(findLakeName(ev.lake_id) || '')}</td>`+
       `<td>${escapeHtml(findStationName(ev) || '')}</td>`+
       `<td>${escapeHtml(ev.value != null ? fmt(ev.value) : '')}</td>`+
@@ -367,15 +404,18 @@ export function buildAdvancedStatReport({ result, paramCode = '', paramOptions =
   const yyyy = today.getFullYear();
   const mm = String(today.getMonth()+1).padStart(2,'0');
   const dd = String(today.getDate()).padStart(2,'0');
-  const paramLabel = findParamName(paramCode) || paramCode || 'param';
+  const paramLabel = findParamName(paramCode) || paramCode || 'Parameter';
   const lakePart = compareLakeId ? `${primaryLakeName}-vs-${secondaryLakeName}` : `${primaryLakeName || 'lake'}`;
   const toSlug = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
   const computedTitle = `advanced-stats_${toSlug(paramLabel)}_${toSlug(lakePart)}_${yyyy}-${mm}-${dd}`;
   const finalTitle = title || computedTitle;
+  // Human-readable visible title: Lake - Dataset - Station - Parameter
+  const visibleDataset = organizationLabel || datasetLabel || (organizationId ? `Dataset ${String(organizationId)}` : '');
+  const visibleStation = stationLabel || (stationId ? String(stationId) : 'All Stations');
+  const visibleTitle = `${primaryLakeName} - ${visibleDataset} - ${visibleStation} - ${paramLabel}`;
 
   const bodyHtml = `
-    <div class=\"container\">
-      <h1>${escapeHtml(findParamName(paramCode) ? `${findParamName(paramCode)} – Advanced Statistics` : 'Advanced Statistics')}</h1>
+    <div class=\"container\">\n      <h1>${escapeHtml(visibleTitle)}</h1>
       <table class=\"summary\"><tbody>${summaryRowsHtml}</tbody></table>
       ${ciHtml}
       <div class=\"interp\"><strong>Interpretation:</strong><div class=\"muted\" style=\"margin-top:6px\">${escapeHtml(interpretation)}</div></div>
