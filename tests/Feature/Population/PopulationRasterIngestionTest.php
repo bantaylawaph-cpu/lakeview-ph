@@ -21,5 +21,6 @@ it('superadmin attempts raster upload placeholder', function () {
 it('dataset years endpoint responds', function () {
     $resp = $this->getJson('/api/population/dataset-years');
     $resp->assertStatus(200);
-    expect($resp->json('data'))->toBeArray();
+    // Controller returns { years: [...] }
+    expect($resp->json('years'))->toBeArray();
 })->group('population');

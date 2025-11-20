@@ -8,9 +8,10 @@ it('superadmin creates and updates lake', function () {
     $admin = superAdmin();
     $create = $this->actingAs($admin)->postJson('/api/lakes', [ 'name' => 'Test Lake' ]);
     if ($create->status() === 201) {
-        $lakeId = $create->json('data.id');
+        // Controller returns the lake object at root (no data wrapper)
+        $lakeId = $create->json('id');
         $upd = $this->actingAs($admin)->putJson('/api/lakes/'.$lakeId, [ 'name' => 'Test Lake Updated' ]);
-        $upd->assertStatus(200)->assertJsonPath('data.name','Test Lake Updated');
+        $upd->assertStatus(200)->assertJsonPath('name','Test Lake Updated');
     } else {
         $create->assertStatus(422); // validation may fail due to schema requirements
     }

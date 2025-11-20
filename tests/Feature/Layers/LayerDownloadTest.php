@@ -1,23 +1,28 @@
 <?php
 
-use App\Models\Layer;
-use App\Models\Tenant;
+use Illuminate\Support\Facades\DB;
 
 it('downloads a layer (authorized)', function () {
-    if (!class_exists(Layer::class)) {
-        $this->markTestSkipped('Layer model not available');
-    }
-    $tenant = class_exists(Tenant::class) ? Tenant::factory()->create() : null;
+    $tenant = \App\Models\Tenant::factory()->create();
     $admin = orgAdmin($tenant);
-    try {
-        $layer = Layer::factory()->create([
-            'uploaded_by' => $admin->id,
-            'body_type' => 'lake',
-            'body_id' => 1,
-        ]);
-    } catch (Throwable $e) {
-        $this->markTestSkipped('Layer factory not available');
-    }
-    $resp = $this->actingAs($admin)->getJson('/api/layers/'.$layer->id.'/download');
+    // Seed a minimal layer directly
+    $layerId = DB::table('layers')->insertGetId([
+        'name' => 'DL Test',
+        'category' => 'test',
+        'type' => 'vector',
+        'source_type' => 'upload',
+        'body_type' => 'lake',
+        'body_id' => null,
+        'uploaded_by' => $admin->id,
+        'visibility' => 'private',
+        'is_active' => true,
+        'is_public' => false,
+        'status' => 'ready',
+        'version' => 1,
+        'srid' => 4326,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    $resp = $this->actingAs($admin)->getJson('/api/layers/'.$layerId.'/download');
     $this->assertTrue(in_array($resp->status(), [200,404]), 'Unexpected status: '.$resp->status());
 })->group('layers')->todo('Assert file stream headers when storage seeded.');
