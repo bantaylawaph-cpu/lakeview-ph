@@ -48,6 +48,8 @@ export default function Modal({
   useEffect(() => {
     if (open) {
       lastActiveRef.current = document.activeElement;
+      // Lock body scroll while any modal is open
+      try { document.body.classList.add('lv-modal-open'); } catch {}
       // defer to allow DOM paint
       setTimeout(() => {
         try {
@@ -71,6 +73,8 @@ export default function Modal({
       setTimeout(() => {
         try { lastActiveRef.current.focus(); } catch {}
       }, animationDuration + 10);
+      // Unlock body scroll (best-effort; if another modal still open they can re-add class)
+      try { document.body.classList.remove('lv-modal-open'); } catch {}
     }
   }, [open, animationDuration, initialFocusRef]);
 

@@ -131,7 +131,10 @@ class EmailOtpController extends Controller
         $v = Validator::make($r->all(), [
             'email' => ['required','email','max:255','unique:users,email'],
             'name'  => ['required','string','max:255'],
-            'password' => ['required','string','min:8','confirmed'],
+            // Strong password: >=8, uppercase, number, special char
+            'password' => ['required','string','min:8','regex:/^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).+$/','confirmed'],
+        ], [
+            'password.regex' => 'Password must have at least one uppercase letter, one number and one special character.'
         ]);
         if ($v->fails()) return response()->json(['errors' => $v->errors()], 422);
 
@@ -249,7 +252,9 @@ class EmailOtpController extends Controller
     public function forgotReset(Request $r) {
         $v = Validator::make($r->all(), [
             'ticket' => ['required','uuid'],
-            'password' => ['required','string','min:8','confirmed'],
+            'password' => ['required','string','min:8','regex:/^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).+$/','confirmed'],
+        ], [
+            'password.regex' => 'Password must have at least one uppercase letter, one number and one special character.'
         ]);
         if ($v->fails()) return response()->json(['errors' => $v->errors()], 422);
 

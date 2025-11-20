@@ -112,6 +112,36 @@
   color: #cbd5e1;
 }
 
+/* Password strength widget */
+.password-strength { margin-top: 8px; }
+.password-strength .bar {
+  height: 6px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #ef4444 0%, #f59e0b 40%, #3b82f6 75%, #10b981 100%);
+  filter: grayscale(0.4) brightness(0.85);
+  transition: filter .35s ease;
+  margin-bottom: 6px;
+}
+.password-strength .bar.ok { filter: none; }
+.password-strength .criteria { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap: 4px 12px; }
+.password-strength .criteria li { font-size: 11px; display: flex; align-items: center; gap: 4px; color: #94a3b8; }
+.password-strength .criteria li.ok { color: #10b981; }
+.password-strength .criteria li.bad svg { color: #f87171; }
+.password-strength .criteria li.ok svg { color: #10b981; }
+
+/* Terms & Conditions */
+.auth-terms { margin-top: 14px; }
+.auth-terms .terms-warning { font-size: 11px; color: #f87171; margin-top: 4px; }
+.auth-link.inline { text-decoration: underline; }
+
+/* Terms modal body spacing */
+.terms-modal-body { padding: 24px; }
+.terms-content h2 { margin-top: 0; font-size: 22px; font-weight: 700; }
+.terms-content h3 { margin-top: 24px; font-size: 16px; font-weight: 600; }
+.terms-content p, .terms-content li { font-size: 13px; line-height: 1.4; }
+.terms-content ul { padding-left: 18px; margin: 8px 0 12px; }
+.terms-footer-note { margin-top: 28px; font-size: 11px; opacity: 0.7; }
+
 /* Inputs */
 .auth-form input,
 .auth-form select {
@@ -285,6 +315,18 @@
   font-size: 0.9rem;
   color: #8ba3ca; /* gray-700 */
 }
+
+/* Right-aligned options container */
+.auth-options-right { display:flex; flex-direction:column; align-items:flex-end; margin-top:12px; }
+.auth-options-right.single { margin-top:8px; }
+.auth-options-right label { margin:4px 0; width:100%; display:flex; justify-content:flex-end; text-align:right; }
+.auth-remember-right span { order:1; }
+.auth-remember-right input[type="checkbox"] { order:2; }
+.auth-terms-line { display:flex; align-items:center; gap:8px; font-size:0.82rem; }
+.auth-terms-line span { order:1; }
+.auth-terms-line input[type="checkbox"] { order:2; }
+.auth-terms-line .inline { font-size:inherit; }
+.terms-warning { text-align:right; }
 
 .auth-remember input[type="checkbox"] {
   width: 16px;

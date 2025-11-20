@@ -313,6 +313,7 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
                     <option value="suggestion">Suggestion</option>
                     <option value="data">Data</option>
                     <option value="ui">UI/UX</option>
+                    <option value="org_petition">Petition a New Organization</option>
                     <option value="other">Other</option>
                   </select>
                   {categoryError && <div id="fb-category-err" className="field-error" style={{ color:'var(--danger, #dc2626)', fontSize:12, marginTop:4 }}>{categoryError}</div>}

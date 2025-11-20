@@ -27,7 +27,7 @@ class PublicStoreFeedbackRequest extends FormRequest
             'images' => ['sometimes','array','max:6'],
             // Allow images and PDFs up to 25MB each
             'images.*' => ['file','mimes:jpg,jpeg,png,pdf','max:25600'],
-            'category' => ['nullable','string','in:bug,suggestion,data,ui,other'],
+                'category' => ['nullable','string','in:bug,suggestion,data,ui,other,org_petition'],
             'guest_name' => ['nullable','string','max:120'],
             'guest_email' => ['nullable','email','max:160'],
             // Honeypot: must remain empty or absent

@@ -635,6 +635,7 @@ export default function AdminFeedback() {
               <option value="suggestion">Suggestion</option>
               <option value="data">Data</option>
               <option value="ui">UI/UX</option>
+              <option value="org_petition">Petition a New Organization</option>
               <option value="other">Other</option>
             </select>
           </div>

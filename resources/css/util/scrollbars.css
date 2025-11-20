@@ -3,6 +3,9 @@
   --lv-scroll-track: rgba(17, 24, 39, 0.06); /* slate-900 @ 6% */
   --lv-scroll-thumb: rgba(100, 116, 139, 0.55); /* slate-500 @ 55% */
   --lv-scroll-thumb-hover: rgba(100, 116, 139, 0.75); /* hover a bit darker */
+  --lv-scroll-thumb-contrast: rgba(203, 213, 225, 0.55); /* slate-300 for dark bg */
+  --lv-scroll-thumb-contrast-hover: rgba(203, 213, 225, 0.8);
+  --lv-scroll-track-dark: rgba(30, 41, 59, 0.4);
 }
 
 /* Firefox */
@@ -32,3 +35,10 @@
 .modern-scrollbar::-webkit-scrollbar-corner {
   background: transparent;
 }
+
+/* Contrast variant for dark containers */
+.modern-scrollbar.contrast::-webkit-scrollbar-track { background: var(--lv-scroll-track-dark); }
+.modern-scrollbar.contrast::-webkit-scrollbar-thumb { background-color: var(--lv-scroll-thumb-contrast); border-color: var(--lv-scroll-track-dark); }
+.modern-scrollbar.contrast:hover::-webkit-scrollbar-thumb { background-color: var(--lv-scroll-thumb-contrast-hover); }
+
+body.lv-modal-open { overflow: hidden; }

@@ -8,7 +8,8 @@ import {
 import { setCurrentUser } from "../../lib/authState";
 import { alertSuccess, alertError, alertInfo } from "../../lib/alerts";
 import Modal from "../../components/Modal";
-import { FiX, FiEye, FiEyeOff } from "react-icons/fi";
+import { FiX, FiEye, FiEyeOff, FiCheck, FiAlertCircle } from "react-icons/fi";
+import TermsModal from "./TermsModal";
 
 export default function AuthModal({ open, onClose, mode: initialMode = "login" }) {
   const navigate = useNavigate();
@@ -32,6 +33,8 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
   const [regPassword2, setRegPassword2] = useState("");
   const [occupation, setOccupation] = useState("");
   const [occupationOther, setOccupationOther] = useState("");
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
 
   // Forgot/Verify/Reset
   const [verifyContext, setVerifyContext] = useState(null); // 'register' | 'reset'
@@ -55,6 +58,13 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
   // Derived
   const passwordsMatch = regPassword.length > 0 && regPassword === regPassword2;
   const canResend = resendIn <= 0;
+  const strongPassword = /^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(regPassword);
+  const passwordCriteria = [
+    { label: 'At least 8 characters', ok: regPassword.length >= 8 },
+    { label: '1 uppercase letter', ok: /[A-Z]/.test(regPassword) },
+    { label: '1 number', ok: /\d/.test(regPassword) },
+    { label: '1 special character', ok: /[^A-Za-z0-9]/.test(regPassword) },
+  ];
 
   useEffect(() => { setMode(initialMode); }, [initialMode]);
 
@@ -75,6 +85,7 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
       setRegPassword2("");
       setOccupation("");
       setOccupationOther("");
+      setTermsAccepted(false);
 
       // otp/reset
       setVerifyContext(null);
@@ -88,6 +99,9 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
 
       // reset visibility toggles
       setShowPwd({ login: false, reg1: false, reg2: false, reset1: false, reset2: false });
+
+      // ensure any nested modals (terms) are also closed
+      setShowTerms(false);
 
       // critical: reset mode back to initial when modal is closed so next open starts clean
       setMode(initialMode || "login");
@@ -331,9 +345,9 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
   return (
     <Modal
       open={open}
-      onClose={onClose}
+      onClose={() => { try { setShowTerms(false); } catch {} ; onClose?.(); }}
       header={false}
-      width={600}
+      width={760}
       ariaLabel="Authentication dialog"
       cardClassName="no-bg no-padding"
       bodyClassName="auth-modal-body modern-scrollbar"
@@ -386,22 +400,23 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
                   {showPwd.login ? <FiEyeOff /> : <FiEye />}
                 </button>
               </div>
-
-              <label className="auth-remember">
-                <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
-                <span>Remember me</span>
-              </label>
+              <div className="auth-options-right single">
+                <label className="auth-remember auth-remember-right">
+                  <span>Remember me</span>
+                  <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+                </label>
+              </div>
 
               <button type="submit" className="auth-btn" disabled={loading}>
                 {loading ? "Logging in..." : "LOG IN"}
               </button>
 
               <div className="auth-inline">
-                <button type="button" className="auth-link" onClick={() => { setMode("forgot"); setErr(""); setEmail(email); }}>Forgot your password?</button>
+                <button type="button" className="auth-link" onClick={() => { setShowTerms(false); setMode("forgot"); setErr(""); setEmail(email); }}>Forgot your password?</button>
                 <span />
               </div>
 
-              <p className="auth-switch">Don’t have an account? <button type="button" className="auth-link" onClick={() => setMode("register")}>Sign Up</button></p>
+              <p className="auth-switch">Don’t have an account? <button type="button" className="auth-link" onClick={() => { setShowTerms(false); setMode("register"); }}>Sign Up</button></p>
             </form>
           )}
 
@@ -448,8 +463,20 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
               </div>
               {!passwordsMatch && regPassword2.length > 0 && (<div className="auth-error" role="alert">Passwords do not match.</div>)}
 
+              {/* Password strength & criteria */}
+              <div className="password-strength" aria-live="polite">
+                <div className={`bar ${strongPassword ? 'ok' : ''}`}></div>
+                <ul className="criteria">
+                  {passwordCriteria.map(c => (
+                    <li key={c.label} className={c.ok ? 'ok' : 'bad'}>
+                      {c.ok ? <FiCheck /> : <FiAlertCircle />} {c.label}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
               <label className="auth-label" htmlFor="occupation">Occupation</label>
-              <select id="occupation" value={occupation} onChange={(e) => setOccupation(e.target.value)} className="auth-select">
+              <select id="occupation" value={occupation} onChange={(e) => setOccupation(e.target.value)} className="auth-select" required aria-required="true">
                 <option value="">Select occupation</option>
                 <option value="student">Student</option>
                 <option value="researcher">Researcher</option>
@@ -467,18 +494,26 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
                 <input type="text" placeholder="Please specify your occupation" value={occupationOther} onChange={(e)=> setOccupationOther(e.target.value)} required />
               )}
 
-              <div className="auth-hint">Use at least 8 characters for a strong password.</div>
+              <div className="auth-hint">Your password must satisfy all criteria above.</div>
 
-              <label className="auth-remember">
-                <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
-                <span>Remember me after verify</span>
-              </label>
+              {/* Right-aligned Remember + Terms */}
+              <div className="auth-options-right">
+                <label className="auth-remember auth-remember-right">
+                  <span>Remember me after verify</span>
+                  <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+                </label>
+                <label className="auth-remember auth-remember-right">
+                  <span>I agree to the <button type="button" className="auth-link inline" onClick={() => setShowTerms(true)}>Terms & Conditions</button></span>
+                  <input type="checkbox" checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)} required />
+                </label>
+                {!termsAccepted && regPassword.length > 0 && (<div className="terms-warning" role="alert">Please accept Terms & Conditions.</div>)}
+              </div>
 
-              <button type="submit" className="auth-btn" disabled={loading || !passwordsMatch}>
-                {loading ? "Sending code..." : "REGISTER"}
+              <button type="submit" className="auth-btn" disabled={loading || !passwordsMatch || !strongPassword || !termsAccepted}>
+                {loading ? "Sending code..." : (!strongPassword ? 'Password not strong enough' : !termsAccepted ? 'Accept Terms to Continue' : 'REGISTER')}
               </button>
 
-              <p className="auth-switch">Already have an account? <button type="button" className="auth-link" onClick={() => setMode("login")}>Log In</button></p>
+              <p className="auth-switch">Already have an account? <button type="button" className="auth-link" onClick={() => { setShowTerms(false); setMode("login"); }}>Log In</button></p>
             </form>
           )}
 
@@ -550,6 +585,7 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
             </form>
           )}
         </div>
+        <TermsModal open={showTerms} onClose={() => setShowTerms(false)} />
       </div>
     </Modal>
   );

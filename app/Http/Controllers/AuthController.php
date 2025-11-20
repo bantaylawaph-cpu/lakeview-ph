@@ -16,8 +16,11 @@ class AuthController extends Controller
         $data = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
-            'password' => 'required|string|min:8',
+            // Enforce strong password: >=8, 1 uppercase, 1 digit, 1 special
+            'password' => ['required','string','min:8','regex:/^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).+$/'],
             'tenant_id' => 'nullable|integer|exists:tenants,id',
+        ], [
+            'password.regex' => 'Password must contain at least one uppercase letter, one number and one special character.'
         ]);
 
         $roleName = $data['tenant_id'] ? Role::CONTRIBUTOR : Role::PUBLIC;

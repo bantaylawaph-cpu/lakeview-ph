@@ -395,7 +395,7 @@ function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth, onOpenFeedbac
           >
             <li>
               <a
-                href="#overview"
+                href="#terms"
                 className="sidebar-row"
                 onClick={(e) => {
                   e.preventDefault();
@@ -404,7 +404,7 @@ function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth, onOpenFeedbac
                   } catch {}
                 }}
               >
-                <span>Overview</span>
+                <span>Terms & Conditions</span>
               </a>
             </li>
             <li>
