@@ -88,6 +88,16 @@
 }
 .lv-modal-card.auth-card .lv-field-row label { color: #cbd5e1; }
 
+/* Ensure select used in auth UI has readable text (only font color changed).
+   Do not alter backgrounds — options inherit text color to match the field.
+*/
+.lv-modal-card.auth-card .auth-select {
+  color: #f1f5f9; /* light text for dark modal */
+}
+.lv-modal-card.auth-card .auth-select option {
+  color: inherit;
+}
+
 /* Inputs: dark translucent background, light text */
 .lv-modal-card.auth-card .lv-field-row input[type="text"],
 .lv-modal-card.auth-card .lv-field-row input[type="email"],
