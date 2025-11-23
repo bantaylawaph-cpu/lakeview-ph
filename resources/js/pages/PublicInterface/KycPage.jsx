@@ -182,7 +182,7 @@ export default function KycPage({ embedded = true, open = true, onClose }) {
   const prev = () => setStep(s => Math.max(1, s - 1));
   const exitWizard = () => { setInWizard(false); setShowNewApp(false); setStep(1); setChosenTenantId(''); setErrors({}); };
 
-  const validateStep1 = () => { const e = {}; if (!chosenTenantId) e.tenant = 'Please choose an organization'; if (!desiredRole) e.role = 'Please choose a role'; setErrors(e); return Object.keys(e).length === 0; };
+  const validateStep1 = () => { const e = {}; if (!chosenTenantId) e.tenant = 'Please choose an organization'; setErrors(e); return Object.keys(e).length === 0; };
   // Guard: prevent duplicate applications for the same organization (pending/approved/needs_changes)
   const canApplyToSelected = useMemo(() => {
     const tid = Number(chosenTenantId || 0);
@@ -345,15 +345,7 @@ export default function KycPage({ embedded = true, open = true, onClose }) {
                 )}
                 {errors.tenant && <div style={{ color:'#b42318' }}>{errors.tenant}</div>}
 
-                <fieldset style={{ border:`1px solid ${legendBorder}`, borderRadius:8, padding:12 }}>
-                  <legend style={{ padding:'0 6px' }}>Desired Role</legend>
-                  <label style={{ display:'flex', gap:8, alignItems:'center', marginBottom:6 }}>
-                    <input type="radio" name="desired_role" value="contributor" checked={desiredRole === 'contributor'} onChange={() => setDesiredRole('contributor')} />
-                    <span>Contributor</span>
-                  </label>
-                  <div style={{ ...helpTextS, marginTop:6 }}>You can only apply as a Contributor. Joining an organization lets you submit reports on its behalf; Organization Admin assignments are handled separately by the organization.</div>
-                </fieldset>
-                {errors.role && <div style={{ color:'#b42318' }}>{errors.role}</div>}
+                {/* Desired Role removed: users apply as Contributor by default. */}
 
                 <div style={{ display:'flex', justifyContent:'space-between', gap:8, marginTop:8 }}>
                   <button type="button" onClick={exitWizard} style={{ ...buttonOutlineS, height:44, padding:'0 16px', borderRadius:10 }}>Cancel</button>

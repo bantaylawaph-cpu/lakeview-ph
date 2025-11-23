@@ -4,6 +4,7 @@ import useSettingsMode from './useSettingsMode';
 import useUpdateSelf from './useUpdateSelf';
 import api from '../../lib/api';
 import Swal from 'sweetalert2';
+import TenantEditModal from './TenantEditModal';
 
 /**
  * Reusable Settings form allowing user to update name & password.
@@ -16,10 +17,9 @@ export default function SettingsForm({ context = 'public', onUpdated }) {
   const [password, setPassword] = useState('');
   const [password2, setPassword2] = useState('');
   const [showPasswordSection, setShowPasswordSection] = useState(false);
-  // Tenant editing (org_admin only)
+  // Tenant manage modal (org_admin only)
   const [tenantName, setTenantName] = useState(() => (user?.tenant?.name || user?.tenant_name || user?.tenant || ''));
-  const [tenantEditing, setTenantEditing] = useState(false);
-  const [tenantSaving, setTenantSaving] = useState(false);
+  const [orgModalOpen, setOrgModalOpen] = useState(false);
   const [localError, setLocalError] = useState('');
   const { mode, showSection, canEdit } = useSettingsMode({ user, context });
   const { update, loading, error, success, resetStatus } = useUpdateSelf();
@@ -63,37 +63,6 @@ export default function SettingsForm({ context = 'public', onUpdated }) {
 
   const showTenant = showSection('tenant') && (user.tenant || user.tenant_id);
   const canEditTenant = user?.role === 'org_admin';
-
-  const submitTenant = async () => {
-    if (!canEditTenant) return;
-    const newName = tenantName?.trim();
-    if (!newName) { Swal.fire('Validation','Tenant name is required','warning'); return; }
-    const currentName = (user?.tenant?.name || user?.tenant_name || (typeof user?.tenant === 'string' ? user.tenant : ''));
-    if (newName === currentName) { setTenantEditing(false); return; }
-    const tid = user?.tenant_id || user?.tenant?.id || (Array.isArray(user?.tenants) && user.tenants[0]?.id) || null;
-    if (!tid) { Swal.fire('Error','Unable to resolve tenant id','error'); return; }
-    setTenantSaving(true);
-    try {
-      // Call new org-scoped tenant rename endpoint
-      const res = await api.patch(`/org/${tid}/tenant`, { name: newName });
-      const updated = res?.data || res;
-      if (updated) {
-        Swal.fire({ toast:true, position:'top-end', timer:1600, showConfirmButton:false, icon:'success', title:'Tenant name updated' });
-        const nextUser = { ...user };
-        if (nextUser.tenant && typeof nextUser.tenant === 'object') nextUser.tenant = { ...nextUser.tenant, name: newName };
-        if (nextUser.tenant_name) nextUser.tenant_name = newName;
-        if (typeof nextUser.tenant === 'string') nextUser.tenant = newName;
-        window.dispatchEvent(new CustomEvent('lv-user-update', { detail: nextUser }));
-        setTenantEditing(false);
-      }
-    } catch (e) {
-      console.error('Tenant update failed', e);
-      const msg = e?.response?.data?.message || (e?.response?.status === 403 ? 'You do not have permission to edit tenant name.' : 'Unable to update tenant name');
-      Swal.fire('Update failed', msg, 'error');
-    } finally {
-      setTenantSaving(false);
-    }
-  };
   const showPassword = showSection('password');
 
   return (
@@ -117,22 +86,13 @@ export default function SettingsForm({ context = 'public', onUpdated }) {
               </div>
               {showTenant && (
                 <div className="lv-field-row">
-                  <label>Tenant</label>
-                  {!tenantEditing && (
-                    <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-                      <input type="text" value={tenantName || `Tenant #${user.tenant_id}`} disabled readOnly />
-                      {canEditTenant && (
-                        <button type="button" className="pill-btn ghost sm" onClick={()=>setTenantEditing(true)}>Edit</button>
-                      )}
-                    </div>
-                  )}
-                  {tenantEditing && (
-                    <div style={{ display:'flex', gap:8, alignItems:'center', width:'100%' }}>
-                      <input type="text" value={tenantName} onChange={e=>setTenantName(e.target.value)} maxLength={255} disabled={tenantSaving} style={{ flex:1 }} />
-                      <button type="button" className="pill-btn primary sm" disabled={tenantSaving} onClick={submitTenant}>{tenantSaving ? 'Saving…' : 'Save'}</button>
-                      <button type="button" className="pill-btn ghost sm" disabled={tenantSaving} onClick={()=>{ setTenantEditing(false); setTenantName(user?.tenant?.name || user?.tenant_name || user?.tenant || ''); }}>Cancel</button>
-                    </div>
-                  )}
+                  <label>Organization</label>
+                  <div style={{ display:'flex', gap:8, alignItems:'center', width:'100%' }}>
+                    <input type="text" value={tenantName || `Tenant #${user.tenant_id}`} disabled readOnly style={{ flex:1 }} />
+                    {canEditTenant && (
+                      <button type="button" className="pill-btn ghost sm" onClick={()=>setOrgModalOpen(true)}>Manage</button>
+                    )}
+                  </div>
                 </div>
               )}
               {success && <div className="lv-status-success" role="status">{success}</div>}
@@ -171,6 +131,16 @@ export default function SettingsForm({ context = 'public', onUpdated }) {
           </div>
         </fieldset>
       </form>
+      {canEditTenant && (
+        <TenantEditModal
+          open={orgModalOpen}
+          onClose={() => setOrgModalOpen(false)}
+          onSaved={(updated, payload, nextUser) => {
+            // Update local tenantName display
+            setTenantName(payload?.name || nextUser?.tenant?.name || nextUser?.tenant_name || tenantName);
+          }}
+        />
+      )}
     </div>
   );
 }

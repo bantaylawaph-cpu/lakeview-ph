@@ -119,7 +119,17 @@ export default function Modal({
       aria-modal="true"
       aria-label={ariaLabel}
       // Close on overlay click (mouseup -> click) to avoid click-through to background.
+      // Do not close the modal if the user is performing a text selection (highlighting),
+      // which can emit click events on the overlay when selection ends outside the modal.
       onClick={(e) => {
+        try {
+          const sel = typeof window !== 'undefined' && window.getSelection ? window.getSelection().toString() : '';
+          if (sel && sel.length > 0) {
+            // User was selecting text; ignore this click so modal doesn't close.
+            e.stopPropagation();
+            return;
+          }
+        } catch {}
         if (closeOnOverlay && e.target === e.currentTarget) {
           e.stopPropagation();
           e.preventDefault();

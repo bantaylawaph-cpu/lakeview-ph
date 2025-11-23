@@ -279,30 +279,39 @@ class TenantController extends Controller
     }
 
     /**
-     * PATCH /api/org/{tenant}/tenant
-     * Allow an org_admin (scoped to tenant) or superadmin to update only the tenant name.
+     * GET /api/org/{tenant}/tenant
+     * Return tenant details for org_admin (scoped) or superadmin.
      */
-    public function orgScopedRename(Request $request, $tenant)
+    public function orgScopedShow(Request $request, $tenant)
     {
-        // Ensure we have a Tenant model (manual resolve to control error messaging)
         $tenantModel = $tenant instanceof Tenant ? $tenant : Tenant::findOrFail((int)$tenant);
-        // Must be tenant admin (org_admin) or superadmin already allowed by authorizeTenantAccess
+        $this->authorizeTenantAccess($request, $tenantModel, requireAdmin: true);
+        return response()->json(['data' => $this->tenantResource($tenantModel)]);
+    }
+
+    /**
+     * PATCH /api/org/{tenant}/tenant
+     * Allow an org_admin (scoped) or superadmin to update tenant core details.
+     * Fields are optional; only provided keys are updated.
+     */
+    public function orgScopedUpdate(Request $request, $tenant)
+    {
+        $tenantModel = $tenant instanceof Tenant ? $tenant : Tenant::findOrFail((int)$tenant);
         $this->authorizeTenantAccess($request, $tenantModel, requireAdmin: true);
         $data = $request->validate([
-            'name' => 'required|string|max:255|unique:tenants,name,' . $tenantModel->id,
+            'name'          => 'sometimes|required|string|max:255|unique:tenants,name,' . $tenantModel->id,
+            'type'          => 'sometimes|nullable|string|max:255',
+            'contact_email' => 'sometimes|nullable|email|max:255',
+            'phone'         => 'sometimes|nullable|string|max:255',
+            'address'       => 'sometimes|nullable|string|max:500',
         ]);
-        $old = $tenantModel->only(['name']);
-        $tenantModel->name = $data['name'];
+        $old = $tenantModel->only(['name','type','contact_email','phone','address']);
+        $tenantModel->fill($data);
         $tenantModel->save();
-        // Minimal resource payload for UI update
-        return response()->json([
-            'data' => [
-                'id' => $tenantModel->id,
-                'name' => $tenantModel->name,
-                'updated_at' => optional($tenantModel->updated_at)->toIso8601String(),
-                'previous_name' => $old['name']
-            ]
-        ]);
+        $resource = $this->tenantResource($tenantModel);
+        $resource['changed'] = array_keys($data);
+        $resource['previous'] = $old;
+        return response()->json(['data' => $resource]);
     }
 
     protected function authorizeTenantAccess(Request $request, Tenant $tenant, bool $requireAdmin = false): void

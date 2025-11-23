@@ -196,8 +196,10 @@ Route::middleware(['auth:sanctum','tenant.scoped','role:org_admin,superadmin'])
     Route::get('/kpis/tests', [\App\Http\Controllers\Api\Org\KpiController::class, 'tests']);
     Route::get('/kpis/tests/draft', [\App\Http\Controllers\Api\Org\KpiController::class, 'testsDraft']);
 
-    // Tenant rename (org_admin scope)
-    Route::patch('/tenant', [TenantController::class, 'orgScopedRename']);
+    // Tenant details (org_admin scope)
+    Route::get('/tenant', [TenantController::class, 'orgScopedShow']);
+    // Tenant update (supports name + contact fields)
+    Route::patch('/tenant', [TenantController::class, 'orgScopedUpdate']);
 
         // Sampling Events (tenant scoped) accessible to org_admin + contributor + superadmin (superadmin passes role middleware automatically)
     Route::get   ('/sample-events',                              [AdminSamplingEventController::class, 'index']);

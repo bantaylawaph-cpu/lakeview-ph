@@ -57,12 +57,6 @@
   color: #111827;
 }
 .form-card input:focus,
-.auth-select {
-  color: #0f172a; /* very dark slate for readability on light backgrounds */
-}
-.auth-select option {
-  color: inherit; /* ensure dropdown items follow the select text color */
-}
 .form-card select:focus,
 .form-card textarea:focus {
   border-color: #3b82f6;

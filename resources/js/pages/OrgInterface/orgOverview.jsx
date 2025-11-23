@@ -8,6 +8,8 @@ import {
 } from "react-icons/fi";
 
 import api, { me as fetchMe } from "../../lib/api";
+import { listTenantsOptions } from "../../lib/api"; // legacy direct use retained for fallback (not primary)
+import { ensureTenantName } from "../../lib/tenantCache";
 import kpiCache from '../../lib/kpiCache';
 import DashboardHeader from '../../components/DashboardHeader';
 import { FiUsers as FiUsersIcon } from 'react-icons/fi';
@@ -76,6 +78,7 @@ export default function OrgOverview({ tenantId: propTenantId }) {
     tests:   { value: null, loading: true, error: null },
     pending: { value: null, loading: true, error: null },
   });
+  const [tenantName, setTenantName] = useState('');
   const [readySignaled, setReadySignaled] = useState(false);
 
   const publish = useCallback((key, payload) => {
@@ -183,8 +186,19 @@ export default function OrgOverview({ tenantId: propTenantId }) {
     return () => clearInterval(interval);
   }, [tenantId, fetchAll]);
 
+  // Cached tenant name (memory + localStorage)
+  useEffect(() => {
+    let cancelled = false;
+    if (!tenantId) return;
+    ensureTenantName(tenantId, (name) => { if (!cancelled) setTenantName(name); });
+    return () => { cancelled = true; };
+  }, [tenantId]);
+
   return (
     <>
+      {tenantName && (
+        <div style={{ marginBottom: 16, fontSize: 30, fontWeight: 700, letterSpacing: '0.5px' }}>Welcome to {tenantName}</div>
+      )}
       <DashboardHeader
         icon={<FiUsersIcon />}
         title="Organization Dashboard"

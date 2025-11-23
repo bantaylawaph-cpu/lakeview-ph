@@ -4,6 +4,8 @@ import { useParams, Link } from 'react-router-dom';
 import { FiClipboard, FiDatabase, FiUsers } from 'react-icons/fi';
 
 import api, { me as fetchMe } from '../../lib/api';
+import { listTenantsOptions } from '../../lib/api'; // retained for possible future fallback
+import { ensureTenantName } from '../../lib/tenantCache';
 import kpiCache from '../../lib/kpiCache';
 import DashboardHeader from '../../components/DashboardHeader';
 import { FiHome } from 'react-icons/fi';
@@ -51,6 +53,7 @@ export default function ContribOverview({ tenantId: propTenantId }) {
     orgPublished: { value: null, loading: true, error: null },
   });
   const [readySignaled, setReadySignaled] = useState(false);
+  const [tenantName, setTenantName] = useState('');
 
   const publish = useCallback((key, payload) => {
     setStats(prev => ({ ...prev, [key]: { ...prev[key], ...payload } }));
@@ -153,8 +156,19 @@ export default function ContribOverview({ tenantId: propTenantId }) {
     return () => clearInterval(interval);
   }, [tenantId, fetchAll]);
 
+  // Cached tenant name (memory + localStorage)
+  useEffect(() => {
+    let cancelled = false;
+    if (!tenantId) return;
+    ensureTenantName(tenantId, (name) => { if (!cancelled) setTenantName(name); });
+    return () => { cancelled = true; };
+  }, [tenantId]);
+
   return (
     <>
+      {tenantName && (
+        <div style={{ marginBottom: 16, fontSize: 30, fontWeight: 700, letterSpacing: '0.5px' }}>Welcome to {tenantName}</div>
+      )}
       <DashboardHeader
         icon={<FiHome />}
         title="Contributor Dashboard"
