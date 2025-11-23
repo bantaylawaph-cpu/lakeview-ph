@@ -351,11 +351,7 @@ export default function KycPage({ embedded = true, open = true, onClose }) {
                     <input type="radio" name="desired_role" value="contributor" checked={desiredRole === 'contributor'} onChange={() => setDesiredRole('contributor')} />
                     <span>Contributor</span>
                   </label>
-                  <label style={{ display:'flex', gap:8, alignItems:'center' }}>
-                    <input type="radio" name="desired_role" value="org_admin" checked={desiredRole === 'org_admin'} onChange={() => setDesiredRole('org_admin')} />
-                    <span>Org Admin (longer review)</span>
-                  </label>
-                  <div style={{ ...helpTextS, marginTop:6 }}>Choose the role you prefer. Org Admin may take longer to review.</div>
+                  <div style={{ ...helpTextS, marginTop:6 }}>You can only apply as a Contributor. Joining an organization lets you submit reports on its behalf; Organization Admin assignments are handled separately by the organization.</div>
                 </fieldset>
                 {errors.role && <div style={{ color:'#b42318' }}>{errors.role}</div>}
 
