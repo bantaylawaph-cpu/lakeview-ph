@@ -15,6 +15,13 @@
   width: 22px; height: 22px; border-radius: 50%;
   background: #e5e7eb; color: #111827; font-size: 0.8rem;
 }
+.wizard-step .step-label {
+  display: inline-block;
+  max-width: calc(100% - 48px); /* leave room for the badge + gap */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .wizard-step.active { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8; }
 .wizard-step.active .step-index { background: #3b82f6; color: #fff; }
 .wizard-step.done { background: #ecfdf5; border-color: #86efac; color: #15803d; }
@@ -57,15 +64,16 @@
   display: flex; align-items: center; gap: 10px; margin-top: 12px;
 }
 /* Small screens: allow steps to scroll horizontally when stacked */
-@media (max-width: 720px) {
+/* Compact step pills at smaller sizes. Hide labels on smaller screens */
+@media (max-width: 920px) {
   .wizard-steps {
     display: flex;
     overflow-x: auto;
     gap: 8px;
     padding: 8px 0 12px;
   }
-  /* compact the steps visually on mobile: show only the numeric badge */
-  .wizard-step { min-width: 54px; flex: 0 0 auto; padding: 6px 8px; gap: 6px; justify-content: center; }
+  /* compact the steps visually on tablet and mobile: show smaller pills */
+  .wizard-step { min-width: 64px; flex: 0 0 auto; padding: 6px 8px; gap: 6px; justify-content: center; }
   .wizard-step .step-index { width: 34px; height: 34px; font-size: 0.9rem; }
   /* visually hide the step label but keep it accessible to screen readers */
   .wizard-step .step-label { position: absolute !important; width:1px !important; height:1px !important; padding:0 !important; margin:-1px !important; overflow:hidden !important; clip:rect(0,0,0,0) !important; white-space:nowrap !important; border:0 !important; }

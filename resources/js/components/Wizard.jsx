@@ -47,11 +47,30 @@ export default function Wizard({
 
   const goPrev = () => setStepIndex((i) => Math.max(0, i - 1));
   const goNext = () => {
-    if (!canGoNext) return;
+    if (!canGoNext) {
+      // give the current step a chance to show an explanation / popup when next is attempted
+      try { if (current && typeof current.onInvalid === 'function') current.onInvalid({ data, setData: updateData, stepIndex }); } catch (e) { /* ignore */ }
+      return;
+    }
     setStepIndex((i) => Math.min(steps.length - 1, i + 1));
   };
-  const finish = () => {
-    if (!canGoNext) return;
+  const finish = async () => {
+    if (!canGoNext) {
+      try { if (current && typeof current.onInvalid === 'function') current.onInvalid({ data, setData: updateData, stepIndex }); } catch (e) { /* ignore */ }
+      return;
+    }
+
+    // allow the current/last step to run a final validation before finish
+    try {
+      if (current && typeof current.onBeforeFinish === 'function') {
+        const res = current.onBeforeFinish({ data, setData: updateData, stepIndex });
+        // support async hooks returning a Promise<boolean>
+        const resolved = res && typeof res.then === 'function' ? await res : res;
+        // if the hook explicitly returns false, block finishing
+        if (resolved === false) return;
+      }
+    } catch (e) { /* ignore */ }
+
     onFinish?.(data);
   };
 
@@ -107,11 +126,19 @@ export default function Wizard({
         </button>
         <div style={{ flex: 1 }} />
         {!isLast ? (
-          <button className="pill-btn primary" disabled={!canGoNext} onClick={goNext}>
-            <span className="hide-sm">{labels.next}</span> <FiChevronRight />
+          <button
+            className={`pill-btn primary ${!canGoNext ? 'disabled' : ''}`}
+            aria-disabled={!canGoNext}
+            onClick={goNext}
+          >
+              <span className="hide-sm">{labels.next}</span> <FiChevronRight />
           </button>
         ) : (
-          <button className="pill-btn primary" disabled={!canGoNext} onClick={finish}>
+          <button
+            className={`pill-btn primary ${!canGoNext ? 'disabled' : ''}`}
+            aria-disabled={!canGoNext}
+            onClick={finish}
+          >
             {labels.finish}
           </button>
         )}

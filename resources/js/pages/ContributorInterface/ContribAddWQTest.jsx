@@ -32,7 +32,7 @@ export default function ContribAddWQTest() {
 
   return (
     <div className="dashboard-content">
-      <DashboardHeader icon={<FiDroplet />} title="Add Water Quality Test" description="Create a new water quality test record. Contributors cannot publish tests directly." />
+      <DashboardHeader icon={<FiDroplet />} title="Add Water Quality Data" description="Create a new water quality test record. Contributors cannot publish tests directly." />
 
       <WQTestWizard
         organization={organization}

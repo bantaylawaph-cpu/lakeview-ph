@@ -447,11 +447,11 @@ export default function WQTestWizard({
       if (patch.parameter_id !== undefined) {
         const p = parameterOptions.find((pp) => String(pp.id) === String(patch.parameter_id));
         nr.parameter_code = p?.code || "";
-        if (!nr.unit) nr.unit = p?.unit || "";
+        nr.unit = p?.unit || "";
       }
       if (patch.depth_m !== undefined) {
         const val = patch.depth_m;
-        nr.depth_m = val === "" || val === null || isNaN(Number(val)) ? 0 : Number(val);
+        nr.depth_m = val === "" ? "" : (val === null || isNaN(Number(val)) ? 0 : Number(val));
       }
       return nr;
     });
@@ -460,7 +460,7 @@ export default function WQTestWizard({
 
   const submit = async (data) => {
     if (!data?.station_id) {
-      alertError('Missing station', 'A station is required for every sampling event. Please select or create a station.');
+      alertError('Missing station', canManageStations ? 'A station is required for every sampling event. Please select or create a station.' : 'A station is required for every sampling event.');
       const err = new Error('Station is required');
       err.code = 'VALIDATION';
       throw err;
@@ -593,6 +593,16 @@ export default function WQTestWizard({
     {
       key: STEP_LABELS[0].key,
       title: STEP_LABELS[0].title,
+      onInvalid: ({ data }) => {
+        if (!data.lake_id) {
+          return alertError('Missing lake', 'Please select a lake before continuing.');
+        }
+        if (!data.station_id) {
+          // contributors cannot create new stations so show a shorter message
+          return alertError('Missing station', canManageStations ? 'A station is required — please select or create one.' : 'A station is required');
+        }
+        return null;
+      },
       canNext: (d) => {
         // Station is required for all sampling events
         return !!d.lake_id && !!d.station_id;
@@ -672,7 +682,7 @@ export default function WQTestWizard({
             }}
           >
             <AppMap
-              style={{ height: mapHeight, width: '100%' }}
+              style={{ height: '100%', width: '100%' }}
               disableDrag={isMobile}
               zoomControl={!isMobile}
               scrollWheelZoom={!isMobile}
@@ -720,6 +730,14 @@ export default function WQTestWizard({
     {
       key: STEP_LABELS[1].key,
       title: STEP_LABELS[1].title,
+      onInvalid: ({ data }) => {
+        if (!data.sampled_at) return alertError('Missing date', 'Please enter the sampling date.');
+        if (!isNotLaterThanTodayDate(data.sampled_at)) return alertError('Invalid date', 'The sampling date must not be later than today.');
+        if (!data.method) return alertError('Missing method', 'Please choose a sampling method.');
+        if (!data.sampler_name) return alertError('Missing sampler', 'Please enter the sampler\'s name.');
+        if (!data.weather) return alertError('Missing weather', 'Please select the weather during sampling.');
+        return null;
+      },
       canNext: (d) => !!d.sampled_at && isNotLaterThanTodayDate(d.sampled_at) && !!d.method && !!d.weather && !!d.sampler_name,
       render: ({ data, setData }) => {
         const maxDt = fmtDate(new Date());
@@ -780,6 +798,13 @@ export default function WQTestWizard({
     {
       key: STEP_LABELS[2].key,
       title: STEP_LABELS[2].title,
+      onInvalid: ({ data }) => {
+        const rows = data.results || [];
+        if (!rows.length) return alertError('No parameters', 'Add at least one parameter row before continuing.');
+        const bad = rows.find((r, i) => !r.parameter_id || r.value === "" || r.value === null);
+        if (bad) return alertError('Missing parameter value', 'Each row must have a selected parameter and a value.');
+        return null;
+      },
       canNext: (d) =>
         (d.results || []).length > 0 &&
         (d.results || []).every((r) => r.parameter_id && r.value !== ""),
@@ -830,11 +855,7 @@ export default function WQTestWizard({
                     </td>
                     <td>
                       <div className="form-group" style={{ margin: 0, minWidth: 0 }}>
-                        <input
-                          value={r.unit}
-                          readOnly={true}
-                          placeholder="auto"
-                        />
+                        <span>{r.unit || "—"}</span>
                       </div>
                     </td>
                     <td>
@@ -879,6 +900,11 @@ export default function WQTestWizard({
     {
       key: STEP_LABELS[3].key,
       title: STEP_LABELS[3].title,
+      onInvalid: ({ data }) => {
+        const okStd = !!(data.applied_standard_id || standardsList.find(s => s.is_current)?.id);
+        if (!okStd) return alertError('Missing standard', 'Please select an applied standard (DAO) before continuing.');
+        return null;
+      },
       canNext: (d) => !! (d.applied_standard_id || standardsList.find(s => s.is_current)?.id),
       render: ({ data, setData }) => (
         <div className="wizard-pane">
@@ -931,6 +957,27 @@ export default function WQTestWizard({
     {
       key: STEP_LABELS[4].key,
       title: STEP_LABELS[4].title,
+      onBeforeFinish: async ({ data }) => {
+        // run full validation for all steps and surface the first problem found
+        if (!data.lake_id) { alertError('Missing lake', 'Please select a lake.'); return false; }
+        if (!data.station_id) { alertError('Missing station', canManageStations ? 'A station is required — please select or create one.' : 'A station is required'); return false; }
+        if (!data.sampled_at) { alertError('Missing date', 'Please enter the sampling date.'); return false; }
+        if (!isNotLaterThanTodayDate(data.sampled_at)) { alertError('Invalid date', 'The sampling date must not be later than today.'); return false; }
+        if (!data.method) { alertError('Missing method', 'Please choose a sampling method.'); return false; }
+        if (!data.sampler_name) { alertError('Missing sampler', 'Please enter the sampler name.'); return false; }
+        if (!data.weather) { alertError('Missing weather', 'Please select the weather during sampling.'); return false; }
+        const rows = data.results || [];
+        if (!rows.length) { alertError('No parameters', 'Add at least one parameter row before submitting.'); return false; }
+        const bad = rows.find((r) => !r.parameter_id || r.value === "" || r.value === null);
+        if (bad) { alertError('Missing parameter value', 'Each row must have a selected parameter and a value.'); return false; }
+        const okStd = !!(data.applied_standard_id || standardsList.find(s => s.is_current)?.id);
+        if (!okStd) { alertError('Missing standard', 'Please select an applied standard (DAO) before submitting.'); return false; }
+
+        // ask for final confirmation before submitting
+        const confirmText = data.status === 'public' ? 'This will publish the water quality test. Continue?' : 'Submit this water quality test?';
+        const ok = await confirm({ title: 'Confirm submission', text: confirmText, confirmButtonText: 'Submit' });
+        return !!ok;
+      },
       render: ({ data }) => {
         const selectedStd = standardOptions.find(s => String(s.id) === String(data.applied_standard_id || standardsList.find(s => s.is_current)?.id || ""));
         return (
