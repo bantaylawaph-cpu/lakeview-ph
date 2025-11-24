@@ -69,8 +69,9 @@ export function useWQTests({ variant, tableId, initialLakes = [], initialTests =
         }
       }
     } catch {}
-    // Default to most recently updated tests first
-    return { id: 'updated_at', dir: 'desc' };
+    // Default to newest tests first (descending id)
+    // Use `id` so ordering reflects record creation/primary key most-recent-first.
+    return { id: 'id', dir: 'desc' };
   });
 
   useEffect(() => {
