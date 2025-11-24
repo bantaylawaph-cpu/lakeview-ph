@@ -127,52 +127,30 @@ export function buildInterpretation({
   // 1. Normality (Shapiro–Wilk) or Diagnostic
   // ------------------------------------------------------------------
   if (result.test_used === 'shapiro_wilk' || result.type === 'one-sample-normality' || result.test_used === 'diagnostic_one') {
-    // One-sample normality
+    // One-sample Shapiro-Wilk: simplify phrasing but keep suggested tests
     if (!Number.isFinite(p)) return '';
     const isRange = paramEval === 'range';
-    if (p < alpha) {
-      // Non-normal
-      const advice = isRange
-        ? 'Run Equivalence TOST Wilcoxon test.'
-        : 'Run Wilcoxon signed-rank test or Sign test.';
-      const suggested = isRange ? ['tost_wilcoxon'] : ['wilcoxon_signed_rank','sign_test'];
-      return { text: join([
-        `There is enough statistical evidence to suggest that the ${paramLabel} of ${lake1Label} deviates from normality`,
-        advice
-      ]), suggestedTests: suggested };
-    } else {
-      // Normal
-      const advice = isRange
-        ? 'Run Equivalence TOST t-test.'
-        : 'Run One-sample t-test.';
-      const suggested = isRange ? ['tost'] : ['t_one_sample'];
-      return { text: join([
-        `There is not enough statistical evidence to suggest that the ${paramLabel} of ${lake1Label} deviates from normality`,
-        advice
-      ]), suggestedTests: suggested };
-    }
+    const normal = p >= alpha;
+    const suggested = isRange ? ['tost_wilcoxon'] : (normal ? ['t_one_sample'] : ['wilcoxon_signed_rank','sign_test']);
+    return { text: `Results of the Shapiro–Wilk test indicate that the data exhibits a ${normal ? 'normal' : 'non-normal'} distribution`, suggestedTests: suggested };
   } else if (result.test_used === 'diagnostic_two' || result.type === 'two-sample-diagnostic') {
-    // Two-sample diagnostic: Shapiro + Levene
+    // Two-sample diagnostic: report each Shapiro result and Levene succinctly, keep suggested tests
     const p1 = toNum(result.p1);
     const p2 = toNum(result.p2);
     const pLevene = toNum(result.p_levene);
     const normal1 = result.normal1 != null ? !!result.normal1 : (p1 != null ? p1 >= alpha : null);
     const normal2 = result.normal2 != null ? !!result.normal2 : (p2 != null ? p2 >= alpha : null);
     const equalVar = result.equal_variances != null ? !!result.equal_variances : (pLevene != null ? pLevene >= alpha : null);
-    const bothNormal = normal1 === true && normal2 === true;
-    const lake1Normal = normal1 === true ? `There is not enough statistical evidence to suggest that the ${paramLabel} of ${lake1Label} deviates from normality` : `There is enough statistical evidence to suggest that the ${paramLabel} of ${lake1Label} deviates from normality`;
-    const lake2Normal = normal2 === true ? `There is not enough statistical evidence to suggest that the ${paramLabel} of ${lake2Name} deviates from normality` : `There is enough statistical evidence to suggest that the ${paramLabel} of ${lake2Name} deviates from normality`;
-    const varEqual = equalVar === true ? 'There is not enough statistical evidence to suggest that variances differ' : 'There is enough statistical evidence to suggest that variances differ';
-    let advice = '';
+
+    const s1 = `Results indicate that ${lake1Label}'s data exhibits a ${normal1 ? 'normal' : 'non-normal'} distribution.`;
+    const s2 = `${lake2Name}'s data exhibits a ${normal2 ? 'normal' : 'non-normal'} distribution.`;
+    const s3 = `The Levene variance test shows that the variances ${equalVar ? 'do not significantly differ' : 'significantly differ'}.`;
+
     let suggested = [];
-    if (bothNormal) {
-      advice = equalVar === true ? 'Run Student t-test.' : 'Run Welch t-test.';
-      suggested = equalVar === true ? ['t_student'] : ['t_welch'];
-    } else {
-      advice = 'Run Mann–Whitney U test or Mood median test.';
-      suggested = ['mann_whitney','mood_median_test'];
-    }
-    return { text: join([lake1Normal, lake2Normal, varEqual, advice]), suggestedTests: suggested };
+    if (normal1 === true && normal2 === true) suggested = equalVar ? ['t_student'] : ['t_welch'];
+    else suggested = ['mann_whitney','mood_median_test'];
+
+    return { text: join([s1, s2, s3]), suggestedTests: suggested };
   } else if (result.test_used === 'shapiro_wilk' && twoSample) {
     // Two-sample Shapiro (individual)
     const p1 = toNum(result.p1);

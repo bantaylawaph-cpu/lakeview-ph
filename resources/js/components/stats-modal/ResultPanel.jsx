@@ -412,6 +412,24 @@ export default function ResultPanel({ result, paramCode, paramOptions, classCode
             <strong>Disclaimer:</strong> This test pools all stations and sampling dates per lake; results are exploratory and not a substitute for station-level or regulatory compliance assessments.
           </div>
         ) : null}
+        {/* Warn when sample size imbalance is large (e.g., >= 4x) */}
+        {twoSample ? (()=>{
+          const n1 = stats1 ? stats1.n : (Array.isArray(result.sample1_values) ? result.sample1_values.length : null);
+          const n2 = stats2 ? stats2.n : (Array.isArray(result.sample2_values) ? result.sample2_values.length : null);
+          if (n1 != null && n2 != null && n1 > 0 && n2 > 0) {
+            const hi = Math.max(n1,n2); const lo = Math.min(n1,n2);
+            if (hi / lo >= 4) {
+              const primaryLabel = `${primaryLakeName} (N=${n1})`;
+              const secondaryLabel = `${secondaryLakeName} (N=${n2})`;
+              return (
+                <div style={{ marginTop:8, fontSize:12, color:'#ffcf6a' }}>
+                  <strong>Warning:</strong> Sample sizes differ substantially — {primaryLabel} vs {secondaryLabel}. Results may be sensitive to these differences; interpret the statistical conclusions cautiously and consider tests robust to unequal sample sizes or stratified analyses.
+                </div>
+              );
+            }
+          }
+          return null;
+        })() : null}
         {Array.isArray(interpObj.suggestedTests) && interpObj.suggestedTests.length ? (
           <div style={{ marginTop:8 }}>
             <div style={{ fontSize:13, marginBottom:6 }}>Suggested Test/s:</div>

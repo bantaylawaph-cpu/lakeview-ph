@@ -201,6 +201,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
   // Shared runner used by UI run and suggested-test runner
   const doRun = async (testToUse) => {
     setLoading(true); setError(null); setResult(null); setShowExactP(false);
+    let effectiveYearFrom; let effectiveYearTo;
     if (!lakeId) { alertError('Missing Lake', 'Please select a Primary Lake before running the test.'); setLoading(false); return; }
     const isCustom = String(lakeId) === 'custom';
     if (!isCustom && !organizationId) { alertError('Missing Dataset Source', 'Please select a Dataset Source before running the test.'); setLoading(false); return; }
@@ -211,6 +212,49 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
     if (inferredTest === 'two-sample') {
       if (!compareValue || !String(compareValue).startsWith('lake:')) { alertError('Missing Comparison Lake', 'For two-sample tests, please select a lake to compare against.'); setLoading(false); return; }
       if (!secondaryOrganizationId) { alertError('Missing Secondary Dataset Source', 'Please select a Secondary Dataset Source for the comparison lake.'); setLoading(false); return; }
+      // Derive overlapping years between the two lakes. If there are no overlapping years we must stop.
+      try {
+        const primaryYearsSet = new Set();
+        const secondaryYearsSet = new Set();
+        const primaryAll = Array.isArray(primaryAllEvents) ? primaryAllEvents : [];
+        const secondaryAll = Array.isArray(secondaryAllEvents) ? secondaryAllEvents : [];
+        for (const ev of primaryAll) {
+          const d = ev?.sampled_at || ev?.date;
+          if (!d) continue;
+          const y = new Date(d).getFullYear();
+          if (!Number.isNaN(y)) primaryYearsSet.add(Number(y));
+        }
+        for (const ev of secondaryAll) {
+          const d = ev?.sampled_at || ev?.date;
+          if (!d) continue;
+          const y = new Date(d).getFullYear();
+          if (!Number.isNaN(y)) secondaryYearsSet.add(Number(y));
+        }
+        const overlap = [...primaryYearsSet].filter(y => secondaryYearsSet.has(y)).sort((a,b)=>a-b);
+        if (!overlap.length) {
+          alertError('No overlapping years', 'The selected lakes do not have any years in common — unable to run two-sample tests.');
+          setLoading(false);
+          return;
+        }
+        // If the user also selected a year range, intersect that with the overlap
+        let filtered = overlap.slice();
+        if (yearFrom || yearTo) {
+          const fromN = yearFrom ? Number(yearFrom) : Number.MIN_SAFE_INTEGER;
+          const toN = yearTo ? Number(yearTo) : Number.MAX_SAFE_INTEGER;
+          filtered = filtered.filter(y => y >= fromN && y <= toN);
+          if (!filtered.length) {
+            alertError('No overlapping years in selected range', 'The selected date range does not overlap between the two lakes. Adjust the year range or clear it to run across the full overlap.');
+            setLoading(false);
+            return;
+          }
+        }
+        effectiveYearFrom = String(filtered[0]);
+        effectiveYearTo = String(filtered[filtered.length - 1]);
+        // Running will use the overlapping years only (no UI notification shown)
+      } catch (err) {
+        // safe fallback — continue using provided yearFrom/yearTo
+        console.warn('Failed to derive overlapping years; continuing with provided years', err);
+      }
     } else if (inferredTest === 'one-sample') {
       if (!compareValue) { alertError('Missing Comparison', 'Please select a Class or Lake to compare against.'); setLoading(false); return; }
       if (!isCustom && String(compareValue).startsWith('class:') && stationId === '') { alertError('Missing Station Selection', 'Please select a station or "All Stations" for lake vs class threshold tests.'); setLoading(false); return; }
@@ -225,8 +269,8 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
         lakeId,
         compareValue,
         appliedStandardId: currentStd?.id,
-        yearFrom,
-        yearTo,
+        yearFrom: typeof effectiveYearFrom !== 'undefined' ? effectiveYearFrom : yearFrom,
+        yearTo: typeof effectiveYearTo !== 'undefined' ? effectiveYearTo : yearTo,
         depthMode,
         depthValue,
         organizationId,

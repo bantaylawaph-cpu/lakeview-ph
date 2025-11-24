@@ -106,7 +106,17 @@ export default function ValuesTable({ result, lakes, lakeId, compareValue, showA
               <tbody>
                 {slice(events).map((ev,i)=>(
                   <tr key={i} style={{ borderBottom:'1px solid rgba(255,255,255,0.02)' }}>
-                    <td style={{ padding:'6px 8px', fontSize:12 }}>{(ev.sampled_at || '').split(' ')[0] || ''}</td>
+                    <td style={{ padding:'6px 8px', fontSize:12 }}>{(() => {
+                      try {
+                        if (!ev.sampled_at) return '';
+                        const d = new Date(ev.sampled_at);
+                        if (!d || Number.isNaN(d.getTime())) return (ev.sampled_at || '').split(' ')[0] || '';
+                        const day = d.getDate();
+                        const month = d.toLocaleString(undefined, { month: 'long' });
+                        const year = d.getFullYear();
+                        return `${day} ${month} ${year}`;
+                      } catch (e) { return (ev.sampled_at || '').split(' ')[0] || ''; }
+                    })()}</td>
                     <td style={{ padding:'6px 8px', fontSize:12 }}>{lakeName(ev.lake_id)}</td>
                     <td style={{ padding:'6px 8px', fontSize:12 }}>{ev.station_name ?? (ev.station_id ?? '')}</td>
                     <td style={{ padding:'6px 8px', fontSize:12 }}>{ev.value != null ? fmt(ev.value) : ''}</td>
