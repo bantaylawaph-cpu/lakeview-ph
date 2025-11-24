@@ -193,3 +193,32 @@
 .role-org_admin  { background: #dbeafe; color: #1e3a8a; }   /* blue-ish */
 .role-contributor{ background: #ecfccb; color: #365314; }   /* green-ish */
 .role-public     { background: #f3f4f6; color: #374151; }   /* neutral */
+
+/* Responsive adjustments */
+/* Mobile SML (< 640px) - default styles */
+
+/* Tablet (640px - 1023px) */
+@media (min-width: 640px) and (max-width: 1023px) {
+  .sidebar {
+    width: 240px;
+    left: -240px;
+  }
+}
+
+/* Laptop (1024px - 1439px) - default styles */
+
+/* Laptop L (1440px - 1919px) */
+@media (min-width: 1440px) and (max-width: 1919px) {
+  .sidebar {
+    width: 280px;
+    left: -280px;
+  }
+}
+
+/* 4K (> 1920px) */
+@media (min-width: 1920px) {
+  .sidebar {
+    width: 300px;
+    left: -300px;
+  }
+}

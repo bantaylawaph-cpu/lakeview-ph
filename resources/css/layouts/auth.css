@@ -394,3 +394,117 @@
   .pw-toggle:hover { color: #0f172a; }
   .pw-toggle:focus-visible { background: rgba(59,130,246,0.15); }
 }
+
+/* Responsive adjustments */
+/* Mobile SML (< 640px) */
+@media (max-width: 639px) {
+  .auth-box {
+    width: 95%;
+    min-height: 400px;
+  }
+  .auth-form {
+    padding: 24px;
+  }
+  .auth-form h2 {
+    font-size: 22px;
+  }
+  .auth-subtitle {
+    font-size: 13px;
+  }
+  .auth-form input,
+  .auth-form select {
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+  .auth-btn {
+    height: 40px;
+    font-size: 14px;
+  }
+  .auth-otp-input {
+    height: 40px;
+    font-size: 14px;
+  }
+  .auth-row {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .auth-btn-secondary {
+    width: 100%;
+  }
+}
+
+/* Tablet (640px - 1023px) */
+@media (min-width: 640px) and (max-width: 1023px) {
+  .auth-box {
+    width: 90%;
+  }
+  .auth-form {
+    padding: 36px;
+  }
+  .auth-form h2 {
+    font-size: 24px;
+  }
+  .auth-subtitle {
+    font-size: 14px;
+  }
+}
+
+/* Laptop (1024px - 1439px) - default styles */
+
+/* Laptop L (1440px - 1919px) */
+@media (min-width: 1440px) and (max-width: 1919px) {
+  .auth-box {
+    width: 600px;
+  }
+  .auth-form {
+    padding: 56px;
+  }
+  .auth-form h2 {
+    font-size: 28px;
+  }
+  .auth-subtitle {
+    font-size: 15px;
+  }
+  .auth-form input,
+  .auth-form select {
+    padding: 14px 16px;
+    font-size: 15px;
+  }
+  .auth-btn {
+    height: 48px;
+    font-size: 16px;
+  }
+  .auth-otp-input {
+    height: 48px;
+    font-size: 16px;
+  }
+}
+
+/* 4K (> 1920px) */
+@media (min-width: 1920px) {
+  .auth-box {
+    width: 700px;
+  }
+  .auth-form {
+    padding: 64px;
+  }
+  .auth-form h2 {
+    font-size: 32px;
+  }
+  .auth-subtitle {
+    font-size: 16px;
+  }
+  .auth-form input,
+  .auth-form select {
+    padding: 16px 18px;
+    font-size: 16px;
+  }
+  .auth-btn {
+    height: 52px;
+    font-size: 17px;
+  }
+  .auth-otp-input {
+    height: 52px;
+    font-size: 17px;
+  }
+}

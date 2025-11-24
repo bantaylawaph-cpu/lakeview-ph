@@ -1,0 +1,142 @@
+/* resources/css/components/heatmap-tab.css */
+
+/* Base layout for the Heatmap tab */
+.heatmap-tab {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.heatmap-tab .heatmap-header { display:flex; justify-content:space-between; align-items:center; gap:8px }
+
+.heatmap-tab .slider-container { display:flex; flex-direction:column; gap:6px }
+
+.heatmap-tab .heatmap-controls-row { display:flex; gap:8px; align-items:center }
+.heatmap-tab .heatmap-controls-row select { min-width: 180px; }
+
+.heatmap-tab .insight-card { padding: 12px; }
+
+.heatmap-tab .heatmap-action-row { display:flex; gap:8px; justify-content:center; align-items:center; flex-wrap:wrap }
+.heatmap-tab .heatmap-action-row .heatmap-action-btn { padding: 8px 12px; border-radius:12px; border:1px solid rgba(255,255,255,0.12); background:transparent; color:#fff; cursor:pointer; font-weight:600; }
+.heatmap-tab .heatmap-action-row .heatmap-action-btn[disabled] { opacity:0.6; cursor:not-allowed }
+
+/* Button size defaults on smaller screens (these override inline widths) */
+.heatmap-tab .heatmap-action-row .heatmap-action-btn { min-width: 44%; max-width: 100%; }
+
+/* Mobile SML (max-width: 639px) — stack and use full widths */
+@media (max-width: 639px) {
+  .heatmap-tab { gap: 6px; }
+  .heatmap-tab .heatmap-controls-row { flex-direction: column; align-items: stretch; }
+  .heatmap-tab .heatmap-controls-row select { width: 100%; }
+  .heatmap-tab .heatmap-action-row { flex-direction: column; align-items: stretch; }
+  .heatmap-tab .heatmap-action-row .heatmap-action-btn { min-width: 100% !important; }
+  .heatmap-tab .insight-card { padding: 10px; }
+}
+
+/* Tablet (640 - 1023px) — 2-column control layout and medium buttons */
+@media (min-width: 640px) and (max-width: 1023px) {
+  .heatmap-tab { gap: 8px; }
+  .heatmap-tab .heatmap-controls-row { flex-direction: row; flex-wrap:wrap; }
+  .heatmap-tab .heatmap-controls-row select { min-width: 140px; }
+  .heatmap-tab .heatmap-action-row { justify-content: flex-start; }
+  .heatmap-tab .heatmap-action-row .heatmap-action-btn { min-width: 140px; }
+}
+
+/* Laptop (1024 - 1439px) — default layout */
+@media (min-width: 1024px) and (max-width: 1439px) {
+  .heatmap-tab .heatmap-action-row .heatmap-action-btn { min-width: 110px; }
+}
+
+/* Laptop L (1440 - 1919px) — slightly larger controls */
+@media (min-width: 1440px) and (max-width: 1919px) {
+  .heatmap-tab { gap: 10px; }
+  .heatmap-tab .insight-card { padding: 14px; }
+  .heatmap-tab .heatmap-action-row .heatmap-action-btn { min-width: 150px; }
+}
+
+/* 4k (>= 1920px) — roomy layout */
+@media (min-width: 1920px) {
+  .heatmap-tab { gap: 12px; }
+  .heatmap-tab .insight-card { padding: 18px; }
+  .heatmap-tab .heatmap-action-row .heatmap-action-btn { min-width: 160px; padding: 10px 14px; }
+  .heatmap-tab .heatmap-header h3 { font-size: 18px; }
+}
+
+/* Small tweak: ensure slider fits in narrow containers */
+.heatmap-tab input[type="range"] { max-width: 100%; }
+
+/* Heatmap overlay: legend (positioned over map) */
+.heatmap-legend {
+  position: absolute;
+  bottom: 90px;
+  left: 12px;
+  z-index: 900;
+  background: rgba(0,0,0,0.55);
+  color: #fff;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 11px;
+  width: auto; /* controlled from JS to match coordinates scale */
+  box-sizing: border-box;
+  transition: width 150ms ease, bottom 150ms ease, left 150ms ease;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+  backdrop-filter: blur(2px);
+}
+
+.heatmap-legend .legend-title { font-weight:600; margin-bottom:6px }
+
+/* Loading indicator over the map */
+.heatmap-loading-indicator {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1200;
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  min-width: 180px;
+}
+
+/* Mobile SML adjustments */
+@media (max-width: 639px) {
+  /* On mobile we uncouple the legend width from the coordinate scale. The legend
+     should stack above the scale but size naturally. We constrain its width to
+     70vw so it doesn't overlap controls/attribution on the right. Left alignment
+     will be computed by JS where possible; fallback to left: 12px when JS isn't available. */
+  .heatmap-legend {
+    left: 12px;
+    transform: none;
+    bottom: 170px; /* sit above bottom sheet on mobile */
+    max-width: 70vw; /* prevent overlap on narrow screens */
+    font-size: 12px;
+    padding: 10px 14px;
+  }
+  .heatmap-loading-indicator { top: 8px; min-width: 140px; font-size: 11px; padding: 6px 8px }
+}
+
+/* Very narrow screens (≤ 375px) — reduce or hide description to save space */
+@media (max-width: 375px) {
+  .heatmap-legend { max-width: 92vw; padding: 8px 10px; font-size: 11px; }
+  .heatmap-legend .legend-desc { display: none; }
+}
+
+/* Tablet */
+@media (min-width: 640px) and (max-width: 1023px) {
+  .heatmap-legend { bottom: 140px; left: 12px; max-width: 220px; font-size: 11px }
+  .heatmap-loading-indicator { top: 10px; min-width: 160px }
+}
+
+/* Laptop L */
+@media (min-width: 1440px) and (max-width: 1919px) {
+  .heatmap-legend { bottom: 100px; left: 18px; max-width: 300px; font-size: 12px }
+  .heatmap-loading-indicator { min-width: 220px; top: 14px }
+}
+
+/* 4k */
+@media (min-width: 1920px) {
+  .heatmap-legend { bottom: 120px; left: 32px; max-width: 360px; font-size: 13px }
+  .heatmap-loading-indicator { min-width: 260px; top: 16px }
+}

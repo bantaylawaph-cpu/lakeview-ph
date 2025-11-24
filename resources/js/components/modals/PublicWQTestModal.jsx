@@ -133,7 +133,7 @@ export default function PublicWQTestModal({ open, onClose, record, basePath = "/
       width={1100}
       ariaLabel="Test details"
       cardClassName="liquid-glass"
-      bodyClassName=""
+      bodyClassName="public-wq-modal-body"
       style={modalStyle}
       animationDuration={160}
       overlayZIndex={11000}
@@ -186,7 +186,7 @@ export default function PublicWQTestModal({ open, onClose, record, basePath = "/
                 )}
               </AppMap>
             </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, color: '#fff' }}>
+              <div className="meta-grid" style={{ color: '#fff' }}>
                 <div><strong>Sampled At:</strong> {sampledAt}</div>
                 <div><strong>Weather:</strong> {WEATHER_DISPLAY[sampleEvent?.weather] || sampleEvent?.weather || '—'}</div>
                 <div><strong>Standard:</strong> {sampleEvent?.applied_standard_code ?? sampleEvent?.applied_standard_name ?? sampleEvent?.applied_standard?.code ?? sampleEvent?.applied_standard?.name ?? '—'}</div>
@@ -201,7 +201,7 @@ export default function PublicWQTestModal({ open, onClose, record, basePath = "/
             <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#fff' }}>Parameters</h4>
           </div>
           <div style={{ padding: 8 }}>
-            <div className="table-wrapper" style={{ overflowX: 'hidden' }}>
+            <div className="table-wrapper">
               <table className="lv-table" style={{ tableLayout: 'fixed', width: '100%', background: 'transparent', color: '#fff' }}>
                 <thead>
                   <tr>

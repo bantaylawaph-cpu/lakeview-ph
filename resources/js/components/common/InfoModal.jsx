@@ -4,6 +4,7 @@ import Modal from '../Modal';
 export default function InfoModal({ open, onClose, title = 'About this chart', sections = [], width = 700, notes = null, link = null }) {
   return (
     <Modal
+      bodyClassName={"info-modal-body--responsive"}
       open={open}
       onClose={onClose}
       title={<span style={{ color: '#fff' }}>{title}</span>}
@@ -24,11 +25,11 @@ export default function InfoModal({ open, onClose, title = 'About this chart', s
       }
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {sections.map((s, idx) => (
+        {Array.isArray(sections) && sections.length > 0 && sections.map((s, idx) => (
           <div key={idx}>
             {s.heading && <h5 style={{ margin: '0 0 6px 0', color: '#fff' }}>{s.heading}</h5>}
             {s.text && <p style={{ margin: '0 0 6px 0', color: '#e5e7eb' }}>{s.text}</p>}
-            {Array.isArray(s.bullets) && s.bullets.length > 0 && (
+            {s.bullets && s.bullets.length > 0 && (
               <ul style={{ margin: 0, paddingLeft: 18 }}>
                 {s.bullets.map((b, i) => (
                   <li key={i} style={{ color: '#e5e7eb', marginBottom: 4 }}>{b}</li>
@@ -37,12 +38,14 @@ export default function InfoModal({ open, onClose, title = 'About this chart', s
             )}
           </div>
         ))}
+
         {notes && (
           <div>
             <h5 style={{ margin: '0 0 6px 0', color: '#fff' }}>Notes</h5>
-            <p style={{ margin: 0, color: '#e5e7eb', whiteSpace: 'pre-wrap' }}>{notes}</p>
+            <p className="info-notes" style={{ margin: 0, color: '#e5e7eb', whiteSpace: 'pre-wrap' }}>{notes}</p>
           </div>
         )}
+
         {link && (
           <div>
             <h5 style={{ margin: '6px 0 6px 0', color: '#fff' }}>Source</h5>

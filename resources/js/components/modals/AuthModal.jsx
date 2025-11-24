@@ -55,6 +55,9 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
     reset2: false,
   });
 
+  // Responsive states
+  const [modalWidth, setModalWidth] = useState(760);
+
   // Derived
   const passwordsMatch = regPassword.length > 0 && regPassword === regPassword2;
   const canResend = resendIn <= 0;
@@ -118,6 +121,21 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
     const t = setInterval(() => setResendIn((s) => Math.max(0, s - 1)), 1000);
     return () => clearInterval(t);
   }, [mode, resendIn]);
+
+  // Responsive width
+  useEffect(() => {
+    const updateWidth = () => {
+      const w = window.innerWidth;
+      if (w < 640) setModalWidth(340); // Mobile SML
+      else if (w < 1024) setModalWidth(500); // Tablet
+      else if (w < 1440) setModalWidth(760); // Laptop
+      else if (w < 1920) setModalWidth(900); // Laptop L
+      else setModalWidth(1000); // 4K
+    };
+    updateWidth();
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, []);
 
   function redirectByRole(user) {
     if (!user) { navigate('/', { replace: true }); return; }
@@ -347,7 +365,7 @@ export default function AuthModal({ open, onClose, mode: initialMode = "login" }
       open={open}
       onClose={() => { try { setShowTerms(false); } catch {} ; onClose?.(); }}
       header={false}
-      width={760}
+      width={modalWidth}
       ariaLabel="Authentication dialog"
       cardClassName="no-bg no-padding"
       bodyClassName="auth-modal-body modern-scrollbar"

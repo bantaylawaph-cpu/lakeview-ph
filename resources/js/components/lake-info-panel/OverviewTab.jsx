@@ -145,13 +145,25 @@ function OverviewTab({
 
   return (
     <>
+      <style>{`
+.overview-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 16px;
+}
+@media (max-width: 639px) {
+  .overview-grid {
+    grid-template-columns: 1fr;
+  }
+}
+`}</style>
       {lake?.image && (
         <div className="lake-info-image">
           <img src={lake.image} alt={lake.name} />
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 16px" }}>
+      <div className="overview-grid">
         <div><strong>Watershed:</strong></div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{watershedName}</span>

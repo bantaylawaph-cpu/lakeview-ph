@@ -1,0 +1,63 @@
+/* resources/css/components/advanced-stat.css */
+/* Responsive layout for AdvancedStat component
+   Breakpoints: Mobile SML (<=639), Tablet (640-1023), Laptop (1024-1439),
+   Laptop L (1440-1919), 4K (>=1920)
+*/
+
+.advanced-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(2, auto);
+  gap: 12px;
+  align-items: center;
+  font-size: 13px;
+  min-width: 0;
+}
+.advanced-stat-grid .as-item { min-width: 0; }
+.advanced-stat-grid .as-span-2 { grid-column: 3 / span 2; }
+
+/* Make the 'Enter values' button behave when available */
+.advanced-stat-grid .pill-btn { white-space: nowrap; }
+
+/* --- Mobile SML (compact phone) --- */
+@media (max-width: 639px) {
+  .advanced-stat-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+    gap: 8px;
+    font-size: 12px;
+  }
+  .advanced-stat-grid .as-span-2 { grid-column: 1 / -1; }
+  .advanced-stat-grid > .as-item { display: block; }
+  .advanced-stat-grid .as-item > div { width: 100%; }
+}
+
+/* --- Tablet --- */
+@media (min-width: 640px) and (max-width: 1023px) {
+  .advanced-stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: auto;
+    gap: 10px;
+    font-size: 12.5px;
+  }
+  /* Make test selector take full-width below the two primary controls */
+  .advanced-stat-grid .as-span-2 { grid-column: 1 / -1; }
+}
+
+/* --- Laptop (1024 - 1439) --- default behavior keeps 4-column layout --- */
+@media (min-width: 1024px) and (max-width: 1439px) {
+  .advanced-stat-grid { grid-template-columns: repeat(4, 1fr); gap:12px; font-size:13px; }
+  .advanced-stat-grid .as-span-2 { grid-column: 3 / span 2; }
+}
+
+/* --- Laptop L (1440 - 1919) --- give slightly more room */
+@media (min-width: 1440px) and (max-width: 1919px) {
+  .advanced-stat-grid { grid-template-columns: repeat(4, 1fr); gap:16px; font-size:14px; }
+  .advanced-stat-grid .as-span-2 { grid-column: 3 / span 2; }
+}
+
+/* --- 4K and bigger --- */
+@media (min-width: 1920px) {
+  .advanced-stat-grid { grid-template-columns: repeat(4, 1fr); gap:20px; font-size:15px; }
+  .advanced-stat-grid .as-span-2 { grid-column: 3 / span 2; }
+}

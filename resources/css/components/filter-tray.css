@@ -76,3 +76,120 @@
   .filter-tray { left: 8px; right: 8px; width: auto; }
   .filter-tray .ft-grid { grid-template-columns: 1fr; }
 }
+
+/* Responsive adjustments */
+/* Mobile SML (< 640px) */
+@media (max-width: 639px) {
+  .filter-tray {
+    top: calc(10px + 36px + 4px);
+    left: 10px;
+    width: calc(100vw - 20px);
+    max-width: none;
+  }
+  .filter-tray-inner {
+    padding: 6px;
+  }
+  .filter-tray .ft-grid {
+    gap: 4px;
+  }
+  .filter-tray .ft-row label {
+    font-size: 11px;
+  }
+  .filter-tray .ft-row input,
+  .filter-tray .ft-row select {
+    padding: 5px 6px;
+    font-size: 12px;
+  }
+  .filter-tray .ft-actions {
+    margin-top: 6px;
+  }
+  .btn {
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+}
+
+/* Tablet (640px - 1023px) */
+@media (min-width: 640px) and (max-width: 1023px) {
+  .filter-tray {
+    top: calc(12px + 40px + 5px);
+    left: 12px;
+    width: 340px;
+  }
+  .filter-tray-inner {
+    padding: 7px;
+  }
+  .filter-tray .ft-grid {
+    gap: 5px;
+  }
+  .filter-tray .ft-row label {
+    font-size: 12px;
+  }
+  .filter-tray .ft-row input,
+  .filter-tray .ft-row select {
+    padding: 6px 7px;
+    font-size: 13px;
+  }
+}
+
+/* Laptop (1024px - 1439px) - default styles */
+
+/* Laptop L (1440px - 1919px) */
+@media (min-width: 1440px) and (max-width: 1919px) {
+  .filter-tray {
+    top: calc(18px + 48px + 7px);
+    left: 18px;
+    width: 360px;
+  }
+  .filter-tray-inner {
+    padding: 10px;
+  }
+  .filter-tray .ft-grid {
+    gap: 7px;
+  }
+  .filter-tray .ft-row label {
+    font-size: 13px;
+  }
+  .filter-tray .ft-row input,
+  .filter-tray .ft-row select {
+    padding: 7px 9px;
+    font-size: 14px;
+  }
+  .filter-tray .ft-actions {
+    margin-top: 10px;
+  }
+  .btn {
+    padding: 9px 12px;
+    font-size: 14px;
+  }
+}
+
+/* 4K (> 1920px) */
+@media (min-width: 1920px) {
+  .filter-tray {
+    top: calc(20px + 52px + 8px);
+    left: 20px;
+    width: 400px;
+  }
+  .filter-tray-inner {
+    padding: 12px;
+  }
+  .filter-tray .ft-grid {
+    gap: 8px;
+  }
+  .filter-tray .ft-row label {
+    font-size: 14px;
+  }
+  .filter-tray .ft-row input,
+  .filter-tray .ft-row select {
+    padding: 8px 10px;
+    font-size: 15px;
+  }
+  .filter-tray .ft-actions {
+    margin-top: 12px;
+  }
+  .btn {
+    padding: 10px 14px;
+    font-size: 15px;
+  }
+}

@@ -118,3 +118,89 @@
 .map-back-btn:hover {
   background: #f5f5f5;
 }
+
+/* Responsive adjustments */
+/* Mobile SML (< 640px) */
+@media (max-width: 639px) {
+  .map-controls {
+    right: 10px;
+    gap: 8px;
+  }
+  .btn-floating,
+  .icon-btn {
+    width: 36px;
+    height: 36px;
+  }
+  .icon-layer {
+    font-size: 16px;
+  }
+  .map-back-btn {
+    height: 36px;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+}
+
+/* Tablet (640px - 1023px) */
+@media (min-width: 640px) and (max-width: 1023px) {
+  .map-controls {
+    right: 15px;
+    gap: 10px;
+  }
+  .btn-floating,
+  .icon-btn {
+    width: 40px;
+    height: 40px;
+  }
+  .icon-layer {
+    font-size: 18px;
+  }
+  .map-back-btn {
+    height: 40px;
+    padding: 0 11px;
+  }
+}
+
+/* Laptop (1024px - 1439px) - default styles */
+
+/* Laptop L (1440px - 1919px) */
+@media (min-width: 1440px) and (max-width: 1919px) {
+  .map-controls {
+    right: 22px;
+    gap: 14px;
+  }
+  .btn-floating,
+  .icon-btn {
+    width: 46px;
+    height: 46px;
+  }
+  .icon-layer {
+    font-size: 22px;
+  }
+  .map-back-btn {
+    height: 44px;
+    padding: 0 14px;
+    font-size: 14px;
+  }
+}
+
+/* 4K (> 1920px) */
+@media (min-width: 1920px) {
+  .map-controls {
+    right: 25px;
+    gap: 16px;
+  }
+  .btn-floating,
+  .icon-btn {
+    width: 48px;
+    height: 48px;
+  }
+  .icon-layer {
+    font-size: 24px;
+  }
+  .map-back-btn {
+    height: 46px;
+    padding: 0 16px;
+    font-size: 15px;
+  }
+}

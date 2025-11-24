@@ -154,7 +154,7 @@ function LayersTab({
           <div style={{ display: "grid", gap: 10 }}>
             {/* Lake Layers Section */}
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-              <h4 style={{ margin: 0, fontWeight: 'bold' }}>Lake layers</h4>
+              <h4 style={{ margin: 0, fontWeight: 'bold' }}>Lake layer</h4>
             </div>
             {layers.map((layer) => {
               const isSelected = String(selectedLayerId) === String(layer.id);
@@ -223,7 +223,7 @@ function LayersTab({
             {(!wsLoading && watershedLayers && watershedLayers.length > 0) ? (
               <>
                 <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop: 6 }}>
-                  <h4 style={{ margin: 0, fontWeight: 'bold' }}>Watershed layers</h4>
+                  <h4 style={{ margin: 0, fontWeight: 'bold' }}>Watershed layer</h4>
                 </div>
                 {watershedLayers.map((layer) => {
                   const isSelected = String(selectedLayerId) === String(layer.id);

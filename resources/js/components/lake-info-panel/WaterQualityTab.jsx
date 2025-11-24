@@ -253,7 +253,50 @@ function WaterQualityTab({ lake }) {
 
   return (
     <>
-  <div style={{ display: 'grid', gridTemplateColumns: 'auto auto 1fr 1fr auto', alignItems: 'end', gap: 6, marginBottom: 6, overflow: 'hidden' }}>
+  <style>{`
+.wq-controls-grid {
+  display: grid;
+  grid-template-columns: auto auto 1fr 1fr auto;
+  align-items: end;
+  gap: 6px;
+  margin-bottom: 6px;
+  overflow: hidden;
+}
+.wq-controls-grid .form-group { margin-right: 6px; }
+.wq-controls-grid select,
+.wq-controls-grid .form-group > select {
+  padding: 4px 8px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+  border-radius: 6px;
+  border: 1px solid rgba(0,0,0,0.12);
+  background: #ffffff;
+  color: #000000;
+  font-size: 13px;
+  box-sizing: border-box;
+  height: auto;
+}
+.wq-controls-grid select option {
+  color: #000000;
+}
+.wq-controls-grid select:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(0,0,0,0.06);
+  border-color: rgba(0,0,0,0.2);
+}
+@media (max-width: 639px) {
+  .wq-controls-grid {
+    grid-template-columns: 1fr;
+  }
+  .wq-controls-grid .form-group { margin-right: 0; }
+}
+@media (min-width: 640px) and (max-width: 1023px) {
+  .wq-controls-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+`}</style>
+  <div className="wq-controls-grid">
         {/* Year Range */}
         <div className="form-group" style={{ minWidth: 180 }}>
           <label style={{ marginBottom: 2, fontSize: 11, color: '#fff' }}>Year</label>
@@ -379,7 +422,7 @@ function WaterQualityTab({ lake }) {
                     </button>
                   </div>
                 </div>
-                <div className="wq-chart" style={{ height: 160 }}>
+                <div className="wq-chart">
                   <Line data={p.chartData} options={timeOptions} />
                 </div>
               </div>

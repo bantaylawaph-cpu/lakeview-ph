@@ -253,8 +253,8 @@ function HeatmapTab({ lake, onToggleHeatmap, onClearHeatmap, currentLayerId = nu
   }
 
   return (
-  <div style={{ display: 'grid', gap: 8 }}>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+  <div className="heatmap-tab">
+    <div className="heatmap-header">
       <div>
         <h3 style={{ margin: 0, fontSize: 16, color: '#fff' }}>Population Density Heatmap</h3>
         <div style={{ fontSize: 13, color: '#ddd' }}>Heatmap of population living around <strong style={{ color: '#fff' }}>{lake?.name}</strong>.</div>
@@ -294,7 +294,7 @@ function HeatmapTab({ lake, onToggleHeatmap, onClearHeatmap, currentLayerId = nu
       />
     </div>
 
-    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+    <div className="heatmap-controls-row">
       <label htmlFor="yearSelect" style={{ color: '#fff' }}>Dataset Year</label>
       <select
         id="yearSelect"
@@ -354,22 +354,14 @@ function HeatmapTab({ lake, onToggleHeatmap, onClearHeatmap, currentLayerId = nu
           </div>
         )}
       </div>
-      <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}>
+      <div className="heatmap-action-row" style={{ marginTop: 12 }}>
         <button
           type="button"
           onClick={handleClear}
           disabled={!heatEnabled || !hasHeatLayer}
           title={!hasHeatLayer ? 'No heatmap to clear' : 'Clear the current heatmap layer (no refetch)'}
-          style={{
-            padding: '8px 10px',
-            borderRadius: 12,
-            border: '1px solid rgba(255,255,255,0.12)',
-            background: 'transparent',
-            color: '#fff',
-            cursor: (!heatEnabled || !hasHeatLayer) ? 'not-allowed' : 'pointer',
-            width: 110,
-            backdropFilter: 'blur(6px)'
-          }}
+          className="heatmap-action-btn clear"
+          style={{ padding: '8px 10px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: '#fff', cursor: (!heatEnabled || !hasHeatLayer) ? 'not-allowed' : 'pointer', backdropFilter: 'blur(6px)' }}
         >
           Clear
         </button>
@@ -378,17 +370,8 @@ function HeatmapTab({ lake, onToggleHeatmap, onClearHeatmap, currentLayerId = nu
           onClick={handleShow}
           disabled={!(distance > 0 && year) || hasHeatLayer}
           title={hasHeatLayer ? 'Heatmap already shown (clear to show again)' : (!(distance > 0 && year) ? (distance <= 0 ? 'Set buffer distance first' : 'Select dataset year first') : '')}
-          style={{
-            padding: '8px 12px',
-            borderRadius: 12,
-            border: '1px solid rgba(255,255,255,0.12)',
-            background: 'transparent',
-            color: '#fff',
-            fontWeight: 600,
-            cursor: (!(distance > 0 && year) || hasHeatLayer) ? 'not-allowed' : 'pointer',
-            width: 160,
-            backdropFilter: 'blur(6px)'
-          }}
+          className="heatmap-action-btn show"
+          style={{ padding: '8px 12px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: '#fff', fontWeight: 600, cursor: (!(distance > 0 && year) || hasHeatLayer) ? 'not-allowed' : 'pointer', backdropFilter: 'blur(6px)' }}
           aria-pressed={heatOn}
         >
           {heatLoading && loadingAction === 'show' ? (
@@ -402,16 +385,8 @@ function HeatmapTab({ lake, onToggleHeatmap, onClearHeatmap, currentLayerId = nu
           onClick={handleRefresh}
           disabled={!(distance > 0 && year) || (!heatEnabled && !hasHeatLayer)}
           title={!(distance > 0 && year) ? (distance <= 0 ? 'Set buffer distance first' : 'Select dataset year first') : ((!heatEnabled && !hasHeatLayer) ? 'Show heatmap first' : 'Refresh heatmap')}
-          style={{
-            padding: '8px 10px',
-            borderRadius: 12,
-            border: '1px solid rgba(255,255,255,0.12)',
-            background: 'transparent',
-            color: '#fff',
-            cursor: (!(distance > 0 && year) || (!heatEnabled && !hasHeatLayer)) ? 'not-allowed' : 'pointer',
-            width: 110,
-            backdropFilter: 'blur(6px)'
-          }}
+          className="heatmap-action-btn refresh"
+          style={{ padding: '8px 10px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: '#fff', cursor: (!(distance > 0 && year) || (!heatEnabled && !hasHeatLayer)) ? 'not-allowed' : 'pointer', backdropFilter: 'blur(6px)' }}
         >
           {heatLoading && loadingAction === 'refresh' ? (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>

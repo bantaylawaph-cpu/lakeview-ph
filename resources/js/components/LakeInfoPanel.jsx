@@ -108,6 +108,20 @@ function LakeInfoPanel({
     } catch {}
   }, [activeTab]);
 
+  // When switching to the Water/Tests tabs (or opening the panel while those
+  // tabs are active) trigger a resize event so Chart.js-based charts recompute
+  // their sizes. This is important when the panel transitions into view —
+  // Chart.js may otherwise measure an incorrect size when being rendered hidden.
+  useEffect(() => {
+    if (!isOpen) return;
+    if (activeTab !== 'water' && activeTab !== 'tests') return;
+    // schedule a couple of resize events: one after the panel transition starts
+    // and another after it finishes to catch layout shifts.
+    const t1 = setTimeout(() => window.dispatchEvent(new Event('resize')), 200);
+    const t2 = setTimeout(() => window.dispatchEvent(new Event('resize')), 600);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [activeTab, isOpen]);
+
   if (!lake && !isOpen) return null;
 
   const handleClose = () => {

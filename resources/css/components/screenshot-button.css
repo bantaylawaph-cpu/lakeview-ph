@@ -8,3 +8,37 @@
   transform: translateX(-50%);
   z-index: 1000;
 }
+
+/* Responsive adjustments */
+/* Mobile SML (< 640px) */
+@media (max-width: 639px) {
+  .screenshot-btn {
+    bottom: 15px;
+    right: 20px;
+    left: auto;
+    transform: none;
+  }
+}
+
+/* Tablet (640px - 1023px) */
+@media (min-width: 640px) and (max-width: 1023px) {
+  .screenshot-btn {
+    bottom: 18px;
+  }
+}
+
+/* Laptop (1024px - 1439px) - default styles */
+
+/* Laptop L (1440px - 1919px) */
+@media (min-width: 1440px) and (max-width: 1919px) {
+  .screenshot-btn {
+    bottom: 22px;
+  }
+}
+
+/* 4K (> 1920px) */
+@media (min-width: 1920px) {
+  .screenshot-btn {
+    bottom: 25px;
+  }
+}

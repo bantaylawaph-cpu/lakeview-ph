@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import Modal from '../Modal';
 import { getCurrentUser } from '../../lib/authState';
 
@@ -48,6 +48,52 @@ export function shouldShowWelcome({ user, pathname }) {
 export default function WelcomeModal({ open, onClose, onLogin }) {
   const user = getCurrentUser();
 
+  const [modalWidth, setModalWidth] = useState(680);
+  const [modalPadding, setModalPadding] = useState(40);
+  const [titleFontSize, setTitleFontSize] = useState(36);
+  const [textFontSize, setTextFontSize] = useState(16);
+  const [logoSize, setLogoSize] = useState(96);
+
+  useEffect(() => {
+    const updateResponsive = () => {
+      const w = window.innerWidth;
+      if (w < 640) { // Mobile SML
+        setModalWidth(320);
+        setModalPadding(20);
+        setTitleFontSize(28);
+        setTextFontSize(14);
+        setLogoSize(64);
+      } else if (w < 1024) { // Tablet
+        setModalWidth(500);
+        setModalPadding(30);
+        setTitleFontSize(32);
+        setTextFontSize(15);
+        setLogoSize(80);
+      } else if (w < 1440) { // Laptop
+        setModalWidth(680);
+        setModalPadding(40);
+        setTitleFontSize(36);
+        setTextFontSize(16);
+        setLogoSize(96);
+      } else if (w < 1920) { // Laptop L
+        setModalWidth(800);
+        setModalPadding(50);
+        setTitleFontSize(40);
+        setTextFontSize(18);
+        setLogoSize(112);
+      } else { // 4K
+        setModalWidth(900);
+        setModalPadding(60);
+        setTitleFontSize(44);
+        setTextFontSize(20);
+        setLogoSize(128);
+      }
+    };
+    updateResponsive();
+    window.addEventListener('resize', updateResponsive);
+    return () => window.removeEventListener('resize', updateResponsive);
+  }, []);
+
   const handleLogin = () => {
     // Persist dismissal (no remember option now)
     savePersistent({ dismissed: true, remember: false, ts: Date.now(), action: 'login' });
@@ -81,16 +127,16 @@ export default function WelcomeModal({ open, onClose, onLogin }) {
       open={open}
       onClose={handleClose}
       title={null}
-      width={680}
+      width={modalWidth}
       cardClassName="auth-card"
       bodyClassName="content-page modern-scrollbar"
-      style={{ background:'rgba(17,24,39,0.75)', border:'1px solid #1f2937', borderRadius:18, padding:40, boxShadow:'0 8px 28px -6px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.4)' }}
+      style={{ background:'rgba(17,24,39,0.75)', border:'1px solid #1f2937', borderRadius:18, padding:modalPadding, boxShadow:'0 8px 28px -6px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.4)' }}
     >
       <div style={{ display:'grid', gap:28, minHeight:400 }}>
         <div style={{ textAlign:'center', display:'flex', flexDirection:'column', alignItems:'center', gap:18 }}>
-          <img src="/lakeview-logo-alt.webp" alt="LakeView PH Logo" style={{ width:96, height:'auto', filter:'drop-shadow(0 2px 4px rgba(0,0,0,0.4))' }} />
-          <h1 style={{ margin:0, fontSize:36, fontWeight:700, color:'#fff', letterSpacing:0.3 }}>Welcome to LakeView PH</h1>
-          <p style={{ margin:0, fontSize:16, lineHeight:1.6, color:'#ffffff', fontWeight:500, maxWidth:520, textAlign:'center' }}>
+          <img src="/lakeview-logo-alt.webp" alt="LakeView PH Logo" style={{ width:logoSize, height:'auto', filter:'drop-shadow(0 2px 4px rgba(0,0,0,0.4))' }} />
+          <h1 style={{ margin:0, fontSize:titleFontSize, fontWeight:700, color:'#fff', letterSpacing:0.3 }}>Welcome to LakeView PH</h1>
+          <p style={{ margin:0, fontSize:textFontSize, lineHeight:1.6, color:'#ffffff', fontWeight:500, maxWidth:520, textAlign:'center' }}>
             LakeView PH provides interactive maps, lake data exploration, and tools for environmental collaboration. Browse public lake information, visualize population and water quality, and join organizations to contribute local insights.
           </p>
         </div>

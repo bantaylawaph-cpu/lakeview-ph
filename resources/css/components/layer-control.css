@@ -39,3 +39,94 @@
   margin-right: 8px;
   transform: scale(1.2);
 }
+
+/* Responsive adjustments */
+/* Mobile SML (< 640px) */
+@media (max-width: 639px) {
+  .layer-control {
+    top: 15px;
+    right: 15px;
+  }
+  .layer-panel {
+    top: 50px;
+    width: 180px;
+    padding: 10px 12px;
+  }
+  .layer-title {
+    font-size: 13px;
+  }
+  .layer-panel label {
+    font-size: 13px;
+    margin: 5px 0;
+  }
+  .layer-panel input[type="radio"] {
+    transform: scale(1.1);
+  }
+}
+
+/* Tablet (640px - 1023px) */
+@media (min-width: 640px) and (max-width: 1023px) {
+  .layer-control {
+    top: 18px;
+    right: 18px;
+  }
+  .layer-panel {
+    top: 55px;
+    width: 190px;
+    padding: 11px 14px;
+  }
+  .layer-title {
+    font-size: 14px;
+  }
+  .layer-panel label {
+    font-size: 14px;
+  }
+}
+
+/* Laptop (1024px - 1439px) - default styles */
+
+/* Laptop L (1440px - 1919px) */
+@media (min-width: 1440px) and (max-width: 1919px) {
+  .layer-control {
+    top: 22px;
+    right: 22px;
+  }
+  .layer-panel {
+    top: 65px;
+    width: 220px;
+    padding: 14px 18px;
+  }
+  .layer-title {
+    font-size: 15px;
+  }
+  .layer-panel label {
+    font-size: 15px;
+    margin: 7px 0;
+  }
+  .layer-panel input[type="radio"] {
+    transform: scale(1.3);
+  }
+}
+
+/* 4K (> 1920px) */
+@media (min-width: 1920px) {
+  .layer-control {
+    top: 25px;
+    right: 25px;
+  }
+  .layer-panel {
+    top: 70px;
+    width: 240px;
+    padding: 16px 20px;
+  }
+  .layer-title {
+    font-size: 16px;
+  }
+  .layer-panel label {
+    font-size: 16px;
+    margin: 8px 0;
+  }
+  .layer-panel input[type="radio"] {
+    transform: scale(1.4);
+  }
+}

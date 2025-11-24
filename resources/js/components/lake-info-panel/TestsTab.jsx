@@ -202,7 +202,46 @@ export default function TestsTab({ lake, onJumpToStation }) {
   return (
     <div>
       <div style={{ display: 'grid', gap: 8 }}>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'end', marginBottom: 6 }}>
+          <style>{`
+.tests-filters-flex {
+  display: flex;
+  gap: 8px;
+  align-items: end;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.tests-filters-flex .form-group { margin-right: 6px; }
+.tests-filters-flex select,
+.tests-filters-flex .form-group > select {
+  padding: 4px 8px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+  border-radius: 6px;
+  border: 1px solid rgba(0,0,0,0.12);
+  background: #ffffff;
+  color: #000000;
+  font-size: 13px;
+  box-sizing: border-box;
+  height: auto;
+}
+.tests-filters-flex select option {
+  color: #000000;
+}
+.tests-filters-flex select:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(0,0,0,0.06);
+  border-color: rgba(0,0,0,0.2);
+}
+@media (max-width: 639px) {
+  .tests-filters-flex {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .tests-filters-flex .form-group { margin-right: 0; }
+  .tests-filters-flex select { width: 100%; }
+}
+`}</style>
+          <div className="tests-filters-flex">
             <div className="form-group" style={{ flex: 1, minWidth: 0 }}>
               <label style={{ fontSize: 11, marginBottom: 2, color: '#fff' }}>Dataset Source</label>
               <OrgSelect options={orgs} value={orgId} onChange={(e) => setOrgId(e.target.value)} placeholder="All dataset sources" style={{ padding: '6px 8px', height: 'auto' }} />

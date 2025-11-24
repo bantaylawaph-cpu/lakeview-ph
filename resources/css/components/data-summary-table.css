@@ -28,6 +28,58 @@
 .ds-field.year   { flex: 0 0 160px; }
 .ds-field.station{ flex: 0 0 220px; }
 
+/* Responsive breakpoints — match project breakpoints used across other components */
+/* Mobile SML: compact phones */
+@media (max-width: 639px) {
+  .ds-field.lake, .ds-field.org, .ds-field.year, .ds-field.station { flex: 1 1 100%; min-width: 0; }
+  .ds-controls-row { gap: 6px; }
+  .ds-summary { max-width: 96vw; }
+  .ds-table { font-size: 12px; }
+  .ds-table thead th, .ds-table tbody td { padding: 6px 4px; }
+  .ds-table-wrap { max-height: 55vh; }
+  .ds-center-loading { height: 90px; }
+}
+
+/* Tablet */
+@media (min-width: 640px) and (max-width: 1023px) {
+  .ds-field.lake { flex: 0 0 280px; }
+  .ds-field.org  { flex: 0 0 220px; }
+  .ds-field.station { flex: 0 0 200px; }
+  .ds-field.year { flex: 0 0 140px; }
+  .ds-table { font-size: 12.5px; }
+  .ds-table-wrap { max-height: 58vh; }
+}
+
+/* Laptop (default 1024 - 1439) — keep the base values but ensure readable table */
+@media (min-width: 1024px) and (max-width: 1439px) {
+  .ds-field.lake { flex: 0 0 300px; }
+  .ds-field.org  { flex: 0 0 240px; }
+  .ds-field.station { flex: 0 0 220px; }
+  .ds-field.year { flex: 0 0 160px; }
+  .ds-table { font-size: 13px; }
+  .ds-table-wrap { max-height: 60vh; }
+}
+
+/* Laptop L */
+@media (min-width: 1440px) and (max-width: 1919px) {
+  .ds-field.lake { flex: 0 0 360px; }
+  .ds-field.org  { flex: 0 0 280px; }
+  .ds-field.station { flex: 0 0 240px; }
+  .ds-field.year { flex: 0 0 180px; }
+  .ds-table { font-size: 14px; }
+  .ds-table-wrap { max-height: 68vh; }
+}
+
+/* 4K */
+@media (min-width: 1920px) {
+  .ds-field.lake { flex: 0 0 460px; }
+  .ds-field.org  { flex: 0 0 360px; }
+  .ds-field.station { flex: 0 0 320px; }
+  .ds-field.year { flex: 0 0 200px; }
+  .ds-table { font-size: 15px; }
+  .ds-table-wrap { max-height: 72vh; }
+}
+
 /* Scroller matches LakeInfoPanel's modern scrollbar behavior */
 .ds-table-wrap {
   max-height: 60vh;

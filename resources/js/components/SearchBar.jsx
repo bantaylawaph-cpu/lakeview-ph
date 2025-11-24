@@ -174,11 +174,11 @@ function SearchBar({ onMenuClick, onFilterClick, onSearch, onClear, onTyping, mo
         )}
       </div>
 
-      <button className="btn-floating" onClick={triggerSearch} aria-label="Search">
+      <button className="btn-floating btn-search" onClick={triggerSearch} aria-label="Search">
         <FiSearch size={18} />
       </button>
 
-      <button className="btn-floating" onClick={onFilterClick} title="Filter lakes" aria-label="Filter lakes">
+      <button className="btn-floating btn-filter" onClick={onFilterClick} title="Filter lakes" aria-label="Filter lakes">
         <FiFilter size={18} />
       </button>
 

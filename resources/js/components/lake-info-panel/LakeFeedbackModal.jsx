@@ -263,7 +263,7 @@ export default function LakeFeedbackModal({ open, onClose, lake }) {
                       )}
                     </div>
                     {files && files.length > 0 && (
-                      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(120px, 1fr))', gap:10, marginTop:10 }}>
+                      <div className="preview-grid" style={{ marginTop: 10 }}>
                         {files.map((f, idx) => (
                           f.type && f.type.startsWith('image/') ? (
                             <div key={idx} className="insight-card" style={{ padding:6, textAlign:'center' }}>
@@ -302,7 +302,7 @@ export default function LakeFeedbackModal({ open, onClose, lake }) {
                   </div>
                   {/* Guest-only name/email in the same row */}
                   {!getToken() && (
-                    <div className="lv-field-row" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                    <div className="lv-field-row guest-grid">
                       <div>
                         <label htmlFor="fb-guest-name">Name (optional)</label>
                         <input id="fb-guest-name" type="text" value={guestName} onChange={(e)=>setGuestName(e.target.value)} maxLength={120} placeholder="Your name" />

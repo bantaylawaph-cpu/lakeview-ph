@@ -475,7 +475,8 @@ export default function DataSummaryTable({ open, onClose, initialLake = '', init
     onClose={onClose}
     title={<span style={{ color: '#fff' }}>Data Summary</span>}
     ariaLabel="Data Summary Table"
-    width={1600}
+    /* Use a responsive width that caps at 1600px but will shrink to viewport width on small screens */
+    width={"min(1600px, 95vw)"}
     style={modalStyle}
     footerStyle={{
       background: 'transparent',

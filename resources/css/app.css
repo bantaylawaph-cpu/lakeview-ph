@@ -49,6 +49,8 @@
 @import './components/sidebar.css';
 @import './components/lake-info-panel.css';
 @import './components/water-quality-tab.css';
+@import './components/heatmap-tab.css';
+@import './components/public-wq-test-modal.css';
 @import './components/elevation-profile.css';
 @import './components/table.css';
 @import './components/form.css';
@@ -58,6 +60,7 @@
 @import "./components/feedback.css";
 @import "./components/sweetalert.css";
 @import "./components/data-summary-table.css";
+@import "./components/advanced-stat.css";
 @import "./components/dashboard-boot.css"; /* Dashboard overlay loader */
 
 

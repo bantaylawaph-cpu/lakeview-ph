@@ -1,0 +1,51 @@
+/* resources/css/components/public-wq-test-modal.css */
+
+/* Base layout helpers for the Public WQ Test modal */
+.public-wq-modal-body {
+  display: block;
+  word-break: break-word;
+}
+
+.public-wq-modal-body .map-preview { height: 180px; }
+.public-wq-modal-body .map-preview > * { height: 100%; }
+
+.public-wq-modal-body .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+
+.public-wq-modal-body .table-wrapper { overflow-x: auto; }
+.public-wq-modal-body table.lv-table { table-layout: fixed; width: 100%; }
+.public-wq-modal-body table.lv-table th .lv-th-inner { white-space: normal; }
+
+/* Breakpoints */
+/* Mobile SML: stack meta and reduce map/table sizes */
+@media (max-width: 639px) {
+  .public-wq-modal-body .map-preview { height: 140px; }
+  .public-wq-modal-body .meta-grid { grid-template-columns: 1fr; gap: 8px; }
+  .public-wq-modal-body table.lv-table { font-size: 12px; table-layout: auto; }
+  .public-wq-modal-body table.lv-table th, .public-wq-modal-body table.lv-table td { padding: 6px 8px; }
+  /* allow the remarks column to wrap and avoid horizontal overflow */
+  .public-wq-modal-body table.lv-table td:last-child { white-space: normal; }
+}
+
+/* Tablet: a bit roomier */
+@media (min-width: 640px) and (max-width: 1023px) {
+  .public-wq-modal-body .map-preview { height: 160px; }
+  .public-wq-modal-body table.lv-table { font-size: 13px; }
+}
+
+/* Laptop (default gap/style) */
+@media (min-width: 1024px) and (max-width: 1439px) {
+  .public-wq-modal-body .map-preview { height: 180px; }
+  .public-wq-modal-body table.lv-table { font-size: 14px; }
+}
+
+/* Laptop L */
+@media (min-width: 1440px) and (max-width: 1919px) {
+  .public-wq-modal-body .map-preview { height: 220px; }
+  .public-wq-modal-body table.lv-table { font-size: 15px; }
+}
+
+/* 4k */
+@media (min-width: 1920px) {
+  .public-wq-modal-body .map-preview { height: 280px; }
+  .public-wq-modal-body table.lv-table { font-size: 16px; }
+}

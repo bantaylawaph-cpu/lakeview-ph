@@ -11,8 +11,38 @@
 .pill-btn.liquid:hover { background: rgba(255,255,255,0.25); }
 
 /* Chart container adjustments inside insight-card */
-.insight-card .wq-chart { overflow: hidden; }
-.insight-card .wq-chart canvas { border-radius: 6px; display: block; }
+.insight-card .wq-chart {
+  overflow: hidden;
+  width: 100%;
+  /* default / laptop size */
+  height: 160px;
+}
+.insight-card .wq-chart canvas {
+  border-radius: 6px;
+  display: block;
+  /* Ensure the canvas fills its container (Chart.js will handle drawing) */
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Responsive heights for the charts so they scale across breakpoints */
+@media (max-width: 639px) {
+  /* Mobile SML — aka compact phone height */
+  .insight-card .wq-chart { height: 120px; }
+}
+@media (min-width: 640px) and (max-width: 1023px) {
+  /* Tablet */
+  .insight-card .wq-chart { height: 140px; }
+}
+/* Laptop (1024 - 1439) keeps the default 160px */
+@media (min-width: 1440px) and (max-width: 1919px) {
+  /* Laptop L */
+  .insight-card .wq-chart { height: 160px; }
+}
+@media (min-width: 1920px) {
+  /* 4k */
+  .insight-card .wq-chart { height: 200px; }
+}
 
 /* Compact card spacing for WQ tab */
 .insight-card { padding: 8px 10px; margin-top: 8px; }

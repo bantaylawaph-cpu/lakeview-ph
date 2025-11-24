@@ -56,6 +56,32 @@
   padding: 16px;
 }
 
+/* Make links and notes inside InfoModal responsive and prevent long-URLs from causing horizontal overflow. */
+.info-modal-body--responsive {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.info-modal-body--responsive .info-link {
+  display: inline-block; /* allow max-width to take effect */
+  max-width: 100%;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  text-decoration: underline;
+}
+.info-modal-body--responsive .info-notes { white-space: pre-wrap; }
+
+/* Responsive sizing across breakpoints — Heatmap dataset info needs to be readable */
+@media (max-width: 639px) {
+  .info-modal-body--responsive { font-size: 0.95rem; }
+  .info-modal-body--responsive h5 { font-size: 1rem; margin-bottom: 6px; }
+}
+@media (min-width: 1440px) and (max-width: 1919px) {
+  .info-modal-body--responsive { font-size: 1.05rem; }
+}
+@media (min-width: 1920px) {
+  .info-modal-body--responsive { font-size: 1.1rem; }
+}
+
 /* Dark auth-like variant (requested rgba(30,41,59,0.95)) */
 .lv-modal-card.auth-card {
   background: rgba(30, 41, 59, 0.95);

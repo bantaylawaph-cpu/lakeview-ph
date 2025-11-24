@@ -353,8 +353,8 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
       </button>
     </div>
   <div>
-  <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gridTemplateRows:'repeat(2, auto)', gap:12, alignItems:'center', fontSize:13, minWidth:0 }}>
-      <div style={{ gridColumn: '1 / span 1', minWidth:0 }}>
+  <div className="advanced-stat-grid" style={{ minWidth: 0 }}>
+      <div className="as-item as-col-1" style={{ minWidth: 0 }}>
         <div style={{ display:'flex', gap:6, alignItems:'center' }}>
           <LakeSelect includeCustom lakes={lakes} value={lakeId} onChange={e=>{ setLakeId(e.target.value); setResult(null); }} />
           {String(lakeId) === 'custom' ? (
@@ -362,27 +362,27 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
           ) : null}
         </div>
       </div>
-      <div style={{ gridColumn: '2 / span 1', minWidth:0 }}>
+      <div className="as-item as-col-2" style={{ minWidth: 0 }}>
         <CompareSelect lakes={lakes} classes={classes} lakeId={lakeId} value={compareValue} onChange={e=>{
           const v = e.target.value; setCompareValue(v); setResult(null); if (v && String(v).startsWith('class:')) setClassCode(String(v).split(':')[1] || '');
         }} />
       </div>
-      <div style={{ gridColumn: '3 / span 1', minWidth:0 }}>
+      <div className="as-item as-col-3" style={{ minWidth: 0 }}>
         <OrgSelect required options={orgOptions} value={organizationId} onChange={e=>{ setOrganizationId(e.target.value); setResult(null); }} placeholder={String(lakeId) === 'custom' ? 'Custom dataset' : 'Dataset Source'} disabled={String(lakeId) === 'custom'} loading={primaryAllLoading} />
       </div>
       {compareValue && String(compareValue).startsWith('lake:') ? (
-        <div style={{ gridColumn: '4 / span 1', minWidth:0 }}>
+        <div className="as-item as-col-4" style={{ minWidth: 0 }}>
           <OrgSelect required options={secondaryOrgOptions} value={secondaryOrganizationId} onChange={e=>{ setSecondaryOrganizationId(e.target.value); setResult(null); }} placeholder="Secondary Dataset Source" loading={secondaryAllLoading} />
         </div>
       ) : (
-        <div style={{ gridColumn: '4 / span 1', minWidth:0 }}>
+        <div className="as-item as-col-4" style={{ minWidth: 0 }}>
           <StationSelect options={stationOptions} value={stationId} onChange={e=>{ setStationId(e.target.value); setResult(null); }} disabled={String(lakeId) === 'custom' || !organizationId || !compareValue || !String(compareValue).startsWith('class:')} loading={stationLoading} allLabel="All stations (pooled lake-wide)" includeAllOption={stationOptions.length > 1} />
         </div>
       )}
-      <div style={{ gridColumn: '1 / span 1', minWidth:0, display:'flex', alignItems:'stretch' }}>
+      <div className="as-item as-col-1" style={{ minWidth:0, display:'flex', alignItems:'stretch' }}>
         <ParamSelect style={{ width: '100%' }} options={paramOptions} value={paramCode} onChange={e=>{ setParamCode(e.target.value); setResult(null); }} loading={paramsLoading} />
       </div>
-      <div style={{ gridColumn: '2 / span 1', minWidth:0, display:'flex', alignItems:'stretch' }}>
+      <div className="as-item as-col-2" style={{ minWidth:0, display:'flex', alignItems:'stretch' }}>
         <DepthSelect style={{ width: '100%' }}
           availableDepths={availableDepths}
           inferredTest={inferredTest}
@@ -393,7 +393,7 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
           onChange={({ mode, value }) => { setDepthMode(mode); setDepthValue(value); setResult(null); }}
         />
       </div>
-      <div style={{ gridColumn: '3 / span 2', display:'flex', justifyContent:'flex-end', minWidth:0 }}>
+      <div className="as-item as-span-2 as-col-3" style={{ display:'flex', justifyContent:'flex-end', minWidth:0 }}>
         <div style={{ display:'flex', gap:8, width:'100%' }}>
           <TestSelector inferredTest={inferredTest} paramHasRange={paramHasRange} selectedTest={selectedTest} onChange={(v)=>{ setSelectedTest(v); setResult(null); }} />
         </div>

@@ -29,3 +29,86 @@
   margin-top: 2px;
   opacity: 0.9;
 }
+
+/* Responsive adjustments */
+/* Mobile SML (< 640px) */
+@media (max-width: 639px) {
+  .coordinates-scale {
+    bottom: 15px;
+    left: 15px;
+    padding: 4px 8px;
+  }
+  .coords-display {
+    gap: 4px;
+    margin-bottom: 3px;
+  }
+  .scale-bar { text-align: center; }
+  .scale-line {
+    height: 2px;
+  }
+  .scale-label {
+    font-size: 11px;
+    margin-top: 1px;
+  }
+}
+
+/* Tablet (640px - 1023px) */
+@media (min-width: 640px) and (max-width: 1023px) {
+  .coordinates-scale {
+    bottom: 18px;
+    left: 18px;
+    padding: 5px 9px;
+  }
+  .coords-display {
+    gap: 5px;
+    margin-bottom: 3px;
+  }
+  .scale-line {
+    height: 3px;
+  }
+  .scale-label {
+    font-size: 12px;
+  }
+}
+
+/* Laptop (1024px - 1439px) - default styles */
+
+/* Laptop L (1440px - 1919px) */
+@media (min-width: 1440px) and (max-width: 1919px) {
+  .coordinates-scale {
+    bottom: 22px;
+    left: 22px;
+    padding: 7px 11px;
+  }
+  .coords-display {
+    gap: 7px;
+    margin-bottom: 5px;
+  }
+  .scale-line {
+    height: 4px;
+  }
+  .scale-label {
+    font-size: 13px;
+    margin-top: 3px;
+  }
+}
+
+/* 4K (> 1920px) */
+@media (min-width: 1920px) {
+  .coordinates-scale {
+    bottom: 25px;
+    left: 25px;
+    padding: 8px 12px;
+  }
+  .coords-display {
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .scale-line {
+    height: 5px;
+  }
+  .scale-label {
+    font-size: 14px;
+    margin-top: 4px;
+  }
+}
