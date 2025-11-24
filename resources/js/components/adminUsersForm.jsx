@@ -1,6 +1,6 @@
-
 import React, { useEffect, useState } from "react";
 import api from "../lib/api";
+import { useWindowSize } from "../hooks/useWindowSize";
 
 const ROLE_LABELS = {
   superadmin: 'Super Administrator',
@@ -22,6 +22,8 @@ export default function AdminUsersForm({
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [roleOptions, setRoleOptions] = useState([]);
   const [tenants, setTenants] = useState([]);
+  const { width: windowW } = useWindowSize();
+
   // Fetch tenants for org-scoped roles (use /api/admin/tenants, handle pagination)
   useEffect(() => {
     api.get("/admin/tenants", { params: { per_page: 100 } }).then((res) => {
@@ -74,15 +76,20 @@ export default function AdminUsersForm({
     onSubmit?.(payload);
   };
 
+  const computeModalWidth = (w) => {
+    if (!w) return 640;
+    if (w >= 2561) return 1400; // 4k
+    if (w >= 1441) return 1080; // Laptop L
+    if (w >= 1025) return 860;  // Laptop
+    if (w >= 769) return 720;   // Tablet
+    // mobile: keep it responsive to viewport rather than fixed pixels
+    if (w <= 420) return '92vw';
+    return '94vw';
+  };
+
   return (
-    <form id={formId} onSubmit={submit} style={{
-      display: 'grid',
-      gridTemplateColumns: '1fr 1fr',
-      gap: 20,
-      maxWidth: 600,
-      margin: '0 auto',
-    }}>
-      <label className="lv-field" style={{ gridColumn: '1/2' }}>
+    <form id={formId} onSubmit={submit} className="lv-grid-2 admin-users-form" style={{ gap: 20, maxWidth: 640 }}>
+      <label className="lv-field">
         <span>Name*</span>
         <input
           required
@@ -92,9 +99,7 @@ export default function AdminUsersForm({
         />
       </label>
 
-      {/* Status selector removed */}
-
-      <label className="lv-field" style={{ gridColumn: '2/3' }}>
+      <label className="lv-field">
         <span>Email*</span>
         <input
           required
@@ -105,7 +110,7 @@ export default function AdminUsersForm({
         />
       </label>
 
-      <label className="lv-field" style={{ gridColumn: '1/2' }}>
+      <label className="lv-field">
         <span>{mode === "edit" ? "New Password (optional)" : "Password*"}</span>
         <input
           type="password"
@@ -116,7 +121,7 @@ export default function AdminUsersForm({
         />
       </label>
 
-      <label className="lv-field" style={{ gridColumn: '2/3' }}>
+      <label className="lv-field">
         <span>{mode === "edit" ? "Confirm New Password" : "Confirm Password*"}</span>
         <input
           type="password"
@@ -127,7 +132,7 @@ export default function AdminUsersForm({
         />
       </label>
 
-      <label className="lv-field" style={{ gridColumn: '1/3' }}>
+      <label className="lv-field full">
         <span>Role*</span>
         <select
           value={form.role}
@@ -144,22 +149,21 @@ export default function AdminUsersForm({
         </select>
       </label>
 
-      {/* Tenant selection for org-scoped roles */}
-      {["org_admin", "contributor"].includes(form.role) && (
-        <label className="lv-field" style={{ gridColumn: '1/3' }}>
+      {"org_admin" === form.role || "contributor" === form.role ? (
+        <label className="lv-field full">
           <span>Organization*</span>
           <select
             value={form.tenant_id || ""}
-            onChange={e => setForm(f => ({ ...f, tenant_id: e.target.value }))}
+            onChange={(e) => setForm((f) => ({ ...f, tenant_id: e.target.value }))}
             required
           >
             <option value="" disabled>Select Organization</option>
-            {tenants.map(t => (
+            {tenants.map((t) => (
               <option key={t.id} value={t.id}>{t.name}</option>
             ))}
           </select>
         </label>
-      )}
+      ) : null}
     </form>
   );
 }

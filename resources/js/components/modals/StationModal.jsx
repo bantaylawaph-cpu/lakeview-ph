@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { FiX } from "react-icons/fi";
 import Modal from "../Modal";
+import { useWindowSize } from '../../hooks/useWindowSize';
 import CoordinatePicker from '../CoordinatePicker';
 import { alertSuccess } from '../../lib/alerts';
 
@@ -15,6 +16,30 @@ export default function StationModal({
 }) {
   const empty = { id: null, name: "", lat: "", lng: "", description: "" };
   const [form, setForm] = useState(editing ? { ...editing } : empty);
+  const { width: windowW } = useWindowSize();
+
+  // Breakpoint-based modal width and map height
+  const modalWidth = (() => {
+    if (windowW <= 480) return '94vw';      // Mobile S
+    if (windowW <= 640) return '92vw';      // Mobile M/L
+    if (windowW <= 768) return 560;         // Tablet portrait
+    if (windowW <= 1024) return 640;        // Tablet landscape / small laptop
+    if (windowW <= 1280) return 720;        // Laptop
+    if (windowW <= 1536) return 760;        // Laptop L
+    if (windowW <= 1920) return 800;        // 1080p
+    return 860;                             // 4K & larger
+  })();
+  const pickerHeight = (() => {
+    if (windowW <= 480) return 220;
+    if (windowW <= 640) return 250;
+    if (windowW <= 768) return 280;
+    if (windowW <= 1024) return 300;
+    if (windowW <= 1280) return 320;
+    if (windowW <= 1536) return 340;
+    if (windowW <= 1920) return 360;
+    return 380;
+  })();
+  const isMobile = windowW <= 640;
 
   useEffect(() => {
     setForm(editing ? { ...editing } : empty);
@@ -49,8 +74,9 @@ export default function StationModal({
       open={open}
       onClose={onClose}
       title={editing ? "Edit Station" : "New Station"}
-      width={860}
+      width={modalWidth}
       style={{ maxHeight: '85vh' }}
+      bodyClassName="modern-scrollbar"
       footer={
         <div className="lv-modal-actions" style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
           <button className="pill-btn ghost" onClick={onClose}><FiX /> Close</button>
@@ -59,52 +85,61 @@ export default function StationModal({
       }
     >
       <div className="dashboard-content" style={{ padding: 12 }}>
-        <div className="org-form" style={{ gap: 12 }}>
-          <div className="form-group" style={{ minWidth: 240, flex: '1 1 320px' }}>
+        <div
+          className="org-form"
+          style={{
+            display: 'grid',
+            gap: 16,
+            gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+            alignItems: 'start'
+          }}
+        >
+          <div className="form-group" style={{ minWidth: 220 }}>
             <label>Station Name *</label>
             <input value={form.name} onChange={(e) => setForm((x) => ({ ...x, name: e.target.value }))} />
           </div>
-          <div className="form-group" style={{ flex: '1 1 240px' }}>
+          <div className="form-group" style={{ minWidth: 220 }}>
             <label>Description</label>
             <input value={form.description} onChange={(e) => setForm((x) => ({ ...x, description: e.target.value }))} />
           </div>
-
-          <div style={{ flexBasis: '100%', marginTop: 6 }}>
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <strong style={{ fontSize: 14 }}>Coordinates</strong>
-                  <span style={{ fontSize: 11, color: '#6b7280' }}>Required</span>
-                </div>
+          <div style={{ gridColumn: '1/-1', marginTop: 4 }}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <strong style={{ fontSize: 14 }}>Coordinates</strong>
+              <span style={{ fontSize: 11, color: '#6b7280' }}>Required</span>
+            </div>
           </div>
-
-          <div style={{ width: '100%', marginTop: 8 }}>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-              <div className="form-group" style={{ flex: '1 1 160px' }}>
-                <label>Latitude *</label>
-                <input type="number" value={form.lat} onChange={(e) => setForm((x) => ({ ...x, lat: e.target.value }))} />
-              </div>
-              <div className="form-group" style={{ flex: '1 1 160px' }}>
-                <label>Longitude *</label>
-                <input type="number" value={form.lng} onChange={(e) => setForm((x) => ({ ...x, lng: e.target.value }))} />
-              </div>
+          <div
+            style={{
+              display: 'grid',
+              gap: 12,
+              gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+              gridColumn: '1/-1'
+            }}
+          >
+            <div className="form-group" style={{ minWidth: 160 }}>
+              <label>Latitude *</label>
+              <input type="number" value={form.lat} onChange={(e) => setForm((x) => ({ ...x, lat: e.target.value }))} />
             </div>
-
-            <div style={{ width: '100%', marginTop: 12 }}>
-              {/* Adapter: CoordinatePicker expects { lat, lon } and will call setForm/updater with that shape. */}
-              <CoordinatePicker
-                form={{ lat: form.lat, lon: form.lng }}
-                setForm={(updater) => {
-                  if (typeof updater === 'function') {
-                    const res = updater({ lat: form.lat, lon: form.lng });
-                    setForm((f) => ({ ...f, lat: res?.lat ?? f.lat, lng: res?.lon ?? f.lng }));
-                  } else if (updater && typeof updater === 'object') {
-                    setForm((f) => ({ ...f, lat: updater.lat ?? f.lat, lng: updater.lon ?? f.lng }));
-                  }
-                }}
-                mapHeight={320}
-                showLakeLayer={true}
-                lakeId={lakeId}
-              />
+            <div className="form-group" style={{ minWidth: 160 }}>
+              <label>Longitude *</label>
+              <input type="number" value={form.lng} onChange={(e) => setForm((x) => ({ ...x, lng: e.target.value }))} />
             </div>
+          </div>
+          <div style={{ gridColumn: '1/-1', marginTop: 4 }}>
+            <CoordinatePicker
+              form={{ lat: form.lat, lon: form.lng }}
+              setForm={(updater) => {
+                if (typeof updater === 'function') {
+                  const res = updater({ lat: form.lat, lon: form.lng });
+                  setForm((f) => ({ ...f, lat: res?.lat ?? f.lat, lng: res?.lon ?? f.lng }));
+                } else if (updater && typeof updater === 'object') {
+                  setForm((f) => ({ ...f, lat: updater.lat ?? f.lat, lng: updater.lon ?? f.lng }));
+                }
+              }}
+              mapHeight={pickerHeight}
+              showLakeLayer={true}
+              lakeId={lakeId}
+            />
           </div>
         </div>
 

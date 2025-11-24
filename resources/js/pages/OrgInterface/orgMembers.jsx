@@ -8,6 +8,7 @@ import DashboardHeader from '../../components/DashboardHeader';
 import api, { me as fetchMe } from "../../lib/api";
 import { cachedGet, invalidateHttpCache } from "../../lib/httpCache";
 import Modal from "../../components/Modal";
+import { useWindowSize } from '../../hooks/useWindowSize';
 import TableToolbar from "../../components/table/TableToolbar";
 import TableLayout from "../../layouts/TableLayout";
 
@@ -31,6 +32,7 @@ const normalizeMembers = (rows = []) => rows.map(u => ({
 }));
 
 export default function OrgMembers() {
+  const { width: windowW } = useWindowSize();
   // Core state
   const location = useLocation();
   const qp = new URLSearchParams(location.search);
@@ -212,6 +214,20 @@ export default function OrgMembers() {
     onVisibleChange: map => setVisibleMap(map),
   };
 
+  // Responsive modal width across breakpoints
+  const modalWidth = (() => {
+    if (windowW <= 480) return '94vw';        // Mobile S
+    if (windowW <= 640) return '92vw';        // Mobile M/L
+    if (windowW <= 768) return 560;           // Tablet portrait
+    if (windowW <= 1024) return 620;          // Tablet landscape / small laptop
+    if (windowW <= 1280) return 660;          // Laptop
+    if (windowW <= 1536) return 700;          // Laptop L
+    if (windowW <= 1920) return 740;          // 1080p
+    return 780;                               // 4K & ultra-wide default cap
+  })();
+
+  const isMobileStack = windowW <= 640; // Mobile S/M/L threshold for vertical stacking
+
   return (
     <div className="container" style={{ padding: 16 }}>
       <DashboardHeader
@@ -253,23 +269,33 @@ export default function OrgMembers() {
         onClose={closeModal}
         title={mode === 'edit' ? 'Edit Contributor' : 'Create Contributor'}
         ariaLabel="Contributor Form"
-        width={600}
+        width={modalWidth}
+        bodyClassName="modern-scrollbar"
         footer={<div className="lv-modal-actions"><button type="button" className="pill-btn ghost" onClick={closeModal} disabled={saving}>Cancel</button><button type="submit" form="org-contributor-form" className="pill-btn primary" disabled={saving}>{saving ? 'Saving…' : (mode==='edit' ? 'Update Contributor' : 'Create Contributor')}</button></div>}
       >
-        <form id="org-contributor-form" onSubmit={(e)=>{ e.preventDefault(); submitForm(initial); }} style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:20 }}>
-          <label className="lv-field" style={{ gridColumn:'1/2' }}>
+        <form
+          id="org-contributor-form"
+          onSubmit={(e)=>{ e.preventDefault(); submitForm(initial); }}
+          style={{
+            display:'grid',
+            gridTemplateColumns: isMobileStack ? '1fr' : '1fr 1fr',
+            gap: isMobileStack ? 16 : 20,
+            alignItems:'start'
+          }}
+        >
+          <label className="lv-field" style={{ gridColumn: isMobileStack ? '1/-1' : '1/2' }}>
             <span>Name *</span>
             <input required value={initial.name} onChange={(e)=>setInitial(i=>({...i,name:e.target.value}))} />
           </label>
-          <label className="lv-field" style={{ gridColumn:'2/3' }}>
+          <label className="lv-field" style={{ gridColumn: isMobileStack ? '1/-1' : '2/3' }}>
             <span>Email *</span>
             <input required type="email" value={initial.email} onChange={(e)=>setInitial(i=>({...i,email:e.target.value}))} />
           </label>
-          <label className="lv-field" style={{ gridColumn:'1/2' }}>
+          <label className="lv-field" style={{ gridColumn: isMobileStack ? '1/-1' : '1/2' }}>
             <span>{mode==='edit' ? 'New Password (optional)' : 'Password *'}</span>
             <input type="password" required={mode!=='edit'} value={initial.password||''} onChange={(e)=>setInitial(i=>({...i,password:e.target.value}))} />
           </label>
-          <label className="lv-field" style={{ gridColumn:'2/3' }}>
+          <label className="lv-field" style={{ gridColumn: isMobileStack ? '1/-1' : '2/3' }}>
             <span>{mode==='edit' ? 'Confirm New Password' : 'Confirm Password *'}</span>
             <input type="password" required={mode!=='edit'} value={initial.password_confirmation||''} onChange={(e)=>setInitial(i=>({...i,password_confirmation:e.target.value}))} />
           </label>

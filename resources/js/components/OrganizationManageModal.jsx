@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from "react";
 import api from "../lib/api";
 import { cachedGet, invalidateHttpCache } from "../lib/httpCache";
@@ -6,8 +5,10 @@ import Modal from "./Modal";
 import Swal from "sweetalert2";
 import LoadingSpinner from "./LoadingSpinner";
 import OrganizationForm from "./OrganizationForm";
+import { useWindowSize } from "../hooks/useWindowSize";
 
 export default function OrganizationManageModal({ org, open, onClose }) {
+	const { width: windowW } = useWindowSize();
 	const [activeTab, setActiveTab] = useState("overview");
 	const [orgDetail, setOrgDetail] = useState(null);
 	const [members, setMembers] = useState([]); // org_admin + contributor
@@ -185,15 +186,27 @@ export default function OrganizationManageModal({ org, open, onClose }) {
 		}
 	};
 
+	const computeModalWidth = (w) => {
+		if (!w) return 640;
+		if (w >= 2561) return 1400; // 4k
+		if (w >= 1441) return 1080; // Laptop L
+		if (w >= 1025) return 860;  // Laptop
+		if (w >= 769) return 720;   // Tablet
+		// mobile: keep it responsive to viewport rather than fixed pixels
+		if (w <= 420) return '92vw';
+		return '94vw';
+	};
+
 	return (
 		<Modal
 			open={open}
 			onClose={onClose}
 			title={`Manage Organization: ${org?.name || ""}`}
-			width={900}
+			width={computeModalWidth(windowW)}
 			ariaLabel="Organization Manage Modal"
+			cardClassName="organization-manage-modal"
 			footer={
-				<div className="lv-modal-actions">
+				<div className="lv-modal-actions" style={{ padding: '12px 16px' }}>
 					<button type="button" className="pill-btn ghost" onClick={onClose}>
 						Close
 					</button>
@@ -201,21 +214,20 @@ export default function OrganizationManageModal({ org, open, onClose }) {
 			}
 		>
 			{/* Tabs */}
-			<div className="lv-tabs" style={{ display:'flex', gap:8, marginBottom:12, flexWrap:'wrap' }}>
-				<button className={`pill-btn ${activeTab==='overview'?'primary':''}`} onClick={()=>setActiveTab('overview')}>Overview</button>
-				<button className={`pill-btn ${activeTab==='members'?'primary':''}`} onClick={()=>setActiveTab('members')}>Members</button>
-				{/* Public Users & Settings tabs removed */}
+			<div className="lv-tabs" style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
+				<button className={`pill-btn ${activeTab==='overview'?'primary':''}`} onClick={()=>setActiveTab('overview')} style={{ padding: '8px 16px', borderRadius: '8px' }}>Overview</button>
+				<button className={`pill-btn ${activeTab==='members'?'primary':''}`} onClick={()=>setActiveTab('members')} style={{ padding: '8px 16px', borderRadius: '8px' }}>Members</button>
 			</div>
-			<div className="lv-modal-section modern-scrollbar" style={{ minHeight: 360, maxHeight: 480, overflowY:'auto', background: '#f8fafc', borderRadius: 12, padding: 16, boxShadow: '0 2px 8px #0001', marginBottom: 0 }}>
+			<div className="lv-modal-section modern-scrollbar" style={{ minHeight: 360, maxHeight: 480, overflowY:'auto', background: '#f8fafc', borderRadius: 12, padding: 20, boxShadow: '0 2px 8px #0001', marginBottom: 16 }}>
 				{loading ? (
 					<div style={{ padding: 24 }}><LoadingSpinner label="Loading…" /></div>
 				) : (
 					<>
 						{activeTab === 'overview' && (
-							<div style={{ display:'grid', gap:12 }}>
+							<div style={{ display:'grid', gap:16 }}>
 								<h3 style={{ margin:0 }}>Edit Organization</h3>
 								{orgDetail ? (
-									<div style={{ padding:12, background:'#fff', borderRadius:8 }}>
+									<div style={{ padding:16, background:'#fff', borderRadius:8, boxShadow: '0 1px 4px #0001' }}>
 										<OrganizationForm inline initialData={orgDetail} onSubmit={async (payload) => {
 											try {
 												await api.put(`/admin/tenants/${org.id}`, payload);
@@ -232,11 +244,10 @@ export default function OrganizationManageModal({ org, open, onClose }) {
 						)}
 						{activeTab === 'members' && (
 							<div style={{ overflowX:'auto' }}>
-								{/* Filters */}
-								<div style={{ display:'flex', gap:12, alignItems:'center', marginBottom:12 }}>
+								<div style={{ display:'flex', gap:16, alignItems:'center', marginBottom:16 }}>
 									<label className="lv-field" style={{ minWidth: 180 }}>
 										<span>Role</span>
-										<select value={memberRoleFilter} onChange={e=>setMemberRoleFilter(e.target.value)}>
+										<select value={memberRoleFilter} onChange={e=>setMemberRoleFilter(e.target.value)} style={{ padding: '8px', borderRadius: '8px' }}>
 											<option value="">All</option>
 											<option value="org_admin">Org Admin</option>
 											<option value="contributor">Contributor</option>
@@ -244,11 +255,11 @@ export default function OrganizationManageModal({ org, open, onClose }) {
 									</label>
 									<label className="lv-field" style={{ flex:1 }}>
 										<span>Search name</span>
-										<input placeholder="Type a name…" value={memberNameFilter} onChange={e=>setMemberNameFilter(e.target.value)} />
+										<input placeholder="Type a name…" value={memberNameFilter} onChange={e=>setMemberNameFilter(e.target.value)} style={{ padding: '8px', borderRadius: '8px' }} />
 									</label>
 								</div>
 								<table className="lv-table" style={{ minWidth: 520, width:'100%', background:'#fff', borderRadius:8, overflow:'hidden', boxShadow:'0 1px 4px #0001' }}>
-									<thead style={{ background:'#f1f5f9' }}>
+									<thead style={{ background:'#f1f5f9', borderBottom: '2px solid #e2e8f0' }}>
 										<tr style={{ fontWeight:500 }}><th>Name</th><th>Email</th><th>Role</th></tr>
 									</thead>
 									<tbody>
@@ -261,7 +272,7 @@ export default function OrganizationManageModal({ org, open, onClose }) {
 											.filter(u => !memberRoleFilter || u.role === memberRoleFilter)
 											.filter(u => !memberNameFilter || (u.name || '').toLowerCase().includes(memberNameFilter.toLowerCase()))
 											.map(u => (
-											<tr key={u.id}>
+											<tr key={u.id} style={{ transition: 'background 0.3s', cursor: 'pointer', ':hover': { background: '#f1f5f9' } }}>
 												<td>{u.name}</td>
 												<td>{u.email}</td>
 												<td>{roleLabel(u.role)}</td>

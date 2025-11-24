@@ -7,6 +7,7 @@ import {
   FiPlus, FiTrash2, FiEdit2, FiClipboard
 } from "react-icons/fi";
 import Wizard from "../Wizard";
+import { useWindowSize } from '../../hooks/useWindowSize';
 import AppMap from "../AppMap";
 import MapViewport from "../MapViewport";
 import StationModal from "../../components/modals/StationModal";
@@ -149,6 +150,7 @@ export default function WQTestWizard({
     return () => { mounted = false; };
   }, [currentUserRole]);
   const [stationsByLake, setStationsByLake] = useState(stationsByLakeProp);
+  const { width: windowW } = useWindowSize();
   const [localLakes, setLocalLakes] = useState(lakes);
   const [localLakeGeoms, setLocalLakeGeoms] = useState(lakeGeoms || {});
   const [stationModalOpen, setStationModalOpen] = useState(false);
@@ -574,6 +576,19 @@ export default function WQTestWizard({
   };
 
   /* --------------------------------- Steps ---------------------------------- */
+  // Responsive map height by breakpoint
+  const mapHeight = (() => {
+    if (windowW <= 480) return 260;      // Mobile S
+    if (windowW <= 640) return 300;      // Mobile M/L
+    if (windowW <= 768) return 320;      // Tablet portrait
+    if (windowW <= 1024) return 350;     // Tablet landscape / small laptop
+    if (windowW <= 1280) return 380;     // Laptop
+    if (windowW <= 1536) return 420;     // Laptop L
+    if (windowW <= 1920) return 460;     // 1080p
+    return 520;                          // 4K & larger
+  })();
+  const isMobile = windowW <= 640;
+  const isTablet = windowW > 640 && windowW <= 1024;
   const steps = [
     {
       key: STEP_LABELS[0].key,
@@ -584,43 +599,33 @@ export default function WQTestWizard({
       },
       render: ({ data, setData }) => (
         <div className="wizard-pane">
-          <FormRow>
-            <FG label="Lake *" style={{ minWidth: 260 }}>
-              <select
-                value={data.lake_id}
-                onChange={(e) => pickLake(data, setData, e.target.value)}
-              >
+          <div
+            style={{
+              display: 'grid',
+              gap: 16,
+              gridTemplateColumns: isMobile ? '1fr' : (isTablet ? '1fr 1fr' : '1fr 1fr 1fr'),
+              alignItems: 'start'
+            }}
+          >
+            <FG label="Lake *" style={{ minWidth: 200 }}>
+              <select value={data.lake_id} onChange={(e) => pickLake(data, setData, e.target.value)}>
                 <option value="">Select a lake…</option>
-                {lakeOptions.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.name}
-                  </option>
-                ))}
+                {lakeOptions.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
               </select>
             </FG>
-          </FormRow>
-          {/* Station selection (required) */}
-          <FormRow>
-            <FG label="Existing Station *" style={{ minWidth: 260 }}>
+            <FG label="Existing Station *" style={{ minWidth: 200 }}>
               <select
                 value={data.station_id}
                 onChange={(e) => pickStation(data, setData, e.target.value)}
                 disabled={!data.lake_id}
               >
-                <option value="">
-                  {data.lake_id ? "Select a station…" : "Choose a lake first"}
-                </option>
-                {stationOptions(data).map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
+                <option value="">{data.lake_id ? 'Select a station…' : 'Choose a lake first'}</option>
+                {stationOptions(data).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </FG>
-
             {canManageStations && (
-              <FG label="Actions" style={{ minWidth: 220 }}>
-                <div style={{ display: "flex", gap: 8 }}>
+              <FG label="Actions" style={{ minWidth: 200 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                   <button
                     className="pill-btn primary"
                     onClick={async () => {
@@ -639,9 +644,7 @@ export default function WQTestWizard({
                     onClick={async () => {
                       if (!data.station_id) return;
                       await fetchStationsForLake(data.lake_id).catch(() => {});
-                      setStationEdit(
-                        stationOptions(data).find((s) => String(s.id) === String(data.station_id)) || null
-                      );
+                      setStationEdit(stationOptions(data).find((s) => String(s.id) === String(data.station_id)) || null);
                       setStationModalOpen(true);
                     }}
                   >
@@ -657,32 +660,48 @@ export default function WQTestWizard({
                 </div>
               </FG>
             )}
-          </FormRow>
-
-          {/* Map (station-only; no pin drop) */}
-          <div className="map-preview" style={{ marginTop: 12 }}>
-            <AppMap style={{ height: 380 }} disableDrag={true} zoomControl={false} scrollWheelZoom={false}>
-              {data.lake_id && mergedLakeGeoms?.[String(data.lake_id)] ? (
-                <GeoJSON key={String(data.lake_id)} data={mergedLakeGeoms[String(data.lake_id)]} style={{ color: "#2563eb", weight: 2, fillOpacity: 0.1 }} pointToLayer={(feature, latlng) => L.circleMarker(latlng, { color: '#2563eb', fillColor: '#2563eb', fillOpacity: 0.5, radius: 8 })} />
-              ) : null}
-
-              {data.geom_point ? (
-                <CircleMarker center={[data.geom_point.lat, data.geom_point.lng]} radius={8} pathOptions={{ color:'#ef4444', fillColor:'#ef4444', fillOpacity:0.9 }}>
+          </div>
+          <div
+            className="map-preview"
+            style={{
+              marginTop: 16,
+              border: '1px solid #e2e8f0',
+              borderRadius: 12,
+              overflow: 'hidden',
+              background: '#fff'
+            }}
+          >
+            <AppMap
+              style={{ height: mapHeight, width: '100%' }}
+              disableDrag={isMobile}
+              zoomControl={!isMobile}
+              scrollWheelZoom={!isMobile}
+            >
+              {data.lake_id && mergedLakeGeoms?.[String(data.lake_id)] && (
+                <GeoJSON
+                  key={String(data.lake_id)}
+                  data={mergedLakeGeoms[String(data.lake_id)]}
+                  style={{ color: '#2563eb', weight: 2, fillOpacity: 0.1 }}
+                  pointToLayer={(feature, latlng) => L.circleMarker(latlng, { color: '#2563eb', fillColor: '#2563eb', fillOpacity: 0.5, radius: 8 })}
+                />
+              )}
+              {data.geom_point && (
+                <CircleMarker center={[data.geom_point.lat, data.geom_point.lng]} radius={8} pathOptions={{ color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.9 }}>
                   <Popup>
                     <div>
                       <div><strong>Station Coordinates</strong></div>
-                      <div>{data.geom_point && Number.isFinite(Number(data.geom_point.lat)) ? Number(data.geom_point.lat).toFixed(6) : '—'}, {data.geom_point && Number.isFinite(Number(data.geom_point.lng)) ? Number(data.geom_point.lng).toFixed(6) : '—'}</div>
-                      {data.station_id ? <div>Station: {data.station_name}</div> : null}
+                      <div>
+                        {data.geom_point && Number.isFinite(Number(data.geom_point.lat)) ? Number(data.geom_point.lat).toFixed(6) : '—'},
+                        {data.geom_point && Number.isFinite(Number(data.geom_point.lng)) ? ' ' + Number(data.geom_point.lng).toFixed(6) : ' —'}
+                      </div>
+                      {data.station_id && <div>Station: {data.station_name}</div>}
                     </div>
                   </Popup>
                 </CircleMarker>
-              ) : null}
-
+              )}
               <MapViewport bounds={mapBounds(data)} maxZoom={14} padding={[16, 16]} pad={0.02} />
             </AppMap>
           </div>
-
-          {/* Station Modal */}
           <StationModal
             open={stationModalOpen}
             onClose={() => setStationModalOpen(false)}

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import Modal from "./Modal";
+import { useWindowSize } from "../hooks/useWindowSize";
 
 const EMPTY = {
   id: null,
@@ -16,6 +17,18 @@ function WatershedForm({
   onCancel,
 }) {
   const [form, setForm] = useState(EMPTY);
+  const { width: windowW } = useWindowSize();
+
+  const computeModalWidth = (w) => {
+    if (!w) return 600;
+    if (w >= 2561) return 1400; // 4k
+    if (w >= 1441) return 1080; // Laptop L
+    if (w >= 1025) return 860;  // Laptop
+    if (w >= 769) return 720;   // Tablet
+    // mobile: keep it responsive to viewport rather than fixed pixels
+    if (w <= 420) return '92vw';
+    return '94vw';
+  };
 
   useEffect(() => {
     const next = { ...EMPTY, ...initialValue };
@@ -40,9 +53,9 @@ function WatershedForm({
       onClose={onCancel}
       title={mode === "create" ? "Add Watershed" : "Edit Watershed"}
       ariaLabel="Watershed Form"
-      width={600}
+      width={computeModalWidth(windowW)}
       footer={
-        <div className="lv-modal-actions">
+        <div className="lv-modal-actions" style={{ padding: '12px 16px' }}>
           <button type="button" className="pill-btn ghost" onClick={onCancel} disabled={loading}>
             Cancel
           </button>
@@ -52,7 +65,7 @@ function WatershedForm({
         </div>
       }
     >
-      <form id="lv-watershed-form" onSubmit={handleSubmit} className="lv-grid-2">
+      <form id="lv-watershed-form" onSubmit={handleSubmit} className="lv-grid" style={{ display: 'grid', gap: 16, gridTemplateColumns: windowW <= 768 ? '1fr' : 'repeat(2, 1fr)' }}>
         <label className="lv-field" style={{ gridColumn: "1 / -1" }}>
           <span>Name *</span>
           <input

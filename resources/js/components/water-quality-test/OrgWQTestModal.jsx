@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import Modal from "../Modal";
+import { useWindowSize } from '../../hooks/useWindowSize';
 import { api } from "../../lib/api";
 import { alertSuccess, alertError, showLoading, closeLoading } from "../../lib/alerts";
 import AppMap from "../AppMap";
@@ -64,6 +65,28 @@ export default function OrgWQTestModal({
   const [standards, setStandards] = useState([]);
   // Lightweight in-memory caches (persist only for session lifetime)
   const cacheRef = useRef({ standards: null, stations: new Map() });
+  const { width: windowW } = useWindowSize();
+  const isMobile = windowW <= 640;
+  const mapHeight = (() => {
+    if (windowW <= 480) return 220;      // Mobile S
+    if (windowW <= 640) return 250;      // Mobile M/L
+    if (windowW <= 768) return 280;      // Tablet portrait
+    if (windowW <= 1024) return 300;     // Tablet landscape / small laptop
+    if (windowW <= 1280) return 320;     // Laptop
+    if (windowW <= 1536) return 340;     // Laptop L
+    if (windowW <= 1920) return 360;     // 1080p
+    return 380;                          // 4K & larger
+  })();
+  const modalWidth = (() => {
+    if (windowW <= 480) return '94vw';
+    if (windowW <= 640) return '92vw';
+    if (windowW <= 768) return 640;
+    if (windowW <= 1024) return 760;
+    if (windowW <= 1280) return 880;
+    if (windowW <= 1536) return 920;
+    if (windowW <= 1920) return 960;
+    return 980;
+  })();
 
   const formatDepth = (d) => {
     const n = Number(d);
@@ -362,9 +385,10 @@ export default function OrgWQTestModal({
     <Modal
       open={open}
       onClose={onClose}
-      width={980}
+      width={modalWidth}
       // keep overall modal compact; inner body will scroll
       maxHeight="86vh"
+      bodyClassName="modern-scrollbar"
   title={`${formattedDate} - ${lakeName}`}
       footer={
         <div style={{ display: "flex", width: "100%", justifyContent: "space-between" }}>
@@ -425,13 +449,17 @@ export default function OrgWQTestModal({
             <div
               className="map-preview"
               style={{
-                height: 300,
-                marginBottom: 8,
+                height: mapHeight,
+                marginBottom: 12,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 width: '100%',
                 padding: 0,
+                border: '1px solid #e2e8f0',
+                borderRadius: 12,
+                overflow: 'hidden',
+                background: '#fff'
               }}
             >
               {!showMap ? (
@@ -480,7 +508,11 @@ export default function OrgWQTestModal({
               )}
             </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <div style={{
+                display: 'grid',
+                gap: 12,
+                gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+              }}>
                 {/* Sampled at */}
                 <div>
                   <strong>Sampled At:</strong>{' '}
@@ -611,7 +643,7 @@ export default function OrgWQTestModal({
                 {/* Lake Class and Period intentionally omitted from sampling metadata */}
 
                 {/* Notes */}
-                <div style={{ gridColumn: "1 / -1" }}>
+                <div style={{ gridColumn: '1 / -1' }}>
                   <strong>Notes:</strong>{' '}
                   {editable ? (
                     <div className="form-group" style={{ marginTop: 6 }}>

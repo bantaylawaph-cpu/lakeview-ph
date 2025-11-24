@@ -199,10 +199,145 @@
   color: #111827;
 }
 
-@media (max-width: 720px) {
+/* Mobile S/M/L — stack to single column to prevent horizontal overflow */
+@media (max-width: 768px) {
   .lv-grid-2 {
     grid-template-columns: 1fr;
   }
+}
+
+/* Device-specific modal/form sizing help (OrganizationForm uses cardClassName="org-modal") */
+
+/* Mobile S/M/L: almost full-width but still inset for nice spacing */
+@media (max-width: 420px) {
+  .org-modal { width: 92vw; }
+}
+
+/* Mobile M/L: keep modal comfortably inset */
+@media (min-width: 421px) and (max-width: 768px) {
+  .org-modal { width: 94vw; }
+}
+
+/* Tablet */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .org-modal { width: 720px; }
+}
+
+/* Laptop */
+@media (min-width: 1025px) and (max-width: 1440px) {
+  .org-modal { width: 860px; }
+}
+
+/* Laptop L */
+@media (min-width: 1441px) and (max-width: 2560px) {
+  .org-modal { width: 1080px; }
+}
+
+/* 4K screens */
+@media (min-width: 2561px) {
+  .org-modal { width: 1400px; }
+}
+
+/* OrganizationForm helper: tighter max width inside the form and consistent spacing */
+.org-form {
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+.org-form .lv-field { min-width: 0; }
+
+.org-form .full { grid-column: 1 / -1; }
+
+/* AdminUsersForm-specific modal/form responsiveness */
+.admin-users-modal {
+  /* Mobile S/M/L: almost full-width but still inset for nice spacing */
+  @media (max-width: 420px) {
+    width: 92vw;
+  }
+
+  /* Mobile M/L: keep modal comfortably inset */
+  @media (min-width: 421px) and (max-width: 768px) {
+    width: 94vw;
+  }
+
+  /* Tablet */
+  @media (min-width: 769px) and (max-width: 1024px) {
+    width: 720px;
+  }
+
+  /* Laptop */
+  @media (min-width: 1025px) and (max-width: 1440px) {
+    width: 860px;
+  }
+
+  /* Laptop L */
+  @media (min-width: 1441px) and (max-width: 2560px) {
+    width: 1080px;
+  }
+
+  /* 4K screens */
+  @media (min-width: 2561px) {
+    width: 1400px;
+  }
+}
+
+.admin-users-form {
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+.admin-users-form .lv-field {
+  min-width: 0;
+}
+
+.admin-users-form .full {
+  grid-column: 1 / -1;
+}
+
+/* OrganizationManageModal-specific modal/form responsiveness */
+.organization-manage-modal {
+  /* Mobile S/M/L: almost full-width but still inset for nice spacing */
+  @media (max-width: 420px) {
+    width: 92vw;
+  }
+
+  /* Mobile M/L: keep modal comfortably inset */
+  @media (min-width: 421px) and (max-width: 768px) {
+    width: 94vw;
+  }
+
+  /* Tablet */
+  @media (min-width: 769px) and (max-width: 1024px) {
+    width: 720px;
+  }
+
+  /* Laptop */
+  @media (min-width: 1025px) and (max-width: 1440px) {
+    width: 860px;
+  }
+
+  /* Laptop L */
+  @media (min-width: 1441px) and (max-width: 2560px) {
+    width: 1080px;
+  }
+
+  /* 4K screens */
+  @media (min-width: 2561px) {
+    width: 1400px;
+  }
+}
+
+.organization-manage-form {
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+.organization-manage-form .lv-field {
+  min-width: 0;
+}
+
+.organization-manage-form .full {
+  grid-column: 1 / -1;
 }
 
 /* Animations */

@@ -3,6 +3,7 @@ import Modal from "./Modal";
 import { api } from "../lib/api";
 import { cachedGet } from "../lib/httpCache";
 import CoordinatePicker from './CoordinatePicker';
+import { useWindowSize } from "../hooks/useWindowSize";
 
 const EMPTY = {
   id: null,
@@ -41,6 +42,7 @@ export default function LakeForm({
   const [municipalities, setMunicipalities] = useState([]);
   const [municipalityDropdownOpen, setMunicipalityDropdownOpen] = useState(false);
   const [municipalityFiltered, setMunicipalityFiltered] = useState([]);
+  const { width: windowW } = useWindowSize();
 
   useEffect(() => {
     // Fetch facet lists (regions, provinces, municipalities) just like FilterTray for full coverage
@@ -135,15 +137,26 @@ export default function LakeForm({
     setMunicipalityDropdownOpen(true);
   };
 
+  const computeModalWidth = (w) => {
+    if (!w) return 760;
+    if (w >= 2561) return 1400; // 4k
+    if (w >= 1441) return 1080; // Laptop L
+    if (w >= 1025) return 860;  // Laptop
+    if (w >= 769) return 720;   // Tablet
+    // mobile: keep it responsive to viewport rather than fixed pixels
+    if (w <= 420) return '92vw';
+    return '94vw';
+  };
+
   return (
     <Modal
       open={open}
       onClose={onCancel}
       title={mode === "create" ? "Add Lake" : "Edit Lake"}
       ariaLabel="Lake Form"
-      width={760}
+      width={computeModalWidth(windowW)}
       footer={
-        <div className="lv-modal-actions">
+        <div className="lv-modal-actions" style={{ padding: '12px 16px' }}>
           <button type="button" className="pill-btn ghost" onClick={onCancel} disabled={loading}>
             Cancel
           </button>
@@ -153,7 +166,7 @@ export default function LakeForm({
         </div>
       }
     >
-  <form id="lv-lake-form" onSubmit={submit} className="lv-grid-2">
+      <form id="lv-lake-form" onSubmit={submit} className="lv-grid" style={{ display: 'grid', gap: 16, gridTemplateColumns: windowW <= 768 ? '1fr' : 'repeat(2, 1fr)' }}>
         <label className="lv-field">
           <span>Name*</span>
           <input
@@ -166,8 +179,6 @@ export default function LakeForm({
         <label className="lv-field">
           <span>Tributaries</span>
           <select
-            // Force default to 'unknown' when no value is set so the UI shows
-            // "Not yet recorded" by default.
             value={(form.flows_status || "unknown")}
             onChange={(e) => setForm({ ...form, flows_status: e.target.value })}
             disabled={form.flows_status === 'present'}
@@ -357,9 +368,9 @@ export default function LakeForm({
           />
         </label>
 
-        <div className="lv-field" style={{gridColumn:'1 / span 2'}}>
-          <div style={{display:'flex',gap:16,flexWrap:'wrap'}}>
-            <label style={{flex:'1 1 160px'}} className="lv-field">
+        <div className="lv-field" style={{ gridColumn: windowW <= 768 ? '1 / span 1' : '1 / span 2' }}>
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+            <label style={{ flex: '1 1 160px' }} className="lv-field">
               <span>Latitude*</span>
               <input
                 type="number"
@@ -370,7 +381,7 @@ export default function LakeForm({
                 required={false}
               />
             </label>
-            <label style={{flex:'1 1 160px'}} className="lv-field">
+            <label style={{ flex: '1 1 160px' }} className="lv-field">
               <span>Longitude*</span>
               <input
                 type="number"
