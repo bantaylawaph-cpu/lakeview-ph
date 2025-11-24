@@ -72,7 +72,13 @@ export default function ContribWQTests() {
         canPublish={false}
         basePath={basePath || '/admin/sample-events'}
         onSave={async (updated) => {
-          setTests((prev) => prev.map((t) => (t.id === updated.id ? { ...t, ...updated } : t)));
+          setTests((prev) => {
+            // If the record already exists in the current page, update it; otherwise insert at the front
+            const exists = prev.some((t) => t.id === updated.id);
+            if (exists) return prev.map((t) => (t.id === updated.id ? { ...t, ...updated } : t));
+            // Insert new at front so user sees their new test immediately
+            return [updated, ...prev];
+          });
           setSelected(updated);
           await alertSuccess('Saved', 'Sampling event updated successfully.');
         }}
