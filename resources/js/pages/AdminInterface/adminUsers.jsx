@@ -172,7 +172,6 @@ export default function AdminUsersPage() {
       if (mode === "edit" && editingId) { await api.put(`/admin/users/${editingId}`, payload); toast("User updated"); }
       else { await api.post("/admin/users", payload); toast("User created"); }
       closeModal();
-      // bust cache so refetch is fresh
       invalidateHttpCache('/admin/users');
       await fetchUsers(buildParams({ page: 1 }));
     } catch (e) {
