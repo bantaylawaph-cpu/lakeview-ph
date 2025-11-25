@@ -1,5 +1,7 @@
 // statsUtils.js
 // stats utilities (helpers and tests)
+// For high-precision decimal arithmetic, we use decimal.js.
+import Decimal from 'decimal.js';
 
 let _wilcoxon;
 let _tcdf, _chisqCdf, _binomCdf, _normalCdf, _fCdf;
@@ -37,10 +39,10 @@ async function loadFCdf(){
   return _fCdf;
 }
 
-function mean(a){ if(!a||!a.length) return NaN; return a.reduce((s,v)=>s+v,0)/a.length; }
-function variance(a){ if(!a||a.length<2) return NaN; const m=mean(a); return a.reduce((s,v)=>s+(v-m)*(v-m),0)/(a.length-1); }
-function sd(a){ const v=variance(a); return Number.isFinite(v)?Math.sqrt(v):NaN; }
-function median(a){ if(!a||!a.length) return NaN; const s=[...a].sort((x,y)=>x-y); const n=s.length; const m=Math.floor(n/2); return n%2? s[m] : (s[m-1]+s[m])/2; }
+function mean(a){ if(!a||!a.length) return Number.NaN; return a.reduce((s,v)=>s+v,0)/a.length; }
+function variance(a){ if(!a||a.length<2) return Number.NaN; const m=mean(a); return a.reduce((s,v)=>s+(v-m)*(v-m),0)/(a.length-1); }
+function sd(a){ const v=variance(a); return Number.isFinite(v)?Math.sqrt(v):Number.NaN; }
+function median(a){ if(!a||!a.length) return Number.NaN; const s=[...a].sort((x,y)=>x-y); const n=s.length; const m=Math.floor(n/2); return n%2? s[m] : (s[m-1]+s[m])/2; }
 
 // Normal CDF using Abramowitz-Stegun approximation of erf
 function normalCdf(x){
@@ -69,7 +71,7 @@ function normalUpperTail(z){
 
 // Inverse normal CDF (quantile)
 function normalQuantile(p, mu=0, sigma=1){
-  if (!(p>0 && p<1) || sigma < 0) return NaN;
+  if (!(p>0 && p<1) || sigma < 0) return Number.NaN;
   if (sigma === 0) return mu;
   const q = p - 0.5;
   let r, val;
@@ -102,6 +104,123 @@ function normalQuantile(p, mu=0, sigma=1){
   return mu + sigma * val;
 }
 
+// Decimal-based normal quantile (inverse CDF) for higher precision.
+// Coefficients are provided as strings to avoid literal rounding in source.
+function normalQuantileDecimal(p, mu=0, sigma=1){
+  // Convert inputs
+  const P = new Decimal(p);
+  const MU = new Decimal(mu);
+  const SIG = new Decimal(sigma);
+  if (!(P.gt(0) && P.lt(1)) || SIG.lt(0)) return new Decimal(Number.NaN);
+  if (SIG.isZero()) return MU;
+
+  const q = P.minus(0.5);
+  let r, val;
+  // helper to construct Decimal constants and evaluate polynomials via Horner's method
+  const D = (s) => new Decimal(s);
+  const polyHorner = (coeffs, rdec) => {
+    if (!Array.isArray(coeffs) || coeffs.length === 0) return new Decimal(0);
+    let acc = new Decimal(coeffs[0]);
+    for (let i = 1; i < coeffs.length; i++) acc = acc.times(rdec).plus(new Decimal(coeffs[i]));
+    return acc;
+  };
+
+  if (P.gte(0.075) && P.lte(0.925)){
+    r = D('0.180625').minus(q.times(q));
+    // numerator coefficients (Horner order)
+    const numCoeffs = [
+      '2509.0809287301226727','33430.575583588128105','67265.770927008700853','45921.953931549871457',
+      '13731.693765509461125','1971.5909503065514427','133.14166789178437745','3.387132872796366608'
+    ];
+    const denCoeffs = [
+      '5226.495278852854561','28729.085735721942674','39307.89580009271061','21213.794301586595867',
+      '5394.1960214247511077','687.1870074920579083','42.313330701600911252','1'
+    ];
+    const num = q.times(polyHorner(numCoeffs, r));
+    const den = polyHorner(denCoeffs, r);
+    val = num.div(den);
+  } else {
+    r = q.gt(0) ? D(1).minus(P) : P;
+    // r = sqrt(-ln(r)) where r in (0,1)
+    r = r.ln().neg().sqrt();
+    if (r.lte(5)){
+      r = r.plus(-1.6);
+      const n = r;
+      const numCoeffs2 = [
+        '7.7454501427834140764e-4','0.0227238449892691845833','0.24178072517745061177','1.27045825245236838258',
+        '3.64784832476320460504','5.7694972214606914055','4.6303378461565452959','1.42343711074968357734'
+      ];
+      const denCoeffs2 = [
+        '1.05075007164441684324e-9','5.475938084995344946e-4','0.0151986665636164571966','0.14810397642748007459',
+        '0.68976733498510000455','1.6763848301838038494','2.05319162663775882187','1'
+      ];
+      const num = polyHorner(numCoeffs2, n);
+      const den = polyHorner(denCoeffs2, n);
+      val = num.div(den);
+    } else {
+      r = r.plus(-5);
+      const n = r;
+      const numCoeffs3 = [
+        '2.01033439929228813265e-7','2.71155556874348757815e-5','0.0012426609473880784386','0.026532189526576123093',
+        '0.29656057182850489123','1.7848265399172913358','5.4637849111641143699','6.6579046435011037772'
+      ];
+      const denCoeffs3 = [
+        '2.04426310338993978564e-15','1.4215117583164458887e-7','1.8463183175100546818e-5','7.868691311456132591e-4',
+        '0.0148753612908506148525','0.13692988092273580531','0.59983220655588793769','1'
+      ];
+      const num = polyHorner(numCoeffs3, n);
+      const den = polyHorner(denCoeffs3, n);
+      val = num.div(den);
+    }
+    if (q.lt(0)) val = val.neg();
+  }
+  return MU.plus(SIG.times(val));
+}
+
+// High-precision decimal helpers (return Decimal instances)
+// Use these when inputs require more precision than IEEE-754 floats provide.
+/**
+ * Sum using Decimal for high-precision decimals.
+ * Returns a Decimal instance. For display, call .toString() or .toNumber() (may lose precision).
+ */
+export function sumDecimal(arr){
+  const a = Array.isArray(arr) ? arr : [];
+  return a.reduce((acc, v) => acc.plus(new Decimal(v)), new Decimal(0));
+}
+
+/**
+ * Mean using Decimal. Useful when inputs are strings/Decimal with many digits.
+ * Returns a Decimal instance.
+ */
+export function meanDecimal(arr){
+  const a = Array.isArray(arr) ? arr : [];
+  if (a.length === 0) return new Decimal(NaN);
+  return sumDecimal(a).div(a.length);
+}
+
+/**
+ * Sample variance using Decimal (denominator n-1). Returns a Decimal.
+ */
+export function varianceDecimal(arr){
+  const a = Array.isArray(arr) ? arr : [];
+  if (a.length < 2) return new Decimal(NaN);
+  const m = meanDecimal(a);
+  const ss = a.reduce((acc, v) => {
+    const dv = new Decimal(v).minus(m);
+    return acc.plus(dv.times(dv));
+  }, new Decimal(0));
+  return ss.div(a.length - 1);
+}
+
+/**
+ * Sample standard deviation using Decimal. Returns a Decimal.
+ */
+export function sdDecimal(arr){
+  const v = varianceDecimal(arr);
+  // If v is NaN, Decimal.sqrt will return NaN
+  return v.sqrt();
+}
+
 
 async function tPValueStdlib(t, df, alt='two-sided'){
   const F = await loadTcdf();
@@ -130,26 +249,38 @@ async function tPValueStdlib(t, df, alt='two-sided'){
 }
 
 export async function tOneSampleAsync(x, mu0, alpha=0.05, alt='two-sided'){
-  const n=x.length; const m=mean(x); const s=sd(x); const t=(m-mu0)/(s/Math.sqrt(n)); const df=n-1;
+  const n = x.length;
+  const m = meanDecimal(x).toNumber();
+  const s = sdDecimal(x).toNumber();
+  const t = (m - mu0) / (s / Math.sqrt(n));
+  const df = n - 1;
   const p = await tPValueStdlib(t, df, alt);
   return { n, mean:m, sd:s, t, df, p_value:p, alpha, alternative: alt, significant: (p<alpha) };
 }
 
 export async function tTwoSampleWelchAsync(x, y, alpha=0.05, alt='two-sided'){
-  const n1=x.length, n2=y.length; const m1=mean(x), m2=mean(y); const v1=variance(x), v2=variance(y);
-  const se=Math.sqrt(v1/n1+v2/n2);
-  const t=(m1-m2)/se;
-  const df=(v1/n1+v2/n2)**2/((v1*v1)/((n1*n1)*(n1-1))+(v2*v2)/((n2*n2)*(n2-1)));
+  const n1 = x.length, n2 = y.length;
+  const m1 = meanDecimal(x).toNumber();
+  const m2 = meanDecimal(y).toNumber();
+  const v1 = varianceDecimal(x).toNumber();
+  const v2 = varianceDecimal(y).toNumber();
+  const se = Math.sqrt(v1/n1 + v2/n2);
+  const t = (m1 - m2) / se;
+  const df = (v1/n1 + v2/n2)**2 / ((v1*v1)/((n1*n1)*(n1-1)) + (v2*v2)/((n2*n2)*(n2-1)));
   const p = await tPValueStdlib(t, df, alt);
   return { n1,n2,mean1:m1,mean2:m2,sd1:Math.sqrt(v1),sd2:Math.sqrt(v2), t, df, p_value:p, alpha, alternative: alt, significant:(p<alpha) };
 }
 
 export async function tTwoSampleStudentAsync(x, y, alpha=0.05, alt='two-sided'){
-  const n1=x.length, n2=y.length; const m1=mean(x), m2=mean(y); const v1=variance(x), v2=variance(y);
+  const n1 = x.length, n2 = y.length;
+  const m1 = meanDecimal(x).toNumber();
+  const m2 = meanDecimal(y).toNumber();
+  const v1 = varianceDecimal(x).toNumber();
+  const v2 = varianceDecimal(y).toNumber();
   const df = n1 + n2 - 2;
   const sp2 = ((n1-1)*v1 + (n2-1)*v2)/df; 
   const se = Math.sqrt(sp2*(1/n1 + 1/n2));
-  const t = (m1-m2)/se;
+  const t = (m1 - m2) / se;
   const p = await tPValueStdlib(t, df, alt);
   return { n1,n2,mean1:m1,mean2:m2,sd1:Math.sqrt(v1),sd2:Math.sqrt(v2), t, df, p_value:p, alpha, alternative: alt, significant:(p<alpha) };
 }
@@ -207,7 +338,7 @@ export async function mannWhitneyAsync(x, y, alpha=0.05, alt='two-sided'){
   if (!F) {
     try { const mod = await import('@stdlib/stats-base-dists-normal-cdf'); F = mod?.default || mod; _normalCdf = F; } catch { F = null; }
   }
-  if (!F || isNaN(F(0))) F = normalCdf;
+  if (!F || Number.isNaN(F(0))) F = normalCdf;
   const pTwo = 2*(1 - F(Math.abs(z)));
   p = (alt==='two-sided') ? pTwo : (1 - F(z));
   return { n1,n2,U,U1,U2,z,p_value:p, alpha, alternative: alt, significant: (p<alpha) };
@@ -241,7 +372,11 @@ export async function moodMedianAsync(x, y, alpha=0.05, yates = true){
 }
 
 export async function tostEquivalenceAsync(x, lower, upper, alpha=0.05){
-  const n=x.length; const m=mean(x); const s=sd(x); const se=s/Math.sqrt(n); const df=n-1;
+  const n = x.length;
+  const m = meanDecimal(x).toNumber();
+  const s = sdDecimal(x).toNumber();
+  const se = s/Math.sqrt(n);
+  const df = n-1;
   
   // Test 1: Is Mean > Lower? (Right tail)
   const t1 = (m - lower) / se;
@@ -322,7 +457,7 @@ export async function tostEquivalenceWilcoxonAsync(x, lower, upper, alpha = 0.05
 export function shapiroWilk(x, alpha=0.05){
   const arr = (Array.isArray(x)? x: []).map(Number).filter(Number.isFinite).sort((a,b)=>a-b);
   const n = arr.length;
-  if (n < 3) return { n, mean: NaN, median: NaN, sd: NaN, W: NaN, p_value: NaN, alpha, normal: null };
+  if (n < 3) return { n, mean: Number.NaN, median: Number.NaN, sd: Number.NaN, W: Number.NaN, p_value: Number.NaN, alpha, normal: null };
 
   const nn2 = Math.floor(n/2);
   const a = new Array(nn2+1).fill(0);
@@ -333,7 +468,8 @@ export function shapiroWilk(x, alpha=0.05){
     const an25 = an + 0.25;
     let summ2 = 0;
     for (let i=1;i<=nn2;i++){
-      a[i] = normalQuantile((i - 0.375)/an25, 0, 1);
+      const nq = normalQuantileDecimal((i - 0.375)/an25, 0, 1);
+      a[i] = (nq && typeof nq.toNumber === 'function') ? nq.toNumber() : Number.NaN;
       summ2 += a[i]*a[i];
     }
     summ2 *= 2;
@@ -373,12 +509,12 @@ export function shapiroWilk(x, alpha=0.05){
   let sa = -a[1];
   for (let i=1, j=n-1; i<n; j--){
     const xi = arr[i] / range;
-    if (xx - xi > small) return { n, mean: mean(arr), median: median(arr), sd: sd(arr), W: NaN, p_value: NaN, alpha, normal: null };
+    if (xx - xi > small) return { n, mean: mean(arr), median: median(arr), sd: sd(arr), W: Number.NaN, p_value: Number.NaN, alpha, normal: null };
     sx += xi; i++;
     if (i !== j) sa += (i - j >= 0 ? 1 : -1) * a[Math.min(i, j)];
     xx = xi;
   }
-  if (n > 5000) return { n, mean: mean(arr), median: median(arr), sd: sd(arr), W: NaN, p_value: NaN, alpha, normal: null };
+  if (n > 5000) return { n, mean: mean(arr), median: median(arr), sd: sd(arr), W: Number.NaN, p_value: Number.NaN, alpha, normal: null };
 
   sa /= n; sx /= n;
   let ssa=0, ssx=0, sax=0;
