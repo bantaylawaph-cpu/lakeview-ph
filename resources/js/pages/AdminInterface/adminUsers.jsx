@@ -192,7 +192,6 @@ export default function AdminUsersPage() {
     } catch (e) { console.error("Delete failed", e); Swal.fire("Delete failed", e?.response?.data?.message || "", "error"); }
   };
 
-  // Actions for TableLayout
   const actions = useMemo(() => [
     { label: 'Edit', title: 'Edit', type: 'edit', icon: <FiEdit2 />, onClick: (raw) => openEdit(raw) },
     { label: 'Delete', title: 'Delete', type: 'delete', icon: <FiTrash2 />, onClick: (raw) => deleteUser(raw) },
@@ -200,7 +199,6 @@ export default function AdminUsersPage() {
 
   const normalized = useMemo(() => normalizeUsers(rows), [rows]);
 
-  // Only show Role in advanced filters for users
   const advancedFields = [
     {
       id: 'role',
@@ -215,7 +213,6 @@ export default function AdminUsersPage() {
   const clearAdvanced = () => { setFRole(""); fetchUsers(buildParams({ page: 1 })); };
   const activeAdvCount = [fRole].filter(Boolean).length;
 
-  // ColumnPicker adapter for TableToolbar (independent from TableLayout internal picker) - we keep existing TableToolbar pattern.
   const columnPickerAdapter = {
     columns: baseColumns.map(c => ({ id: c.id, header: c.header })),
     visibleMap: visibleMap,
