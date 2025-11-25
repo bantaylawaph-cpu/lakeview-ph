@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FiLayers, FiEye, FiTrash2, FiEdit2 } from "react-icons/fi";
 
 import { confirm, alertError, alertSuccess, showLoading, closeLoading } from "../../lib/alerts";
-import { fetchLayersPaged, toggleLayerVisibility, deleteLayer, updateLayer } from "../../lib/layers";
+import { fetchLayersPaged, deleteLayer, updateLayer } from "../../lib/layers";
 import TableLayout from "../../layouts/TableLayout";
 import TableToolbar from "../table/TableToolbar";
 import FilterPanel from "../table/FilterPanel";
@@ -23,12 +23,9 @@ const DEFAULT_VISIBILITY_OPTIONS = [
 
 const getVisibilityLabel = (value) => VISIBILITY_LABELS[value] || value || "Unknown";
 
-// small utility to create a brief UX delay for loader visibility
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function LayerList({
-  allowActivate = true,
-  allowToggleVisibility = true,
   allowDelete = true,
   visibilityOptions = DEFAULT_VISIBILITY_OPTIONS,
   currentUserRole = null,
@@ -40,7 +37,6 @@ function LayerList({
   const [pagination, setPagination] = useState({ page: 1, perPage: 5, total: 0, lastPage: 1 });
   const [resetSignal, setResetSignal] = useState(0);
   const [search, setSearch] = useState(() => {
-    // Prefer prop; fallback to URL query ?search=
     if (initialSearch) return initialSearch;
     try {
       const usp = new URLSearchParams(window.location.search);
@@ -73,14 +69,6 @@ function LayerList({
     )).filter((opt) => opt && opt.value);
     return mapped.length ? mapped : DEFAULT_VISIBILITY_OPTIONS;
   }, [visibilityOptions]);
-
-
-  const allowedVisibilityValues = useMemo(() => {
-    const base = normalizedVisibilityOptions.map((opt) => opt.value);
-    if (currentUserRole === 'superadmin') return base;
-    // read-only roles
-    return [base[0]]; // only show first (likely 'public') so toggle disabled
-  }, [normalizedVisibilityOptions, currentUserRole]);
 
   const formatCreator = (row) => {
     // Prefer the uploader's user name; avoid falling back to organization labels like "LakeView".
@@ -115,23 +103,17 @@ function LayerList({
           const gj = L.geoJSON(geometry);
           const b = gj.getBounds();
           if (b && b.isValid && b.isValid()) {
-            setPreviewBounds(b);
             updateViewport(b, { maxZoom: row?.body_type === 'watershed' ? 12 : 13 });
-          } else {
-            setPreviewBounds(null);
           }
         } catch (err) {
           console.warn('[LayerList] Could not compute bounds for preview', err);
-          setPreviewBounds(null);
         }
       } catch (err) {
         console.warn('[LayerList] Failed to parse preview geometry', err);
         setPreviewGeometry(null);
-        setPreviewBounds(null);
       }
     } else {
       setPreviewGeometry(null);
-      setPreviewBounds(null);
     }
 
     // Attach a token so React remounts the GeoJSON even if the same id is clicked
@@ -142,7 +124,6 @@ function LayerList({
   };
 
   const [previewGeometry, setPreviewGeometry] = useState(null);
-  const [previewBounds, setPreviewBounds] = useState(null);
 
   const [mapViewport, setMapViewport] = useState({
     bounds: null,
@@ -199,25 +180,19 @@ function LayerList({
   };
 
   useEffect(() => {
-    // Guard against double invocation in React 18 StrictMode dev by tracking first mount.
-    // In production StrictMode effects are not double-called.
     let did = false;
     if (!did) refresh();
     return () => { did = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Re-fetch when search or filters change (debounced a bit by consumer if needed)
   useEffect(() => {
     const t = setTimeout(() => refresh(1), 250);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, fBodyType, fVisibility, fDownloadableOnly, fCreatedBy]);
 
   useEffect(() => {
     if (!previewLayer?.geom_geojson) {
       setPreviewGeometry(null);
-      setPreviewBounds(null);
       resetViewport();
       return;
     }
@@ -228,7 +203,6 @@ function LayerList({
     } catch (err) {
       console.error('[LayerList] Failed to parse preview geometry', err);
       setPreviewGeometry(null);
-      setPreviewBounds(null);
       return;
     }
 
@@ -238,26 +212,20 @@ function LayerList({
       const layer = L.geoJSON(geometry);
       const bounds = layer.getBounds();
       if (bounds && bounds.isValid && bounds.isValid()) {
-        setPreviewBounds(bounds);
         updateViewport(bounds, { maxZoom: previewLayer?.body_type === "watershed" ? 12 : 13 });
       } else {
-        setPreviewBounds(null);
         resetViewport();
       }
     } catch (err) {
       console.error('[LayerList] Failed to compute preview bounds', err);
-      setPreviewBounds(null);
       resetViewport();
     }
   }, [previewLayer, updateViewport, resetViewport]);
-
-  // No body options needed; table shows all layers by default
 
   const doDelete = async (target) => {
   if (currentUserRole !== 'superadmin') return; // reflect backend permissions
     const id = target && typeof target === 'object' ? target.id : target;
     const name = target && typeof target === 'object' ? target.name : null;
-    // quick pre-confirm loader for consistent UX
     try { closeLoading(); } catch {}
     try { showLoading('Loading', 'Preparing delete…'); } catch {}
     try { await sleep(150); } catch {}
@@ -276,9 +244,6 @@ function LayerList({
     }
   };
 
-  // Server-side filters applied; show current page as-is
-  const filtered = useMemo(() => layers, [layers]);
-
   const filtersBadgeCount = (fBodyType ? 1 : 0) + (fVisibility ? 1 : 0) + (fDownloadableOnly ? 1 : 0) + (fCreatedBy ? 1 : 0);
 
   const columns = useMemo(() => {
@@ -287,7 +252,6 @@ function LayerList({
     if (visibleMap.body) arr.push({ id: 'body', header: 'Body', render: (r) => (r.body_type === 'watershed' ? 'Watershed' : 'Lake'), sortValue: (r) => (r.body_type || '') });
     if (visibleMap.visibility) arr.push({ id: 'visibility', header: 'Visibility', render: (r) => getVisibilityLabel(r.visibility), sortValue: (r) => r.visibility });
     if (visibleMap.downloadable) arr.push({ id: 'downloadable', header: 'Downloadable', render: (r) => (r.is_downloadable ? 'Yes' : 'No'), sortValue: (r) => (r.is_downloadable ? 1 : 0), width: 120 });
-  // Default column removed (one layer per body)
     if (visibleMap.creator) arr.push({ id: 'creator', header: 'Created by', render: (r) => formatCreator(r) });
     if (visibleMap.updated) arr.push({ id: 'updated', header: 'Updated', render: (r) => (r.updated_at ? new Date(r.updated_at).toLocaleString() : '-'), sortValue: (r) => (r.updated_at || ''), width: 200 });
     return arr;
@@ -299,11 +263,6 @@ function LayerList({
     },
     {
       label: 'Edit', title: 'Edit metadata', icon: <FiEdit2 />, onClick: async (row) => {
-        const initialEditVisibility = (() => {
-          const current = ['organization', 'organization_admin'].includes(row.visibility) ? 'admin' : row.visibility;
-          if (allowedVisibilityValues.includes(current)) return current;
-          return normalizedVisibilityOptions[0]?.value || 'public';
-        })();
         try { closeLoading(); } catch {}
         try { showLoading('Loading', 'Preparing edit form…'); } catch {}
         try { await sleep(150); } catch {}
@@ -315,14 +274,13 @@ function LayerList({
     {
       label: 'Delete', title: 'Delete', icon: <FiTrash2 />, type: 'delete', onClick: (row) => doDelete(row.id), visible: () => allowDelete && currentUserRole === 'superadmin'
     }
-  ], [allowedVisibilityValues, normalizedVisibilityOptions, currentUserRole, allowDelete]);
+  ], [currentUserRole, allowDelete]);
 
   const columnPickerAdapter = { columns: [
     { id: 'name', header: 'Name' },
     { id: 'body', header: 'Body' },
     { id: 'visibility', header: 'Visibility' },
     { id: 'downloadable', header: 'Downloadable' },
-  // Default Layer column removed
     { id: 'creator', header: 'Created by' },
     { id: 'updated', header: 'Updated' },
   ], visibleMap, onVisibleChange: (m) => setVisibleMap(m) };
@@ -392,7 +350,7 @@ function LayerList({
           <TableLayout
             tableId="layers-table"
             columns={columns}
-            data={filtered}
+            data={layers}
             actions={actions}
             resetSignal={resetSignal}
             columnPicker={false}
@@ -416,11 +374,6 @@ function LayerList({
             viewportVersion={mapViewport.token}
           />
         </div>
-
-        <style>{`
-          .spin { animation: spin 1.2s linear infinite; }
-          @keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
-        `}</style>
       </div>
 
       <LayerEditModal
@@ -449,4 +402,3 @@ function LayerList({
 }
 
 export default LayerList;
-

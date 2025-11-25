@@ -31,11 +31,6 @@ async function loadBinomCdf(){
   try { const mod = await import('@stdlib/stats-base-dists-binomial-cdf'); _binomCdf = mod?.default || mod; } catch { _binomCdf = null; }
   return _binomCdf;
 }
-async function loadNormalCdf(){
-  if (_normalCdf) return _normalCdf;
-  try { const mod = await import('@stdlib/stats-base-dists-normal-cdf'); _normalCdf = mod?.default || mod; } catch { _normalCdf = null; }
-  return _normalCdf;
-}
 async function loadFCdf(){
   if (_fCdf) return _fCdf;
   try { const mod = await import('@stdlib/stats-base-dists-f-cdf'); _fCdf = mod?.default || mod; } catch { _fCdf = null; }
@@ -107,17 +102,6 @@ function normalQuantile(p, mu=0, sigma=1){
   return mu + sigma * val;
 }
 
-function tPValueApprox(t, df, alt='two-sided'){
-  const z = Math.abs(t);
-  const pTwo = 2*normalUpperTail(z);
-  if (alt === 'two-sided') return Math.max(0, Math.min(1, pTwo));
-  if (alt === 'greater') return Math.max(0, Math.min(1, normalUpperTail(t)));
-  if (alt === 'less') {
-    const pRight = normalUpperTail(t);
-    return Math.max(0, Math.min(1, 1 - pRight));
-  }
-  return Math.max(0, Math.min(1, pTwo));
-}
 
 async function tPValueStdlib(t, df, alt='two-sided'){
   const F = await loadTcdf();
