@@ -16,17 +16,10 @@ export default function MeasureTool({ active, mode = "distance", onFinish }) {
   const initialCursorRef = useRef("");
 
   useEffect(() => {
-    if (!active) {
-      setPoints([]);
-      setMousePos(null);
-      setPaused(false);
-      setClosed(false);
-    } else {
-      setPoints([]);
-      setMousePos(null);
-      setPaused(false);
-      setClosed(false);
-    }
+    setPoints([]);
+    setMousePos(null);
+    setPaused(false);
+    setClosed(false);
   }, [active, mode]);
 
   useEffect(() => {

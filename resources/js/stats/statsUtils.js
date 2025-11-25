@@ -194,7 +194,7 @@ export function sumDecimal(arr){
  */
 export function meanDecimal(arr){
   const a = Array.isArray(arr) ? arr : [];
-  if (a.length === 0) return new Decimal(NaN);
+  if (a.length === 0) return new Decimal(Number.NaN);
   return sumDecimal(a).div(a.length);
 }
 
@@ -203,7 +203,7 @@ export function meanDecimal(arr){
  */
 export function varianceDecimal(arr){
   const a = Array.isArray(arr) ? arr : [];
-  if (a.length < 2) return new Decimal(NaN);
+  if (a.length < 2) return new Decimal(Number.NaN);
   const m = meanDecimal(a);
   const ss = a.reduce((acc, v) => {
     const dv = new Decimal(v).minus(m);
