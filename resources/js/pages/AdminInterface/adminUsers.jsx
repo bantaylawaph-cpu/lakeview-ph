@@ -161,7 +161,6 @@ export default function AdminUsersPage() {
 
   const submitForm = async (payload) => {
     if (payload.global_role) { payload.role = payload.global_role; delete payload.global_role; }
-    // Status field deprecated: do not send active/disabled/is_active
     if ('active' in payload) delete payload.active;
     if ('disabled' in payload) delete payload.disabled;
     if ('is_active' in payload) delete payload.is_active;
