@@ -19,7 +19,8 @@ export default function AdminOrganizationsPage() {
   const VIS_KEY = TABLE_ID + '::visible';
 
   const [rows, setRows] = useState([]);
-  const [meta, setMeta] = useState({ current_page: 1, last_page: 1, per_page: 15, total: 0 });
+  const [meta, setMeta] = useState({ current_page: 1, last_page: 1, per_page: 10, total: 0 });
+  const PER_PAGE = 10;
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -28,6 +29,21 @@ export default function AdminOrganizationsPage() {
   const [editingOrg, setEditingOrg] = useState(null);
   const [openManage, setOpenManage] = useState(false);
   const [manageOrg, setManageOrg] = useState(null);
+
+  // Sorting state (mirrors pattern from useWQTests: persisted locally, server-side fetch honors sort_by + sort_dir)
+  const SORT_KEY = TABLE_ID + '::sort';
+  const [sort, setSort] = useState(() => {
+    try {
+      const raw = localStorage.getItem(SORT_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed.id === 'string' && (parsed.dir === 'asc' || parsed.dir === 'desc')) return parsed;
+      }
+    } catch {}
+    // Default newest first by id (descending) even if id column not shown
+    return { id: 'id', dir: 'desc' };
+  });
+  useEffect(() => { try { localStorage.setItem(SORT_KEY, JSON.stringify(sort)); } catch {} }, [sort]);
 
   const persisted = (() => { try { return JSON.parse(localStorage.getItem(ADV_KEY) || '{}'); } catch { return {}; } })();
   // Persist 'type' and 'status' filters for organizations.
@@ -69,9 +85,13 @@ export default function AdminOrganizationsPage() {
 
   const buildParams = (overrides={}) => {
     const page = overrides.page ?? meta.current_page;
-    const per_page = overrides.per_page ?? meta.per_page;
+    const per_page = overrides.per_page ?? PER_PAGE;
     const params = { q, page, per_page, ...overrides };
     if (fType) params.type = fType;
+    if (sort && sort.id) {
+      params.sort_by = sort.id;
+      params.sort_dir = sort.dir === 'asc' ? 'asc' : 'desc';
+    }
     // status filter removed from UI
     return params;
   };
@@ -84,8 +104,27 @@ export default function AdminOrganizationsPage() {
       const payload = res.data;
       const items = Array.isArray(payload?.data) ? payload.data : (Array.isArray(payload) ? payload : []);
       setRows(items);
+      // Robust pagination meta: support meta object or top-level fields
       const m = payload?.meta || {};
-      setMeta({ current_page: m.current_page || params.page || 1, last_page: m.last_page || 1, per_page: m.per_page || params.per_page || 15, total: m.total || items.length });
+      const total = m.total ?? payload?.total ?? null;
+      const per = m.per_page ?? payload?.per_page ?? params.per_page ?? PER_PAGE;
+      const cp = Number(m.current_page ?? payload?.current_page ?? params.page ?? 1) || 1;
+      let lp = m.last_page ?? payload?.last_page;
+      if (lp == null) {
+        if (total != null) {
+          const t = Number(total);
+          lp = Number.isFinite(t) ? Math.max(1, Math.ceil(t / Number(per || PER_PAGE))) : 1;
+        } else {
+          // No total provided: infer at least one more page if current page is full
+          lp = cp + ((Array.isArray(items) && items.length >= Number(per || PER_PAGE)) ? 1 : 0);
+        }
+      }
+      setMeta({
+        current_page: cp,
+        last_page: Number(lp) || 1,
+        per_page: per,
+        total: total != null ? Number(total) : items.length
+      });
     } catch(e) { Swal.fire('Failed to load organizations', e?.response?.data?.message || '', 'error'); } finally { setLoading(false); }
   };
 
@@ -99,8 +138,17 @@ export default function AdminOrganizationsPage() {
   }, [fType]);
 
   const page = meta.current_page;
-  const perPage = meta.per_page;
+  const perPage = PER_PAGE;
   const goPage = (p) => fetchOrgs(buildParams({ page: p }));
+
+  // Handle header sort toggles (TableLayout will call onSortChange with column id)
+  const handleSortChange = (colId) => {
+    if (!colId) return;
+    const nextDir = (sort.id === colId && sort.dir === 'asc') ? 'desc' : 'asc';
+    const next = { id: colId, dir: nextDir };
+    setSort(next);
+    fetchOrgs(buildParams({ page: 1, sort_by: next.id, sort_dir: next.dir }));
+  };
 
   const columns = useMemo(() => {
     const arr = [];
@@ -230,7 +278,7 @@ export default function AdminOrganizationsPage() {
                 <FiSettings />
               </button>
             </div>
-          )}]} data={normalized} pageSize={perPage} actions={actions} columnPicker={false} hidePager={false} loading={loading} serverSide={true} pagination={{ page: page, totalPages: meta.last_page }} onPageChange={goPage} />
+          )}]} data={normalized} pageSize={perPage} actions={actions} columnPicker={false} hidePager={false} loading={loading} serverSide={true} pagination={{ page: page, totalPages: meta.last_page }} onPageChange={goPage} sort={sort} onSortChange={handleSortChange} />
       </div>
 
       <OrganizationForm

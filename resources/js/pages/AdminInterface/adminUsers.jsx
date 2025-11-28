@@ -33,11 +33,24 @@ const normalizeUsers = (rows = []) => rows.map(u => ({
 export default function AdminUsersPage() {
   // raw user rows from API
   const [rows, setRows] = useState([]);
-  const [meta, setMeta] = useState({ current_page: 1, last_page: 1, per_page: 15, total: 0 });
+  const [meta, setMeta] = useState({ current_page: 1, last_page: 1, per_page: 10, total: 0 });
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [myId, setMyId] = useState(null);
+  // Sorting state (persisted) similar to useWQTests
+  const SORT_KEY = `${TABLE_ID}::sort`;
+  const [sort, setSort] = useState(() => {
+    try {
+      const raw = localStorage.getItem(SORT_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed.id === 'string' && (parsed.dir === 'asc' || parsed.dir === 'desc')) return parsed;
+      }
+    } catch {}
+    return { id: 'id', dir: 'desc' }; // default newest users first
+  });
+  useEffect(() => { try { localStorage.setItem(SORT_KEY, JSON.stringify(sort)); } catch {} }, [sort]);
 
   // Persist advanced filter state
   const ADV_KEY = `${TABLE_ID}::filters_advanced`;
@@ -89,7 +102,7 @@ export default function AdminUsersPage() {
   const [saving, setSaving] = useState(false);
 
   const page = meta.current_page ?? 1;
-  const perPage = meta.per_page ?? 15;
+  const perPage = 10;
 
   const unwrap = (res) => (res?.data ?? res);
   const toast = (title, icon = "success") => Swal.fire({ toast: true, position: "top-end", timer: 1600, showConfirmButton: false, icon, title });
@@ -98,6 +111,10 @@ export default function AdminUsersPage() {
   const buildParams = (overrides = {}) => {
     const params = { q, page, per_page: perPage, ...overrides };
     if (fRole) params.role = fRole;
+    if (sort && sort.id) {
+      params.sort_by = sort.id;
+      params.sort_dir = sort.dir === 'asc' ? 'asc' : 'desc';
+    }
     return params;
   };
 
@@ -108,12 +125,25 @@ export default function AdminUsersPage() {
   const items = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
       const filtered = myId ? items.filter(u => u.id !== myId) : items;
   setRows(filtered);
+      // Support meta or top-level pagination fields from API; infer last_page when total is missing
       const m = res?.meta ?? {};
+      const total = m.total ?? res?.total ?? null;
+      const per = m.per_page ?? res?.per_page ?? params.per_page ?? perPage;
+      const cp = Number(m.current_page ?? res?.current_page ?? params.page ?? 1) || 1;
+      let lp = m.last_page ?? res?.last_page;
+      if (lp == null) {
+        if (total != null) {
+          const t = Number(total);
+          lp = Number.isFinite(t) ? Math.max(1, Math.ceil(t / Number(per || perPage))) : 1;
+        } else {
+          lp = cp + ((Array.isArray(items) && items.length >= Number(per || perPage)) ? 1 : 0);
+        }
+      }
       setMeta({
-        current_page: m.current_page ?? params.page ?? 1,
-        last_page: m.last_page ?? 1,
-        per_page: m.per_page ?? params.per_page ?? 15,
-        total: m.total ?? items.length,
+        current_page: cp,
+        last_page: Number(lp) || 1,
+        per_page: per,
+        total: total != null ? Number(total) : items.length,
       });
     } catch (e) {
       console.error("Failed to load users", e);
@@ -136,6 +166,14 @@ export default function AdminUsersPage() {
   }, []);
 
   const goPage = (p) => fetchUsers(buildParams({ page: p }));
+
+  const handleSortChange = (colId) => {
+    if (!colId) return;
+    const nextDir = (sort.id === colId && sort.dir === 'asc') ? 'desc' : 'asc';
+    const next = { id: colId, dir: nextDir };
+    setSort(next);
+    fetchUsers(buildParams({ page: 1, sort_by: next.id, sort_dir: next.dir }));
+  };
 
   const openCreate = () => {
     setMode("create"); setEditingId(null); setInitial(emptyInitial); setOpen(true);
@@ -263,6 +301,8 @@ export default function AdminUsersPage() {
           serverSide={true}
           pagination={{ page: page, totalPages: meta.last_page }}
           onPageChange={goPage}
+          sort={sort}
+          onSortChange={handleSortChange}
         />
       </div>
 
