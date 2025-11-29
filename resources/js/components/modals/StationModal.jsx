@@ -172,7 +172,8 @@ export default function StationModal({
 
         if (value.lat && value.lng) {
           markerRef.current = L.circleMarker([value.lat, value.lng], { radius: 8, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.9 }).addTo(map);
-          map.setView([value.lat, value.lng], 12);
+          // Keep current zoom level when centering the map. Using panTo will recenter without changing zoom
+          map.panTo([value.lat, value.lng]);
         }
       })();
 
@@ -187,7 +188,8 @@ export default function StationModal({
           const L = await import('leaflet');
           if (!markerRef.current) markerRef.current = L.circleMarker([lat, lng], { radius: 8, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.9 }).addTo(mapRef.current);
           else markerRef.current.setLatLng([lat, lng]);
-          mapRef.current.setView([lat, lng], 12);
+          // Don't force a zoom change when updating the marker — just pan to the new center
+          mapRef.current.panTo([lat, lng]);
         })();
       }
     }, [value.lat, value.lng]);

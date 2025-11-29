@@ -17,8 +17,8 @@ const _lakeOptionsCache = new Map(); // key -> {ts, data}
 const _lakeOptionsInflight = new Map(); // key -> Promise
 const LAKE_OPTIONS_TTL = 30 * 1000; // 30s
 
-export const fetchLakeOptions = async (q = "") => {
-  const key = String(q || "");
+export const fetchLakeOptions = async (q = "", { hasData = false } = {}) => {
+  const key = String(q || "") + (hasData ? ":hasdata" : "");
 
   // return cached value if fresh
   const cached = _lakeOptionsCache.get(key);
@@ -32,7 +32,11 @@ export const fetchLakeOptions = async (q = "") => {
   }
 
   const promise = (async () => {
-    const qp = q ? `?q=${encodeURIComponent(q)}` : "";
+    const params = new URLSearchParams();
+    if (q) params.append("q", q);
+    if (hasData) params.append("has_data", "1");
+    const qp = params.toString() ? `?${params.toString()}` : "";
+    
     // Try public (no-auth) endpoints first so anonymous users receive options.
     // If those fail, fall back to authenticated endpoints (if a token exists).
     const attempts = [

@@ -48,7 +48,8 @@ export default function CoordinatePicker({ form, setForm, mapHeight = 240, showL
           markerRef.current.setLatLng([lat, lon]);
           try { markerRef.current.setStyle({ color: '#2563eb', fillColor: '#2563eb' }); } catch {}
         }
-        mapRef.current.setView([lat, lon], 12);
+        // Preserve the user's current zoom level when centering; use panTo instead of forcing a zoom change
+        mapRef.current.panTo([lat, lon]);
       }
     } catch {}
   }, [showLakeLayer]);
@@ -82,7 +83,8 @@ export default function CoordinatePicker({ form, setForm, mapHeight = 240, showL
       // initial marker
       if (form.lat && form.lon) {
         markerRef.current = L.circleMarker([form.lat, form.lon], { radius: 8, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.9 }).addTo(map);
-        map.setView([form.lat, form.lon], 12);
+        // Keep current zoom when centering an initial marker
+        map.panTo([form.lat, form.lon]);
       }
 
       // if a lake is provided, render its overlay immediately after map init
@@ -103,7 +105,7 @@ export default function CoordinatePicker({ form, setForm, mapHeight = 240, showL
         const L = await import('leaflet');
         if (!markerRef.current) markerRef.current = L.circleMarker([lat, lon], { radius: 8, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.9 }).addTo(mapRef.current);
         else markerRef.current.setLatLng([lat, lon]);
-        try { mapRef.current.setView([lat, lon], 12); } catch (e) {}
+        try { mapRef.current.panTo([lat, lon]); } catch (e) {}
       })();
     }
   }, [form.lat, form.lon]);

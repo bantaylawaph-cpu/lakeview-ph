@@ -37,3 +37,11 @@
   border-color: #3b82f6;
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
 }
+
+/* Date input calendar icon visibility */
+.form-group input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: brightness(0) saturate(100%);
+  opacity: 1;
+}
+.form-group input[type="date"]::-moz-focus-inner { border: 0; }
+.form-group input[type="date"] { color-scheme: light; }

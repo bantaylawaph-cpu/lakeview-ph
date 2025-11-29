@@ -301,7 +301,7 @@ export default function DataSummaryTable({ open, onClose, initialLake = '', init
     (async () => {
       try {
         const { fetchLakeOptions } = await import('../../lib/layers');
-        const lakes = await fetchLakeOptions();
+        const lakes = await fetchLakeOptions("", { hasData: true });
         if (!mounted) return;
         const base = Array.isArray(lakes) ? lakes : [];
         setLakeOptions(base);
@@ -379,24 +379,19 @@ export default function DataSummaryTable({ open, onClose, initialLake = '', init
         const hasDepthExplicit = Object.prototype.hasOwnProperty.call(r, 'depth_m');
         const depthValue = hasDepthExplicit ? (r.depth_m == null ? 0 : r.depth_m) : undefined;
         const key = hasDepthExplicit ? `${pName}::depth:${depthValue}` : pName;
+        const thresh = r.threshold || null;
         if (!paramMap.has(key)) {
-          paramMap.set(key, { meta: { hasDepthExplicit, depthValue, depthWasNull: hasDepthExplicit && r.depth_m == null, threshold: null, unit: r.parameter?.unit || r.unit || '' }, cells: {} });
+          paramMap.set(key, { meta: { hasDepthExplicit, depthValue, depthWasNull: hasDepthExplicit && r.depth_m == null, threshold: null, unit: r.parameter?.unit || r.unit || '' }, cells: {}, rawValues: [] });
         }
         const entry = paramMap.get(key);
+        entry.rawValues.push({ value: r.value, threshold: thresh });
         const cellMap = entry.cells;
-        const prev = cellMap[m];
-        const threshold = r.threshold || null;
-        if (!prev || sampled > prev.date) {
-          cellMap[m] = {
-            date: sampled,
-            value: r.value,
-            unit: r.parameter?.unit || r.unit || '',
-            threshold,
-            hasDepthExplicit: entry.meta.hasDepthExplicit,
-            depthValue: entry.meta.depthValue,
-          };
+        if (!cellMap[m]) {
+          cellMap[m] = { values: [], thresholds: [] };
         }
-        if (threshold && !entry.meta.threshold) entry.meta.threshold = threshold;
+        cellMap[m].values.push(r.value);
+        cellMap[m].thresholds.push(thresh);
+        if (thresh && !entry.meta.threshold) entry.meta.threshold = thresh;
         if (!entry.meta.unit && (r.parameter?.unit || r.unit)) entry.meta.unit = r.parameter?.unit || r.unit || '';
       }
     }
@@ -424,8 +419,16 @@ export default function DataSummaryTable({ open, onClose, initialLake = '', init
     const params = Array.from(paramMap.entries()).map(([key, obj]) => {
       const map = obj.cells;
       const name = obj.meta.displayName;
-      const cells = months.map(mi => map[mi] ?? null);
-      return { name, cells, meta: obj.meta };
+      const cells = months.map(mi => {
+        const monthData = map[mi];
+        if (!monthData || !monthData.values.length) return null;
+        const values = monthData.values.map(v => Number(v)).filter(Number.isFinite);
+        if (!values.length) return null;
+        const avg = arithmeticMean(values);
+        const threshold = monthData.thresholds.find(t => t) || obj.meta.threshold;
+        return { value: avg, threshold };
+      });
+      return { name, cells, meta: obj.meta, rawValues: obj.rawValues };
     });
     return { months, params };
   }, [events, selectedStation, selectedYear]);
@@ -601,7 +604,7 @@ export default function DataSummaryTable({ open, onClose, initialLake = '', init
                       );
                     })}
                     {(() => {
-                      const values = p.cells.map(c => (c ? Number(c.value) : null)).filter(v => Number.isFinite(Number(v))).map(Number);
+                      const values = p.rawValues.map(rv => Number(rv.value)).filter(v => Number.isFinite(v));
                       const outlierFlag = hasOutliers(values);
                       let avg = null;
                       if (outlierFlag) {
@@ -613,12 +616,13 @@ export default function DataSummaryTable({ open, onClose, initialLake = '', init
                       const med = median(values);
                       const paramT = p.meta?.threshold || null;
                       let meet = 0, total = 0;
-                      for (const c of p.cells) {
-                        if (!c || !Number.isFinite(Number(c.value))) continue;
-                        const effT = hasThresholdBounds(c?.threshold) ? c.threshold : (hasThresholdBounds(paramT) ? paramT : null);
+                      for (const rv of p.rawValues) {
+                        const num = Number(rv.value);
+                        if (!Number.isFinite(num)) continue;
+                        const effT = hasThresholdBounds(rv.threshold) ? rv.threshold : (hasThresholdBounds(paramT) ? paramT : null);
                         if (!effT) continue;
                         total += 1;
-                        if (meetsThreshold(c.value, effT)) meet += 1;
+                        if (meetsThreshold(rv.value, effT)) meet += 1;
                       }
                       const pct = total > 0 ? (meet / total) * 100 : null;
                       // Remove color-coding for % Compliance cells

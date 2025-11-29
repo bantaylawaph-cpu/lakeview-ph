@@ -808,6 +808,36 @@ export default function WQTestWizard({
       canNext: (d) =>
         (d.results || []).length > 0 &&
         (d.results || []).every((r) => r.parameter_id && r.value !== ""),
+      onBeforeNext: ({ data }) => {
+        // Prevent multiple rows of the same parameter at the identical depth when user clicks Next
+        const rows = Array.isArray(data?.results) ? data.results : [];
+        if (!rows.length) return true;
+
+        const counts = new Map();
+        for (const r of rows) {
+          // only consider rows with a selected parameter
+          if (!r.parameter_id) continue;
+          // normalize depth: empty or null -> 0
+          const depth = r.depth_m === "" || r.depth_m === null || r.depth_m === undefined ? 0 : Number(r.depth_m);
+          const key = `${String(r.parameter_id)}::${String(depth)}`;
+          counts.set(key, (counts.get(key) || 0) + 1);
+        }
+
+        const dups = Array.from(counts.entries()).filter(([, c]) => c > 1);
+        if (dups.length === 0) return true;
+
+        // Build a helpful message listing the duplicated parameter + depth combos
+        const lines = dups.map(([k]) => {
+          const [paramId, depthStr] = k.split('::');
+          const param = parameterOptions.find((p) => String(p.id) === String(paramId));
+          const paramLabel = param ? `${param.code} — ${param.name}` : `Parameter ${paramId}`;
+          const depth = Number(depthStr);
+          return `${paramLabel} at ${formatDepth(depth)} (${depth} m)`;
+        });
+
+        alertError('Duplicate parameter entries', `You have multiple rows for the same parameter at the same depth. Please remove or change duplicates before continuing:\n\n${lines.join('\n')}`);
+        return false;
+      },
       render: ({ data, setData }) => (
         <div className="wizard-pane">
           <div className="wizard-nav" style={{ justifyContent: "flex-end", marginBottom: 8 }}>

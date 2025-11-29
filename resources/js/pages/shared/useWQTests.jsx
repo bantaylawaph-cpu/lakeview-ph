@@ -380,7 +380,6 @@ export function useWQTests({ variant, tableId, initialLakes = [], initialTests =
     }
     cols.push(
       { id: 'year', header: 'Year', width: 90, render: (row) => yqmFrom(row).year ?? '—', sortValue: (row) => yqmFrom(row).year ?? null },
-      { id: 'quarter', header: 'Quarter', width: 90, render: (row) => { const q = yqmFrom(row).quarter; return Number.isFinite(q) ? `Q${q}` : '—'; }, sortValue: (row) => yqmFrom(row).quarter ?? null },
       { id: 'month_day', header: 'Month-Day', width: 160, render: (row) => { if (!row || !row.sampled_at) return '—'; try { const d = new Date(row.sampled_at); return d.toLocaleDateString(undefined, { month: 'long', day: 'numeric' }); } catch { return '—'; } }, sortValue: (row) => (row?.sampled_at ? new Date(row.sampled_at) : null) },
       { id: 'lake_name', header: 'Lake', width: 200, render: (row) => row?.lake?.name ?? row?.lake_name ?? '—', sortValue: (row) => row?.lake?.name ?? row?.lake_name ?? '' },
       { id: 'station_name', header: 'Station', width: 220, render: (row) => {

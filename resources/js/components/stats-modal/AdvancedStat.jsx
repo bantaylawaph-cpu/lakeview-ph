@@ -25,7 +25,7 @@ import useParamEvaluationType from './hooks/useParamEvaluationType';
 import useAvailableDepths from './hooks/useAvailableDepths';
 import useStationsForLakeClass from './hooks/useStationsForLakeClass';
 import useStandardsAndClasses from './hooks/useStandardsAndClasses';
-import infoSectionsContent from './content/advancedStatHelp';
+import infoSectionsContent from './content/advancedStatHelp.jsx';
 import { lakeName } from './utils/shared';
 import { openPrintWindowWithStyle, buildAdvancedStatReport } from './utils/exportPdf';
 import runAdvancedStat from './services/runAdvancedStat';
@@ -400,7 +400,9 @@ function AdvancedStat({ lakes = [], params = [], paramOptions: parentParamOption
   <div className="advanced-stat-grid" style={{ minWidth: 0 }}>
       <div className="as-item as-col-1" style={{ minWidth: 0 }}>
         <div style={{ display:'flex', gap:6, alignItems:'center' }}>
-          <LakeSelect includeCustom lakes={lakes} value={lakeId} onChange={e=>{ setLakeId(e.target.value); setResult(null); }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <LakeSelect includeCustom lakes={lakes} value={lakeId} style={{ width: '100%' }} onChange={e=>{ setLakeId(e.target.value); setResult(null); }} />
+          </div>
           {String(lakeId) === 'custom' ? (
             <button className="pill-btn" type="button" onClick={() => setCustomOpen(true)} title="Enter custom values" style={{ whiteSpace:'nowrap' }}>Enter values</button>
           ) : null}

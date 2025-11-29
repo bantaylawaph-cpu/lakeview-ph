@@ -8,6 +8,7 @@ import {
   FiGithub,
   FiDatabase,
   FiSettings,
+  FiGrid,
   FiLogIn,
   FiLogOut,
   FiUser,
@@ -469,33 +470,40 @@ function Sidebar({ isOpen, onClose, pinned, setPinned, onOpenAuth, onOpenFeedbac
 
         {isLoggedIn ? (
           <>
-            {/* Profile row acts as "Back to your interface" for privileged roles */}
+            {/* Profile row showing logged-in user */}
             <li aria-label="Logged-in user" title={me?.name || ""}>
-              <button
-                type="button"
-                className="sidebar-row"
-                onClick={(e) => {
-                  e.preventDefault();
-                  const role = me?.role;
-                  // Support both 'superadmin' and potential 'admin' value
-                  if (role === 'superadmin' || role === 'admin') {
-                    navigate('/admin-dashboard');
-                  } else if (role === 'org_admin') {
-                    navigate('/org-dashboard');
-                  } else if (role === 'contributor') {
-                    navigate('/contrib-dashboard');
-                  } else {
-                    // Non-privileged users stay on map
-                    return;
-                  }
-                  if (!pinned) onClose?.();
-                }}
-                title="Back to your dashboard"
-              >
+              <div className="sidebar-row" style={{ cursor: 'default' }}>
                 <FiUser className="sidebar-icon" />
                 <span>{me?.name}</span>
-              </button>
+              </div>
             </li>
+
+            {/* Back to Dashboard button for privileged roles */}
+            {(me?.role === 'superadmin' || me?.role === 'admin' || me?.role === 'org_admin' || me?.role === 'contributor') && (
+              <li>
+                <button
+                  type="button"
+                  className="sidebar-row"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    const role = me?.role;
+                    // Support both 'superadmin' and potential 'admin' value
+                    if (role === 'superadmin' || role === 'admin') {
+                      navigate('/admin-dashboard');
+                    } else if (role === 'org_admin') {
+                      navigate('/org-dashboard');
+                    } else if (role === 'contributor') {
+                      navigate('/contrib-dashboard');
+                    }
+                    if (!pinned) onClose?.();
+                  }}
+                  title="Back to your dashboard"
+                >
+                  <FiGrid className="sidebar-icon" />
+                  <span>Back to Dashboard</span>
+                </button>
+              </li>
+            )}
 
             <li>
               <button

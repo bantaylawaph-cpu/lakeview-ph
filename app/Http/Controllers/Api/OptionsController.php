@@ -30,24 +30,35 @@ class OptionsController extends Controller
         return response()->json($roles);
     }
     /**
-     * GET /api/options/lakes?q=&limit=
+     * GET /api/options/lakes?q=&limit=&has_data=
      * Returns [{ id, name, class_code }, ...] for lightweight dropdowns.
+     * If has_data=1, only return lakes that have sampling events.
      */
     public function lakes(Request $request)
     {
         $q = trim((string) $request->query('q', ''));
         $limit = (int) $request->query('limit', 500);
         $limit = max(1, min($limit, 2000)); // cap for safety
+        $hasData = $request->query('has_data') === '1' || $request->query('has_data') === 'true';
 
-        $rows = Lake::query()
-            ->select(['id', 'name', 'class_code'])
+        $query = Lake::query()
+            ->select(['lakes.id', 'lakes.name', 'lakes.class_code'])
             ->when($q !== '', function ($qb) use ($q) {
                 // Postgres: ILIKE for case-insensitive search
-                $qb->where('name', 'ILIKE', "%{$q}%");
+                $qb->where('lakes.name', 'ILIKE', "%{$q}%");
             })
-            ->orderBy('name')
-            ->limit($limit)
-            ->get();
+            ->when($hasData, function ($qb) {
+                // Only include lakes that have at least one sampling event
+                $qb->whereExists(function ($sub) {
+                    $sub->select(DB::raw(1))
+                        ->from('sampling_events')
+                        ->whereColumn('sampling_events.lake_id', 'lakes.id');
+                });
+            })
+            ->orderBy('lakes.name')
+            ->limit($limit);
+
+        $rows = $query->get();
 
         return response()->json($rows);
     }

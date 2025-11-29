@@ -329,28 +329,32 @@ export default function OrgWQTestModal({
   const save = () => {
     (async () => {
       try {
-        // Validate sampled_at is not in the future
         if (sampleEvent?.sampled_at) {
           try {
-            // Use only the date portion for comparison when the input is a date string
-            const candidate = new Date(sampleEvent.sampled_at);
-            const now = new Date();
-            // If candidate represents a date only (no time component), treat it as end of day
-            if (!sampleEvent.sampled_at.includes('T')) {
-              candidate.setHours(23, 59, 59, 999);
-            }
-            if (candidate.getTime() > now.getTime()) {
-              await alertError('Invalid date', 'Sampled date cannot be in the future. Please correct the date and try again.');
-              return;
+            const s = String(sampleEvent.sampled_at);
+            if (!s.includes('T')) {
+              const parts = s.split('-').map((p) => Number(p));
+              if (parts.length === 3 && parts.every((n) => Number.isFinite(n))) {
+                const inputDate = new Date(parts[0], parts[1] - 1, parts[2]);
+                inputDate.setHours(0, 0, 0, 0);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                if (inputDate.getTime() > today.getTime()) {
+                  await alertError('Invalid date', 'Sampled date cannot be in the future. Please correct the date and try again.');
+                  return;
+                }
+              }
+            } else {
+              const candidate = new Date(s);
+              if (Number.isFinite(candidate.getTime()) && candidate.getTime() > Date.now()) {
+                await alertError('Invalid date', 'Sampled date cannot be in the future. Please correct the date and try again.');
+                return;
+              }
             }
           } catch (_) {
-            // If parsing fails, allow server to do validation but continue to avoid blocking UX
           }
         }
-        // Show a blocking loading modal while saving
-        // Note: don't await showLoading; it resolves only when closed.
         showLoading('Saving changes…', 'Almost there — this may take a few seconds.');
-        // send updated sampling event to backend
         const payload = {
           lake_id: sampleEvent.lake_id,
           station_id: sampleEvent.station_id,
