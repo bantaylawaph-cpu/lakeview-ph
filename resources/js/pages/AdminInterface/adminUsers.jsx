@@ -121,24 +121,31 @@ export default function AdminUsersPage() {
   const fetchUsers = async (params = {}) => {
     setLoading(true);
     try {
-      const res = unwrap(await cachedGet("/admin/users", { params, ttlMs: 5 * 60 * 1000 }));
-  const items = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+      // Keep axios response and parse payload; disable cache to reflect DB
+      const raw = await cachedGet("/admin/users", { params, ttlMs: 0 });
+      const payload = raw?.data ?? raw;
+      const items = Array.isArray(payload?.data) ? payload.data : (Array.isArray(payload) ? payload : []);
       const filtered = myId ? items.filter(u => u.id !== myId) : items;
-  setRows(filtered);
-      // Support meta or top-level pagination fields from API; infer last_page when total is missing
-      const m = res?.meta ?? {};
-      const total = m.total ?? res?.total ?? null;
-      const per = m.per_page ?? res?.per_page ?? params.per_page ?? perPage;
-      const cp = Number(m.current_page ?? res?.current_page ?? params.page ?? 1) || 1;
-      let lp = m.last_page ?? res?.last_page;
+      setRows(filtered);
+
+      // Read pagination from common shapes: Laravel { meta: {...} }, or { pagination: {...} }, or top-level
+      const m = payload?.meta ?? payload?.pagination ?? {};
+      const total = m.total ?? payload?.total ?? null;
+      const per = m.per_page ?? m.perPage ?? payload?.per_page ?? payload?.perPage ?? params.per_page ?? perPage;
+      const cp = Number(m.current_page ?? m.currentPage ?? payload?.current_page ?? payload?.currentPage ?? params.page ?? 1) || 1;
+      let lp = m.last_page ?? m.lastPage ?? payload?.last_page ?? payload?.lastPage;
+
+      // If last_page not supplied, compute from total when available; otherwise keep prior or assume current page
       if (lp == null) {
         if (total != null) {
           const t = Number(total);
           lp = Number.isFinite(t) ? Math.max(1, Math.ceil(t / Number(per || perPage))) : 1;
         } else {
-          lp = cp + ((Array.isArray(items) && items.length >= Number(per || perPage)) ? 1 : 0);
+          // Avoid inflating total pages as you navigate; stick to known value or current page
+          lp = (meta?.last_page && Number(meta.last_page)) || cp;
         }
       }
+
       setMeta({
         current_page: cp,
         last_page: Number(lp) || 1,

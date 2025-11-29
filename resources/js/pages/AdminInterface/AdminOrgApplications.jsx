@@ -57,8 +57,8 @@ export default function AdminOrgApplications() {
   const load = async () => {
     setLoading(true); setError(null);
     try {
-      // Always fetch all applications; status filtering will be applied per-user after grouping.
-      const res = await cachedGet('/admin/org-applications', { ttlMs: 5 * 60 * 1000 });
+      // Always fetch fresh from DB; disable cache to avoid stale data
+      const res = await cachedGet('/admin/org-applications', { ttlMs: 0 });
       setApps(res?.data || []);
     } catch (e) {
       try { const j = JSON.parse(e?.message||''); setError(j?.message || 'Failed to load.'); } catch { setError('Failed to load.'); }

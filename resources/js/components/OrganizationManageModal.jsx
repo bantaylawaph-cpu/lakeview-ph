@@ -6,6 +6,7 @@ import Swal from "sweetalert2";
 import LoadingSpinner from "./LoadingSpinner";
 import OrganizationForm from "./OrganizationForm";
 import { useWindowSize } from "../hooks/useWindowSize";
+import { FiTrash2 } from 'react-icons/fi';
 
 export default function OrganizationManageModal({ org, open, onClose }) {
 	const { width: windowW } = useWindowSize();
@@ -16,6 +17,7 @@ export default function OrganizationManageModal({ org, open, onClose }) {
 	const [editing, setEditing] = useState(null); // user being edited
 	const [editForm, setEditForm] = useState({ name: "", email: "" });
 	const [saving, setSaving] = useState(false);
+	const [deleting, setDeleting] = useState(false);
 	// Settings tab removed
 
 	// Audit removed
@@ -32,6 +34,72 @@ export default function OrganizationManageModal({ org, open, onClose }) {
 				contact_email: tenant.contact_email || "",
 			});
 		} catch { /* ignore */ }
+	};
+
+	// Check if organization has existing data across key resources
+	const getOrgUsage = async (tenantId) => {
+		try {
+			// users (paginator with total)
+			const usersRes = await cachedGet('/admin/users', { params: { tenant_id: tenantId, per_page: 1 }, ttlMs: 0 }).catch(() => null);
+			const usersPayload = usersRes?.data ?? usersRes ?? {};
+			const usersTotal = usersPayload?.meta?.total ?? usersPayload?.total ?? 0;
+
+			// sampling events (paginator with total)
+			const eventsRes = await cachedGet('/admin/sample-events', { params: { organization_id: tenantId, per_page: 1 }, ttlMs: 0 }).catch(() => null);
+			const eventsPayload = eventsRes?.data ?? eventsRes ?? {};
+			const eventsTotal = eventsPayload?.meta?.total ?? eventsPayload?.total ?? 0;
+
+			// stations (array)
+			const stationsRes = await cachedGet('/admin/stations', { params: { organization_id: tenantId }, ttlMs: 0 }).catch(() => ({ data: { data: [] } }));
+			const stationsPayload = stationsRes?.data ?? stationsRes ?? {};
+			const stationsData = Array.isArray(stationsPayload?.data) ? stationsPayload.data : (Array.isArray(stationsPayload) ? stationsPayload : []);
+			const stationsTotal = Array.isArray(stationsData) ? stationsData.length : 0;
+
+			return { users: Number(usersTotal) || 0, events: Number(eventsTotal) || 0, stations: Number(stationsTotal) || 0 };
+		} catch {
+			return { users: 0, events: 0, stations: 0 };
+		}
+	};
+
+	const handleDeleteOrg = async () => {
+		if (!org?.id) return;
+		setDeleting(true);
+		try {
+			const usage = await getOrgUsage(org.id);
+			const total = (usage.users || 0) + (usage.events || 0) + (usage.stations || 0);
+			if (total > 0) {
+				await Swal.fire({
+					title: 'Cannot delete organization',
+					html: `This organization still has existing data:<br/>`
+						+ `• Users: <b>${usage.users}</b><br/>`
+						+ `• Sampling events: <b>${usage.events}</b><br/>`
+						+ `• Stations: <b>${usage.stations}</b><br/><br/>`
+						+ `Please detach/delete these first, then try again.`,
+					icon: 'warning',
+					confirmButtonText: 'Close'
+				});
+				return;
+			}
+
+			const ok = await Swal.fire({
+				title: 'Delete organization?',
+				text: `This will delete ${org?.name || 'this organization'}.`,
+				icon: 'warning',
+				showCancelButton: true,
+				confirmButtonText: 'Delete',
+				confirmButtonColor: '#dc2626'
+			}).then(r => r.isConfirmed);
+			if (!ok) return;
+
+			await api.delete(`/admin/tenants/${org.id}`);
+			try { invalidateHttpCache('/admin/tenants'); } catch {}
+			await Swal.fire('Deleted', 'Organization soft deleted.', 'success');
+			if (onClose) onClose();
+		} catch (e) {
+			Swal.fire('Delete failed', formatApiError(e), 'error');
+		} finally {
+			setDeleting(false);
+		}
 	};
 
 	const formatApiError = (e) => {
@@ -218,7 +286,7 @@ export default function OrganizationManageModal({ org, open, onClose }) {
 				<button className={`pill-btn ${activeTab==='overview'?'primary':''}`} onClick={()=>setActiveTab('overview')} style={{ padding: '8px 16px', borderRadius: '8px' }}>Overview</button>
 				<button className={`pill-btn ${activeTab==='members'?'primary':''}`} onClick={()=>setActiveTab('members')} style={{ padding: '8px 16px', borderRadius: '8px' }}>Members</button>
 			</div>
-			<div className="lv-modal-section modern-scrollbar" style={{ minHeight: 360, maxHeight: 480, overflowY:'auto', background: '#f8fafc', borderRadius: 12, padding: 20, boxShadow: '0 2px 8px #0001', marginBottom: 16 }}>
+			<div className="lv-modal-section" style={{ minHeight: 360, background: '#f8fafc', borderRadius: 12, padding: 20, boxShadow: '0 2px 8px #0001', marginBottom: 16 }}>
 				{loading ? (
 					<div style={{ padding: 24 }}><LoadingSpinner label="Loading…" /></div>
 				) : (
@@ -238,6 +306,15 @@ export default function OrganizationManageModal({ org, open, onClose }) {
 												Swal.fire('Failed', formatApiError(e), 'error');
 											}
 										}} />
+										<div style={{ marginTop:16, padding:16, borderRadius:8, background:'#fff7f7', border:'1px solid #fecaca', display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
+											<div>
+												<div style={{ fontWeight:600, color:'#b91c1c' }}>Danger zone</div>
+												<div style={{ color:'#7f1d1d' }}>Deleting an organization is permanent unless restored. Ensure there is no associated data.</div>
+											</div>
+											<button className="pill-btn danger" onClick={handleDeleteOrg} disabled={deleting} style={{ display:'inline-flex', alignItems:'center', gap:8 }}>
+												<FiTrash2 /> {deleting ? 'Deleting…' : 'Delete'}
+											</button>
+										</div>
 									</div>
 								) : <div style={{ color:'#555' }}>Loading…</div>}
 							</div>

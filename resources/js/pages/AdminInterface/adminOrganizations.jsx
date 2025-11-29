@@ -203,11 +203,11 @@ export default function AdminOrganizationsPage() {
   };
   const handleSoftDelete = async (row) => {
     const org = row._raw || row;
-    const { isConfirmed } = await Swal.fire({ title: 'Delete organization?', text: `Soft delete ${org.name}? You can restore later before hard deleting.`, icon:'warning', showCancelButton:true, confirmButtonText: 'Delete', confirmButtonColor:'#dc2626' });
+    const { isConfirmed } = await Swal.fire({ title: 'Delete organization?', text: `This will delete ${org.name}.`, icon:'warning', showCancelButton:true, confirmButtonText: 'Delete', confirmButtonColor:'#dc2626' });
     if (!isConfirmed) return;
     try {
       await api.delete(`/admin/tenants/${org.id}`);
-      Swal.fire('Deleted','Organization soft deleted.','success');
+      Swal.fire('Deleted','Organization deleted.','success');
       invalidateHttpCache('/admin/tenants');
       fetchOrgs(buildParams({ page }));
     } catch (e) { Swal.fire('Delete failed', formatApiError(e), 'error'); }

@@ -27,6 +27,7 @@ export default function TableLayout({
   columnPicker = false,
   toolbar = null,
   hidePager = false,
+  pageSize = 15,
   loading = false,
   loadingLabel = null,
   // Virtualization (windowing) for large lists
@@ -258,7 +259,12 @@ export default function TableLayout({
   };
 
   // Pagination (client-side state removed)
-  // const [page, setPage] = useState(1);
+  // Client-side pagination state (used when serverSide=false)
+  const [clientPage, setClientPage] = useState(1);
+  useEffect(() => {
+    // Reset to first page when data changes significantly
+    setClientPage(1);
+  }, [data]);
   
   // Sorting (client-side state and logic removed)
   const SORT_KEY = `${tableId}::sort`;
@@ -268,10 +274,20 @@ export default function TableLayout({
   // const cmp = useCallback((a, b, col) => { ... });
   // const sorted = useMemo(() => { ... });
 
-  // Data is now passed directly
-  const paged = data;
-  const page = serverSide ? pagination.page : 1; // fallback for client-side
-  const totalPages = serverSide ? pagination.totalPages : 1;
+  // Data and pager values
+  const page = serverSide ? (pagination.page || 1) : clientPage;
+  const totalPages = useMemo(() => {
+    if (serverSide) return pagination.totalPages || 1;
+    const total = Array.isArray(data) ? data.length : 0;
+    return Math.max(1, Math.ceil(total / Math.max(1, pageSize)));
+  }, [serverSide, pagination.totalPages, data, pageSize]);
+
+  const paged = useMemo(() => {
+    if (serverSide) return data;
+    const size = Math.max(1, pageSize);
+    const start = (page - 1) * size;
+    return Array.isArray(data) ? data.slice(start, start + size) : [];
+  }, [serverSide, data, page, pageSize]);
 
   // useEffect(() => {
   //   if (page > totalPages) setPage(totalPages);
@@ -561,11 +577,33 @@ export default function TableLayout({
 
       {!hidePager && (
         <div className="lv-table-pager">
-          <button className="pill-btn ghost sm" disabled={loading || page <= 1} onClick={() => { if (!loading) onPageChange(page - 1); }}>
+          <button
+            className="pill-btn ghost sm"
+            disabled={loading || page <= 1}
+            onClick={() => {
+              if (loading) return;
+              if (serverSide) {
+                onPageChange(page - 1);
+              } else {
+                setClientPage((p) => Math.max(1, p - 1));
+              }
+            }}
+          >
             {isMobile ? "<" : "< Prev"}
           </button>
             <span className="pager-text">Page {page} of {totalPages}</span>
-          <button className="pill-btn ghost sm" disabled={loading || page >= totalPages} onClick={() => { if (!loading) onPageChange(page + 1); }}>
+          <button
+            className="pill-btn ghost sm"
+            disabled={loading || page >= totalPages}
+            onClick={() => {
+              if (loading) return;
+              if (serverSide) {
+                onPageChange(page + 1);
+              } else {
+                setClientPage((p) => Math.min(totalPages, p + 1));
+              }
+            }}
+          >
             {isMobile ? ">" : "Next >"}
           </button>
         </div>
