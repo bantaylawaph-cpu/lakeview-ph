@@ -289,8 +289,10 @@ export default function AdminFeedback() {
       id: 'title', header: 'Title', width: 240,
       render: (r) => (
         <div>
-          <div style={{ fontWeight:600, fontSize:13 }}>{r.title}</div>
-          <div style={{ fontSize:11, color:'#64748b', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{r.message}</div>
+          <div style={{ fontWeight:600, fontSize:13, wordBreak:'break-word' }}>{r.title}</div>
+          <div style={{ fontSize:11, color:'#64748b', overflow:'hidden', textOverflow:'ellipsis', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', wordBreak:'break-word' }}>
+            {r.message?.split(/\s+/).slice(0, 10).join(' ') + (r.message?.split(/\s+/).length > 10 ? '...' : '')}
+          </div>
         </div>
       )
     },
