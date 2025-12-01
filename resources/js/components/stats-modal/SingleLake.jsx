@@ -5,7 +5,6 @@ import { Line } from "react-chartjs-2";
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend } from "chart.js";
 import InfoModal from "../common/InfoModal";
 import { buildGraphExplanation } from "../utils/graphExplain";
-import { eventStationName } from "./utils/dataUtils";
 import { lakeName, lakeClass, baseLineChartOptions, normalizeDepthDatasets } from "./utils/shared";
 import useSampleEvents from "./hooks/useSampleEvents";
 import useStationsCache from "./hooks/useStationsCache";
@@ -24,6 +23,37 @@ import LoadingSpinner from '../LoadingSpinner';
 import { fmt as fmtNum } from './formatters';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
+
+const complianceShadingPlugin = {
+  id: 'complianceShading',
+  beforeDatasetsDraw(chart, args, pluginOptions) {
+    try {
+      const { ctx, chartArea, scales } = chart;
+      if (!chartArea || !scales || !scales.y) return;
+      const y = scales.y;
+      const { left, right, top, bottom } = chartArea;
+      const min = pluginOptions?.min;
+      const max = pluginOptions?.max;
+      if (min == null && max == null) return;
+      ctx.save();
+      ctx.fillStyle = 'rgba(239,68,68,0.08)';
+      // Shade area above max (non-compliant high)
+      if (max != null) {
+        const yMaxPx = y.getPixelForValue(Number(max));
+        const h = Math.max(0, yMaxPx - top);
+        if (h > 0) ctx.fillRect(left, top, right - left, h);
+      }
+      // Shade area below min (non-compliant low)
+      if (min != null) {
+        const yMinPx = y.getPixelForValue(Number(min));
+        const h = Math.max(0, bottom - yMinPx);
+        if (h > 0) ctx.fillRect(left, yMinPx, right - left, h);
+      }
+      ctx.restore();
+    } catch (_) {
+    }
+  },
+};
 
 export default function SingleLake({
   lakeOptions,
@@ -53,35 +83,25 @@ export default function SingleLake({
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const sidebarWidth = 320;
   const stationBtnRef = useRef(null);
-  const [applied, setApplied] = useState(false);
-  // 'time' | 'depth' | 'bar'
+
   const [chartType, setChartType] = useState('time');
   const prevTypeRef = useRef('time');
   const prevTimeStateRef = useRef({ timeRange: 'all', dateFrom: '', dateTo: '' });
   const [seriesMode, setSeriesMode] = useState('avg'); // 'avg' | 'per-station'
   const [infoOpen, setInfoOpen] = useState(false);
   const [infoContent, setInfoContent] = useState({ title: '', sections: [] });
-  // removed: bar-chart years state
-  // removed: bar chart depth selection state
-  // Time-series depth selector: 'all' shows each depth as separate series, otherwise filters to a single depth band
   const [selectedDepth, setSelectedDepth] = useState('all');
   // Trend analysis (SMK)
   const [trendEnabled, setTrendEnabled] = useState(false);
   const trendAlpha = 0.05;
-  // Correlation removed
+  const [shadeOutOfCompliance, setShadeOutOfCompliance] = useState(false);
+  const [toggleNonCompliantPoints, setToggleNonCompliantPoints] = useState(false);
   const { events, loading } = useSampleEvents(selectedLake, selectedOrg, timeRange, dateFrom, dateTo);
-  // Also fetch unfiltered events (all time) to derive available years without being affected
-  // by the currently selected timeRange/dateFrom/dateTo. This prevents the year list from
-  // narrowing to the chosen year when the user picks a year filter.
   const { events: eventsAll } = useSampleEvents(selectedLake, selectedOrg, 'all', '', '');
-  const hasStationIds = true;
-  const { orgOptions: orgOptionsLocal, stationsByOrg, allStations, loading: stationsLoading } = useStationsCache(selectedLake);
+  const { stationsByOrg, allStations, loading: stationsLoading } = useStationsCache(selectedLake);
   const stationsList = useMemo(() => (!selectedOrg ? (allStations || []) : (stationsByOrg?.[String(selectedOrg)] || [])), [selectedOrg, allStations, stationsByOrg]);
-  useEffect(() => {
-    setApplied(false);
-  }, [selectedLake, selectedOrg, selectedParam, JSON.stringify(selectedStations), timeRange, dateFrom, dateTo, bucket, chartType, selectedDepth]);
+  useEffect(() => {}, [selectedLake, selectedOrg, selectedParam, JSON.stringify(selectedStations), timeRange, dateFrom, dateTo, bucket, chartType, selectedDepth]);
 
-  // Available years for the selected lake/org based on events
   const availableYears = useMemo(() => {
     const years = new Set();
     (Array.isArray(eventsAll) ? eventsAll : []).forEach((ev) => {
@@ -95,14 +115,10 @@ export default function SingleLake({
     return Array.from(years).sort((a, b) => b - a);
   }, [eventsAll]);
 
-
-  // summaryStats hook removed; summary will not be provided
-  const summaryStats = null;
   const nameForSelectedLake = useMemo(() => lakeName(lakeOptions, selectedLake) || String(selectedLake || '') || '', [lakeOptions, selectedLake]);
   const classForSelectedLake = useMemo(() => lakeClass(lakeOptions, selectedLake) || selectedClass || '', [lakeOptions, selectedLake, selectedClass]);
   const { current: currentStd } = useCurrentStandard();
 
-  // Prefetch thresholds for all parameters alongside parameters
   useEffect(() => {
     if (!paramOptions?.length || !currentStd?.id) return;
     paramOptions.forEach(p => {
@@ -112,8 +128,6 @@ export default function SingleLake({
 
   const { chartData, loadingThresholds: tsThresholdsLoading } = useTimeSeriesData({ events, selectedParam, selectedStations, bucket, timeRange, dateFrom, dateTo, seriesMode, classForSelectedLake, depthSelection: selectedDepth, appliedStandardId: currentStd?.id });
   const depthProfile = useDepthProfileData({ events, selectedParam, selectedStations, bucket });
-  // Correlation removed
-  // derive depth options for selectedParam from events
   const depthOptions = useMemo(() => {
     const depths = new Set();
     (Array.isArray(events) ? events : []).forEach((ev) => {
@@ -145,21 +159,15 @@ export default function SingleLake({
     return arr;
   }, [events, selectedParam]);
 
-  // If user switches to per-station series mode, disallow 'all' depth selection.
   useEffect(() => {
     try {
       if (seriesMode === 'per-station' && selectedDepth === 'all') {
-        // choose a sensible default depth (surface if available)
         const def = (depthOptions && depthOptions.length) ? String(depthOptions[0]) : '0';
         setSelectedDepth(def);
-        setApplied(false);
       }
     } catch (e) { /* noop */ }
-  }, [seriesMode, depthOptions]);
+  }, [seriesMode, depthOptions, selectedDepth]);
 
-  // removed: single-lake bar data
-
-  // Since custom range is removed from Time Series, force a safe preset if lingering
   useEffect(() => {
     if (chartType === 'time' && timeRange === 'custom') {
       setTimeRange('all');
@@ -168,7 +176,6 @@ export default function SingleLake({
     }
   }, [chartType, timeRange]);
 
-  // Resolve parameter metadata (label/name/unit) for labeling axes
   const selectedParamMeta = useMemo(() => {
     const sel = String(selectedParam || '');
     return (paramOptions || []).find(p => String(p.key || p.id || p.code) === sel) || null;
@@ -179,20 +186,18 @@ export default function SingleLake({
   const depthThr = useParamThresholds({ paramCode: selectedParamCode, appliedStandardId: currentStd?.id, classCode: classForSelectedLake || undefined });
 
   const canShowInfo = useMemo(() => {
-    if (!applied) return false;
     try {
       if (chartType === 'time') return Boolean(chartData?.datasets?.length);
       if (chartType === 'depth') return Boolean(depthProfile?.datasets?.length);
       return false;
     } catch { return false; }
-  }, [applied, chartType, chartData, depthProfile]);
+  }, [chartType, chartData, depthProfile]);
 
   const canChooseParam = useMemo(() => {
     if (!selectedLake || !selectedOrg) return false;
     return Array.isArray(selectedStations) && selectedStations.length > 0;
   }, [selectedLake, selectedOrg, selectedStations]);
 
-  // Seasonal MK overlay (only for time-series)
   const chartLabels = chartData?.labels || [];
   const { result: smk, loading: smkLoading } = useSeasonalMK({
     events,
@@ -204,75 +209,19 @@ export default function SingleLake({
     dateTo,
     labels: chartLabels,
     alpha: trendAlpha,
-    enabled: trendEnabled && chartType === 'time' && applied && !!selectedParam,
+    enabled: trendEnabled && chartType === 'time' && !!selectedParam,
     depthSelection: selectedDepth,
   });
   
 
-  const computeMissingFields = () => {
-    const missing = [];
-    if (!selectedLake) { missing.push('Select a lake'); return missing; }
-    if (!selectedOrg) missing.push('choose a dataset source');
-    if (!selectedStations || selectedStations.length === 0) missing.push('choose at least one location');
-    if (!selectedParam) missing.push('select a parameter');
-    return missing;
-  };
-
-  const handleApply = async () => {
-    const missing = computeMissingFields();
-  if (missing.length) {
-      // Special-case: single missing token 'Select a lake' -> short sentence
-      if (missing.length === 1 && /^Select a lake/i.test(missing[0])) {
-        const sentence = `Please select a lake.`;
-        try {
-          const Swal = (await import('sweetalert2')).default;
-          Swal.fire({ icon: 'warning', title: 'Missing fields', html: `<div style="text-align:left; white-space:normal; word-break:break-word; font-size:13px">${sentence}</div>`, width: 560, showCloseButton: true });
-        } catch (e) { window.alert(sentence); }
-        return;
-      }
-
-      // Map tokens to user-friendly clauses
-      const clauses = [];
-      missing.forEach((m) => {
-        const tok = String(m || '').toLowerCase();
-        if (/dataset source/i.test(m) || /choose a dataset source/i.test(tok)) clauses.push('choose a dataset source');
-        else if (/choose at least one location/i.test(tok) || /location/i.test(tok) && /at least/i.test(tok)) clauses.push('choose at least one location');
-  // correlation-specific prompts removed
-        else if (/select a parameter/i.test(tok) || /^parameter$/i.test(m)) clauses.push('select a parameter');
-        else clauses.push(tok);
-      });
-
-      const sentence = `Please ${clauses.join('; ')}.`;
-      try {
-        const Swal = (await import('sweetalert2')).default;
-        Swal.fire({ icon: 'warning', title: 'Missing fields', html: `<div style="text-align:left; white-space:normal; word-break:break-word; font-size:13px">${sentence}</div>`, width: 560, showCloseButton: true });
-      } catch (e) { window.alert(sentence); }
-      return;
-    }
-    // Bar chart requires at least one year selected
-    if (false) {
-      if (false) {
-        const sentence = `Please select at least one year.`;
-        try {
-          const Swal = (await import('sweetalert2')).default;
-          Swal.fire({ icon: 'warning', title: 'Missing fields', html: `<div style="text-align:left; white-space:normal; word-break:break-word; font-size:13px">${sentence}</div>`, width: 560, showCloseButton: true });
-        } catch (e) { window.alert(sentence); }
-        return;
-      }
-    }
-    // Depth profile requires a single year to be selected (no 'All years')
-    if (chartType === 'depth') {
-      if (!dateFrom || !dateTo) {
-        const sentence = `Please select a year.`;
-        try {
-          const Swal = (await import('sweetalert2')).default;
-          Swal.fire({ icon: 'warning', title: 'Missing fields', html: `<div style="text-align:left; white-space:normal; word-break:break-word; font-size:13px">${sentence}</div>`, width: 560, showCloseButton: true });
-        } catch (e) { window.alert(sentence); }
-        return;
-      }
-    }
-    setApplied(true);
-  };
+  const isSelectionIncomplete = useMemo(() => {
+    if (!selectedLake) return true;
+    if (!selectedOrg) return true;
+    if (!selectedStations || selectedStations.length === 0) return true;
+    if (!selectedParam) return true;
+    if (chartType === 'depth' && (!dateFrom || !dateTo)) return true;
+    return false;
+  }, [selectedLake, selectedOrg, selectedStations, selectedParam, chartType, dateFrom, dateTo]);
 
   const toggleSidebar = () => {
     setSidebarOpen((v) => !v);
@@ -287,13 +236,6 @@ export default function SingleLake({
     return base;
   }, [selectedParamLabel, selectedParamUnit]);
 
-  // removed: bar-specific station selection limit
-
-  const isComplete = useMemo(() => {
-    if (!selectedLake) return false;
-    return Boolean(selectedStations && selectedStations.length > 0 && selectedParam);
-  }, [selectedLake, JSON.stringify(selectedStations), selectedParam]);
-
   return (
     <div className="insight-card" style={{ backgroundColor: '#0f172a' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
@@ -304,12 +246,9 @@ export default function SingleLake({
           disabled={!canShowInfo}
           onClick={() => {
             if (!canShowInfo) return;
-            // Extract standards from current datasets (threshold lines are labeled "<std> – Min/Max")
-            // Prefer standards metadata produced by the active chart hook when present
             const standards = (() => {
               const meta = (chartType === 'depth' ? (depthProfile?.meta || {}) : (chartData?.meta || {}));
               if (Array.isArray(meta.standards) && meta.standards.length) return meta.standards.map(s => ({ code: s.code, min: s.min, max: s.max }));
-              // fallback: parse labels heuristically
               const ds = (chartType === 'depth' ? (depthProfile?.datasets || []) : (chartData?.datasets || []));
               const map = new Map();
               ds.forEach((d) => {
@@ -349,7 +288,6 @@ export default function SingleLake({
               compareMode: false,
               summary: null,
               inferredType: inferred,
-              // include trend context so the explanation can show the SMK description and result
               trendEnabled,
               trend: smk,
               alpha: trendAlpha,
@@ -365,14 +303,13 @@ export default function SingleLake({
   <StatsSidebar isOpen={sidebarOpen && isModalOpen} width={sidebarWidth} usePortal top={72} side="left" zIndex={10000} onToggle={toggleSidebar}>
           <div>
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Lake</div>
-            <LakeSelect lakes={lakeOptions} value={selectedLake} onChange={(e) => { onLakeChange(e.target.value); setApplied(false); }} />
+            <LakeSelect lakes={lakeOptions} value={selectedLake} onChange={(e) => { onLakeChange(e.target.value); }} />
           </div>
 
           <div>
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Dataset source</div>
             <OrgSelect options={orgOptions} value={selectedOrg} onChange={(e) => {
               const nextOrg = e.target.value;
-              // prune stations to those available in the new org instead of clearing all
               try {
                 const list = !nextOrg ? (allStations || []) : (stationsByOrg?.[String(nextOrg)] || []);
                 const names = new Set((list || []).map((s) => String(s?.name || s?.station_name || s?.code || '')));
@@ -380,7 +317,6 @@ export default function SingleLake({
                 onStationsChange(pruned);
               } catch {}
               onOrgChange(nextOrg);
-              setApplied(false);
             }} disabled={!selectedLake} loading={!!selectedLake && stationsLoading} required={false} placeholder="Select a dataset source" style={{ width: '100%' }} />
           </div>
 
@@ -398,10 +334,9 @@ export default function SingleLake({
                   onClose={() => setStationsOpen(false)}
                   stations={stationsList}
                   value={selectedStations}
-                  // allow selecting all stations in time-series and depth-profile modes
                   maxSelected={(chartType === 'time' || chartType === 'depth') ? (stationsList?.length || 9999) : 3}
                   showLimitLabel={!(chartType === 'time' || chartType === 'depth')}
-                  onChange={(next) => { onStationsChange(next); setApplied(false); }}
+                  onChange={(next) => { onStationsChange(next); }}
                 />
               </div>
             </div>
@@ -414,7 +349,6 @@ export default function SingleLake({
               const next = e.target.value;
               const prev = prevTypeRef.current;
               setChartType(next);
-              // If leaving Depth profile, clear year-based custom range to avoid leaking year dropdown
               if (prev === 'depth' && next !== 'depth') {
                 try {
                   const prevSaved = prevTimeStateRef.current || { timeRange: 'all', dateFrom: '', dateTo: '' };
@@ -423,11 +357,9 @@ export default function SingleLake({
                   setDateTo(prevSaved.dateTo || '');
                 } catch {}
               } else if (next === 'depth' && prev !== 'depth') {
-                // Save existing time selection before switching into depth mode
                 prevTimeStateRef.current = { timeRange, dateFrom, dateTo };
               }
               prevTypeRef.current = next;
-              setApplied(false);
             }} style={{ width: '100%' }}>
               <option value="time">Time series</option>
               <option value="depth">Depth profile</option>
@@ -469,26 +401,21 @@ export default function SingleLake({
             />
           )}
 
-          {/* removed: Bar chart controls */}
-
           {(chartType === 'time') && (
             <div>
               <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Series Mode</div>
-              <SeriesModeToggle mode={seriesMode} onChange={(next) => { setSeriesMode(next); setApplied(false); }} />
+              <SeriesModeToggle mode={seriesMode} onChange={(next) => { setSeriesMode(next); }} />
             </div>
           )}
-          {/* spatial controls removed */}
-          {/* Correlation removed */}
 
           {/* Parameters */}
           <div>
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Parameter</div>
-            <ParamSelect options={paramOptions} value={selectedParam} onChange={(e) => { onParamChange(e.target.value); setApplied(false); }} disabled={!canChooseParam} loading={!Array.isArray(paramOptions) || paramOptions.length === 0} placeholder="Select parameter" style={{ width: '100%' }} />
-            {/* Time-series depth selector: show either all depths (each as a series) or pick a specific depth band */}
+            <ParamSelect options={paramOptions} value={selectedParam} onChange={(e) => { onParamChange(e.target.value); }} disabled={!canChooseParam} loading={!Array.isArray(paramOptions) || paramOptions.length === 0} placeholder="Select parameter" style={{ width: '100%' }} />
             {chartType === 'time' && depthOptions && depthOptions.length >= 1 && (
               <div style={{ marginTop: 8 }}>
                 <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Depth</div>
-                <select className="pill-btn" value={selectedDepth} onChange={(e) => { setSelectedDepth(e.target.value); setApplied(false); }} disabled={!selectedParam} style={{ width: '100%' }}>
+                <select className="pill-btn" value={selectedDepth} onChange={(e) => { setSelectedDepth(e.target.value); }} disabled={!selectedParam} style={{ width: '100%' }}>
                   {seriesMode !== 'per-station' ? <option value="all">All depths (separate lines)</option> : null}
                   {depthOptions.map((d) => {
                     const label = d === '0' ? 'Surface (0 m)' : `${d} m`;
@@ -499,29 +426,13 @@ export default function SingleLake({
             )}
           </div>
 
-          {/* Trend analysis toggle and hidden controls */}
-          {chartType === 'time' && (
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                <div style={{ fontSize: 12, opacity: 0.8 }}>Trend analysis (Seasonal MK)</div>
-                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  <input type="checkbox" checked={trendEnabled} onChange={(e)=>{ setTrendEnabled(e.target.checked); setApplied(false); }} />
-                  <span style={{ fontSize: 12, opacity: 0.9 }}>Enable</span>
-                </label>
-              </div>
-              {/* Season scheme selector removed — PAGASA Wet/Dry is the default and only scheme for now */}
-            </div>
-          )}
-
-          <div>
-            <button type="button" className="pill-btn liquid" onClick={handleApply} style={{ width: '100%' }}>Apply</button>
-          </div>
+          {/* Apply button removed; charts update automatically */}
   </StatsSidebar>
 
   {/* Main panel */}
   <div style={{ flex: 1, minWidth: 0, transition: 'all 260ms ease' }}>
           <div className="wq-chart" style={{ height: 300, borderRadius: 8, background: 'transparent', border: '1px solid rgba(255,255,255,0.06)', padding: 8 }}>
-        {applied ? (
+        {!isSelectionIncomplete ? (
           chartType === 'depth' ? (
             depthProfile && depthProfile.datasets && depthProfile.datasets.length && depthProfile.hasMultipleDepths ? (
               (() => {
@@ -580,7 +491,6 @@ export default function SingleLake({
               </div>
             ) : chartData && chartData.datasets && chartData.datasets.length ? (
               (() => {
-                // Determine if any primary dataset actually has data points (exclude thresholds and trend overlays)
                 const baseDs = chartData.datasets || [];
                 const hasPrimaryData = (() => {
                   try {
@@ -613,7 +523,7 @@ export default function SingleLake({
                 if (smk && Array.isArray(smk.overlay)){
                   datasets = datasets.concat([
                     {
-                      label: `Sen’s slope (SMK)`,
+                      label: `Sen’s slope (Mann-Kendall)`,
                       data: smk.overlay,
                       borderColor: '#f2c94c',
                       backgroundColor: 'transparent',
@@ -624,8 +534,34 @@ export default function SingleLake({
                     }
                   ]);
                 }
-                const data = { labels: chartData.labels, datasets };
-                return <Line key={`time-${selectedParam}-${selectedLake}-${seriesMode}-${trendEnabled? 'trend': 'plain'}`} ref={chartRef} data={data} options={singleChartOptions} />;
+                // Apply compliance visualization
+                let modifiedDatasets = datasets.slice();
+                let chartOptions = { ...singleChartOptions };
+                let chartPlugins = undefined;
+                if (toggleNonCompliantPoints || shadeOutOfCompliance) {
+                  const thr = depthThr;
+                  const isOutOfCompliance = (v) => {
+                    if (v == null || !Number.isFinite(v)) return false;
+                    if (thr && thr.min != null && v < Number(thr.min)) return true;
+                    if (thr && thr.max != null && v > Number(thr.max)) return true;
+                    return false;
+                  };
+                  modifiedDatasets = modifiedDatasets.map(ds => {
+                    const newDs = { ...ds };
+                    if (toggleNonCompliantPoints && !ds.label?.includes('Min') && !ds.label?.includes('Max') && !ds.label?.includes("Sen’s slope")) {
+                      newDs.pointBackgroundColor = ds.data.map(v => isOutOfCompliance(v) ? 'rgba(239,68,68,1)' : (ds.borderColor || '#fff'));
+                      newDs.pointBorderColor = ds.data.map(v => isOutOfCompliance(v) ? 'rgba(239,68,68,1)' : (ds.borderColor || '#fff'));
+                    }
+                    return newDs;
+                  });
+                  if (shadeOutOfCompliance) {
+                    chartOptions.plugins = chartOptions.plugins || {};
+                    chartOptions.plugins.complianceShading = { min: thr?.min ?? null, max: thr?.max ?? null };
+                    chartPlugins = [complianceShadingPlugin];
+                  }
+                }
+                const data = { labels: chartData.labels, datasets: modifiedDatasets };
+                return <Line key={`time-${selectedParam}-${selectedLake}-${seriesMode}-${trendEnabled}-${shadeOutOfCompliance}-${toggleNonCompliantPoints}`} ref={chartRef} data={data} options={chartOptions} plugins={chartPlugins} />;
               })()
             ) : (
               <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -635,7 +571,7 @@ export default function SingleLake({
           ) : null
         ) : (
           <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <span style={{ opacity: 0.9 }}>{isComplete ? 'Click Apply to generate the chart.' : 'Fill all fields to enable Apply.'}</span>
+            <span style={{ opacity: 0.9 }}>Select lake, source, locations, and parameter to view chart.</span>
           </div>
         )}
       </div>
@@ -646,34 +582,47 @@ export default function SingleLake({
           Parameter thresholds are based on {currentStd.name || currentStd.code} guidelines.
         </div>
       ) : null}
-      {/* Trend result (concise statement) */}
-      {chartType === 'time' && trendEnabled && applied && smk && (
-        (() => {
-          const lakeLabel = nameForSelectedLake || 'this lake';
-          const paramLabel = selectedParamLabel || 'Value';
-          const unit = selectedParamUnit ? ` ${selectedParamUnit}` : '';
-          const slope = Number(smk?.sen?.slope);
-          const hasSlope = Number.isFinite(slope);
-          const slopeAbs = hasSlope ? fmtNum(Math.abs(slope)) : null;
-          const sign = slope > 0 ? '+' : (slope < 0 ? '−' : '0');
-          let sentence = '';
-          if (smk.status === 'Increasing' && hasSlope) {
-            sentence = `${paramLabel} in ${lakeLabel} is increasing by about ${slopeAbs}${unit} per year.`;
-          } else if (smk.status === 'Decreasing' && hasSlope) {
-            sentence = `${paramLabel} in ${lakeLabel} is decreasing by about ${slopeAbs}${unit} per year.`;
-          } else if (smk.status === 'Increasing' || smk.status === 'Decreasing') {
-            // Significant but slope missing for some reason
-            sentence = `${paramLabel} in ${lakeLabel} is ${smk.status.toLowerCase()}.`;
-          } else {
-            // High p-value (no significant trend): do not report slope
-            sentence = `${paramLabel} in ${lakeLabel} shows no significant trend.`;
-          }
-          return (
-            <div style={{ marginTop: 8, fontSize: 12, opacity: 0.95 }}>
-              {sentence}
+      {/* Trend analysis and compliance toggles */}
+      {chartType === 'time' && (
+        <div style={{ marginTop: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <input type="checkbox" checked={trendEnabled} onChange={(e)=>{ setTrendEnabled(e.target.checked); }} />
+              <span style={{ fontSize: 11, opacity: 0.9 }}>Enable Trend Analysis</span>
+            </label>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <input type="checkbox" checked={shadeOutOfCompliance} onChange={(e)=>{ setShadeOutOfCompliance(e.target.checked); }} />
+              <span style={{ fontSize: 11, opacity: 0.9 }}>Shade out-of-compliance region</span>
+            </label>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <input type="checkbox" checked={toggleNonCompliantPoints} onChange={(e)=>{ setToggleNonCompliantPoints(e.target.checked); }} />
+              <span style={{ fontSize: 11, opacity: 0.9 }}>Toggle non-compliant points</span>
+            </label>
+          </div>
+          {trendEnabled && !isSelectionIncomplete && smk && (
+            <div style={{ fontSize: 11, opacity: 0.95 }}>
+              {(() => {
+                const lakeLabel = nameForSelectedLake || 'this lake';
+                const paramLabel = selectedParamLabel || 'Value';
+                const unit = selectedParamUnit ? ` ${selectedParamUnit}` : '';
+                const slope = Number(smk?.sen?.slope);
+                const hasSlope = Number.isFinite(slope);
+                const slopeAbs = hasSlope ? fmtNum(Math.abs(slope)) : null;
+                let sentence = '';
+                if (smk.status === 'Increasing' && hasSlope) {
+                  sentence = `${paramLabel} in ${lakeLabel} is increasing by about ${slopeAbs}${unit} per year.`;
+                } else if (smk.status === 'Decreasing' && hasSlope) {
+                  sentence = `${paramLabel} in ${lakeLabel} is decreasing by about ${slopeAbs}${unit} per year.`;
+                } else if (smk.status === 'Increasing' || smk.status === 'Decreasing') {
+                  sentence = `${paramLabel} in ${lakeLabel} is ${smk.status.toLowerCase()}.`;
+                } else {
+                  sentence = `${paramLabel} in ${lakeLabel} shows no significant trend.`;
+                }
+                return sentence;
+              })()}
             </div>
-          );
-        })()
+          )}
+        </div>
       )}
       <InfoModal open={infoOpen} onClose={() => setInfoOpen(false)} title={infoContent.title} sections={infoContent.sections} />
     </div>
