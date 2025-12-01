@@ -10,6 +10,7 @@ import useSampleEvents from "./hooks/useSampleEvents";
 import useStationsCache from "./hooks/useStationsCache";
 import useTimeSeriesData from "./hooks/useTimeSeriesData";
 import useDepthProfileData from "./hooks/useDepthProfileData";
+import useDepthProfileChartData from "./hooks/useDepthProfileChartData";
 import useSeasonalMK from "./hooks/useSeasonalMK";
 import useCurrentStandard from "./hooks/useCurrentStandard";
 import useParamThresholds, { fetchParamThresholds } from "./hooks/useParamThresholds";
@@ -29,29 +30,46 @@ const complianceShadingPlugin = {
   beforeDatasetsDraw(chart, args, pluginOptions) {
     try {
       const { ctx, chartArea, scales } = chart;
-      if (!chartArea || !scales || !scales.y) return;
-      const y = scales.y;
+      if (!chartArea || !scales) return;
+      const axisKey = pluginOptions?.axis === 'x' ? 'x' : 'y';
+      const scale = scales[axisKey];
+      if (!scale) return;
       const { left, right, top, bottom } = chartArea;
       const min = pluginOptions?.min;
       const max = pluginOptions?.max;
       if (min == null && max == null) return;
       ctx.save();
       ctx.fillStyle = 'rgba(239,68,68,0.08)';
-      // Shade area above max (non-compliant high)
-      if (max != null) {
-        const yMaxPx = y.getPixelForValue(Number(max));
-        const h = Math.max(0, yMaxPx - top);
-        if (h > 0) ctx.fillRect(left, top, right - left, h);
-      }
-      // Shade area below min (non-compliant low)
-      if (min != null) {
-        const yMinPx = y.getPixelForValue(Number(min));
-        const h = Math.max(0, bottom - yMinPx);
-        if (h > 0) ctx.fillRect(left, yMinPx, right - left, h);
+      if (axisKey === 'y') {
+        // Shade area above max (non-compliant high)
+        if (max != null) {
+          const yMaxPx = scale.getPixelForValue(Number(max));
+          const h = Math.max(0, yMaxPx - top);
+          if (h > 0) ctx.fillRect(left, top, right - left, h);
+        }
+        // Shade area below min (non-compliant low)
+        if (min != null) {
+          const yMinPx = scale.getPixelForValue(Number(min));
+          const h = Math.max(0, bottom - yMinPx);
+          if (h > 0) ctx.fillRect(left, yMinPx, right - left, h);
+        }
+      } else {
+        // axis === 'x' (depth profile: parameter along x)
+        // Shade area right of max (non-compliant high)
+        if (max != null) {
+          const xMaxPx = scale.getPixelForValue(Number(max));
+          const w = Math.max(0, right - xMaxPx);
+          if (w > 0) ctx.fillRect(xMaxPx, top, w, bottom - top);
+        }
+        // Shade area left of min (non-compliant low)
+        if (min != null) {
+          const xMinPx = scale.getPixelForValue(Number(min));
+          const w = Math.max(0, xMinPx - left);
+          if (w > 0) ctx.fillRect(left, top, w, bottom - top);
+        }
       }
       ctx.restore();
-    } catch (_) {
-    }
+    } catch (_) {}
   },
 };
 
@@ -127,7 +145,16 @@ export default function SingleLake({
   }, [paramOptions, currentStd?.id, classForSelectedLake]);
 
   const { chartData, loadingThresholds: tsThresholdsLoading } = useTimeSeriesData({ events, selectedParam, selectedStations, bucket, timeRange, dateFrom, dateTo, seriesMode, classForSelectedLake, depthSelection: selectedDepth, appliedStandardId: currentStd?.id });
+  // Parameter metadata (moved earlier to ensure selectedParamCode available before depth profile chart hook)
+  const selectedParamMeta = useMemo(() => {
+    const sel = String(selectedParam || '');
+    return (paramOptions || []).find(p => String(p.key || p.id || p.code) === sel) || null;
+  }, [paramOptions, selectedParam]);
+  const selectedParamLabel = useMemo(() => (selectedParamMeta?.label || selectedParamMeta?.name || selectedParamMeta?.code || 'Value'), [selectedParamMeta]);
+  const selectedParamUnit = useMemo(() => (selectedParamMeta?.unit || ''), [selectedParamMeta]);
+  const selectedParamCode = useMemo(() => (selectedParamMeta?.code || String(selectedParam || '')), [selectedParamMeta, selectedParam]);
   const depthProfile = useDepthProfileData({ events, selectedParam, selectedStations, bucket });
+  const { chartData: depthChartData, loadingThresholds: depthThrLoading, unit: depthUnit, maxDepth: depthMax, hasMultipleDepths: depthHasMultiple, onlySurface: depthOnlySurface } = useDepthProfileChartData({ depthProfile, paramCode: selectedParamCode, appliedStandardId: currentStd?.id, classCode: classForSelectedLake || undefined });
   const depthOptions = useMemo(() => {
     const depths = new Set();
     (Array.isArray(events) ? events : []).forEach((ev) => {
@@ -176,13 +203,6 @@ export default function SingleLake({
     }
   }, [chartType, timeRange]);
 
-  const selectedParamMeta = useMemo(() => {
-    const sel = String(selectedParam || '');
-    return (paramOptions || []).find(p => String(p.key || p.id || p.code) === sel) || null;
-  }, [paramOptions, selectedParam]);
-  const selectedParamLabel = useMemo(() => (selectedParamMeta?.label || selectedParamMeta?.name || selectedParamMeta?.code || 'Value'), [selectedParamMeta]);
-  const selectedParamUnit = useMemo(() => (selectedParamMeta?.unit || ''), [selectedParamMeta]);
-  const selectedParamCode = useMemo(() => (selectedParamMeta?.code || String(selectedParam || '')), [selectedParamMeta, selectedParam]);
   const depthThr = useParamThresholds({ paramCode: selectedParamCode, appliedStandardId: currentStd?.id, classCode: classForSelectedLake || undefined });
 
   const canShowInfo = useMemo(() => {
@@ -434,55 +454,68 @@ export default function SingleLake({
           <div className="wq-chart" style={{ height: 300, borderRadius: 8, background: 'transparent', border: '1px solid rgba(255,255,255,0.06)', padding: 8 }}>
         {!isSelectionIncomplete ? (
           chartType === 'depth' ? (
-            depthProfile && depthProfile.datasets && depthProfile.datasets.length && depthProfile.hasMultipleDepths ? (
+            depthChartData && depthHasMultiple ? (
               (() => {
-                const depthDatasets = (depthProfile.datasets || []).slice();
-                const maxDepth = depthProfile.maxDepth || 0;
-                const tMin = Number.isFinite(depthThr?.min) ? Number(depthThr.min) : null;
-                const tMax = Number.isFinite(depthThr?.max) ? Number(depthThr.max) : null;
-                if (tMin != null) {
-                  depthDatasets.push({ label: `Min`, data: [{ x: tMin, y: 0 }, { x: tMin, y: Math.max(1, maxDepth) }], borderColor: 'rgba(16,185,129,1)', backgroundColor: 'transparent', pointRadius: 0, borderDash: [4,4], tension: 0, spanGaps: true, showLine: true, parsing: false });
+                const thr = depthThr;
+                const isOut = (val) => {
+                  if (val == null || !Number.isFinite(val)) return false;
+                  if (thr && thr.min != null && val < Number(thr.min)) return true;
+                  if (thr && thr.max != null && val > Number(thr.max)) return true;
+                  return false;
+                };
+                let ds = depthChartData.datasets || [];
+                if (toggleNonCompliantPoints) {
+                  ds = ds.map(d => {
+                    const label = String(d?.label || '').toLowerCase();
+                    if (label === 'min' || label === 'max') return d; // skip threshold lines
+                    const newD = { ...d };
+                    if (Array.isArray(d.data)) {
+                      newD.pointBackgroundColor = d.data.map(p => {
+                        const v = (p && typeof p === 'object') ? (Number.isFinite(p.x) ? p.x : null) : (Number.isFinite(p) ? p : null);
+                        return isOut(v) ? 'rgba(239,68,68,1)' : (d.borderColor || '#fff');
+                      });
+                      newD.pointBorderColor = newD.pointBackgroundColor;
+                    }
+                    return newD;
+                  });
                 }
-                if (tMax != null) {
-                  depthDatasets.push({ label: `Max`, data: [{ x: tMax, y: 0 }, { x: tMax, y: Math.max(1, maxDepth) }], borderColor: 'rgba(239,68,68,1)', backgroundColor: 'transparent', pointRadius: 0, borderDash: [4,4], tension: 0, spanGaps: true, showLine: true, parsing: false });
+                const chartOptions = {
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                    legend: { display: true, position: 'bottom', labels: { color: '#fff', boxWidth: 8, font: { size: 10 } } },
+                    tooltip: { callbacks: { label: (ctx) => {
+                      const v = ctx.parsed?.x ?? ctx.raw?.x; const d = ctx.parsed?.y ?? ctx.raw?.y;
+                      return `${ctx.dataset.label}: ${Number(v).toFixed(2)}${depthUnit ? ` ${depthUnit}` : ''} at ${d} m`;
+                    } } },
+                  },
+                  scales: {
+                    x: { type: 'linear', title: { display: true, text: `${selectedParamLabel}${(depthUnit || selectedParamUnit) ? ` (${depthUnit || selectedParamUnit})` : ''}`, color: '#fff' }, ticks: { color: '#fff', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.15)' } },
+                    y: { type: 'linear', reverse: true, title: { display: true, text: 'Depth (m)', color: '#fff' }, min: 0, suggestedMax: Math.max(5, depthMax || 0), ticks: { color: '#fff', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.15)' } },
+                  },
+                };
+                let plugins = undefined;
+                if (shadeOutOfCompliance) {
+                  chartOptions.plugins.complianceShading = { min: thr?.min ?? null, max: thr?.max ?? null, axis: 'x' };
+                  plugins = [complianceShadingPlugin];
                 }
-                const depthData = { datasets: normalizeDepthDatasets(depthDatasets) };
+                const data = { datasets: ds };
                 return (
                   <Line
-                    key={`depth-${selectedParam}-${selectedLake}-${seriesMode}`}
+                    key={`depth-${selectedParam}-${selectedLake}-${seriesMode}-${shadeOutOfCompliance}-${toggleNonCompliantPoints}`}
                     ref={chartRef}
-                    data={depthData}
-                    options={{
-                      responsive: true,
-                      maintainAspectRatio: false,
-                      plugins: {
-                        legend: { display: true, position: 'bottom', labels: { color: '#fff', boxWidth: 8, font: { size: 10 } } },
-                        tooltip: { callbacks: { label: (ctx) => {
-                          const v = ctx.parsed?.x ?? ctx.raw?.x; const d = ctx.parsed?.y ?? ctx.raw?.y;
-                          return `${ctx.dataset.label}: ${Number(v).toFixed(2)}${depthProfile.unit ? ` ${depthProfile.unit}` : ''} at ${d} m`;
-                        } } },
-                      },
-                      scales: {
-                        x: { type: 'linear', title: { display: true, text: `${selectedParamLabel}${(depthProfile?.unit || selectedParamUnit) ? ` (${depthProfile?.unit || selectedParamUnit})` : ''}`, color: '#fff' }, ticks: { color: '#fff', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.15)' } },
-                        y: { type: 'linear', reverse: true, title: { display: true, text: 'Depth (m)', color: '#fff' }, min: 0, suggestedMax: Math.max(5, depthProfile.maxDepth || 0), ticks: { color: '#fff', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.15)' } },
-                      },
-                    }}
+                    data={data}
+                    options={chartOptions}
+                    plugins={plugins}
                   />
                 );
               })()
             ) : (
-              (() => {
-                const lakeLabel = nameForSelectedLake || 'this lake';
-                let msg = 'Depth profile requires multiple depths; only surface (0 m) measurements were found for this selection.';
-                if (depthProfile && depthProfile.onlySurface) {
-                  msg = `Only surface (0 m) measurements are available for ${lakeLabel} for this parameter. A depth profile requires multiple depths.`;
-                }
-                return (
-                  <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <span style={{ opacity: 0.9 }}>{msg}</span>
-                  </div>
-                );
-              })()
+              <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <span style={{ opacity: 0.9 }}>
+                  {depthOnlySurface ? `Only surface (0 m) measurements are available for ${nameForSelectedLake || 'this lake'} for this parameter. A depth profile requires multiple depths.` : 'Depth profile requires multiple depths; only surface (0 m) measurements were found for this selection.'}
+                </span>
+              </div>
             )
           ) : chartType === 'time' ? (
             tsThresholdsLoading ? (
@@ -583,13 +616,15 @@ export default function SingleLake({
         </div>
       ) : null}
       {/* Trend analysis and compliance toggles */}
-      {chartType === 'time' && (
+      {(chartType === 'time' || chartType === 'depth') && (
         <div style={{ marginTop: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <input type="checkbox" checked={trendEnabled} onChange={(e)=>{ setTrendEnabled(e.target.checked); }} />
-              <span style={{ fontSize: 11, opacity: 0.9 }}>Enable Trend Analysis</span>
-            </label>
+            {chartType === 'time' && (
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <input type="checkbox" checked={trendEnabled} onChange={(e)=>{ setTrendEnabled(e.target.checked); }} />
+                <span style={{ fontSize: 11, opacity: 0.9 }}>Enable Trend Analysis</span>
+              </label>
+            )}
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               <input type="checkbox" checked={shadeOutOfCompliance} onChange={(e)=>{ setShadeOutOfCompliance(e.target.checked); }} />
               <span style={{ fontSize: 11, opacity: 0.9 }}>Shade out-of-compliance region</span>
@@ -599,7 +634,7 @@ export default function SingleLake({
               <span style={{ fontSize: 11, opacity: 0.9 }}>Toggle non-compliant points</span>
             </label>
           </div>
-          {trendEnabled && !isSelectionIncomplete && smk && (
+          {chartType === 'time' && trendEnabled && !isSelectionIncomplete && smk && (
             <div style={{ fontSize: 11, opacity: 0.95 }}>
               {(() => {
                 const lakeLabel = nameForSelectedLake || 'this lake';
