@@ -1,16 +1,13 @@
-import React, { useEffect, useMemo, useState, useRef, useImperativeHandle } from "react";
+import React, { useEffect, useMemo, useState, useImperativeHandle } from "react";
 import { Bar } from "react-chartjs-2";
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, BarElement } from "chart.js";
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, BarElement);
-// year label plugin will be registered below after importing from shared
 import TimeBucketRange from "../controls/TimeBucketRange";
 import StatsSidebar from "./StatsSidebar";
 import { fetchParameters } from "./data/fetchers";
 import InfoModal from "../common/InfoModal";
 import { buildGraphExplanation } from "../utils/graphExplain";
-import { eventStationName } from "./utils/dataUtils";
-import { lakeName, lakeClass, yearLabelPlugin } from "./utils/shared";
-// register plugin for bar charts (draws year labels under grouped bars)
+import { lakeName, yearLabelPlugin } from "./utils/shared";
 ChartJS.register(yearLabelPlugin);
 import useStationsCache from "./hooks/useStationsCache";
 import GraphInfoButton from "./ui/GraphInfoButton";
@@ -49,29 +46,19 @@ function CompareLake({
   const [selectedParam, setSelectedParam] = useState("");
   const { events: eventsA, loading: loadingA } = useSampleEvents(lakeA, selectedOrgA, timeRange, dateFrom, dateTo);
   const { events: eventsB, loading: loadingB } = useSampleEvents(lakeB, selectedOrgB, timeRange, dateFrom, dateTo);
-  // Unfiltered events to drive bar charts and year lists independent of the current time range
   const { events: eventsAAll } = useSampleEvents(lakeA, selectedOrgA, 'all', '', '');
   const { events: eventsBAll } = useSampleEvents(lakeB, selectedOrgB, 'all', '', '');
   const loading = loadingA || loadingB;
-  // Station identifiers are required for all datasets
-  const hasStationIdsA = true;
-  const hasStationIdsB = true;
   const [localParams, setLocalParams] = useState([]);
-  const [applied, setApplied] = useState(false);
-  // useSummaryStats removed
-  const summaryA = null;
-  const summaryB = null;
   const [selectedYears, setSelectedYears] = useState([]);
   const [depthSelection, setDepthSelection] = useState('0');
   const [infoOpen, setInfoOpen] = useState(false);
   const [infoContent, setInfoContent] = useState({ title: '', sections: [] });
 
   const nameForLake = (lk) => lakeName(lakeOptions, lk);
-  const classForLake = (lk) => lakeClass(lakeOptions, lk);
 
-  // Color palettes for Lake A and Lake B to ensure they are visually distinct
-  const paletteA = ['#0369a1', '#0284c7', '#60a5fa', '#7dd3fc']; // blues
-  const paletteB = ['#b91c1c', '#ef4444', '#f97316', '#fb923c']; // reds/oranges
+  const paletteA = ['#0369a1', '#0284c7', '#60a5fa', '#7dd3fc'];
+  const paletteB = ['#b91c1c', '#ef4444', '#f97316', '#fb923c'];
 
   const colorizeDatasets = (datasets) => {
     if (!Array.isArray(datasets)) return datasets;
@@ -103,7 +90,6 @@ function CompareLake({
 
   const { current: currentStd } = useCurrentStandard();
 
-  // Prefetch thresholds for all parameters alongside parameters
   useEffect(() => {
     if (!paramList?.length || !currentStd?.id) return;
     paramList.forEach(p => {
@@ -116,7 +102,6 @@ function CompareLake({
   const stationsA = useMemo(() => (!selectedOrgA ? (allStationsA || []) : (stationsByOrgA?.[String(selectedOrgA)] || [])), [selectedOrgA, allStationsA, stationsByOrgA]);
   const stationsB = useMemo(() => (!selectedOrgB ? (allStationsB || []) : (stationsByOrgB?.[String(selectedOrgB)] || [])), [selectedOrgB, allStationsB, stationsByOrgB]);
 
-  // Fallback: if useStationsCache hasn't returned orgOptions yet, derive org options from the fetched events
   const derivedOrgOptionsA = useMemo(() => {
     if (Array.isArray(orgOptionsA) && orgOptionsA.length) return orgOptionsA;
     const map = new Map();
@@ -139,17 +124,14 @@ function CompareLake({
     return Array.from(map.values());
   }, [orgOptionsB, eventsB]);
 
-  // Prevent same-lake vs same-lake by filtering the opposite dropdown
   const lakeOptionsForA = useMemo(() => lakeOptions.filter(l => String(l.id) !== String(lakeB)), [lakeOptions, lakeB]);
   const lakeOptionsForB = useMemo(() => lakeOptions.filter(l => String(l.id) !== String(lakeA)), [lakeOptions, lakeA]);
-  // Defensive: if both end up equal somehow, clear Lake B
   useEffect(() => {
     if (lakeA && lakeB && String(lakeA) === String(lakeB)) {
       setLakeB('');
     }
   }, [lakeA, lakeB]);
 
-  // If lake changes and the previously selected org is no longer valid, clear it (A)
   useEffect(() => {
     try {
       if (!lakeA) return;
@@ -160,7 +142,6 @@ function CompareLake({
     } catch {}
   }, [lakeA, derivedOrgOptionsA]);
 
-  // If lake changes and the previously selected org is no longer valid, clear it (B)
   useEffect(() => {
     try {
       if (!lakeB) return;
@@ -171,87 +152,21 @@ function CompareLake({
     } catch {}
   }, [lakeB, derivedOrgOptionsB]);
 
-  const isComplete = useMemo(() => {
-    const hasLake = Boolean(lakeA || lakeB);
-    const hasParam = Boolean(selectedParam);
-    const hasOrgs = (!lakeA || selectedOrgA) && (!lakeB || selectedOrgB);
-    return hasLake && hasParam && hasOrgs;
-  }, [lakeA, lakeB, selectedParam, selectedOrgA, selectedOrgB]);
 
-  const canChooseParam = useMemo(() => {
-    const lakes = [ { lake: lakeA, org: selectedOrgA }, { lake: lakeB, org: selectedOrgB } ];
-    if (!lakes.some(l => l.lake)) return false;
-    for (const l of lakes) {
-      if (!l.lake) continue; // lake not selected -> skip
-      if (!l.org) return false; // dataset source required
-    }
-    return true;
-  }, [lakeA, lakeB, selectedOrgA, selectedOrgB]);
+  const isSelectionIncomplete = useMemo(() => {
+    if (!lakeA && !lakeB) return true;
+    if (lakeA && !selectedOrgA) return true;
+    if (lakeB && !selectedOrgB) return true;
+    if (!selectedParam) return true;
+    if (!selectedYears || selectedYears.length === 0) return true;
+    return false;
+  }, [lakeA, lakeB, selectedOrgA, selectedOrgB, selectedParam, selectedYears]);
 
-  const computeMissingFields = () => {
-    const missing = [];
-    if (!lakeA && !lakeB) { missing.push('Select at least one lake (Lake A or Lake B)'); return missing; }
-    const check = (label, lake, org) => {
-      if (!lake) return;
-      if (!org) missing.push(`${label}: Dataset source`);
-    };
-    check('Lake A', lakeA, selectedOrgA);
-    check('Lake B', lakeB, selectedOrgB);
-    if (!selectedParam) missing.push('Parameter');
-    return missing;
-  };
-
-  const handleApply = async () => {
-    const missing = computeMissingFields();
-    if (missing.length) {
-      if (missing.length === 1 && /^Select at least one lake/i.test(missing[0])) {
-        const sentence = `Please select at least one lake (Lake A or Lake B).`;
-        try {
-          const Swal = (await import('sweetalert2')).default;
-          Swal.fire({ icon: 'warning', title: 'Missing fields', html: `<div style="text-align:left; white-space:normal; word-break:break-word; font-size:13px">${sentence}</div>`, width: 560, showCloseButton: true });
-        } catch (e) { window.alert(sentence); }
-        return;
-      }
-
-      const lakeMissing = { A: [], B: [] };
-      let paramMissing = false;
-      missing.forEach((m) => {
-        if (/^Lake A:/i.test(m)) lakeMissing.A.push(m.replace(/^Lake A:\s*/i, ''));
-        else if (/^Lake B:/i.test(m)) lakeMissing.B.push(m.replace(/^Lake B:\s*/i, ''));
-        else if (/^Parameter$/i.test(m)) paramMissing = true;
-      });
-
-      const mapToken = (tok) => {
-        if (/dataset source/i.test(tok)) return 'a dataset source';
-        return tok.toLowerCase();
-      };
-
-      const clauses = [];
-      if (lakeMissing.A.length) clauses.push(`choose ${lakeMissing.A.map(mapToken).join(' and ')} for Lake A`);
-      if (lakeMissing.B.length) clauses.push(`choose ${lakeMissing.B.map(mapToken).join(' and ')} for Lake B`);
-      if (paramMissing) clauses.push('select a parameter');
-
-      const sentence = `Please ${clauses.join('; ')}.`;
-      try {
-        const Swal = (await import('sweetalert2')).default;
-        Swal.fire({ icon: 'warning', title: 'Missing fields', html: `<div style="text-align:left; white-space:normal; word-break:break-word; font-size:13px">${sentence}</div>`, width: 560, showCloseButton: true });
-      } catch (e) { window.alert(sentence); }
-      return;
-    }
-    setApplied(true);
-  };
-
-  useEffect(() => { setApplied(false); }, [lakeA, lakeB, selectedOrgA, selectedOrgB, selectedParam, timeRange, dateFrom, dateTo, bucket]);
-
-  // Reset bar depth selection to surface when the parameter changes
   useEffect(() => {
     setDepthSelection('0');
   }, [selectedParam]);
 
 
-  // removed: time-series filtered events (Compare view is bar-only)
-
-  // Available years: show only overlapping years when both lakes are selected; otherwise show years for the selected lake
   const availableYears = useMemo(() => {
     const toYearSet = (arr) => {
       const s = new Set();
@@ -278,19 +193,16 @@ function CompareLake({
     return [];
   }, [eventsAAll, eventsBAll, lakeA, lakeB, selectedOrgA, selectedOrgB]);
 
-  // Keep selectedYears within available overlap; silently prune invalid years
   useEffect(() => {
     setSelectedYears((prev) => prev.filter((y) => availableYears.includes(y)));
   }, [availableYears.join(',')]);
 
-  // derive depth options for selectedParam from events (union of both lakes)
   const depthOptions = useMemo(() => {
     const depths = new Set();
 
     const matchParam = (r) => {
       if (!r) return false;
       const sel = String(selectedParam || '');
-      // check nested parameter object
       if (r.parameter) {
         if (typeof r.parameter === 'string') {
           if (sel === String(r.parameter)) return true;
@@ -300,7 +212,6 @@ function CompareLake({
           if (r.parameter.id && sel === String(r.parameter.id)) return true;
         }
       }
-      // check flat parameter fields
       if (r.parameter_code && sel === String(r.parameter_code)) return true;
       if (r.parameter_key && sel === String(r.parameter_key)) return true;
       if (r.parameter_id && sel === String(r.parameter_id)) return true;
@@ -322,12 +233,10 @@ function CompareLake({
     pushDepths(eventsAAll);
     pushDepths(eventsBAll);
     const arr = Array.from(depths).sort((a,b)=>Number(a)-Number(b));
-    // ensure surface (0) is present
     if (!arr.includes('0')) arr.unshift('0');
     return arr;
   }, [eventsAAll, eventsBAll, selectedParam]);
 
-  // removed: time-series chart data (Compare is bar-only)
 
   useImperativeHandle(ref, () => ({
     clearAll: () => {
@@ -336,23 +245,19 @@ function CompareLake({
       setSelectedOrgA('');
       setSelectedOrgB('');
       setSelectedParam('');
-      setApplied(false);
-      // also clear compare-specific selections
       setSelectedYears([]);
       setDepthSelection('0');
     }
   }));
 
-  // removed: time-series chart options (Compare is bar-only)
 
   const { barData, loadingThresholds: compareThrLoading } = useCompareBarData({ eventsA: eventsAAll, eventsB: eventsBAll, bucket, selectedYears, depth: depthSelection, selectedParam, lakeA, lakeB, lakeOptions });
 
-  // Compare is bar-only; no time-series range state to correct
 
   const canShowInfo = useMemo(() => {
-    if (!applied) return false;
+    if (isSelectionIncomplete) return false;
     try { return Boolean(barData && Array.isArray(barData.datasets) && barData.datasets.length); } catch { return false; }
-  }, [applied, barData]);
+  }, [isSelectionIncomplete, barData]);
 
   return (
     <div className="insight-card" style={{ backgroundColor: '#0f172a' }}>
@@ -363,7 +268,6 @@ function CompareLake({
         <GraphInfoButton
           disabled={!canShowInfo}
           onClick={() => {
-            // Prefer standards from barData.meta when available (Compare is bar-only)
             const meta = (barData?.meta || {});
             let standards = [];
             if (Array.isArray(meta.standards) && meta.standards.length) {
@@ -413,18 +317,16 @@ function CompareLake({
             };
             const content = buildGraphExplanation(ctx);
             const fmt = (v) => (Number.isFinite(v) ? v.toFixed(2) : 'N/A');
-            // per-lake summaries removed (useSummaryStats hook deleted). If you want per-lake stats here, reintroduce a summary collector.
             setInfoContent(content);
             setInfoOpen(true);
           }}
         />
       </div>
   <div style={{ display: 'flex', gap: 16 }}>
-        {/* Sidebar (extracted) */}
   <StatsSidebar isOpen={sidebarOpen && isModalOpen} width={sidebarWidth} usePortal top={72} side="left" zIndex={10000} onToggle={toggleSidebar}>
           <div style={{ fontSize: 12, opacity: 0.85 }}>Lake A</div>
           <div style={{ display: 'grid', gap: 6 }}>
-            <LakeSelect lakes={lakeOptionsForA} value={lakeA} onChange={(e) => { setLakeA(e.target.value); /* keep org if still valid; effect below will clear if invalid */ setApplied(false); setSelectedYears([]); }} />
+            <LakeSelect lakes={lakeOptionsForA} value={lakeA} onChange={(e) => { setLakeA(e.target.value); setSelectedYears([]); }} />
             <OrgSelect options={derivedOrgOptionsA} value={selectedOrgA} onChange={(e) => { setSelectedOrgA(e.target.value); /* keep param */ }} required={false} placeholder="Select a dataset source" style={{ width:'100%' }} loading={!!lakeA && loadingStationsA} disabled={!lakeA} />
           </div>
 
@@ -432,7 +334,7 @@ function CompareLake({
 
           <div style={{ fontSize: 12, opacity: 0.85 }}>Lake B</div>
           <div style={{ display: 'grid', gap: 6 }}>
-            <LakeSelect lakes={lakeOptionsForB} value={lakeB} onChange={(e) => { setLakeB(e.target.value); /* keep org if still valid; effect below will clear if invalid */ setApplied(false); setSelectedYears([]); }} />
+            <LakeSelect lakes={lakeOptionsForB} value={lakeB} onChange={(e) => { setLakeB(e.target.value); setSelectedYears([]); }} />
             <OrgSelect options={derivedOrgOptionsB} value={selectedOrgB} onChange={(e) => { setSelectedOrgB(e.target.value); /* keep param */ }} required={false} placeholder="Select a dataset source" style={{ width:'100%' }} loading={!!lakeB && loadingStationsB} disabled={!lakeB} />
           </div>
 
@@ -467,7 +369,6 @@ function CompareLake({
             <ParamSelect options={paramList} value={selectedParam} onChange={(e) => { setSelectedParam(e.target.value); onParamChange?.(e.target.value); }} placeholder="Select parameter" style={{ width:'100%' }} loading={!Array.isArray(paramList) || paramList.length === 0} />
           </div>
 
-          {/* removed: time-series depth selector */}
 
           {(
             <div>
@@ -487,27 +388,26 @@ function CompareLake({
             </div>
           )}
 
-          <div>
-            <button type="button" className="pill-btn liquid" onClick={handleApply} style={{ width: '100%' }}>Apply</button>
-          </div>
   </StatsSidebar>
-        {/* Main panel */}
+        
         <div style={{ flex: 1, minWidth: 0 }}>
-          {/* Summary panels removed per design: Samples / Mean / Median are not shown in CompareLake */}
 
   <div className="wq-chart" style={{ height: 300, borderRadius: 8, background: 'transparent', border: '1px solid rgba(255,255,255,0.06)', padding: 8 }}>
-  {applied && (lakeA && selectedOrgA && lakeB && selectedOrgB) && availableYears.length === 0 ? (
+  {(lakeA && selectedOrgA && lakeB && selectedOrgB) && availableYears.length === 0 ? (
           <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <span style={{ opacity: 0.9 }}>No overlapping years between the selected datasets.</span>
           </div>
-        ) : applied && !compareThrLoading && barData && Array.isArray(barData.datasets) && barData.datasets.length ? (
+        ) : isSelectionIncomplete ? (
+          <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ opacity: 0.9 }}>Select lakes, dataset sources, parameter, and years to view chart.</span>
+          </div>
+        ) : !compareThrLoading && barData && Array.isArray(barData.datasets) && barData.datasets.length ? (
           (() => {
-            // If datasets are present but contain no actual bar values, show an explicit message
             const raw = Array.isArray(barData.datasets) ? barData.datasets : [];
             const hasPrimaryData = (() => {
               try {
                 for (const d of raw) {
-                  if (d && d.type === 'line') continue; // ignore threshold lines
+                  if (d && d.type === 'line') continue;
                   const arr = Array.isArray(d.data) ? d.data : [];
                   for (const v of arr) {
                     const val = typeof v === 'number' ? v : (v && typeof v === 'object' ? (Number.isFinite(v.y) ? v.y : (Number.isFinite(v.x) ? v.x : null)) : null);
@@ -535,7 +435,6 @@ function CompareLake({
               responsive: true,
               maintainAspectRatio: false,
               plugins: {
-                // Show legend only for threshold lines (Min/Max)
                 legend: {
                   display: !!hasThresholdLines,
                   labels: {
@@ -549,7 +448,6 @@ function CompareLake({
                   },
                 },
                 tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.formattedValue}${unit ? ` ${unit}` : ''}` } },
-                // Draw per-group year labels inside the chart area to avoid axis label overlap
                 yearLabelPlugin: { meta: bd?.meta || {}, color: '#fff', fontSize: 11, paddingInside: 14 },
               },
               indexAxis: 'x',
@@ -561,13 +459,13 @@ function CompareLake({
             };
             return <Bar key={`bar-${selectedParam}-${lakeA}-${lakeB}`} ref={chartRef} data={bd} options={options} />;
           })()
-        ) : compareThrLoading && applied ? (
+        ) : compareThrLoading ? (
           <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <LoadingSpinner inline label="Loading thresholds…" color="#fff" />
           </div>
         ) : (
           <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ opacity: 0.9 }}>{loading ? 'Loading…' : (applied ? 'No data for the current filters.' : 'Fill all fields and click Apply to generate the chart.')}</span>
+            <span style={{ opacity: 0.9 }}>{loading ? 'Loading…' : 'No data for the current filters.'}</span>
           </div>
         )}
       </div>
