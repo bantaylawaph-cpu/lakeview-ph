@@ -316,7 +316,13 @@ export default function FilterTray({ open, onClose, onApply, initial = {} }) {
 
         <div className="ft-actions" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <div aria-live="polite" style={{ fontSize: 13 }}>
-            {countLoading ? 'Showing — lakes.' : (count != null ? `Showing ${count} lakes.` : 'Showing — lakes.')}
+            {countLoading
+              ? 'Showing — lakes.'
+              : (count != null
+                  ? (count === 0
+                      ? 'No lakes match your filters.'
+                      : `Showing ${count} ${count === 1 ? 'lake' : 'lakes'}.`)
+                  : 'Showing — lakes.')}
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn btn-secondary" onClick={() => { handleReset(); }} disabled={applying} aria-busy={applying ? true : undefined}>

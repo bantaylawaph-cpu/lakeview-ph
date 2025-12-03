@@ -60,7 +60,15 @@ class LakeController extends Controller
                     });
                 }
                 if (!empty($advFilters['municipality'])) {
-                    $query->where('municipality', $advFilters['municipality']);
+                    $municipality = $advFilters['municipality'];
+                    $query->where(function($q) use ($municipality, $driver) {
+                        if ($driver === 'pgsql') {
+                            $q->whereRaw("(jsonb_typeof(municipality) = 'array' AND municipality @> ?::jsonb)", [json_encode([$municipality])])
+                              ->orWhereRaw("(jsonb_typeof(municipality) <> 'array' AND municipality::text = ?)", [$municipality]);
+                        } else {
+                            $q->whereJsonContains('municipality', $municipality)->orWhere('municipality', $municipality);
+                        }
+                    });
                 }
                 if (!empty($advFilters['class_code'])) {
                     $query->where('class_code', $advFilters['class_code']);
@@ -168,7 +176,15 @@ class LakeController extends Controller
                     });
                 }
                 if (!empty($advFilters['municipality'])) {
-                    $query->where('municipality', $advFilters['municipality']);
+                    $municipality = $advFilters['municipality'];
+                    $query->where(function($q) use ($municipality, $driver) {
+                        if ($driver === 'pgsql') {
+                            $q->whereRaw("(jsonb_typeof(municipality) = 'array' AND municipality @> ?::jsonb)", [json_encode([$municipality])])
+                              ->orWhereRaw("(jsonb_typeof(municipality) <> 'array' AND municipality::text = ?)", [$municipality]);
+                        } else {
+                            $q->whereJsonContains('municipality', $municipality)->orWhere('municipality', $municipality);
+                        }
+                    });
                 }
                 if (!empty($advFilters['class_code'])) {
                     $query->where('class_code', $advFilters['class_code']);
