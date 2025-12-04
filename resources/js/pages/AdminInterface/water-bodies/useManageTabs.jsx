@@ -711,6 +711,12 @@ export function useManageLakesTabLogic() {
     [openDelete, openEdit, viewLake]
   );
 
+  // Consistent refresh handler (used by toolbar)
+  const handleRefresh = useCallback(async () => {
+    try { invalidateHttpCache('/lakes'); } catch {}
+    await fetchLakes();
+  }, [fetchLakes]);
+
   return {
     // identifiers and columns
     TABLE_ID,
@@ -727,6 +733,7 @@ export function useManageLakesTabLogic() {
     loading,
     errorMsg,
     fetchLakes,
+    handleRefresh,
     actions,
 
     // paging & sorting & search
@@ -1077,6 +1084,12 @@ export function useManageFlowsTabLogic() {
     } catch (e) { setRows([]); setErrorMsg(e.message || 'Failed to load tributaries'); } finally { setLoading(false); }
   }, [pagination.page, pagination.perPage, sort.id, sort.dir, query, adv]);
 
+  // Consistent refresh handler (used by toolbar)
+  const handleRefreshFlows = useCallback(async () => {
+    try { invalidateHttpCache('/lake-flows'); } catch {}
+    await fetchRows();
+  }, [fetchRows]);
+
   useEffect(()=>{ fetchLakesOptions(); }, [fetchLakesOptions]);
   useEffect(()=>{ const t = setTimeout(() => fetchRows(), 300); return () => clearTimeout(t); }, [fetchRows]);
   useEffect(()=>{ setPagination(p => ({ ...p, page: 1 })); }, [query, adv]);
@@ -1180,6 +1193,7 @@ export function useManageFlowsTabLogic() {
     resetSignal,
     triggerResetWidths,
     fetchRows,
+    handleRefresh: handleRefreshFlows,
     openCreate,
     actions,
     // filters
@@ -1219,6 +1233,7 @@ export function useManageFlowsTabLogic() {
         localStorage.removeItem(SORT_KEY);
       } catch {}
       setVisibleMap({ lake:true, flow_type:true, name:true, source:true, is_primary:true, updated_at:false });
+      setAdv({});
       setQuery('');
       setSort({ id: 'created_at', dir: 'desc' });
       triggerResetWidths();

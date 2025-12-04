@@ -20,7 +20,7 @@ export default function ManageFlowsTab() {
         filters={[]}
           columnPicker={{ columns: s.columns, visibleMap: s.visibleMap, onVisibleChange: s.setVisibleMap }}
         onResetWidths={() => { s.triggerResetWidths(); s.restoreDefaults && s.restoreDefaults(); try { localStorage.removeItem(s.TABLE_ID + '::sort'); } catch {}; s.setSort && s.setSort({ id: 'flow_type', dir: 'asc' }); }}
-        onRefresh={s.fetchRows}
+        onRefresh={s.handleRefresh}
         onAdd={s.openCreate}
         onToggleFilters={() => s.setFiltersOpen((v) => !v)}
         filtersBadgeCount={s.activeFilterCount}

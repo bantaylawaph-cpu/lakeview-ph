@@ -213,7 +213,7 @@ export default function TableToolbar({
         )}
 
         {onRefresh && (
-          <button className="pill-btn ghost" onClick={onRefresh} title="Refresh table" aria-label="Refresh table">
+          <button className="pill-btn ghost" onClick={(e) => { e.preventDefault(); onRefresh(); }} title="Refresh table" aria-label="Refresh table">
             <FiRefreshCw /><span>Refresh</span>
           </button>
         )}

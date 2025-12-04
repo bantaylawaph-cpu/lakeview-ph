@@ -261,12 +261,15 @@ function ParametersTab() {
   }, [gridColumns, visibleMap]);
 
   const handleRefresh = useCallback(() => {
+    try { invalidateHttpCache('/admin/parameters'); } catch {}
     fetchParameters({
       search: query,
       page,
       per_page: perPage,
+      sort_by: sort?.id,
+      sort_dir: sort?.dir,
     });
-  }, [fetchParameters, query, page]);
+  }, [fetchParameters, query, page, sort?.id, sort?.dir]);
 
   const unitOptions = useMemo(() => ensureOption(UNIT_OPTIONS, modalForm.unit), [modalForm.unit]);
 
@@ -352,7 +355,7 @@ function ParametersTab() {
                   setVisibleMap(next);
                 },
               }}
-              onResetWidths={() => { setGridResetSignal((s) => s + 1); try { localStorage.removeItem(GRID_SORT_KEY); } catch {} ; setSort && setSort({ id: 'id', dir: 'desc' }); }}
+              onResetWidths={() => { setGridResetSignal((s) => s + 1); setQuery(""); setPage(1); try { localStorage.removeItem(GRID_SORT_KEY); } catch {} ; setSort && setSort({ id: 'id', dir: 'desc' }); }}
               onRefresh={handleRefresh}
               onAdd={openCreateModal}
             />

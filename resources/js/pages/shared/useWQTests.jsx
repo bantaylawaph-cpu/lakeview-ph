@@ -625,6 +625,17 @@ export function useWQTests({ variant, tableId, initialLakes = [], initialTests =
   const doRefresh = async () => {
     setLoading(true);
     try {
+      // Ensure fresh network responses by clearing cached GETs used below
+      try {
+        const basePath = isAdmin
+          ? '/admin/sample-events'
+          : isOrg
+            ? (currentTenantId ? `/org/${currentTenantId}/sample-events` : '/admin/sample-events')
+            : (currentOrgId ? `/contrib/${currentOrgId}/sample-events` : null);
+        if (basePath) invalidateHttpCache(basePath);
+        invalidateHttpCache('/options/parameters');
+      } catch {}
+
       const params = new URLSearchParams();
       params.set('per_page', '10');
       params.set('page', '1');
@@ -700,7 +711,23 @@ export function useWQTests({ variant, tableId, initialLakes = [], initialTests =
       search={{ value: q, onChange: setQ, placeholder: 'Search Water Quality Records...' }}
       filters={[]}
       columnPicker={{ columns: baseColumns.map((c) => ({ id: c.id, label: c.header })), visibleMap, onVisibleChange: (next) => setVisibleMap(next) }}
-      onResetWidths={() => { setResetSignal((x) => x + 1); setSort({ id: 'updated_at', dir: 'desc' }); try { localStorage.removeItem(SORT_KEY); } catch {} }}
+      onResetWidths={() => {
+        setResetSignal((x) => x + 1);
+        // Clear search and all filters; reset paging and sort
+        setQ("");
+        setLakeId("");
+        setStatus("");
+        setMemberId("");
+        setOrganizationId("");
+        setYear("");
+        setQuarter("");
+        setMonth("");
+        setDateFrom("");
+        setDateTo("");
+        setPage(1);
+        setSort({ id: 'updated_at', dir: 'desc' });
+        try { localStorage.removeItem(SORT_KEY); } catch {}
+      }}
       onRefresh={doRefresh}
       onToggleFilters={() => setFiltersOpen((v) => !v)}
       filtersBadgeCount={[

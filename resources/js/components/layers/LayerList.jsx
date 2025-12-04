@@ -278,7 +278,15 @@ function LayerList({
     <TableToolbar
       tableId="layers-table"
       search={{ value: search, onChange: setSearch, placeholder: 'Search layers…' }}
-      onResetWidths={() => setResetSignal((v) => v + 1)}
+      onResetWidths={() => {
+        setResetSignal((v) => v + 1);
+        setSearch("");
+        setFBodyType("");
+        setFVisibility("");
+        setFDownloadableOnly("");
+        setPagination((p) => ({ ...p, page: 1 }));
+        refresh(1);
+      }}
       onRefresh={refresh}
       onToggleFilters={() => setFiltersOpen((v) => !v)}
       filtersBadgeCount={filtersBadgeCount}
