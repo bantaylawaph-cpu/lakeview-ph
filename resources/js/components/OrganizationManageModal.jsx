@@ -93,7 +93,7 @@ export default function OrganizationManageModal({ org, open, onClose }) {
 
 			await api.delete(`/admin/tenants/${org.id}`);
 			try { invalidateHttpCache('/admin/tenants'); } catch {}
-			await Swal.fire('Deleted', 'Organization soft deleted.', 'success');
+			await Swal.fire('Deleted', 'Organization deleted.', 'success');
 			if (onClose) onClose();
 		} catch (e) {
 			Swal.fire('Delete failed', formatApiError(e), 'error');
@@ -309,7 +309,7 @@ export default function OrganizationManageModal({ org, open, onClose }) {
 										<div style={{ marginTop:16, padding:16, borderRadius:8, background:'#fff7f7', border:'1px solid #fecaca', display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
 											<div>
 												<div style={{ fontWeight:600, color:'#b91c1c' }}>Danger zone</div>
-												<div style={{ color:'#7f1d1d' }}>Deleting an organization is permanent unless restored. Ensure there is no associated data.</div>
+												<div style={{ color:'#7f1d1d' }}>Deleting an organization is permanent. Ensure there is no associated data.</div>
 											</div>
 											<button className="pill-btn danger" onClick={handleDeleteOrg} disabled={deleting} style={{ display:'inline-flex', alignItems:'center', gap:8 }}>
 												<FiTrash2 /> {deleting ? 'Deleting…' : 'Delete'}

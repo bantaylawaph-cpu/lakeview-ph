@@ -414,7 +414,6 @@ export default function OrgMembers() {
         icon={<FiUsers />}
         title="Members"
         description="View and manage all organization members (admins & contributors)."
-        actions={<button className="pill-btn" onClick={openCreate}>+ New Contributor</button>}
       />
 
       <div className="card" style={{ padding:12, borderRadius:12, marginBottom:12 }}>
