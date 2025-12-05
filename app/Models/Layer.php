@@ -38,7 +38,8 @@ class Layer extends Model
      */
     public function setIsDownloadableAttribute($value): void
     {
-        $this->attributes['is_downloadable'] = filter_var($value, FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
+        // Persist as native boolean to satisfy Postgres boolean column type
+        $this->attributes['is_downloadable'] = filter_var($value, FILTER_VALIDATE_BOOLEAN);
     }
 
     public function getIsDownloadableAttribute($value): bool
