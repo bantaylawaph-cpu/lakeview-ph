@@ -4,6 +4,7 @@ import api from '../../lib/api';
 import Swal from 'sweetalert2';
 import { getCurrentUser } from '../../lib/authState';
 import { TYPE_OPTIONS } from '../OrganizationForm';
+import { FiCheck, FiAlertCircle } from 'react-icons/fi';
 
 // Modal for org_admin to edit their own tenant's details.
 // Uses org-scoped endpoint: PATCH /org/{tenantId}/tenant
@@ -19,8 +20,42 @@ export default function TenantEditModal({ open, onClose, onSaved }) {
     phone: tenantObj?.phone || '',
     address: tenantObj?.address || '',
   });
+  const [errors, setErrors] = useState({ name: null, contact_email: null, phone: null });
   const [saving, setSaving] = useState(false);
   const [fetching, setFetching] = useState(false);
+
+  // Validation functions (from adminUsersForm)
+  const validateFullName = (name) => {
+    if (!name || name.trim().length === 0) return "Organization name is required.";
+    if (name.trim().length < 2) return "Organization name must be at least 2 characters.";
+    if (name.length > 100) return "Organization name must not exceed 100 characters.";
+    return null;
+  };
+
+  const validateEmail = (email) => {
+    if (!email || email.trim().length === 0) return null; // Email is optional
+    if (email.length > 254) return "Email must not exceed 254 characters.";
+    if (/\s/.test(email)) return "Email must not contain spaces.";
+    if (!/^[a-zA-Z0-9]/.test(email)) return "Email must start with a letter or number.";
+    if (!/[a-zA-Z0-9]$/.test(email)) return "Email must end with a letter or number.";
+    if (!email.includes('@')) return "Email must contain @.";
+    const emailRegex = /^[a-zA-Z0-9][a-zA-Z0-9._-]*@[a-zA-Z0-9][a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!emailRegex.test(email)) return "Please enter a valid email address.";
+    return null;
+  };
+
+  const validatePhone = (phone) => {
+    if (!phone || phone.trim().length === 0) return null; // Phone is optional
+    // Philippine phone format: 09XXXXXXXXX or +639XXXXXXXXX
+    const phoneRegex = /^(09|\+639)\d{9}$/;
+    if (!phoneRegex.test(phone)) return "Phone number must be in format 09XXXXXXXXX or +639XXXXXXXXX.";
+    return null;
+  };
+
+  // Derived validation states
+  const validName = validateFullName(form.name) === null;
+  const validEmail = validateEmail(form.contact_email) === null;
+  const validPhone = validatePhone(form.phone) === null;
 
   // On open, attempt to fetch fresh tenant details (org-scoped endpoint, fallback silently if not available)
   useEffect(() => {
@@ -54,6 +89,7 @@ export default function TenantEditModal({ open, onClose, onSaved }) {
             phone: raw.phone || '',
             address: raw.address || '',
           });
+          setErrors({ name: null, contact_email: null, phone: null });
         }
       } catch { /* ignore network / permission errors */ } finally {
         if (!cancelled) setFetching(false);
@@ -67,17 +103,48 @@ export default function TenantEditModal({ open, onClose, onSaved }) {
   const handleChange = (key) => (e) => {
     const v = (e && e.target) ? (e.target.type === 'checkbox' ? e.target.checked : e.target.value) : e;
     setForm(s => ({ ...s, [key]: v }));
+    
+    // Clear error for the field being edited
+    if (errors[key]) {
+      setErrors((prev) => ({ ...prev, [key]: null }));
+    }
   };
 
   if (!tenantId) {
     return <Modal open={open} onClose={onClose} title="Organization" width={640}><p>Unable to resolve tenant id.</p></Modal>;
   }
 
-  const disabled = !form.name?.trim();
+  const disabled = !form.name?.trim() || !validName || !validEmail || !validPhone;
 
   const submit = async (e) => {
     e?.preventDefault?.();
+    
+    // Validate all fields
+    const nameError = validateFullName(form.name);
+    const emailError = validateEmail(form.contact_email);
+    const phoneError = validatePhone(form.phone);
+    
+    // Set errors if any
+    if (nameError || emailError || phoneError) {
+      setErrors({ name: nameError, contact_email: emailError, phone: phoneError });
+      return;
+    }
+    
     if (disabled) return;
+    
+    // Confirm before saving
+    const result = await Swal.fire({
+      title: 'Save Changes?',
+      text: 'Are you sure you want to save these changes?',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Save Changes',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#3b82f6'
+    });
+    
+    if (!result.isConfirmed) return;
+    
     setSaving(true);
     try {
       const payload = {
@@ -117,7 +184,26 @@ export default function TenantEditModal({ open, onClose, onSaved }) {
       <form onSubmit={submit} style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:18, opacity: fetching ? 0.85 : 1 }}>
         <label className="lv-field" style={{ gridColumn:'1/2' }}>
           <span>Name*</span>
-          <input type="text" value={form.name} onChange={handleChange('name')} maxLength={255} required />
+          <input 
+            type="text" 
+            value={form.name} 
+            onChange={handleChange('name')} 
+            maxLength={255} 
+            required
+            className={errors.name ? "error" : validName && form.name ? "success" : ""}
+          />
+          {errors.name && (
+            <div className="field-error" style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#dc2626', fontSize: 13, marginTop: 4 }}>
+              <FiAlertCircle size={14} />
+              <span>{errors.name}</span>
+            </div>
+          )}
+          {!errors.name && validName && form.name && (
+            <div className="field-success" style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#16a34a', fontSize: 13, marginTop: 4 }}>
+              <FiCheck size={14} />
+              <span>Valid name</span>
+            </div>
+          )}
         </label>
         <label className="lv-field" style={{ gridColumn:'2/3' }}>
           <span>Type</span>
@@ -128,11 +214,46 @@ export default function TenantEditModal({ open, onClose, onSaved }) {
         </label>
         <label className="lv-field" style={{ gridColumn:'1/2' }}>
           <span>Contact Email</span>
-          <input type="email" value={form.contact_email || ''} onChange={handleChange('contact_email')} />
+          <input 
+            type="email" 
+            value={form.contact_email || ''} 
+            onChange={handleChange('contact_email')}
+            className={errors.contact_email ? "error" : validEmail && form.contact_email ? "success" : ""}
+          />
+          {errors.contact_email && (
+            <div className="field-error" style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#dc2626', fontSize: 13, marginTop: 4 }}>
+              <FiAlertCircle size={14} />
+              <span>{errors.contact_email}</span>
+            </div>
+          )}
+          {!errors.contact_email && validEmail && form.contact_email && (
+            <div className="field-success" style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#16a34a', fontSize: 13, marginTop: 4 }}>
+              <FiCheck size={14} />
+              <span>Valid email</span>
+            </div>
+          )}
         </label>
         <label className="lv-field" style={{ gridColumn:'2/3' }}>
           <span>Phone</span>
-          <input type="text" value={form.phone || ''} onChange={handleChange('phone')} />
+          <input 
+            type="text" 
+            value={form.phone || ''} 
+            onChange={handleChange('phone')}
+            placeholder="09123456789 or +639123456789"
+            className={errors.phone ? "error" : validPhone && form.phone ? "success" : ""}
+          />
+          {errors.phone && (
+            <div className="field-error" style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#dc2626', fontSize: 13, marginTop: 4 }}>
+              <FiAlertCircle size={14} />
+              <span>{errors.phone}</span>
+            </div>
+          )}
+          {!errors.phone && validPhone && form.phone && (
+            <div className="field-success" style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#16a34a', fontSize: 13, marginTop: 4 }}>
+              <FiCheck size={14} />
+              <span>Valid phone</span>
+            </div>
+          )}
         </label>
         <label className="lv-field" style={{ gridColumn:'1/3' }}>
           <span>Address</span>

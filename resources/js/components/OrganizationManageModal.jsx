@@ -6,7 +6,7 @@ import Swal from "sweetalert2";
 import LoadingSpinner from "./LoadingSpinner";
 import OrganizationForm from "./OrganizationForm";
 import { useWindowSize } from "../hooks/useWindowSize";
-import { FiTrash2 } from 'react-icons/fi';
+import { FiTrash2, FiCheck, FiAlertCircle } from 'react-icons/fi';
 
 export default function OrganizationManageModal({ org, open, onClose }) {
 	const { width: windowW } = useWindowSize();
@@ -16,9 +16,35 @@ export default function OrganizationManageModal({ org, open, onClose }) {
 	const [loading, setLoading] = useState(false);
 	const [editing, setEditing] = useState(null); // user being edited
 	const [editForm, setEditForm] = useState({ name: "", email: "" });
+	const [editErrors, setEditErrors] = useState({ name: null, email: null });
 	const [saving, setSaving] = useState(false);
 	const [deleting, setDeleting] = useState(false);
 	// Settings tab removed
+
+	// Validation functions (from adminUsersForm)
+	const validateFullName = (name) => {
+		if (!name || name.trim().length === 0) return "Full name is required.";
+		if (name.trim().length < 2) return "Full name must be at least 2 characters.";
+		if (name.length > 50) return "Full name must not exceed 50 characters.";
+		if (!/^[a-zA-Z\s]+$/.test(name)) return "Full name must contain only letters and spaces.";
+		return null;
+	};
+
+	const validateEmail = (email) => {
+		if (!email || email.trim().length === 0) return "Email is required.";
+		if (email.length > 254) return "Email must not exceed 254 characters.";
+		if (/\s/.test(email)) return "Email must not contain spaces.";
+		if (!/^[a-zA-Z0-9]/.test(email)) return "Email must start with a letter or number.";
+		if (!/[a-zA-Z0-9]$/.test(email)) return "Email must end with a letter or number.";
+		if (!email.includes('@')) return "Email must contain @.";
+		const emailRegex = /^[a-zA-Z0-9][a-zA-Z0-9._-]*@[a-zA-Z0-9][a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+		if (!emailRegex.test(email)) return "Please enter a valid email address.";
+		return null;
+	};
+
+	// Derived validation states
+	const validEditName = validateFullName(editForm.name) === null;
+	const validEditEmail = validateEmail(editForm.email) === null;
 
 	// Audit removed
 
@@ -175,13 +201,26 @@ export default function OrganizationManageModal({ org, open, onClose }) {
 	const openEdit = (user) => {
 		setEditing(user);
 		setEditForm({ name: user.name, email: user.email });
+		setEditErrors({ name: null, email: null });
 	};
 	const closeEdit = () => {
 		setEditing(null);
 		setEditForm({ name: "", email: "" });
+		setEditErrors({ name: null, email: null });
 	};
 	const submitEdit = async (e) => {
 		e.preventDefault();
+		
+		// Validate all fields
+		const nameError = validateFullName(editForm.name);
+		const emailError = validateEmail(editForm.email);
+		
+		// Set errors if any
+		if (nameError || emailError) {
+			setEditErrors({ name: nameError, email: emailError });
+			return;
+		}
+		
 		setSaving(true);
 		try {
 			await api.put(`/admin/users/${editing.id}`, {
@@ -379,16 +418,56 @@ export default function OrganizationManageModal({ org, open, onClose }) {
 						</div>
 					}
 				>
-					<form id="org-edit-user-form" onSubmit={submitEdit} style={{ display: 'grid', gap: 16 }}>
-						<label className="lv-field">
-							<span>Name</span>
-							<input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} required />
-						</label>
-						<label className="lv-field">
-							<span>Email</span>
-							<input value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} required />
-						</label>
-					</form>
+				<form id="org-edit-user-form" onSubmit={submitEdit} style={{ display: 'grid', gap: 16 }}>
+					<label className="lv-field">
+						<span>Name</span>
+						<input 
+							value={editForm.name} 
+							onChange={e => {
+								setEditForm(f => ({ ...f, name: e.target.value }));
+								if (editErrors.name) setEditErrors(prev => ({ ...prev, name: null }));
+							}} 
+							required
+							className={editErrors.name ? "error" : validEditName && editForm.name ? "success" : ""}
+						/>
+						{editErrors.name && (
+							<div className="field-error" style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#dc2626', fontSize: 13, marginTop: 4 }}>
+								<FiAlertCircle size={14} />
+								<span>{editErrors.name}</span>
+							</div>
+						)}
+						{!editErrors.name && validEditName && editForm.name && (
+							<div className="field-success" style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#16a34a', fontSize: 13, marginTop: 4 }}>
+								<FiCheck size={14} />
+								<span>Valid name</span>
+							</div>
+						)}
+					</label>
+					<label className="lv-field">
+						<span>Email</span>
+						<input 
+							value={editForm.email} 
+							onChange={e => {
+								setEditForm(f => ({ ...f, email: e.target.value }));
+								if (editErrors.email) setEditErrors(prev => ({ ...prev, email: null }));
+							}} 
+							required
+							className={editErrors.email ? "error" : validEditEmail && editForm.email ? "success" : ""}
+						/>
+						{editErrors.email && (
+							<div className="field-error" style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#dc2626', fontSize: 13, marginTop: 4 }}>
+								<FiAlertCircle size={14} />
+								<span>{editErrors.email}</span>
+							</div>
+						)}
+						{!editErrors.email && validEditEmail && editForm.email && (
+							<div className="field-success" style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#16a34a', fontSize: 13, marginTop: 4 }}>
+								<FiCheck size={14} />
+								<span>Valid email</span>
+							</div>
+						)}
+					</label>
+				</form>
 				</Modal>
 			)}
 		</Modal>
