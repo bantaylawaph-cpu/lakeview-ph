@@ -44,7 +44,7 @@ class OrgUserController extends Controller
             $query->orderBy('name', 'asc');
         }
 
-        $users = $query->paginate($request->integer('per_page', 15));
+        $users = $query->with('role')->paginate($request->integer('per_page', 15));
 
         return response()->json($users);
     }
@@ -72,6 +72,8 @@ class OrgUserController extends Controller
             'name' => ['required','string','max:255'],
             'email' => ['required','email','max:255'],
             'password' => ['nullable','string','min:8'],
+            'occupation' => ['nullable','string','max:255'],
+            'occupation_other' => ['nullable','string','max:255'],
         ]);
 
         $user = User::firstWhere('email', $data['email']);
@@ -90,6 +92,8 @@ class OrgUserController extends Controller
 
         $user->role_id = $contributorRoleId; // force contributor
         $user->tenant_id = $tenant;
+        $user->occupation = $data['occupation'] ?? null;
+        $user->occupation_other = $data['occupation_other'] ?? null;
         $user->save();
 
         return response()->json([
@@ -108,6 +112,8 @@ class OrgUserController extends Controller
             'name' => ['sometimes','string','max:255'],
             'email' => ['sometimes','email','max:255', Rule::unique('users','email')->ignore($user->id)],
             'password' => ['sometimes','nullable','string','min:8'],
+            'occupation' => ['sometimes','nullable','string','max:255'],
+            'occupation_other' => ['sometimes','nullable','string','max:255'],
         ]);
 
         if ($user->tenant_id !== $tenant) {
@@ -117,6 +123,8 @@ class OrgUserController extends Controller
         if (array_key_exists('name', $data)) $user->name = $data['name'];
         if (array_key_exists('email', $data)) $user->email = $data['email'];
         if (!empty($data['password'])) $user->password = Hash::make($data['password']);
+        if (array_key_exists('occupation', $data)) $user->occupation = $data['occupation'];
+        if (array_key_exists('occupation_other', $data)) $user->occupation_other = $data['occupation_other'];
         $user->save();
 
         return response()->json(['message' => 'Updated','user' => $user->fresh(['role'])]);

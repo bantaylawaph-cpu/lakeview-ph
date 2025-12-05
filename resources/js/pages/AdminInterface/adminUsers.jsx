@@ -207,7 +207,14 @@ export default function AdminUsersPage() {
       let role = user?.role || user?.global_role || "";
       const tenantId = user?.tenant_id || user?.tenant?.id || (Array.isArray(user?.tenants) ? user.tenants[0]?.id : undefined) || "";
       setMode("edit"); setEditingId(user.id);
-      setInitial({ name: user.name || "", email: user.email || "", password: "", role, tenant_id: tenantId });
+      setInitial({ 
+        name: user.name || "", 
+        email: user.email || "", 
+        role, 
+        tenant_id: tenantId,
+        occupation: user.occupation || "",
+        occupation_other: user.occupation_other || ""
+      });
       setOpen(true);
     } catch (e) {
       console.error("Failed to load user", e);

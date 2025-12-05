@@ -19,17 +19,28 @@ const FIXED_ROLE = 'contributor';
 const TABLE_ID = 'org-contributors';
 const VIS_KEY = `${TABLE_ID}::visible`;
 
+// Role labels for display
+const ROLE_LABELS = {
+  org_admin: 'Organization Admin',
+  contributor: 'Contributor',
+};
+
 // Initial form values
 const emptyContributor = { name: '', email: '', password: '', role: FIXED_ROLE, occupation: '', occupation_other: '' };
 
 // Normalize API users -> table rows (include role for display)
-const normalizeMembers = (rows = []) => rows.map(u => ({
-  id: u.id,
-  name: u.name || '',
-  email: u.email || '',
-  role: u.role || (u.role_id === CONTRIBUTOR_ROLE_ID ? 'contributor' : ''),
-  _raw: u,
-}));
+const normalizeMembers = (rows = []) => rows.map(u => {
+  // u.role already set in fetchMembers, just need to format for display
+  const roleKey = u.role || '';
+  return {
+    id: u.id,
+    name: u.name || '',
+    email: u.email || '',
+    role: ROLE_LABELS[roleKey] || roleKey || '—',
+    role_key: roleKey, // preserve original key for filtering/logic
+    _raw: u,
+  };
+});
 
 export default function OrgMembers() {
   const { width: windowW } = useWindowSize();
@@ -155,7 +166,7 @@ export default function OrgMembers() {
       const raw = await api.get(`/org/${tid}/users`, { params });
       const payload = raw; // keep full paginator object
       const items = Array.isArray(payload?.data) ? payload.data : (Array.isArray(payload) ? payload : []);
-      // Safely derive role name for each user
+      // Safely derive role name for each user (role is now loaded as relationship)
       const members = items.map(u => {
         const roleName = u.role?.name || u.role_name || u.role || (u.role_id === CONTRIBUTOR_ROLE_ID ? 'contributor' : undefined);
         return { ...u, role: roleName };
@@ -244,15 +255,19 @@ export default function OrgMembers() {
     try {
       const res = unwrap(await api.get(`/org/${tenantId}/users/${row.id}`));
       const u = res?.data ?? res;
+      
+      // Extract occupation, handling potential nested structures
+      const occupation = u.occupation || u.profile?.occupation || '';
+      const occupationOther = u.occupation_other || u.profile?.occupation_other || '';
+      
       setMode('edit');
       setEditingId(u.id);
       setInitial({ 
         name: u.name || '', 
         email: u.email || '', 
-        password: '', 
         role: FIXED_ROLE,
-        occupation: u.occupation || '',
-        occupation_other: u.occupation_other || ''
+        occupation: occupation,
+        occupation_other: occupationOther
       });
       setOpen(true);
     } catch (e) {
@@ -272,7 +287,7 @@ export default function OrgMembers() {
     const emailError = validateEmail(payload.email);
     let passwordError = null;
     
-    if (mode === 'create' || payload.password) {
+    if (mode === 'create') {
       passwordError = validatePassword(payload.password);
     }
     
@@ -291,14 +306,14 @@ export default function OrgMembers() {
     }
     
     // Check password confirmation match
-    if ((mode === 'create' || payload.password) && payload.password !== payload.password_confirmation) {
+    if (mode === 'create' && payload.password !== payload.password_confirmation) {
       Swal.fire('Password Mismatch', 'Passwords do not match.', 'error');
       return;
     }
     
     const verb = mode === 'edit' ? 'Update' : 'Create';
     const body = { name: payload.name, email: payload.email };
-    if (payload.password) {
+    if (mode === 'create' && payload.password) {
       body.password = payload.password;
       if (payload.password_confirmation) body.password_confirmation = payload.password_confirmation;
     }
@@ -474,109 +489,111 @@ export default function OrgMembers() {
               </div>
             )}
           </label>
-          <label className="lv-field" style={{ gridColumn: isMobileStack ? '1/-1' : '1/2' }}>
-            <span>{mode==='edit' ? 'New Password (optional)' : 'Password *'}</span>
-            <div style={{ position: 'relative' }}>
-              <input 
-                type={showPwd.password ? "text" : "password"} 
-                required={mode!=='edit'} 
-                value={initial.password||''} 
-                onChange={(e)=>setInitial(i=>({...i,password:e.target.value}))} 
-                maxLength={64}
-                style={{ paddingRight: '40px' }}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPwd((p) => ({ ...p, password: !p.password }))}
-                style={{
-                  position: 'absolute',
-                  right: '8px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: '4px',
-                  display: 'flex',
-                  alignItems: 'center'
-                }}
-                aria-label={showPwd.password ? "Hide password" : "Show password"}
-              >
-                {showPwd.password ? <FiEyeOff size={18} /> : <FiEye size={18} />}
-              </button>
-            </div>
-          </label>
-          <label className="lv-field" style={{ gridColumn: isMobileStack ? '1/-1' : '2/3' }}>
-            <span>{mode==='edit' ? 'Confirm New Password' : 'Confirm Password *'}</span>
-            <div style={{ position: 'relative' }}>
-              <input 
-                type={showPwd.confirm ? "text" : "password"} 
-                required={mode!=='edit'} 
-                value={initial.password_confirmation||''} 
-                onChange={(e)=>setInitial(i=>({...i,password_confirmation:e.target.value}))} 
-                maxLength={64}
-                style={{ paddingRight: '40px' }}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPwd((p) => ({ ...p, confirm: !p.confirm }))}
-                style={{
-                  position: 'absolute',
-                  right: '8px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: '4px',
-                  display: 'flex',
-                  alignItems: 'center'
-                }}
-                aria-label={showPwd.confirm ? "Hide confirm password" : "Show confirm password"}
-              >
-                {showPwd.confirm ? <FiEyeOff size={18} /> : <FiEye size={18} />}
-              </button>
-            </div>
-            {!passwordsMatch && (initial.password_confirmation?.length || 0) > 0 && (initial.password?.length || 0) > 0 && (
-              <div className="auth-error" role="alert" style={{ marginTop: 4, fontSize: '0.875rem', color: '#dc2626' }}>
-                Passwords do not match.
-              </div>
-            )}
-          </label>
-
-          {/* Password strength & criteria */}
-          {(mode === 'create' || (initial.password?.length || 0) > 0) && (
-            <div className="lv-field" style={{ gridColumn: '1 / -1' }}>
-              <div className="password-strength" aria-live="polite" style={{ marginTop: 8 }}>
-                <div style={{
-                  height: '4px',
-                  borderRadius: '2px',
-                  background: strongPassword ? '#22c55e' : '#e5e7eb',
-                  marginBottom: '8px',
-                  transition: 'background 0.3s'
-                }}></div>
-                <ul style={{
-                  listStyle: 'none',
-                  padding: 0,
-                  margin: 0,
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                  gap: '4px',
-                  fontSize: '0.875rem'
-                }}>
-                  {passwordCriteria.map(c => (
-                    <li key={c.label} style={{
+          {mode === 'create' && (
+            <>
+              <label className="lv-field" style={{ gridColumn: isMobileStack ? '1/-1' : '1/2' }}>
+                <span>Password *</span>
+                <div style={{ position: 'relative' }}>
+                  <input 
+                    type={showPwd.password ? "text" : "password"} 
+                    required
+                    value={initial.password||''} 
+                    onChange={(e)=>setInitial(i=>({...i,password:e.target.value}))} 
+                    maxLength={64}
+                    style={{ paddingRight: '40px' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPwd((p) => ({ ...p, password: !p.password }))}
+                    style={{
+                      position: 'absolute',
+                      right: '8px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: '4px',
                       display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      color: c.ok ? '#22c55e' : '#94a3b8'
-                    }}>
-                      {c.ok ? <FiCheck size={14} /> : <FiAlertCircle size={14} />} {c.label}
-                    </li>
-                  ))}
-                </ul>
+                      alignItems: 'center'
+                    }}
+                    aria-label={showPwd.password ? "Hide password" : "Show password"}
+                  >
+                    {showPwd.password ? <FiEyeOff size={18} /> : <FiEye size={18} />}
+                  </button>
+                </div>
+              </label>
+              <label className="lv-field" style={{ gridColumn: isMobileStack ? '1/-1' : '2/3' }}>
+                <span>Confirm Password *</span>
+                <div style={{ position: 'relative' }}>
+                  <input 
+                    type={showPwd.confirm ? "text" : "password"} 
+                    required
+                    value={initial.password_confirmation||''} 
+                    onChange={(e)=>setInitial(i=>({...i,password_confirmation:e.target.value}))} 
+                    maxLength={64}
+                    style={{ paddingRight: '40px' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPwd((p) => ({ ...p, confirm: !p.confirm }))}
+                    style={{
+                      position: 'absolute',
+                      right: '8px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: '4px',
+                      display: 'flex',
+                      alignItems: 'center'
+                    }}
+                    aria-label={showPwd.confirm ? "Hide confirm password" : "Show confirm password"}
+                  >
+                    {showPwd.confirm ? <FiEyeOff size={18} /> : <FiEye size={18} />}
+                  </button>
+                </div>
+                {!passwordsMatch && (initial.password_confirmation?.length || 0) > 0 && (initial.password?.length || 0) > 0 && (
+                  <div className="auth-error" role="alert" style={{ marginTop: 4, fontSize: '0.875rem', color: '#dc2626' }}>
+                    Passwords do not match.
+                  </div>
+                )}
+              </label>
+
+              {/* Password strength & criteria */}
+              <div className="lv-field" style={{ gridColumn: '1 / -1' }}>
+                <div className="password-strength" aria-live="polite" style={{ marginTop: 8 }}>
+                  <div style={{
+                    height: '4px',
+                    borderRadius: '2px',
+                    background: strongPassword ? '#22c55e' : '#e5e7eb',
+                    marginBottom: '8px',
+                    transition: 'background 0.3s'
+                  }}></div>
+                  <ul style={{
+                    listStyle: 'none',
+                    padding: 0,
+                    margin: 0,
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                    gap: '4px',
+                    fontSize: '0.875rem'
+                  }}>
+                    {passwordCriteria.map(c => (
+                      <li key={c.label} style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        color: c.ok ? '#22c55e' : '#94a3b8'
+                      }}>
+                        {c.ok ? <FiCheck size={14} /> : <FiAlertCircle size={14} />} {c.label}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </div>
-            </div>
+            </>
           )}
 
           <label className="lv-field" style={{ gridColumn: '1/-1' }}>

@@ -68,14 +68,14 @@ export default function AdminUsersForm({
   const validFullName = validateFullName(form.name) === null;
   const validEmail = validateEmail(form.email) === null;
   const strongPassword = form.password ? validatePassword(form.password) === null : true;
-  const passwordsMatch = form.password.length > 0 && form.password === passwordConfirmation;
+  const passwordsMatch = (form.password?.length || 0) > 0 && form.password === passwordConfirmation;
 
   const passwordCriteria = [
-    { label: 'At least 8 characters', ok: form.password.length >= 8 && form.password.length <= 64 },
-    { label: '1 uppercase letter', ok: /[A-Z]/.test(form.password) },
-    { label: '1 number', ok: /\d/.test(form.password) },
-    { label: '1 special character', ok: /[^A-Za-z0-9]/.test(form.password) },
-    { label: 'No spaces', ok: !/\s/.test(form.password) || form.password.length === 0 },
+    { label: 'At least 8 characters', ok: (form.password?.length || 0) >= 8 && (form.password?.length || 0) <= 64 },
+    { label: '1 uppercase letter', ok: /[A-Z]/.test(form.password || '') },
+    { label: '1 number', ok: /\d/.test(form.password || '') },
+    { label: '1 special character', ok: /[^A-Za-z0-9]/.test(form.password || '') },
+    { label: 'No spaces', ok: !/\s/.test(form.password || '') || (form.password?.length || 0) === 0 },
   ];
 
   // Fetch tenants for org-scoped roles (use /api/admin/tenants, handle pagination)
@@ -119,7 +119,7 @@ export default function AdminUsersForm({
     const emailError = validateEmail(form.email);
     let passwordError = null;
     
-    if (mode === "create" || form.password) {
+    if (mode === "create") {
       passwordError = validatePassword(form.password);
     }
     
@@ -130,7 +130,7 @@ export default function AdminUsersForm({
     }
     
     // Check password confirmation match
-    if ((mode === "create" || form.password) && form.password !== passwordConfirmation) {
+    if (mode === "create" && form.password !== passwordConfirmation) {
       setErrors({ ...errors, password: "Passwords do not match." });
       return;
     }
@@ -144,9 +144,6 @@ export default function AdminUsersForm({
     };
     if (mode === "create") {
       payload.password = form.password || undefined;
-      payload.password_confirmation = passwordConfirmation || undefined;
-    } else if (form.password) {
-      payload.password = form.password;
       payload.password_confirmation = passwordConfirmation || undefined;
     }
     if (form.role !== "") {
@@ -213,112 +210,114 @@ export default function AdminUsersForm({
         )}
       </label>
 
-      <label className="lv-field">
-        <span>{mode === "edit" ? "New Password (optional)" : "Password*"}</span>
-        <div style={{ position: 'relative' }}>
-          <input
-            type={showPwd.password ? "text" : "password"}
-            required={mode !== "edit"}
-            value={form.password}
-            onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-            placeholder={mode === "edit" ? "Leave blank to keep current" : "Minimum 8 characters"}
-            maxLength={64}
-            style={{ paddingRight: '40px' }}
-          />
-          <button
-            type="button"
-            onClick={() => setShowPwd((p) => ({ ...p, password: !p.password }))}
-            style={{
-              position: 'absolute',
-              right: '8px',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              padding: '4px',
-              display: 'flex',
-              alignItems: 'center'
-            }}
-            aria-label={showPwd.password ? "Hide password" : "Show password"}
-          >
-            {showPwd.password ? <FiEyeOff size={18} /> : <FiEye size={18} />}
-          </button>
-        </div>
-      </label>
-
-      <label className="lv-field">
-        <span>{mode === "edit" ? "Confirm New Password" : "Confirm Password*"}</span>
-        <div style={{ position: 'relative' }}>
-          <input
-            type={showPwd.confirm ? "text" : "password"}
-            required={mode !== "edit"}
-            value={passwordConfirmation}
-            onChange={(e) => setPasswordConfirmation(e.target.value)}
-            placeholder={mode === "edit" ? "Retype new password" : "Retype password"}
-            maxLength={64}
-            style={{ paddingRight: '40px' }}
-          />
-          <button
-            type="button"
-            onClick={() => setShowPwd((p) => ({ ...p, confirm: !p.confirm }))}
-            style={{
-              position: 'absolute',
-              right: '8px',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              padding: '4px',
-              display: 'flex',
-              alignItems: 'center'
-            }}
-            aria-label={showPwd.confirm ? "Hide confirm password" : "Show confirm password"}
-          >
-            {showPwd.confirm ? <FiEyeOff size={18} /> : <FiEye size={18} />}
-          </button>
-        </div>
-        {!passwordsMatch && passwordConfirmation.length > 0 && form.password.length > 0 && (
-          <div className="auth-error" role="alert" style={{ marginTop: 4, fontSize: '0.875rem', color: '#dc2626' }}>
-            Passwords do not match.
-          </div>
-        )}
-      </label>
-
-      {/* Password strength & criteria */}
-      {(mode === "create" || form.password.length > 0) && (
-        <div className="lv-field full" style={{ gridColumn: '1 / -1' }}>
-          <div className="password-strength" aria-live="polite" style={{ marginTop: 8 }}>
-            <div style={{
-              height: '4px',
-              borderRadius: '2px',
-              background: strongPassword ? '#22c55e' : '#e5e7eb',
-              marginBottom: '8px',
-              transition: 'background 0.3s'
-            }}></div>
-            <ul style={{
-              listStyle: 'none',
-              padding: 0,
-              margin: 0,
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-              gap: '4px',
-              fontSize: '0.875rem'
-            }}>
-              {passwordCriteria.map(c => (
-                <li key={c.label} style={{
+      {mode === 'create' && (
+        <>
+          <label className="lv-field">
+            <span>Password*</span>
+            <div style={{ position: 'relative' }}>
+              <input
+                type={showPwd.password ? "text" : "password"}
+                required
+                value={form.password || ''}
+                onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                placeholder="Minimum 8 characters"
+                maxLength={64}
+                style={{ paddingRight: '40px' }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPwd((p) => ({ ...p, password: !p.password }))}
+                style={{
+                  position: 'absolute',
+                  right: '8px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '4px',
                   display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  color: c.ok ? '#22c55e' : '#94a3b8'
-                }}>
-                  {c.ok ? <FiCheck size={14} /> : <FiAlertCircle size={14} />} {c.label}
-                </li>
-              ))}
-            </ul>
+                  alignItems: 'center'
+                }}
+                aria-label={showPwd.password ? "Hide password" : "Show password"}
+              >
+                {showPwd.password ? <FiEyeOff size={18} /> : <FiEye size={18} />}
+              </button>
+            </div>
+          </label>
+
+          <label className="lv-field">
+            <span>Confirm Password*</span>
+            <div style={{ position: 'relative' }}>
+              <input
+                type={showPwd.confirm ? "text" : "password"}
+                required
+                value={passwordConfirmation}
+                onChange={(e) => setPasswordConfirmation(e.target.value)}
+                placeholder="Retype password"
+                maxLength={64}
+                style={{ paddingRight: '40px' }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPwd((p) => ({ ...p, confirm: !p.confirm }))}
+                style={{
+                  position: 'absolute',
+                  right: '8px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}
+                aria-label={showPwd.confirm ? "Hide confirm password" : "Show confirm password"}
+              >
+                {showPwd.confirm ? <FiEyeOff size={18} /> : <FiEye size={18} />}
+              </button>
+            </div>
+            {!passwordsMatch && passwordConfirmation.length > 0 && (form.password?.length || 0) > 0 && (
+              <div className="auth-error" role="alert" style={{ marginTop: 4, fontSize: '0.875rem', color: '#dc2626' }}>
+                Passwords do not match.
+              </div>
+            )}
+          </label>
+
+          {/* Password strength & criteria */}
+          <div className="lv-field full" style={{ gridColumn: '1 / -1' }}>
+            <div className="password-strength" aria-live="polite" style={{ marginTop: 8 }}>
+              <div style={{
+                height: '4px',
+                borderRadius: '2px',
+                background: strongPassword ? '#22c55e' : '#e5e7eb',
+                marginBottom: '8px',
+                transition: 'background 0.3s'
+              }}></div>
+              <ul style={{
+                listStyle: 'none',
+                padding: 0,
+                margin: 0,
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gap: '4px',
+                fontSize: '0.875rem'
+              }}>
+                {passwordCriteria.map(c => (
+                  <li key={c.label} style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    color: c.ok ? '#22c55e' : '#94a3b8'
+                  }}>
+                    {c.ok ? <FiCheck size={14} /> : <FiAlertCircle size={14} />} {c.label}
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
-        </div>
+        </>
       )}
 
       <label className="lv-field full">
