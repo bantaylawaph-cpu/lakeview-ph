@@ -131,6 +131,7 @@ class OrgUserController extends Controller
     }
 
     // DELETE /api/org/{tenant}/users/{user}
+    // Remove user from organization (demote to public, preserve account & data)
     public function destroy(Request $request, int $tenant, User $user)
     {
         $actor = $request->user();
@@ -140,9 +141,36 @@ class OrgUserController extends Controller
             return response()->json(['message' => 'User not in tenant'], 404);
         }
 
-        // Option: demote instead of delete? For now just delete.
-        $user->delete();
-        return response()->json(['message' => 'User removed']);
+        // Prevent self-removal
+        if ($user->id === $actor->id) {
+            return response()->json(['message' => 'Cannot remove yourself from the organization'], 422);
+        }
+
+        // Prevent removing last org admin
+        if ($user->isOrgAdmin()) {
+            $adminCount = User::where('tenant_id', $tenant)
+                ->whereHas('role', fn($q) => $q->where('name', Role::ORG_ADMIN))
+                ->count();
+            if ($adminCount <= 1) {
+                return response()->json(['message' => 'Cannot remove the last organization administrator. Transfer admin role first.'], 422);
+            }
+        }
+
+        // Get public role
+        $publicRoleId = Role::where('name', Role::PUBLIC)->value('id');
+        if (!$publicRoleId) {
+            return response()->json(['message' => 'Public role not found. Please run database seeders.'], 500);
+        }
+
+        // Remove from organization (demote to public, preserve account)
+        $user->role_id = $publicRoleId;
+        $user->tenant_id = null;
+        $user->save();
+
+        return response()->json([
+            'message' => 'User removed from organization. Their account and data contributions have been preserved.',
+            'user' => $user->fresh(['role'])
+        ]);
     }
 
     private function authorizeTenantUser(?User $actor, int $tenant, User $target): void

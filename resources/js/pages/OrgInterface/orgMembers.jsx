@@ -340,29 +340,36 @@ export default function OrgMembers() {
     } finally { setSaving(false); }
   };
 
-  // Delete
+  // Remove from organization
   const deleteContributor = useCallback(async (row) => {
     if (!tenantId) {
       Swal.fire('Tenant not ready', 'Please wait a moment and try again.', 'info');
       return;
     }
-    const { isConfirmed } = await Swal.fire({ title:'Delete contributor?', text:`This will permanently delete ${row.email}.`, icon:'warning', showCancelButton:true, confirmButtonText:'Delete', confirmButtonColor:'#dc2626' });
+    const { isConfirmed } = await Swal.fire({ 
+      title:'Remove from organization?', 
+      html:`<p>Remove <strong>${row.email}</strong> from this organization?</p><p style="font-size: 0.9em; color: #64748b; margin-top: 8px;">Their account will be preserved along with all water quality records and feedback they created. They will be demoted to a public user.</p>`, 
+      icon:'warning', 
+      showCancelButton:true, 
+      confirmButtonText:'Remove from Org', 
+      confirmButtonColor:'#dc2626' 
+    });
     if (!isConfirmed) return;
     try {
       await api.delete(`/org/${tenantId}/users/${row.id}`);
-      toast('Contributor deleted');
+      toast('User removed from organization');
       try { invalidateHttpCache(`/org/${tenantId}/users`); } catch {}
       reload();
     } catch(e) {
-      console.error('Delete failed', e);
-      Swal.fire('Delete failed', e?.response?.data?.message || '', 'error');
+      console.error('Remove failed', e);
+      Swal.fire('Remove failed', e?.response?.data?.message || '', 'error');
     }
   }, [tenantId]);
 
   // Actions (same style as adminUsers)
   const actions = useMemo(() => [
     { label:'Edit', title:'Edit', type:'edit', icon:<FiEdit />, onClick:(raw)=>openEdit(raw) },
-    { label:'Delete', title:'Delete', type:'delete', icon:<FiTrash />, onClick:(raw)=>deleteContributor(raw) },
+    { label:'Remove from Org', title:'Remove from Organization', type:'delete', icon:<FiTrash />, onClick:(raw)=>deleteContributor(raw) },
   ], [openEdit, deleteContributor]);
 
   // Normalized rows (for TableLayout)
