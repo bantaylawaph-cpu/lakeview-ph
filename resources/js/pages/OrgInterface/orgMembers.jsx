@@ -221,7 +221,7 @@ export default function OrgMembers() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId]);
 
-  const reload = () => { if (tenantId) fetchMembers(tenantId, buildParams()); };
+  const reload = () => { if (tenantId) { try { invalidateHttpCache(`/org/${tenantId}/users`); } catch {} fetchMembers(tenantId, buildParams()); } };
 
   const goPage = (p) => {
     setPagination((prev) => ({ ...prev, page: p }));
@@ -409,7 +409,7 @@ export default function OrgMembers() {
   const isMobileStack = windowW <= 640; // Mobile S/M/L threshold for vertical stacking
 
   return (
-    <div className="container" style={{ padding: 16 }}>
+    <div style={{ padding: 16 }}>
       <DashboardHeader
         icon={<FiUsers />}
         title="Members"

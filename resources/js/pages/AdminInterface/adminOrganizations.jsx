@@ -256,7 +256,7 @@ export default function AdminOrganizationsPage() {
   // actions menu removed; no DOM wiring required
 
   return (
-    <div className="container" style={{ padding: 16 }}>
+    <div style={{ padding: 16 }}>
       <DashboardHeader
         icon={<FiBriefcaseIcon />}
         title="Organizations"
@@ -269,7 +269,7 @@ export default function AdminOrganizationsPage() {
           search={{ value:q, onChange: v => { setQ(v); fetchOrgs(buildParams({ q:v, page:1 })); }, placeholder:'Search Organizations...' }}
           filters={[]}
           columnPicker={columnPickerAdapter}
-          onRefresh={() => fetchOrgs(buildParams())}
+          onRefresh={() => { try { invalidateHttpCache('/admin/tenants'); } catch {} fetchOrgs(buildParams()); }}
           onAdd={openCreate}
           onToggleFilters={() => setShowAdvanced(s => !s)}
           filtersBadgeCount={activeAdvCount}

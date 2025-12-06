@@ -191,28 +191,6 @@ export default function AdminOrgApplications() {
     return sorted.slice(start, start + pageSize);
   }, [sorted, page]);
 
-  function exportCsv() {
-    const cols = COLUMNS.filter(c => visibleMap[c.id] !== false && c.id !== 'actions');
-    const header = cols.map(c => '"' + (c.header || c.id).replaceAll('"', '""') + '"').join(',');
-    const body = filtered.map(gr => cols.map(c => {
-      const primary = gr.primary_app;
-      const v = c.id === 'user' ? (gr.user?.name ?? '')
-  : c.id === 'applications' ? String((gr?.apps || []).length)
-        : c.id === 'status' ? (gr.status_summary ?? '')
-        : '';
-      const s = String(v ?? '');
-      return '"' + s.replaceAll('"', '""') + '"';
-    }).join(',')).join('\n');
-    const csv = [header, body].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'admin-org-applications-per-user.csv';
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
   // Mirror AdminUsers: build TableLayout columns and normalized rows
   const [profileUserId, setProfileUserId] = useState(null);
   const [userApps, setUserApps] = useState({ open: false, user: null, apps: [], loading: false, error: '' });
@@ -324,7 +302,6 @@ export default function AdminOrgApplications() {
         filters={[{ id: 'status', label: 'Status', type: 'select', value: status, onChange: setStatus, options: STATUS_OPTIONS }]}
         columnPicker={{ columns: COLUMNS, visibleMap, onVisibleChange: setVisibleMap }}
         onRefresh={load}
-        onExport={exportCsv}
       />
 
       <div className="card">

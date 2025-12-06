@@ -458,7 +458,7 @@ export default function AdminFeedback() {
         search={{ value: search, onChange: setSearch, placeholder: 'Search Feedback...' }}
         columnPicker={{ columns: COLUMNS, visibleMap, onVisibleChange: setVisibleMap }}
         onToggleFilters={() => setShowFilters(v => !v)}
-        onRefresh={() => { try { invalidateHttpCache('/admin/feedback'); } catch {} fetchData(1); }}
+        onRefresh={() => { try { invalidateHttpCache('/admin/feedback'); } catch {} fetchData(1, false); }}
       />
 
       {showFilters && (

@@ -21,6 +21,10 @@ export default function SettingsForm({ context = 'public', onUpdated }) {
   const [tenantName, setTenantName] = useState(() => (user?.tenant?.name || user?.tenant_name || user?.tenant || ''));
   const [orgModalOpen, setOrgModalOpen] = useState(false);
   const [localError, setLocalError] = useState('');
+  const [profileSuccess, setProfileSuccess] = useState('');
+  const [profileError, setProfileError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState('');
+  const [passwordError, setPasswordError] = useState('');
   const { mode, showSection, canEdit } = useSettingsMode({ user, context });
   const { update, loading, error, success, resetStatus } = useUpdateSelf();
 
@@ -40,6 +44,8 @@ export default function SettingsForm({ context = 'public', onUpdated }) {
     e.preventDefault();
     resetStatus();
     setLocalError('');
+    // clear panel-specific messages
+    setProfileSuccess(''); setProfileError(''); setPasswordSuccess(''); setPasswordError('');
     if (showPasswordSection && (password || password2 || currentPassword)) {
       if (password !== password2) { setLocalError('Passwords do not match.'); return; }
       if (!currentPassword) { setLocalError('Current password is required.'); return; }
@@ -56,6 +62,18 @@ export default function SettingsForm({ context = 'public', onUpdated }) {
     const res = await update(payload);
     if (res?.user) { setUser(res.user); setName(res.user.name); }
     if (payload.password) resetPasswordFields();
+    // If update returned an error, route it to the proper panel
+    if (res?.error) {
+      // Route error to relevant panels
+      if (payload.password) setPasswordError(res.error);
+      if (payload.name) setProfileError(res.error);
+      if (!payload.password && !payload.name) setProfileError(res.error);
+    } else if (res?.updated) {
+      // resolved ok — show panel-specific success for each affected field
+      if (payload.password) setPasswordSuccess('Password updated successfully.');
+      if (payload.name) setProfileSuccess('Settings updated successfully.');
+      if (!payload.password && !payload.name) setProfileSuccess('Settings updated successfully.');
+    }
     onUpdated?.(res?.user);
   }, [password,password2,currentPassword,name,user,canEdit,update,onUpdated,showPasswordSection]);
 
@@ -78,7 +96,7 @@ export default function SettingsForm({ context = 'public', onUpdated }) {
               <h3>Profile</h3>
               <div className="lv-field-row">
                 <label>Name</label>
-                <input type="text" value={name} onChange={e=>setName(e.target.value)} maxLength={255} disabled={!canEdit('name')} />
+                <input type="text" value={name} onChange={e=>{ setName(e.target.value); setProfileSuccess(''); setProfileError(''); }} maxLength={255} disabled={!canEdit('name')} />
               </div>
               <div className="lv-field-row">
                 <label>Email</label>
@@ -95,9 +113,8 @@ export default function SettingsForm({ context = 'public', onUpdated }) {
                   </div>
                 </div>
               )}
-              {success && <div className="lv-status-success" role="status">{success}</div>}
-              {error && <div className="lv-status-error" role="alert">{error}</div>}
-              {localError && <div className="lv-status-error" role="alert">{localError}</div>}
+              {profileSuccess && <div className="lv-status-success" role="status">{profileSuccess}</div>}
+              {profileError && <div className="lv-status-error" role="alert">{profileError}</div>}
             </div>
             {showPassword && (
               <div className="lv-settings-panel">
@@ -111,18 +128,21 @@ export default function SettingsForm({ context = 'public', onUpdated }) {
                   <div className="password-section">
                     <div className="lv-field-row">
                       <label>Current Password</label>
-                      <input type="password" value={currentPassword} onChange={e=>setCurrentPassword(e.target.value)} placeholder="Enter current password" autoComplete="current-password" disabled={!canEdit('password')} />
+                      <input type="password" value={currentPassword} onChange={e=>{ setCurrentPassword(e.target.value); setLocalError(''); setPasswordSuccess(''); setPasswordError(''); }} placeholder="Enter current password" autoComplete="current-password" disabled={!canEdit('password')} />
                     </div>
                     <div className="lv-field-row">
                       <label>New Password</label>
-                      <input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="(leave blank to keep)" autoComplete="new-password" disabled={!canEdit('password')} />
+                      <input type="password" value={password} onChange={e=>{ setPassword(e.target.value); setLocalError(''); setPasswordSuccess(''); setPasswordError(''); }} placeholder="(leave blank to keep)" autoComplete="new-password" disabled={!canEdit('password')} />
                     </div>
                     <div className="lv-field-row">
                       <label>Confirm New Password</label>
-                      <input type="password" value={password2} onChange={e=>setPassword2(e.target.value)} autoComplete="new-password" disabled={!canEdit('password')} />
+                      <input type="password" value={password2} onChange={e=>{ setPassword2(e.target.value); setLocalError(''); setPasswordSuccess(''); setPasswordError(''); }} autoComplete="new-password" disabled={!canEdit('password')} />
                     </div>
                   </div>
                 )}
+                {passwordSuccess && <div className="lv-status-success" role="status">{passwordSuccess}</div>}
+                {passwordError && <div className="lv-status-error" role="alert">{passwordError}</div>}
+                {localError && <div className="lv-status-error" role="alert">{localError}</div>}
               </div>
             )}
           </div>

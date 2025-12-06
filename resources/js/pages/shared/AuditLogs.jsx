@@ -425,7 +425,7 @@ export default function AuditLogs({ scope = 'admin' }) {
   // Render
   if (!isAdminScope && !isOrgAdmin) {
     return (
-      <div className="container" style={{ padding:16, position:'relative' }}>
+      <div style={{ padding:16, position:'relative' }}>
         <div className="dashboard-card" style={{ marginBottom:12 }}>
           <div className="dashboard-card-header">
             <div className="dashboard-card-title">
@@ -446,7 +446,7 @@ export default function AuditLogs({ scope = 'admin' }) {
   const headingDesc = isAdminScope ? 'View system audit logs and activity history.' : 'Activity history within your organization.';
 
   return (
-    <div className="container" style={{ padding: 16, position:'relative' }}>
+    <div style={{ padding: 16, position:'relative' }}>
       <div className="dashboard-card" style={{ marginBottom: 12 }}>
         <div className="dashboard-card-header">
           <div className="dashboard-card-title">
@@ -460,7 +460,7 @@ export default function AuditLogs({ scope = 'admin' }) {
         <TableToolbar
           tableId={TABLE_ID}
           search={{ value: q, onChange: (val) => setQ(val), placeholder: 'Search Logs...' }}
-          onRefresh={() => fetchLogs(buildParams(), { force: true })}
+          onRefresh={() => { try { if (effectiveBase) invalidateHttpCache(effectiveBase); } catch {} fetchLogs(buildParams(), { force: true }); }}
         />
         {error && <div className="lv-error" style={{ padding: 8, color: 'var(--danger)' }}>{error}</div>}
       </div>

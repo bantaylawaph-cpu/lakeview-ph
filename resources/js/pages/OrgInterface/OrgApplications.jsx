@@ -121,28 +121,6 @@ export default function OrgApplications() {
     });
   }, [rows, query]);
 
-  function exportCsv() {
-    const cols = COLUMNS.filter(c => visibleMap[c.id] !== false && c.id !== 'actions');
-    const header = cols.map(c => '"' + (c.header || c.id).replaceAll('"', '""') + '"').join(',');
-    const body = filtered.map(r => cols.map(c => {
-      const v = c.id === 'user' ? (r.user?.name ?? '')
-        : c.id === 'email' ? (r.user?.email ?? '')
-        : c.id === 'desired_role' ? (roleLabel(r.desired_role) ?? '')
-        : c.id === 'status' ? (statusLabel(r.status) ?? '')
-        : '';
-      const s = String(v ?? '');
-      return '"' + s.replaceAll('"', '""') + '"';
-    }).join(',')).join('\n');
-    const csv = [header, body].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'org-applications.csv';
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
   // Build TableLayout columns, normalized data, and actions (mirror admin table UX)
   const [profileUserId, setProfileUserId] = useState(null);
   const [statusInfoOpen, setStatusInfoOpen] = useState(false);
@@ -222,8 +200,7 @@ export default function OrgApplications() {
         search={{ value: query, onChange: setQuery, placeholder: 'Search Applications...' }}
         filters={[{ id: 'status', label: 'Status', type: 'select', value: status, onChange: setStatus, options: STATUS_OPTIONS }]}
         columnPicker={{ columns: COLUMNS, visibleMap, onVisibleChange: setVisibleMap }}
-        onRefresh={load}
-        onExport={exportCsv}
+        onRefresh={() => { if (orgTenantId) { try { invalidateHttpCache(`/org/${orgTenantId}/applications`); } catch {} load(); } }}
       />
 
       {loading && <div style={{ marginTop: 8 }}>Loading…</div>}

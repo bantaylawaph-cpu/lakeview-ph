@@ -293,7 +293,7 @@ export default function AdminUsersPage() {
   }, [fRole]);
 
   return (
-    <div className="container" style={{ padding: 16 }}>
+    <div style={{ padding: 16 }}>
       <DashboardHeader
         icon={<FiUsersIcon />}
         title="Users"
@@ -306,7 +306,7 @@ export default function AdminUsersPage() {
           search={{ value: q, onChange: (val) => { setQ(val); fetchUsers(buildParams({ q: val, page: 1 })); }, placeholder: "Search Users..." }}
           filters={[]} // no basic filters now
           columnPicker={columnPickerAdapter}
-          onRefresh={() => fetchUsers(buildParams())}
+          onRefresh={() => { try { invalidateHttpCache('/admin/users'); } catch {} fetchUsers(buildParams()); }}
           onAdd={openCreate}
           onToggleFilters={() => setShowAdvanced(s => !s)}
           filtersBadgeCount={activeAdvCount}
