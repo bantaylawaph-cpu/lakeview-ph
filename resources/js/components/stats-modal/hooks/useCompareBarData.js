@@ -59,8 +59,8 @@ export default function useCompareBarData({ eventsA = [], eventsB = [], bucket =
     if (lakeA) lakes.push({ id: lakeA, events: eventsA });
     if (lakeB) lakes.push({ id: lakeB, events: eventsB });
     const lakeLabels = lakes.map((lk) => lakeName(lakeOptions, lk.id) || String(lk.id));
-    if (thrLoading) return { labels: lakeLabels, datasets: [], meta: { thresholdsLoading: true } };
-    if (!selectedParam || !years.length || lakes.length === 0) return { labels: lakeLabels, datasets: [], meta: { thresholdsLoading: false } };
+    if (thrLoading) return { labels: [], datasets: [], meta: { thresholdsLoading: true } };
+    if (!selectedParam || !years.length || lakes.length === 0) return { labels: [], datasets: [], meta: { thresholdsLoading: false } };
 
     const parse = parseIsoDate;
 
@@ -107,9 +107,14 @@ export default function useCompareBarData({ eventsA = [], eventsB = [], bucket =
       return cnt ? (sum / cnt) : null;
     };
 
-  const datasets = [];
-  // Year-based palette (group legend by year); months/quarters vary by lightness
-  const baseHues = [210, 0, 160, 120, 28, 280, 190, 340, 45, 200];
+    // We will output grouped bars per bucket (x-axis = period), bars = lakes
+    // Define stable colors per lake
+    const lakeColors = [
+      { bg: 'hsla(210, 70%, 55%, 0.85)', stroke: 'hsla(210, 70%, 45%, 1)' },
+      { bg: 'hsla(0, 70%, 60%, 0.85)', stroke: 'hsla(0, 70%, 50%, 1)' },
+      { bg: 'hsla(160, 70%, 55%, 0.85)', stroke: 'hsla(160, 70%, 45%, 1)' },
+      { bg: 'hsla(28, 70%, 60%, 0.85)', stroke: 'hsla(28, 70%, 50%, 1)' },
+    ];
 
     // build list of period keys depending on bucket
     const rawKeys = [];
@@ -133,6 +138,22 @@ export default function useCompareBarData({ eventsA = [], eventsB = [], bucket =
     };
     uniqueKeys.sort((a, b) => orderValue(a) - orderValue(b));
 
+    // Build labels for periods on x-axis
+    const periodLabels = uniqueKeys.map((pk) => humanLabelFor(pk));
+    // Build datasets per lake with values per period
+    const datasets = lakes.map((lk, idx) => {
+      const color = lakeColors[idx % lakeColors.length];
+      const data = uniqueKeys.map((pk) => meanForPeriod(lk.events, pk));
+      return {
+        label: lakeName(lakeOptions, lk.id) || String(lk.id),
+        data,
+        backgroundColor: color.bg,
+        borderColor: color.stroke,
+        borderWidth: 1,
+      };
+    });
+
+    // Meta for year grouping (used by yearLabelPlugin)
     const yearsFromKeys = Array.from(new Set(uniqueKeys.map((pk) => {
       if (/^\d{4}$/.test(pk)) return pk;
       const mq = pk.match(/^(\d{4})-Q(\d)$/); if (mq) return mq[1];
@@ -140,7 +161,6 @@ export default function useCompareBarData({ eventsA = [], eventsB = [], bucket =
       return '0000';
     })));
     yearsFromKeys.sort((a, b) => Number(a) - Number(b));
-    const yearHue = new Map(yearsFromKeys.map((y, i) => [String(y), baseHues[i % baseHues.length]]));
     const withinCountForBucket = bucket === 'year' ? 1 : (bucket === 'quarter' ? 4 : 12);
     const withinIndexFromPk = (pk) => {
       if (bucket === 'year') return 0;
@@ -154,26 +174,13 @@ export default function useCompareBarData({ eventsA = [], eventsB = [], bucket =
       const mm = pk.match(/^(\d{4})-(\d{2})$/); if (mm) return mm[1];
       return '0000';
     };
-    const colorFor = (pk) => {
-      const y = yearFromPk(pk);
-      const hue = yearHue.get(String(y)) ?? 200;
-      const idx = withinIndexFromPk(pk);
-      const t = withinCountForBucket > 1 ? (idx / (withinCountForBucket - 1)) : 0.5;
-      const light = 45 + Math.round(t * 25);
-      const borderLight = Math.max(30, light - 10);
-      return { bg: `hsla(${hue}, 70%, ${light}%, 0.85)`, stroke: `hsla(${hue}, 70%, ${borderLight}%, 1)`, year: String(y) };
-    };
-
-    const periodInfo = [];
-    const yearIndexMap = new Map();
-
-    uniqueKeys.forEach((pk) => {
-      const data = lakes.map((lk) => meanForPeriod(lk.events, pk));
-      const c = colorFor(pk);
-      datasets.push({ label: humanLabelFor(pk), data, backgroundColor: c.bg, borderColor: c.stroke, borderWidth: 1 });
-      periodInfo.push({ key: pk, year: c.year, month: withinCountForBucket === 12 ? withinIndexFromPk(pk) + 1 : null, quarter: withinCountForBucket === 4 ? withinIndexFromPk(pk) + 1 : null, index: datasets.length - 1 });
-      const arr = yearIndexMap.get(c.year) || []; arr.push(datasets.length - 1); yearIndexMap.set(c.year, arr);
-    });
+    const periodInfo = uniqueKeys.map((pk, i) => ({
+      key: pk,
+      year: yearFromPk(pk),
+      month: withinCountForBucket === 12 ? withinIndexFromPk(pk) + 1 : null,
+      quarter: withinCountForBucket === 4 ? withinIndexFromPk(pk) + 1 : null,
+      index: i,
+    }));
 
     // Enforced current-standard thresholds per lake (using pre-fetched thrA/thrB)
     const stdA = thrA || { min: null, max: null, code: current?.code || null };
@@ -183,7 +190,7 @@ export default function useCompareBarData({ eventsA = [], eventsB = [], bucket =
     const makeLine = (label, value, color) => {
       // span full width by emitting two points across the category axis and disabling parsing
       const left = -0.5;
-      const right = Math.max(0, lakeLabels.length - 0.5);
+      const right = Math.max(0, periodLabels.length - 0.5);
       return {
         label,
         data: [{ x: left, y: value }, { x: right, y: value }],
@@ -228,13 +235,15 @@ export default function useCompareBarData({ eventsA = [], eventsB = [], bucket =
     });
 
     // expose detected standard info for callers (map of combined standards)
-  const standards = Array.from(combinedStandards.values()).map((entry) => ({ code: entry.stdLabel, min: entry.min != null ? entry.min : null, max: entry.max != null ? entry.max : null, lakes: Array.from(entry.lakes) }));
+    const standards = Array.from(combinedStandards.values()).map((entry) => ({ code: entry.stdLabel, min: entry.min != null ? entry.min : null, max: entry.max != null ? entry.max : null, lakes: Array.from(entry.lakes) }));
 
-    const yearColors = {};
-    yearsFromKeys.forEach((y) => { const hue = yearHue.get(String(y)) ?? 200; yearColors[String(y)] = `hsla(${hue}, 70%, 55%, 0.9)`; });
+    // yearIndexMap for plugin: indices of periods per year
+    const yearIndexMap = new Map();
+    periodInfo.forEach((p) => { const arr = yearIndexMap.get(p.year) || []; arr.push(p.index); yearIndexMap.set(p.year, arr); });
     const yearIndexObj = {}; Array.from(yearIndexMap.entries()).forEach(([y, idxs]) => { yearIndexObj[y] = idxs; });
+    const yearColors = {}; yearsFromKeys.forEach((y) => { yearColors[String(y)] = '#9ca3af'; });
 
-    return { labels: lakeLabels, datasets, meta: { years, standards, bucket, periodInfo, yearIndexMap: yearIndexObj, yearColors, yearOrder: yearsFromKeys, thresholdsLoading: false } };
+    return { labels: periodLabels, datasets, meta: { years, standards, bucket, periodInfo, yearIndexMap: yearIndexObj, yearColors, yearOrder: yearsFromKeys, thresholdsLoading: false } };
   }, [eventsA, eventsB, bucket, selectedYears, depth, selectedParam, lakeA, lakeB, lakeOptions, thrA?.min, thrA?.max, thrB?.min, thrB?.max, thrA?.code, thrB?.code, thrLoading]);
 
   return { barData: memo, loadingThresholds: thrLoading };

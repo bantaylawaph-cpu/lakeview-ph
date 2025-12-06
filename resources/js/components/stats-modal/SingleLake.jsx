@@ -499,6 +499,26 @@ export default function SingleLake({
                   chartOptions.plugins.complianceShading = { min: thr?.min ?? null, max: thr?.max ?? null, axis: 'x' };
                   plugins = [complianceShadingPlugin];
                 }
+                // Relabel threshold lines: Min/Max (<Standard Code>: <value> <unit>) for depth profile
+                try {
+                  const stdCode = depthChartData?.meta?.standards?.[0]?.code || currentStd?.code || '';
+                  ds = (Array.isArray(ds) ? ds : []).map((dsi) => {
+                    const lbl = String(dsi?.label || '').toLowerCase();
+                    const isThreshold = lbl.includes('min') || lbl.includes('max');
+                    if (isThreshold) {
+                      const base = lbl.includes('max') ? 'Max' : 'Min';
+                      let val = NaN;
+                      try {
+                        const p0 = dsi?.data?.[0];
+                        val = typeof p0 === 'number' ? Number(p0) : Number(p0?.x);
+                      } catch {}
+                      const unitStr = (depthUnit || selectedParamUnit) ? ` ${depthUnit || selectedParamUnit}` : '';
+                      const valStr = Number.isFinite(val) ? `${val}${unitStr}` : `N/A${unitStr}`;
+                      return { ...dsi, label: `${base} (${stdCode}: ${valStr})` };
+                    }
+                    return dsi;
+                  });
+                } catch {}
                 const data = { datasets: ds };
                 return (
                   <Line
@@ -556,7 +576,7 @@ export default function SingleLake({
                 if (smk && Array.isArray(smk.overlay)){
                   datasets = datasets.concat([
                     {
-                      label: `Sen’s slope (Mann-Kendall)`,
+                      label: `Trend Line (Sen's slope)`,
                       data: smk.overlay,
                       borderColor: '#f2c94c',
                       backgroundColor: 'transparent',
@@ -593,6 +613,26 @@ export default function SingleLake({
                     chartPlugins = [complianceShadingPlugin];
                   }
                 }
+                // Relabel threshold lines: Min/Max (<Standard Code>: <value> <unit>) for time series
+                try {
+                  const stdCode = chartData?.meta?.standards?.[0]?.code || currentStd?.code || '';
+                  modifiedDatasets = (Array.isArray(modifiedDatasets) ? modifiedDatasets : []).map((ds) => {
+                    const lbl = String(ds?.label || '').toLowerCase();
+                    const isThreshold = lbl.includes('min') || lbl.includes('max');
+                    if (isThreshold) {
+                      const base = lbl.includes('max') ? 'Max' : 'Min';
+                      let val = NaN;
+                      try {
+                        const p0 = ds?.data?.[0];
+                        val = typeof p0 === 'number' ? Number(p0) : Number(p0?.y);
+                      } catch {}
+                      const unitStr = selectedParamUnit ? ` ${selectedParamUnit}` : '';
+                      const valStr = Number.isFinite(val) ? `${val}${unitStr}` : `N/A${unitStr}`;
+                      return { ...ds, label: `${base} (${stdCode}: ${valStr})` };
+                    }
+                    return ds;
+                  });
+                } catch {}
                 const data = { labels: chartData.labels, datasets: modifiedDatasets };
                 return <Line key={`time-${selectedParam}-${selectedLake}-${seriesMode}-${trendEnabled}-${shadeOutOfCompliance}-${toggleNonCompliantPoints}`} ref={chartRef} data={data} options={chartOptions} plugins={chartPlugins} />;
               })()

@@ -457,7 +457,31 @@ function WaterQualityTab({ lake }) {
                   </div>
                 </div>
                 <div className="wq-chart">
-                  <Line data={p.chartData} options={timeOptions} plugins={[complianceShadingPlugin]} />
+                  {(() => {
+                    let data = p.chartData;
+                    try {
+                      const stdCode = p?.threshold?.code || currentStd?.code || '';
+                      const unitStr = p?.unit ? ` ${p.unit}` : '';
+                      const ds = Array.isArray(data?.datasets) ? data.datasets : [];
+                      const relabeled = ds.map((dsi) => {
+                        const lbl = String(dsi?.label || '').toLowerCase();
+                        const isThreshold = lbl.includes('min') || lbl.includes('max');
+                        if (isThreshold) {
+                          const base = lbl.includes('max') ? 'Max' : 'Min';
+                          let val = NaN;
+                          try {
+                            const p0 = dsi?.data?.[0];
+                            val = typeof p0 === 'number' ? Number(p0) : Number(p0?.y);
+                          } catch {}
+                          const valStr = Number.isFinite(val) ? `${val}${unitStr}` : `N/A${unitStr}`;
+                          return { ...dsi, label: `${base} (${stdCode}: ${valStr})` };
+                        }
+                        return dsi;
+                      });
+                      data = { ...data, datasets: relabeled };
+                    } catch {}
+                    return <Line data={data} options={timeOptions} plugins={[complianceShadingPlugin]} />;
+                  })()}
                 </div>
               </div>
             );

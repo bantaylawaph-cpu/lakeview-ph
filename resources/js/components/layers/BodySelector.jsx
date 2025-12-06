@@ -38,7 +38,7 @@ export default function BodySelector({ allowedBodyTypes, bodyType, onBodyTypeCha
             onChange={(e) => onBodyIdChange?.(e.target.value)}
             required
           >
-            <option value="" disabled>Select category…</option>
+            <option value="" disabled>Choose a watershed</option>
             {watershedOptions.map((o) => (
               <option key={`ws-${o.id}`} value={o.id}>{o.name}</option>
             ))}

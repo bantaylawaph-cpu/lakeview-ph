@@ -22,7 +22,7 @@ import { fetchParamThresholds } from './hooks/useParamThresholds';
 function CompareLake({
   lakeOptions = [],
   params = [],
-  bucket = "month",
+  bucket = "year",
   setBucket = () => {},
   chartRef,
   timeRange = "all",
@@ -247,11 +247,27 @@ function CompareLake({
       setSelectedParam('');
       setSelectedYears([]);
       setDepthSelection('0');
+      try { setBucket('year'); } catch {}
     }
   }));
 
 
   const { barData, loadingThresholds: compareThrLoading } = useCompareBarData({ eventsA: eventsAAll, eventsB: eventsBAll, bucket, selectedYears, depth: depthSelection, selectedParam, lakeA, lakeB, lakeOptions });
+
+  // Ensure default bucket is 'year' whenever modal opens or on initial mount
+  useEffect(() => {
+    try {
+      const allowed = new Set(['year','quarter','month']);
+      if (!allowed.has(String(bucket))) {
+        setBucket('year');
+        return;
+      }
+      if (String(bucket) === 'month') {
+        setBucket('year');
+      }
+    } catch {}
+    // run on open and first render
+  }, [isModalOpen]);
 
 
   const canShowInfo = useMemo(() => {
@@ -350,7 +366,7 @@ function CompareLake({
               setDateFrom={setDateFrom}
               dateTo={dateTo}
               setDateTo={setDateTo}
-              allowedBuckets={['year','quarter','month']}
+                allowedBuckets={['year','quarter','month']}
               rangeMode={'year-multi'}
               availableYears={availableYears}
               selectedYears={selectedYears}
@@ -431,24 +447,30 @@ function CompareLake({
             const unit = paramMeta?.unit || '';
             const title = paramMeta ? `${paramMeta.label || paramMeta.name || paramMeta.code}` : 'Value';
             const hasThresholdLines = Array.isArray(bd?.datasets) && bd.datasets.some((d) => d && d.type === 'line');
+            // Enforce legend label format for threshold lines: Min/Max (<Standard Code>: <value> <unit>)
+            try {
+              const stdCode = bd?.meta?.standards?.[0]?.code || '';
+              bd.datasets = (Array.isArray(bd.datasets) ? bd.datasets : []).map((ds) => {
+                if (ds && ds.type === 'line') {
+                  const isMax = String(ds.label || '').toLowerCase().includes('max');
+                  const base = isMax ? 'Max' : 'Min';
+                  let val = NaN;
+                  try { val = Number(ds?.data?.[0]?.y); } catch {}
+                  const valStr = Number.isFinite(val) ? `${val}${unit ? ` ${unit}` : ''}` : `N/A${unit ? ` ${unit}` : ''}`;
+                  return { ...ds, label: `${base} (${stdCode}: ${valStr})` };
+                }
+                return ds;
+              });
+            } catch {}
             const options = {
               responsive: true,
               maintainAspectRatio: false,
               plugins: {
                 legend: {
-                  display: !!hasThresholdLines,
-                  labels: {
-                    color: '#fff',
-                    filter: (legendItem, chartData) => {
-                      try {
-                        const ds = chartData?.datasets?.[legendItem.datasetIndex];
-                        return !!(ds && ds.type === 'line');
-                      } catch { return false; }
-                    },
-                  },
+                  display: true,
+                  labels: { color: '#fff' },
                 },
                 tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.formattedValue}${unit ? ` ${unit}` : ''}` } },
-                yearLabelPlugin: { meta: bd?.meta || {}, color: '#fff', fontSize: 11, paddingInside: 14 },
               },
               indexAxis: 'x',
               datasets: { bar: { categoryPercentage: 0.75, barPercentage: 0.9 } },

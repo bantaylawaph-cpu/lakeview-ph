@@ -33,34 +33,6 @@ export default function ValuesTable({ result, lakes, lakeId, compareValue, showA
     return 'Group 2';
   };
 
-  const copyValues = async () => {
-    try {
-      let text = '';
-      if (events) {
-        const lines = [ 'sampled_at,lake,station_id,value' ];
-        slice(events).forEach(ev => lines.push(`${ev.sampled_at || ''},"${lakeName(ev.lake_id)}",${ev.station_id ?? ''},${ev.value ?? ''}`));
-        text = lines.join('\n');
-      } else if (one) {
-        text = slice(one).join(', ');
-      } else {
-        const maxLen = Math.max(two1.length, two2.length);
-        const lines = [ [groupLabel(two1,two2,1), groupLabel(two1,two2,2)].join(',') ];
-        for (let i=0;i<maxLen;i++) {
-          const a = i < two1.length ? two1[i] : '';
-          const b = i < two2.length ? two2[i] : '';
-          lines.push(`${a},${b}`);
-        }
-        text = lines.join('\n');
-      }
-      if (navigator?.clipboard?.writeText) await navigator.clipboard.writeText(text); else {
-        const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
-      }
-      alertSuccess('Copied', 'Values copied to clipboard.');
-    } catch (e) {
-      alertError('Copy failed', 'Could not copy values to clipboard.');
-    }
-  };
-
   const copyValuesOnly = async () => {
     try {
       let text = '';
@@ -87,7 +59,6 @@ export default function ValuesTable({ result, lakes, lakeId, compareValue, showA
         <strong>{String(lakeId) === 'custom' && one ? `Custom dataset values (${one.length})` : 'Data used'}</strong>
         <div style={{ display:'flex', gap:8 }}>
           <button className="pill-btn" onClick={()=>setShowAllValues(s=>!s)}>{showAll ? `Show first ${limit}` : 'Show all'}</button>
-          <button className="pill-btn" onClick={copyValues}>Copy</button>
           <button className="pill-btn" onClick={copyValuesOnly}>Copy values</button>
         </div>
       </div>
