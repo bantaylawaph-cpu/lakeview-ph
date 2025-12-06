@@ -39,7 +39,8 @@ class Layer extends Model
     public function setIsDownloadableAttribute($value): void
     {
         $bool = filter_var($value, FILTER_VALIDATE_BOOLEAN);
-        $this->attributes['is_downloadable'] = $bool ? 'true' : 'false';
+        // Persist as a native boolean so the DB stores the correct type
+        $this->attributes['is_downloadable'] = $bool;
     }
 
     public function getIsDownloadableAttribute($value): bool

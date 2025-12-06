@@ -77,12 +77,12 @@ function LayerList({
 
   const [previewLayer, setPreviewLayer] = useState(null);
   const [previewOpen, setPreviewOpen] = useState(false);
-  
+
   const handlePreviewClick = async (row) => {
     if (!row) return;
     // quick loading before opening preview
-    try { closeLoading(); } catch {}
-    try { showLoading('Loading', 'Preparing preview…'); } catch {}
+    try { closeLoading(); } catch { }
+    try { showLoading('Loading', 'Preparing preview…'); } catch { }
 
     // Try to parse geometry and update viewport immediately (like MapPage.applyOverlayByLayerId)
     if (row?.geom_geojson) {
@@ -108,7 +108,7 @@ function LayerList({
 
     // Attach a token so React remounts the GeoJSON even if the same id is clicked
     setPreviewLayer({ ...row, _previewToken: Date.now() });
-    try { await sleep(150); } catch {}
+    try { await sleep(150); } catch { }
     closeLoading();
     setPreviewOpen(true);
   };
@@ -212,16 +212,16 @@ function LayerList({
   }, [previewLayer, updateViewport, resetViewport]);
 
   const doDelete = async (target) => {
-  if (currentUserRole !== 'superadmin') return; // reflect backend permissions
+    if (currentUserRole !== 'superadmin') return; // reflect backend permissions
     const id = target && typeof target === 'object' ? target.id : target;
     const name = target && typeof target === 'object' ? target.name : null;
-    try { closeLoading(); } catch {}
-    try { showLoading('Loading', 'Preparing delete…'); } catch {}
-    try { await sleep(150); } catch {}
+    try { closeLoading(); } catch { }
+    try { showLoading('Loading', 'Preparing delete…'); } catch { }
+    try { await sleep(150); } catch { }
     closeLoading();
     if (!(await confirm({ title: 'Delete this layer?', text: 'This cannot be undone.', confirmButtonText: 'Delete' }))) return;
     try {
-  showLoading('Deleting layer', 'Please wait…');
+      showLoading('Deleting layer', 'Please wait…');
       await deleteLayer(id);
       await refresh();
       await alertSuccess('Deleted', name ? `"${name}" was deleted.` : 'Layer deleted.');
@@ -252,9 +252,9 @@ function LayerList({
     },
     {
       label: 'Edit', title: 'Edit metadata', icon: <FiEdit2 />, onClick: async (row) => {
-        try { closeLoading(); } catch {}
-        try { showLoading('Loading', 'Preparing edit form…'); } catch {}
-        try { await sleep(150); } catch {}
+        try { closeLoading(); } catch { }
+        try { showLoading('Loading', 'Preparing edit form…'); } catch { }
+        try { await sleep(150); } catch { }
         closeLoading();
         setEditRow(row);
         setEditOpen(true);
@@ -265,14 +265,16 @@ function LayerList({
     }
   ], [currentUserRole, allowDelete]);
 
-  const columnPickerAdapter = { columns: [
-    { id: 'name', header: 'Name' },
-    { id: 'body', header: 'Body' },
-    { id: 'visibility', header: 'Visibility' },
-    { id: 'downloadable', header: 'Downloadable' },
-    { id: 'creator', header: 'Created by' },
-    { id: 'updated', header: 'Updated' },
-  ], visibleMap, onVisibleChange: (m) => setVisibleMap(m) };
+  const columnPickerAdapter = {
+    columns: [
+      { id: 'name', header: 'Name' },
+      { id: 'body', header: 'Body' },
+      { id: 'visibility', header: 'Visibility' },
+      { id: 'downloadable', header: 'Downloadable' },
+      { id: 'creator', header: 'Created by' },
+      { id: 'updated', header: 'Updated' },
+    ], visibleMap, onVisibleChange: (m) => setVisibleMap(m)
+  };
 
   const toolbarTop = (
     <TableToolbar
@@ -295,20 +297,26 @@ function LayerList({
   );
 
   const filterFields = [
-    { id: 'body_type', label: 'Body Type', type: 'select', value: fBodyType, onChange: setFBodyType, options: [
-      { value: '', label: 'All' },
-      { value: 'lake', label: 'Lake' },
-      { value: 'watershed', label: 'Watershed' },
-    ]},
-    { id: 'visibility', label: 'Visibility', type: 'select', value: fVisibility, onChange: setFVisibility, options: [
-      { value: '', label: 'All' },
-      ...normalizedVisibilityOptions
-    ]},
-    { id: 'downloadable', label: 'Downloadable', type: 'select', value: fDownloadableOnly, onChange: setFDownloadableOnly, options: [
-      { value: '', label: 'All' },
-      { value: 'yes', label: 'Yes' },
-      { value: 'no', label: 'No' },
-    ]},
+    {
+      id: 'body_type', label: 'Body Type', type: 'select', value: fBodyType, onChange: setFBodyType, options: [
+        { value: '', label: 'All' },
+        { value: 'lake', label: 'Lake' },
+        { value: 'watershed', label: 'Watershed' },
+      ]
+    },
+    {
+      id: 'visibility', label: 'Visibility', type: 'select', value: fVisibility, onChange: setFVisibility, options: [
+        { value: '', label: 'All' },
+        ...normalizedVisibilityOptions
+      ]
+    },
+    {
+      id: 'downloadable', label: 'Downloadable', type: 'select', value: fDownloadableOnly, onChange: setFDownloadableOnly, options: [
+        { value: '', label: 'All' },
+        { value: 'yes', label: 'Yes' },
+        { value: 'no', label: 'No' },
+      ]
+    },
   ];
 
   return (

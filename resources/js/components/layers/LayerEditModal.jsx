@@ -61,7 +61,6 @@ export default function LayerEditModal({
 
       await onSave(layer.id, patch);
       onClose();
-      await alertSuccess('Layer updated', 'Changes saved successfully.');
     } catch (e) {
       console.error('[LayerEditModal] Update layer failed', e);
       await alertError('Failed to update layer', e?.message || '');
