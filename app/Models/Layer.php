@@ -20,27 +20,20 @@ class Layer extends Model
         'body_type','body_id','uploaded_by',
         'name','srid',
         'visibility','is_downloadable','notes',
-        'source_type',
-        // 'geom','bbox','area_km2' are managed via PostGIS/trigger; leave out of mass-assign by default
-    ];
+        'source_type',    ];
 
     protected $casts = [
         'body_id'   => 'integer',
         'srid'      => 'integer',
-        // Keep cast for common paths; accessor below ensures strict boolean semantics
-        'is_downloadable' => 'boolean',
+        'is_downloadable' => 'string',
         'created_at'=> 'datetime',
         'updated_at'=> 'datetime',
     ];
 
-    /**
-     * Ensure we persist native booleans (or 0/1) and read strict booleans.
-     */
     public function setIsDownloadableAttribute($value): void
     {
         $bool = filter_var($value, FILTER_VALIDATE_BOOLEAN);
-        // Persist as a native boolean so the DB stores the correct type
-        $this->attributes['is_downloadable'] = $bool;
+        $this->attributes['is_downloadable'] = $bool ? 'true' : 'false';
     }
 
     public function getIsDownloadableAttribute($value): bool
@@ -61,25 +54,14 @@ class Layer extends Model
     {
         return $this->morphTo();
     }
-
-    // User who uploaded the layer
     public function uploader(): BelongsTo
     {
         return $this->belongsTo(User::class, 'uploaded_by');
     }
 
-    /* -------------------------- Scopes -------------------------- */
-
     public function scopePublic($q)   { return $q->where('visibility', self::VIS_PUBLIC); }
     public function scopeFor($q, string $type, int $id) { return $q->where(['body_type'=>$type,'body_id'=>$id]); }
 
-    /* -------------------------- Helpers -------------------------- */
-
-    /**
-     * Convenience helper to compute the organization label for UI use.
-     * Mirrors the SQL used in controllers; returns "LakeView" when uploader is superadmin or no tenant.
-     * This method does not affect JSON unless you explicitly call/append it.
-     */
     public function organizationName(): string
     {
         if (!$this->uploaded_by) {
@@ -99,7 +81,4 @@ class Layer extends Model
 
         return 'LakeView';
     }
-
-    // Tip: when returning to the frontend map, select GeoJSON from the DB:
-    // Layer::select('*')->selectRaw('ST_AsGeoJSON(geom) AS geom_geojson')->get();
 }
