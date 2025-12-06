@@ -159,7 +159,7 @@
 .org-filter input:not([type="date"]) {
   background: transparent; border: 0; outline: 0; color: #111827;
   width: 100%; min-width: 0; flex: 1 1 auto;
-  border-radius: 8px; padding: 6px 28px 6px 8px;
+  border-radius: 8px; padding: 0 28px 0 8px;
   appearance: none; -webkit-appearance: none; -moz-appearance: none;
 }
 .org-filter::after {
@@ -291,12 +291,34 @@
 /*  ADVANCED FILTERS PANEL (below toolbar)                              */
 /* ====================================================================== */
 .advanced-filters {
-  margin: 10px 0 6px 0;
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s ease-out, margin 0.3s ease-out, padding 0.3s ease-out, border 0.3s ease-out, opacity 0.3s ease-out, overflow 0s linear 0s, visibility 0s linear 0.3s;
+  overflow: hidden;
   background: #ffffff;
-  border: 1px solid #e5e7eb;
   border-radius: 12px;
+  
+  /* Closed state */
+  margin: 0;
+  padding: 0;
+  border: 0 solid #e5e7eb;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.advanced-filters.open {
+  grid-template-rows: 1fr;
+  margin: 10px 0 6px 0;
   padding: 12px;
-  overflow: visible;              /* ensure poppers/inputs are visible */
+  border: 1px solid #e5e7eb;
+  opacity: 1;
+  overflow: visible;
+  visibility: visible;
+  transition: grid-template-rows 0.3s ease-out, margin 0.3s ease-out, padding 0.3s ease-out, border 0.3s ease-out, opacity 0.3s ease-out, overflow 0s linear 0.3s, visibility 0s linear 0s;
+}
+
+.advanced-filters-inner {
+  min-height: 0;
 }
 
 /* ---------------------------------------------------------------------- */

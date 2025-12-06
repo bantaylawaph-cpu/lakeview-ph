@@ -1,7 +1,7 @@
 // src/components/ScreenshotButton.jsx
 import React from "react";
 import { FiCamera } from "react-icons/fi";
-import domtoimage from "dom-to-image";
+import * as htmlToImage from "html-to-image";
 
 function ScreenshotButton() {
   const handleScreenshot = () => {
@@ -32,7 +32,8 @@ function ScreenshotButton() {
     });
 
     setTimeout(() => {
-      domtoimage.toBlob(mapContainer).then((blob) => {
+      htmlToImage.toBlob(mapContainer).then((blob) => {
+        if (!blob) return;
         // Download image
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');

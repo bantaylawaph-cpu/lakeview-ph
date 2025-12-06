@@ -15,20 +15,21 @@ import { useWindowSize } from "../../hooks/useWindowSize";
 export default function FilterPanel({ open, fields = [], onClearAll }) {
   const { width } = useWindowSize();
   const isMobile = width < 768;
-  if (!open || isMobile) return null;
+  if (isMobile) return null;
 
   return (
-    <div className="advanced-filters" role="region" aria-label="Advanced filters">
-      <div className="advanced-filters-header">
-        <strong>Filters</strong>
-        {onClearAll && (
-          <button className="pill-btn ghost sm" onClick={onClearAll} aria-label="Clear filters">
-            Clear all
-          </button>
-        )}
-      </div>
+    <div className={`advanced-filters ${open ? 'open' : ''}`} role="region" aria-label="Advanced filters">
+      <div className="advanced-filters-inner">
+        <div className="advanced-filters-header">
+          <strong>Filters</strong>
+          {onClearAll && (
+            <button className="pill-btn ghost sm" onClick={onClearAll} aria-label="Clear filters">
+              Clear all
+            </button>
+          )}
+        </div>
 
-      <div className="advanced-filters-grid">
+        <div className="advanced-filters-grid">
   {fields.map((f) => {
           if (f.type === 'group' && Array.isArray(f.children)) {
             return (
@@ -176,6 +177,7 @@ export default function FilterPanel({ open, fields = [], onClearAll }) {
 
           return null;
         })}
+      </div>
       </div>
     </div>
   );

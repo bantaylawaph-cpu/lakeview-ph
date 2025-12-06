@@ -308,8 +308,8 @@ export default function FilterTray({ open, onClose, onApply, initial = {} }) {
 
           <NumberInput label="Surface area — min (km²)" value={surfaceMin} onChange={setSurfaceMin} />
           <NumberInput label="Surface area — max (km²)" value={surfaceMax} onChange={setSurfaceMax} />
-          <NumberInput label="Surface Elevation — min (m)" value={elevationMin} onChange={setElevationMin} />
-          <NumberInput label="Surface Elevation — max (m)" value={elevationMax} onChange={setElevationMax} />
+          <NumberInput label="Surface Elev. — min (m)" value={elevationMin} onChange={setElevationMin} />
+          <NumberInput label="Surface Elev. — max (m)" value={elevationMax} onChange={setElevationMax} />
           <NumberInput label="Average depth — min (m)" value={depthMin} onChange={setDepthMin} />
           <NumberInput label="Average depth — max (m)" value={depthMax} onChange={setDepthMax} />
         </div>
