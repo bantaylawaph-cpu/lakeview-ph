@@ -19,6 +19,7 @@ function ScreenshotButton() {
       '.leaflet-control-container',
       '.lake-info-panel',
       '.heatmap-legend',
+      '.worldcover-legend',
       '.back-to-dashboard',
       '.filter-tray',
       '.sidebar',
