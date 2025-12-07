@@ -326,6 +326,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/users/{user}', [UserController::class, 'show'])->whereNumber('user');
 });
 
+// Public app configuration (default basemap)
+Route::get('/public/app-config', [\App\Http\Controllers\Api\AppConfigController::class, 'show']);
+
+// Admin app configuration update (requires auth); apply middleware as appropriate
+Route::middleware(['auth:sanctum'])->post('/admin/app-config', [\App\Http\Controllers\Api\AppConfigController::class, 'update']);
+
 /*
 |--------------------------------------------------------------------------
 | Lakes write endpoints (restricted)

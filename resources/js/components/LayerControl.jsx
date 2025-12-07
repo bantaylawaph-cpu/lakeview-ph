@@ -1,9 +1,28 @@
 // src/components/LayerControl.jsx
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { FiLayers } from "react-icons/fi";
 
 function LayerControl({ selectedView, setSelectedView, showContours, setShowContours, showContourLabels, setShowContourLabels }) {
   const [open, setOpen] = useState(false);
+
+  // Initialize from global default if parent hasn't set one yet
+  useEffect(() => {
+    if (!selectedView && typeof setSelectedView === 'function') {
+      let def = 'topographic';
+      try { def = localStorage.getItem('lv.defaultBasemap') || def; } catch {}
+      setSelectedView(def);
+    }
+  }, [selectedView, setSelectedView]);
+
+  // React to global basemap changes from Admin Settings
+  useEffect(() => {
+    const onDefaultBasemap = (e) => {
+      const value = e.detail;
+      if (typeof setSelectedView === 'function') setSelectedView(value);
+    };
+    window.addEventListener('lv-default-basemap', onDefaultBasemap);
+    return () => window.removeEventListener('lv-default-basemap', onDefaultBasemap);
+  }, [setSelectedView]);
 
   return (
     <div className="layer-control">
@@ -29,7 +48,7 @@ function LayerControl({ selectedView, setSelectedView, showContours, setShowCont
               checked={selectedView === "satellite"}
               onChange={() => setSelectedView("satellite")}
             />
-            <span>Satellite</span>
+            <span>Esri World Imagery</span>
           </label>
           <label>
             <input
@@ -39,7 +58,7 @@ function LayerControl({ selectedView, setSelectedView, showContours, setShowCont
               checked={selectedView === "topographic"}
               onChange={() => setSelectedView("topographic")}
             />
-            <span>Topographic</span>
+            <span>Esri Topographic</span>
           </label>
           <label>
             <input
@@ -49,7 +68,7 @@ function LayerControl({ selectedView, setSelectedView, showContours, setShowCont
               checked={selectedView === "street"}
               onChange={() => setSelectedView("street")}
             />
-            <span>Streets</span>
+            <span>Esri Streets</span>
           </label>
           <label>
             <input
@@ -59,7 +78,7 @@ function LayerControl({ selectedView, setSelectedView, showContours, setShowCont
               checked={selectedView === "osm"}
               onChange={() => setSelectedView("osm")}
             />
-            <span>Streets (OSM)</span>
+            <span>OpenStreetMap</span>
           </label>
           <div style={{ borderTop: '1px solid #eee', margin: '8px 0' }} />
           <h6 className="layer-title">Overlays</h6>

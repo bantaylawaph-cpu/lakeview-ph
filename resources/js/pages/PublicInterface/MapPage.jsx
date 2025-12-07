@@ -54,7 +54,9 @@ function MapRefBridge({ onReady }) {
 }
 
 function MapPage() {
-  const [selectedView, setSelectedView] = useState("osm");
+  const [selectedView, setSelectedView] = useState(() => {
+    try { return localStorage.getItem('lv.defaultBasemap') || 'topographic'; } catch { return 'topographic'; }
+  });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarPinned, setSidebarPinned] = useState(false);
   const [lakePanelOpen, setLakePanelOpen] = useState(false);
@@ -127,6 +129,34 @@ function MapPage() {
     const onOpen = () => setSettingsOpen(true);
     window.addEventListener('lv-open-settings', onOpen);
     return () => window.removeEventListener('lv-open-settings', onOpen);
+  }, []);
+
+  // Initialize from server-side default basemap (public endpoint)
+  useEffect(() => {
+    let abort = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/public/app-config', { credentials: 'include' });
+        if (!res.ok) return;
+        const js = await res.json();
+        const value = js?.default_basemap || 'topographic';
+        if (!abort) {
+          setSelectedView(value);
+          try { localStorage.setItem('lv.defaultBasemap', value); } catch {}
+        }
+      } catch {}
+    })();
+    return () => { abort = true; };
+  }, []);
+
+  // React to global default basemap changes
+  useEffect(() => {
+    const onDefaultBasemap = (e) => {
+      const value = e.detail;
+      setSelectedView(value);
+    };
+    window.addEventListener('lv-default-basemap', onDefaultBasemap);
+    return () => window.removeEventListener('lv-default-basemap', onDefaultBasemap);
   }, []);
 
   useEffect(() => {
