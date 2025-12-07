@@ -138,12 +138,28 @@ export default function useCompareBarData({ eventsA = [], eventsB = [], bucket =
     };
     uniqueKeys.sort((a, b) => orderValue(a) - orderValue(b));
 
+    // Filter out periods where all lake values are null or 0
+    const filteredKeys = uniqueKeys.filter((pk) => {
+      try {
+        for (const lk of lakes) {
+          const v = meanForPeriod(lk.events, pk);
+          const num = Number(v);
+          if (Number.isFinite(num) && num > 0) return true;
+        }
+        return false;
+      } catch { return true; }
+    });
+
     // Build labels for periods on x-axis
-    const periodLabels = uniqueKeys.map((pk) => humanLabelFor(pk));
-    // Build datasets per lake with values per period
+    const periodLabels = filteredKeys.map((pk) => humanLabelFor(pk));
+    // Build datasets per lake with values per filtered period list
     const datasets = lakes.map((lk, idx) => {
       const color = lakeColors[idx % lakeColors.length];
-      const data = uniqueKeys.map((pk) => meanForPeriod(lk.events, pk));
+      const data = filteredKeys.map((pk) => {
+        const v = meanForPeriod(lk.events, pk);
+        const num = Number(v);
+        return Number.isFinite(num) ? (num === 0 ? null : num) : null;
+      });
       return {
         label: lakeName(lakeOptions, lk.id) || String(lk.id),
         data,
@@ -154,7 +170,7 @@ export default function useCompareBarData({ eventsA = [], eventsB = [], bucket =
     });
 
     // Meta for year grouping (used by yearLabelPlugin)
-    const yearsFromKeys = Array.from(new Set(uniqueKeys.map((pk) => {
+    const yearsFromKeys = Array.from(new Set(filteredKeys.map((pk) => {
       if (/^\d{4}$/.test(pk)) return pk;
       const mq = pk.match(/^(\d{4})-Q(\d)$/); if (mq) return mq[1];
       const mm = pk.match(/^(\d{4})-(\d{2})$/); if (mm) return mm[1];
@@ -174,7 +190,7 @@ export default function useCompareBarData({ eventsA = [], eventsB = [], bucket =
       const mm = pk.match(/^(\d{4})-(\d{2})$/); if (mm) return mm[1];
       return '0000';
     };
-    const periodInfo = uniqueKeys.map((pk, i) => ({
+    const periodInfo = filteredKeys.map((pk, i) => ({
       key: pk,
       year: yearFromPk(pk),
       month: withinCountForBucket === 12 ? withinIndexFromPk(pk) + 1 : null,

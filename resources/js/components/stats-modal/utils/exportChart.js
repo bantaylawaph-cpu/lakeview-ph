@@ -74,32 +74,17 @@ export function exportChartToDataUrl(inst, { format = 'image/png', scale = 1, ba
     const type = inst.config?.type || 'line';
     const lightOptions = buildLightOptions(inst.options || {});
 
-    // Simplify legends for exported bar charts to avoid clutter:
-    // - Show only threshold lines (dataset.type === 'line') in legend
-    // - If no line datasets exist, hide legend entirely
+    // Ensure legends for bar charts include lake datasets and thresholds
     try {
       if (String(type).toLowerCase() === 'bar') {
-        const dsets = Array.isArray(data?.datasets) ? data.datasets : [];
-        const hasLine = dsets.some((ds) => ds && ds.type === 'line');
         lightOptions.plugins = lightOptions.plugins || {};
         lightOptions.plugins.legend = lightOptions.plugins.legend || {};
-        if (hasLine) {
-          lightOptions.plugins.legend.display = true;
-          const prevLabels = lightOptions.plugins.legend.labels || {};
-          lightOptions.plugins.legend.labels = {
-            ...prevLabels,
-            // keep labels in dark for export; filter to only line datasets
-            filter: (legendItem, chartData) => {
-              try {
-                const ds = chartData?.datasets?.[legendItem.datasetIndex];
-                return !!(ds && ds.type === 'line');
-              } catch {
-                return false;
-              }
-            },
-          };
-        } else {
-          lightOptions.plugins.legend.display = false;
+        lightOptions.plugins.legend.display = true;
+        // Do not filter legend items; show both lake bars and threshold lines
+        if (lightOptions.plugins.legend.labels) {
+          const prev = lightOptions.plugins.legend.labels;
+          const { filter, ...rest } = prev;
+          lightOptions.plugins.legend.labels = { ...rest };
         }
       }
     } catch {}
@@ -152,6 +137,114 @@ export async function exportAndDownload(inst, filename, opts = {}) {
     try { url = inst.toBase64Image ? inst.toBase64Image() : inst.canvas?.toDataURL('image/png'); } catch {}
   }
   downloadDataUrl(url, filename);
+}
+
+export function exportCsvFromChart(chartRefOrInstance, filename = 'chart.csv') {
+  try {
+    const inst = chartRefOrInstance?.current || chartRefOrInstance;
+    const data = inst?.data || inst?.config?.data;
+    const labels = Array.isArray(data?.labels) ? data.labels : [];
+    const allDatasets = Array.isArray(data?.datasets) ? data.datasets : [];
+
+    // Determine chart type shape: time series vs depth profile
+    const isDepthProfile = (() => {
+      if (labels && labels.length) return false;
+      // If any dataset has points like {x: number, y: number}, treat as depth profile
+      for (const ds of allDatasets) {
+        const arr = Array.isArray(ds?.data) ? ds.data : [];
+        for (const pt of arr) {
+          if (pt && typeof pt === 'object' && Number.isFinite(pt.x) && Number.isFinite(pt.y)) {
+            return true;
+          }
+        }
+      }
+      return false;
+    })();
+
+    const rows = [];
+
+    if (!isDepthProfile) {
+      // Time Series CSV: Bucket + one column per series (exclude Min/Max overlays)
+      let datasets = allDatasets.filter((ds) => {
+        const lbl = String(ds?.label || '').toLowerCase();
+        if (lbl === 'min' || lbl === 'max') return false;
+        if (ds && ds.type === 'line' && (lbl.includes('min') || lbl.includes('max'))) return false;
+        return true;
+      });
+
+      const header = ['Bucket', ...datasets.map((d) => String(d?.label || 'Series'))];
+      rows.push(header.join(','));
+      for (let i = 0; i < labels.length; i++) {
+        const bucket = labels[i];
+        const vals = datasets.map((d) => {
+          const v = Array.isArray(d?.data) ? d.data[i] : null;
+          const num = Number(v);
+          return Number.isFinite(num) ? String(num) : '';
+        });
+        rows.push([String(bucket), ...vals].join(','));
+      }
+    } else {
+      // Depth Profile CSV: Rows per depth, columns per month
+      const monthOrder = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      const isMonth = (s) => monthOrder.includes(s);
+      const monthFromLabel = (lbl) => {
+        const m = String(lbl || '').match(/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/i);
+        return m ? m[1] : null;
+      };
+
+      // Collect values by month and depth
+      const depths = new Set();
+      const monthSet = new Set();
+      const values = new Map(); // key: `${month}` -> Map(depth -> value)
+
+      for (const ds of allDatasets) {
+        const lbl = String(ds?.label || '');
+        const isThreshold = (ds && ds.type === 'line') || /\b(min|max)\b/i.test(lbl);
+        if (isThreshold) continue;
+        const month = monthFromLabel(lbl);
+        if (!month || !isMonth(month)) continue;
+        monthSet.add(month);
+        const arr = Array.isArray(ds?.data) ? ds.data : [];
+        for (const pt of arr) {
+          if (!pt || typeof pt !== 'object') continue;
+          const x = Number(pt.x), y = String(pt.y);
+          if (!Number.isFinite(x)) continue;
+          depths.add(y);
+          const map = values.get(month) || new Map();
+          map.set(y, x);
+          values.set(month, map);
+        }
+      }
+
+      const depthList = Array.from(depths).sort((a, b) => Number(a) - Number(b));
+      const monthList = monthOrder.filter((m) => monthSet.has(m));
+
+      // Header: Depth (m) + months
+      const header = ['Depth (m)', ...monthList];
+      rows.push(header.join(','));
+
+      // Rows per depth
+      for (const d of depthList) {
+        const label = d === '0' ? '0' : String(d);
+        const vals = monthList.map((m) => {
+          const v = values.get(m)?.get(String(d));
+          const num = Number(v);
+          return Number.isFinite(num) ? String(num) : '';
+        });
+        rows.push([label, ...vals].join(','));
+      }
+    }
+
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  } catch (e) {
+    // silent
+  }
 }
 
 export default {

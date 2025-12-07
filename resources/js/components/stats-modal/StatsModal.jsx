@@ -1,6 +1,7 @@
 // resources/js/components/modals/StatsModal.jsx
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { apiPublic, buildQuery, getToken } from "../../lib/api";
+import Swal from "sweetalert2";
 import { alertError } from "../../lib/alerts";
 import { fetchParameters, fetchSampleEvents, fetchStationsForLake, deriveOrgOptions, deriveParamOptions } from "./data/fetchers";
 import Modal from "../Modal";
@@ -9,7 +10,7 @@ import CompareLake from "./CompareLake";
 import AdvancedStat from "./AdvancedStat";
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, BarElement } from "chart.js";
 import { yearLabelPlugin } from "./utils/shared";
-import { exportAndDownload } from "./utils/exportChart";
+import { exportAndDownload, exportCsvFromChart } from "./utils/exportChart";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, BarElement);
 // Ensure custom plugins used by charts are registered in this module too
@@ -115,15 +116,38 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
   };
 
   const handleExport = () => {
-    const ref = activeTab === "single" ? singleChartRef : compareChartRef;
-    const inst = ref?.current;
-    if (!inst) return;
-    const lakeName = lakeOptions.find((l) => String(l.id) === String(selectedLake))?.name || "lake";
-    const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-    const label = activeTab === "single"
-      ? `${lakeName}-${selectedParam || "param"}`
-      : `compare-${compareSelectedParam || "param"}`;
-    exportAndDownload(inst, `stats-${label}-${ts}.png`);
+    try {
+      Swal.fire({
+        title: 'Export Options',
+        text: 'Choose a format to export your chart.',
+        icon: 'question',
+        showDenyButton: true,
+        showCancelButton: true,
+        confirmButtonText: 'PNG',
+        denyButtonText: 'Excel (CSV)',
+        cancelButtonText: 'Cancel',
+        focusConfirm: true,
+      }).then((res) => {
+        const ref = activeTab === "single" ? singleChartRef : compareChartRef;
+        const inst = ref?.current;
+        if (!inst) return;
+        const lakeName = lakeOptions.find((l) => String(l.id) === String(selectedLake))?.name || "lake";
+        const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+        const baseLabel = activeTab === "single"
+          ? `${lakeName}-${selectedParam || "param"}`
+          : `compare-${compareSelectedParam || "param"}`;
+
+        if (res.isConfirmed) {
+          // PNG export
+          exportAndDownload(inst, `stats-${baseLabel}-${ts}.png`);
+        } else if (res.isDenied) {
+          // CSV export (Time Series only for now)
+          exportCsvFromChart(inst, `stats-${baseLabel}-${ts}.csv`);
+        } else {
+          // canceled
+        }
+      });
+    } catch {}
   };
 
   const ensureAuthOrPrompt = useCallback(async () => {
@@ -282,11 +306,8 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="pill-btn" onClick={async () => {
               if (!(await ensureAuthOrPrompt())) return;
-              if (activeTab === 'advanced' && advancedRef.current && typeof advancedRef.current.exportPdf === 'function') {
-                advancedRef.current.exportPdf();
-              } else {
-                handleExport();
-              }
+              // Show SweetAlert options modal; no export functionality yet
+              handleExport();
             }} title={authed ? undefined : 'Sign in to export'}>Export</button>
           </div>
         </div>
