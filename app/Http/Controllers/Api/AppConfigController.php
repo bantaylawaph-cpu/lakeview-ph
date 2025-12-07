@@ -44,7 +44,7 @@ class AppConfigController extends Controller
             }
             $value = (string) $request->input('default_basemap', 'topographic');
             // sanity whitelist
-            $allowed = ['satellite','topographic','street','osm'];
+            $allowed = ['satellite','topographic','street','osm','stamen_terrain','worldcover_2021'];
             if (!in_array($value, $allowed, true)) {
                 return response()->json(['error' => 'invalid_value'], 422);
             }

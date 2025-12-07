@@ -1,6 +1,6 @@
 // resources/js/components/AppMap.jsx
 import React from "react";
-import { MapContainer, TileLayer, useMapEvent, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, WMSTileLayer, useMapEvent, useMap } from "react-leaflet";
 import L from "leaflet";
 import 'leaflet.vectorgrid';
 import "leaflet/dist/leaflet.css";
@@ -16,6 +16,10 @@ const BASEMAPS = {
   topographic:
     "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
   osm: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+  // Stamen Terrain via Stadia Maps
+  stamen_terrain: "https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}.png",
+  // ESA WorldCover — use WMS endpoint; 2021 only
+  worldcover_2021: "wms:WORLDCOVER_2021_MAP",
 };
 
 const ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
@@ -26,6 +30,12 @@ const BASemap_ATTRIBUTIONS = {
   street: '&copy; <a href="https://www.esri.com">Esri</a> contributors',
   topographic: '&copy; <a href="https://www.esri.com">Esri</a> contributors',
   osm: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  stamen_terrain:
+    'Tiles &copy; <a href="https://stadiamaps.com">Stadia Maps</a>, ' +
+    'Design &copy; <a href="https://stamen.com">Stamen</a> (CC BY 4.0), ' +
+    'Data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  worldcover_2021:
+    '&copy; ESA WorldCover 2021, Copernicus Sentinel data (2021) via <a href="https://www.terrascope.be/">Terrascope</a>',
 };
 
 // Philippines extent
@@ -84,10 +94,27 @@ function AppMap({
   { /* Map click handler: if parent passes onClick, attach it via a small component */ }
   {typeof onClick === 'function' ? <MapClickHandler onClick={onClick} /> : null}
   {typeof disableDrag !== 'undefined' ? <MapInteractionHandler disableDrag={disableDrag} /> : null}
-  <TileLayer url={url} attribution={attribution} noWrap={noWrap} />
+  {String(url).startsWith('wms:') ? (
+    <WMSTileLayer
+      url={"https://services.terrascope.be/wms/v2"}
+      layers={String(url).replace('wms:', '')}
+      styles={'default'}
+      format={'image/png'}
+      transparent={true}
+      version={'1.1.1'}
+      attribution={attribution}
+      tileSize={256}
+      crossOrigin={true}
+      uppercase={true}
+    />
+  ) : (
+    <TileLayer url={url} attribution={attribution} noWrap={noWrap} />
+  )}
 
   {showPostgisContours ? <ContoursVectorLayer url={contoursUrl} /> : null}
   {showPostgisContours ? <ContourLabelsLayer /> : null}
+
+  {view === 'worldcover_2021' ? <WorldCoverLegend /> : null}
 
       {children}
     </MapContainer>
@@ -302,4 +329,71 @@ function ContourLabelsLayer() {
   }, [map, fetchAndRender, clearMarkers]);
 
   return null;
+}
+
+function WorldCoverLegend() {
+  const map = useMap();
+  const [legendWidth, setLegendWidth] = React.useState(360);
+  React.useEffect(() => {
+    const measure = () => {
+      try {
+        // Prefer Leaflet attribution control container if available
+        const el = map?.attributionControl?._container || document.querySelector('.leaflet-control-attribution');
+        const w = el ? el.offsetWidth : 360;
+        // Clamp to sensible range
+        const clamped = Math.max(280, Math.min(w, 520));
+        setLegendWidth(clamped);
+      } catch {}
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [map]);
+  // ESA WorldCover 2021 legend (subset of classes commonly visible)
+  const items = [
+    { label: 'Tree Cover', color: '#006400' },
+    { label: 'Shrubland', color: '#bbbd7a' },
+    { label: 'Grassland', color: '#ffff00' },
+    { label: 'Cropland', color: '#ffa500' },
+    { label: 'Built-up', color: '#ff0000' },
+    { label: 'Bare/Sparse', color: '#b2b2b2' },
+    { label: 'Snow/Ice', color: '#ffffff', border: '#ccc' },
+    { label: 'Permanent Water', color: '#0000ff' },
+    { label: 'Herbaceous Wetland', color: '#38a800' },
+    { label: 'Mangroves', color: '#00a87c' },
+    { label: 'Moss/Lichen', color: '#7f7f00' },
+  ];
+  const boxStyle = {
+    position: 'absolute',
+    bottom: 54, // sit just above attribution line
+    right: 16, // align with attribution control width
+    background: '#fff',
+    border: '1px solid #e5e7eb',
+    borderRadius: 8,
+    boxShadow: '0 2px 10px rgba(0,0,0,0.08)',
+    padding: '10px 12px',
+    width: legendWidth, // dynamically match attribution width
+    fontSize: 12,
+    color: '#374151',
+    zIndex: 500, // keep below floating buttons
+    pointerEvents: 'auto',
+  };
+  const rowStyle = { display: 'flex', alignItems: 'center', gap: 8 };
+  const swatchStyle = (c, b) => ({ width: 16, height: 12, background: c, border: b ? `1px solid ${b}` : '1px solid #ddd', borderRadius: 2 });
+  return (
+    <div style={boxStyle} aria-label="ESA WorldCover Legend">
+      <div style={{ fontWeight: 600, marginBottom: 8 }}>ESA WorldCover 2021</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+        {items.map((it) => (
+          <div key={it.label} style={{ ...rowStyle }}>
+            <span style={swatchStyle(it.color, it.border)} />
+            <span>{it.label}</span>
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop: 8, fontSize: 10, color: '#6b7280' }}>
+        Data: ESA WorldCover 2021 (Terrascope)
+      </div>
+    </div>
+  );
 }

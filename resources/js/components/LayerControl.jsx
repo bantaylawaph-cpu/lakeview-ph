@@ -80,6 +80,26 @@ function LayerControl({ selectedView, setSelectedView, showContours, setShowCont
             />
             <span>OpenStreetMap</span>
           </label>
+          <label>
+            <input
+              type="radio"
+              name="map-view"
+              value="stamen_terrain"
+              checked={selectedView === "stamen_terrain"}
+              onChange={() => setSelectedView("stamen_terrain")}
+            />
+            <span>Stamen Terrain</span>
+          </label>
+          <label>
+            <input
+              type="radio"
+              name="map-view"
+              value="worldcover_2021"
+              checked={selectedView === "worldcover_2021"}
+              onChange={() => setSelectedView("worldcover_2021")}
+            />
+            <span>ESA WorldCover 2021</span>
+          </label>
           <div style={{ borderTop: '1px solid #eee', margin: '8px 0' }} />
           <h6 className="layer-title">Overlays</h6>
           <label>

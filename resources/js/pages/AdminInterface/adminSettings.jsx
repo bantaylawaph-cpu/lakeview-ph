@@ -47,7 +47,7 @@ export default function AdminSettingsPage() {
 					</div>
 				</div>
 				<p style={{ marginTop: 8, fontSize: 13, color: '#6b7280' }}>
-					Configure system-level settings, integrations, and global options.
+					Configure super administrator account and default basemap.
 				</p>
 			</div>
 
@@ -76,6 +76,8 @@ export default function AdminSettingsPage() {
 						<option value="topographic">Esri Topographic</option>
 						<option value="street">Esri Streets</option>
 						<option value="osm">OpenStreetMap</option>
+						<option value="stamen_terrain">Stamen Terrain (Stadia Maps)</option>
+						<option value="worldcover_2021">ESA WorldCover 2021</option>
 					</select>
 				</div>
 			</div>
