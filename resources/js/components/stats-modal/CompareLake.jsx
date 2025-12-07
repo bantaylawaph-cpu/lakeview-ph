@@ -9,6 +9,7 @@ import InfoModal from "../common/InfoModal";
 import { buildGraphExplanation } from "../utils/graphExplain";
 import { lakeName, yearLabelPlugin } from "./utils/shared";
 ChartJS.register(yearLabelPlugin);
+import LoadingSpinner from '../LoadingSpinner';
 import useStationsCache from "./hooks/useStationsCache";
 import GraphInfoButton from "./ui/GraphInfoButton";
 import useSampleEvents from "./hooks/useSampleEvents";

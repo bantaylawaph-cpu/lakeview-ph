@@ -2,7 +2,7 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { apiPublic, buildQuery, getToken } from "../../lib/api";
 import Swal from "sweetalert2";
-import { alertError } from "../../lib/alerts";
+import { alertError, alertInfo } from "../../lib/alerts";
 import { fetchParameters, fetchSampleEvents, fetchStationsForLake, deriveOrgOptions, deriveParamOptions } from "./data/fetchers";
 import Modal from "../Modal";
 import SingleLake from "./SingleLake";
@@ -117,6 +117,20 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
 
   const handleExport = () => {
     try {
+      const ref = activeTab === "single" ? singleChartRef : compareChartRef;
+      const inst = ref?.current;
+      const hasData = (() => {
+        try {
+          const data = inst?.data || inst?.config?.data;
+          const ds = Array.isArray(data?.datasets) ? data.datasets : [];
+          return inst && ds.length > 0 && ds.some(d => Array.isArray(d?.data) ? d.data.length > 0 : !!d?.data);
+        } catch { return false; }
+      })();
+      if (!inst || !hasData) {
+        alertInfo('Generate a chart first');
+        return;
+      }
+
       Swal.fire({
         title: 'Export Options',
         text: 'Choose a format to export your chart.',
@@ -128,9 +142,6 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
         cancelButtonText: 'Cancel',
         focusConfirm: true,
       }).then((res) => {
-        const ref = activeTab === "single" ? singleChartRef : compareChartRef;
-        const inst = ref?.current;
-        if (!inst) return;
         const lakeName = lakeOptions.find((l) => String(l.id) === String(selectedLake))?.name || "lake";
         const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
         const baseLabel = activeTab === "single"
@@ -138,10 +149,8 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
           : `compare-${compareSelectedParam || "param"}`;
 
         if (res.isConfirmed) {
-          // PNG export
           exportAndDownload(inst, `stats-${baseLabel}-${ts}.png`);
         } else if (res.isDenied) {
-          // CSV export (Time Series only for now)
           exportCsvFromChart(inst, `stats-${baseLabel}-${ts}.csv`);
         } else {
           // canceled
@@ -306,8 +315,17 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="pill-btn" onClick={async () => {
               if (!(await ensureAuthOrPrompt())) return;
-              // Show SweetAlert options modal; no export functionality yet
-              handleExport();
+              if (activeTab === 'advanced') {
+                try {
+                  if (advancedRef.current && typeof advancedRef.current.exportPdf === 'function') {
+                    await advancedRef.current.exportPdf();
+                  } else {
+                    alertInfo('Generate a chart first');
+                  }
+                } catch { /* silent */ }
+              } else {
+                handleExport();
+              }
             }} title={authed ? undefined : 'Sign in to export'}>Export</button>
           </div>
         </div>
