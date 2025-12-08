@@ -174,6 +174,8 @@ class UserController extends Controller
             'password' => ['required','string','min:8','confirmed'],
             'role' => ['required', Rule::in($roleNames)],
             'tenant_id' => ['nullable','integer','exists:tenants,id'],
+            'occupation' => ['nullable','string','max:255'],
+            'occupation_other' => ['nullable','string','max:255'],
         ]);
 
         // Enforce creation context:
@@ -204,6 +206,8 @@ class UserController extends Controller
         $user->password = Hash::make($data['password']);
         $user->role_id = $roleRow->id;
         $user->tenant_id = $data['tenant_id'] ?? null;
+        $user->occupation = $data['occupation'] ?? null;
+        $user->occupation_other = $data['occupation_other'] ?? null;
         // Status deprecated: do not set is_active
         $user->save();
 
@@ -224,6 +228,8 @@ class UserController extends Controller
             'password' => ['nullable','string','min:8','confirmed'],
             'role' => ['required', Rule::in($roleNames)],
             'tenant_id' => ['nullable','integer','exists:tenants,id'],
+            'occupation' => ['nullable','string','max:255'],
+            'occupation_other' => ['nullable','string','max:255'],
             'reason' => ['nullable','string','max:500']
         ]);
 
@@ -250,6 +256,8 @@ class UserController extends Controller
         }
         $user->role_id = $roleRow->id;
         $user->tenant_id = $data['tenant_id'] ?? null;
+        if (array_key_exists('occupation', $data)) $user->occupation = $data['occupation'];
+        if (array_key_exists('occupation_other', $data)) $user->occupation_other = $data['occupation_other'];
         // Status deprecated: ignore is_active updates
         $user->save();
 
@@ -286,6 +294,8 @@ class UserController extends Controller
                 'id' => $u->tenant->id,
                 'name' => $u->tenant->name,
             ] : null,
+            'occupation' => $u->occupation ?? null,
+            'occupation_other' => $u->occupation_other ?? null,
             'email_verified_at' => optional($u->email_verified_at)->toIso8601String(),
             'created_at' => optional($u->created_at)->toIso8601String(),
             'updated_at' => optional($u->updated_at)->toIso8601String(),

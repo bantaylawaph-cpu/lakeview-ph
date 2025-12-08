@@ -359,7 +359,7 @@ export default function AdminUsersForm({
           value={form.occupation || ""}
           onChange={(e) => setForm((f) => ({ ...f, occupation: e.target.value }))}
         >
-          <option value="">Select occupation</option>
+          <option value="" disabled>Select occupation</option>
           <option value="student">Student</option>
           <option value="researcher">Researcher</option>
           <option value="government">Government</option>
