@@ -18,6 +18,7 @@ export default function AdminUsersForm({
   saving = false,           // not used here, but handy if you want inline spinners
   onSubmit,
   onCancel,                 // called from parent footer
+  readOnly = false,         // if true, occupation fields are read-only
 }) {
   const [form, setForm] = useState({ 
     ...initialValues, 
@@ -358,9 +359,8 @@ export default function AdminUsersForm({
         <select
           value={form.occupation || ""}
           onChange={(e) => setForm((f) => ({ ...f, occupation: e.target.value }))}
-          disabled
-          title="Occupation cannot be edited"
-          onClick={(e) => { e.preventDefault(); alert('Occupation cannot be edited'); }}
+          disabled={readOnly}
+          title={readOnly ? "Occupation cannot be edited" : ""}
         >
           <option value="" disabled>Select occupation</option>
           <option value="student">Student</option>
@@ -384,9 +384,8 @@ export default function AdminUsersForm({
             placeholder="Enter your occupation"
             value={form.occupation_other || ""}
             onChange={(e) => setForm((f) => ({ ...f, occupation_other: e.target.value }))}
-            disabled
-            title="Occupation cannot be edited"
-            onClick={(e) => { e.preventDefault(); alert('Occupation cannot be edited'); }}
+            disabled={readOnly}
+            title={readOnly ? "Occupation cannot be edited" : ""}
           />
         </label>
       )}

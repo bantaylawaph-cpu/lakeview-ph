@@ -616,9 +616,8 @@ export default function OrgMembers() {
             <select
               value={initial.occupation || ""}
               onChange={(e)=>setInitial(i=>({...i,occupation:e.target.value}))}
-              disabled
-              title="Occupation cannot be edited"
-              onClick={(e) => { e.preventDefault(); alert('Occupation cannot be edited'); }}
+              disabled={mode === 'edit'}
+              title={mode === 'edit' ? "Occupation cannot be edited" : ""}
             >
               <option value="" disabled>Select occupation</option>
               <option value="student">Student</option>
@@ -642,9 +641,8 @@ export default function OrgMembers() {
                 placeholder="Enter your occupation"
                 value={initial.occupation_other || ""}
                 onChange={(e)=>setInitial(i=>({...i,occupation_other:e.target.value}))}
-                disabled
-                title="Occupation cannot be edited"
-                onClick={(e) => { e.preventDefault(); alert('Occupation cannot be edited'); }}
+                disabled={mode === 'edit'}
+                title={mode === 'edit' ? "Occupation cannot be edited" : ""}
               />
             </label>
           )}

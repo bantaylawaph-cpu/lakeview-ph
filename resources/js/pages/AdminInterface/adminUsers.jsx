@@ -358,6 +358,7 @@ export default function AdminUsersPage() {
           saving={saving}
           onSubmit={submitForm}
           onCancel={closeModal}
+          readOnly={mode === "edit"}
         />
       </Modal>
 
