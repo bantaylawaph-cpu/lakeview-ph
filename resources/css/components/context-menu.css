@@ -44,3 +44,31 @@
   border-radius: 8px !important;
   box-shadow: none !important;
 }
+
+/* Single-line tooltip variant: prevent wrapping and center inline content */
+.leaflet-tooltip.single-line-tooltip,
+.leaflet-tooltip.solid-tooltip.single-line-tooltip {
+  white-space: nowrap !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 6px 10px !important;
+  max-width: none !important; /* avoid leaflets max-width clipping */
+}
+
+.leaflet-tooltip.single-line-tooltip .popup-icon {
+  margin-right: 6px;
+}
+
+/* Pin tooltip with coordinate and helper text in second row */
+.leaflet-tooltip .popup-helpers {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.leaflet-tooltip .popup-helpers .helper {
+  font-size: 11px;
+  opacity: 0.85;
+  margin-top: 2px;
+}
+.leaflet-tooltip .popup-icon { margin-right: 8px; }

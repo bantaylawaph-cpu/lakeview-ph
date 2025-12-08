@@ -186,9 +186,13 @@ const ContextMenu = ({ map, onMeasureDistance, onMeasureArea, onElevationProfile
             offset={[0, -30]}
             permanent
           >
-            <FaMapMarkerAlt style={{ marginRight: 4, color: "#90caf9" }} />
-            {pin.lat.toFixed(5)}, {pin.lng.toFixed(5)}
-            <div style={{ fontSize: 10, opacity: 0.8, marginTop: 6 }}>Right‑click to remove</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <FaMapMarkerAlt className="popup-icon" style={{ color: "#90caf9" }} />
+              <div className="popup-helpers">
+                <span>{pin.lat.toFixed(5)}, {pin.lng.toFixed(5)}</span>
+                <span className="helper">Right‑click pin to remove</span>
+              </div>
+            </div>
           </Tooltip>
         </Marker>
       ))}

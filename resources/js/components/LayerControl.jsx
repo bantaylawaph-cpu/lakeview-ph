@@ -44,6 +44,16 @@ function LayerControl({ selectedView, setSelectedView, showContours, setShowCont
             <input
               type="radio"
               name="map-view"
+              value="osm"
+              checked={selectedView === "osm"}
+              onChange={() => setSelectedView("osm")}
+            />
+            <span>OpenStreetMap</span>
+          </label>
+          <label>
+            <input
+              type="radio"
+              name="map-view"
               value="satellite"
               checked={selectedView === "satellite"}
               onChange={() => setSelectedView("satellite")}
@@ -69,16 +79,6 @@ function LayerControl({ selectedView, setSelectedView, showContours, setShowCont
               onChange={() => setSelectedView("street")}
             />
             <span>Esri Streets</span>
-          </label>
-          <label>
-            <input
-              type="radio"
-              name="map-view"
-              value="osm"
-              checked={selectedView === "osm"}
-              onChange={() => setSelectedView("osm")}
-            />
-            <span>OpenStreetMap</span>
           </label>
           <label>
             <input

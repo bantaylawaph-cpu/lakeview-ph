@@ -95,7 +95,7 @@ function MapControls({ defaultCenter = [12.8797, 121.7740], defaultZoom = 6, def
       {position && (
         <Marker position={position} icon={locationIcon}>
           <Tooltip
-            className="glass-panel"
+            className="solid-tooltip single-line-tooltip"
             direction="top"
             offset={[0, -35]}
             permanent

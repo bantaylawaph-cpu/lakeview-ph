@@ -208,8 +208,8 @@ export default function PublicWQTestModal({ open, onClose, record, basePath = "/
                     <th className="lv-th" style={{ background: 'transparent', color: '#fff' }}><div className="lv-th-inner"><span className="lv-th-label">Parameter</span></div></th>
                     <th className="lv-th" style={{ width: 100, background: 'transparent', color: '#fff' }}><div className="lv-th-inner"><span className="lv-th-label">Value</span></div></th>
                     <th className="lv-th" style={{ width: 90, background: 'transparent', color: '#fff' }}><div className="lv-th-inner"><span className="lv-th-label">Unit</span></div></th>
-                    <th className="lv-th" style={{ width: 100, background: 'transparent', color: '#fff' }}><div className="lv-th-inner"><span className="lv-th-label">Depth (m)</span></div></th>
-                    <th className="lv-th" style={{ width: 90, background: 'transparent', color: '#fff' }}><div className="lv-th-inner"><span className="lv-th-label">Pass/Fail</span></div></th>
+                    <th className="lv-th" style={{ width: 110, background: 'transparent', color: '#fff', whiteSpace: 'nowrap' }}><div className="lv-th-inner"><span className="lv-th-label">Depth (m)</span></div></th>
+                    <th className="lv-th" style={{ width: 100, background: 'transparent', color: '#fff', whiteSpace: 'nowrap' }}><div className="lv-th-inner"><span className="lv-th-label">Pass/Fail</span></div></th>
                     <th className="lv-th" style={{ background: 'transparent', color: '#fff' }}><div className="lv-th-inner"><span className="lv-th-label">Remarks</span></div></th>
                   </tr>
                 </thead>
@@ -222,8 +222,8 @@ export default function PublicWQTestModal({ open, onClose, record, basePath = "/
                         <td style={{ background: 'transparent', color: '#fff' }}>{r.code ? `${r.code} — ${r.name || ''}` : (r.name || '—')}</td>
                         <td style={{ background: 'transparent', color: '#fff' }}>{r.value ?? '—'}</td>
                         <td style={{ background: 'transparent', color: '#fff' }}>{r.unit || '—'}</td>
-                        <td style={{ background: 'transparent', color: '#fff' }}>{formatDepth(r.depth_m ?? 0)}</td>
-                        <td style={{ background: 'transparent', color: '#fff' }}>{pfLabel(r.pass_fail)}</td>
+                        <td style={{ background: 'transparent', color: '#fff', whiteSpace: 'nowrap' }}>{formatDepth(r.depth_m ?? 0)}</td>
+                        <td style={{ background: 'transparent', color: '#fff', whiteSpace: 'nowrap' }}>{pfLabel(r.pass_fail)}</td>
                         <td style={{ background: 'transparent', color: '#fff' }}>{r.remarks || '—'}</td>
                       </tr>
                     )) : (

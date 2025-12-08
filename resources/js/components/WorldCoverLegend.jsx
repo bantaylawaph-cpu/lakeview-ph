@@ -61,12 +61,19 @@ export default function WorldCoverLegend() {
         // Mobile/Tablet: attach center-left, ultra-compact single column
         if (vw < 1024) {
           const h = window.innerHeight || 0;
-          const cardHeight = Math.min(h * 0.5, 320); // keep compact
-          // For mobile/tablet we prefer a small margin from the bottom instead of centering
-          // This avoids a large empty gap at the bottom when the legend is anchored to the left.
-          const centerBottom = Math.max(12, Math.floor((h - cardHeight) / 3));
-          const bottomClamp = Math.min(centerBottom, 40); // cap so it never floats too high
-          setDock({ useLeft: true, left: 12, bottom: bottomClamp, height: cardHeight });
+          const controls = document.querySelector('.map-controls');
+          const controlsRect = controls ? controls.getBoundingClientRect() : null;
+          // Match the vertical center of map controls; default to center if not found
+          let centerY = controlsRect ? (controlsRect.top + controlsRect.bottom) / 2 : (h / 2);
+          // Keep the legend within the visible window by clamping to available top/bottom space
+          const cardHeight = Math.min(Math.floor(h * 0.45), 320); // slightly larger
+          let top = Math.max(12, Math.round(centerY - (cardHeight / 2)));
+          // Ensure minimum distance from top and bottom
+          top = Math.min(top, Math.max(12, h - cardHeight - 12));
+          // Convert top into bottom offset for absolute positioning
+          const bottomOffset = Math.max(12, h - (top + cardHeight));
+          // We prefer to anchor legend to left when space allows
+          setDock({ useLeft: true, left: 12, bottom: bottomOffset, height: cardHeight });
           setMaxRowWidth(240);
           // tighten UI for compact column
           setUi(prev => ({
@@ -79,7 +86,7 @@ export default function WorldCoverLegend() {
           const coords = document.querySelector('.coordinates-scale');
           if (coords) {
             const cr = coords.getBoundingClientRect();
-            const bottomDock = (window.innerHeight || 0) - cr.bottom; // align bottoms
+            const bottomDock = Math.max(8, (window.innerHeight || 0) - cr.bottom); // align bottoms but avoid zeros
             const leftDock = cr.right + 8; // sit to the right of scale
             const heightDock = cr.height;  // match height of the scale component
             setDock({ useLeft: true, left: leftDock, bottom: bottomDock, height: heightDock });
@@ -123,6 +130,8 @@ export default function WorldCoverLegend() {
 
   const boxStyle = {
     position: 'absolute',
+    // prefer top positioning when we set a `bottom` to ensure stable layout (avoid empty gap)
+    top: dock.useLeft && dock.bottom != null ? undefined : undefined,
     bottom: dock.useLeft && dock.bottom != null ? dock.bottom : ui.bottom,
     right: dock.useLeft ? 'auto' : offset.right,
     left: dock.useLeft ? dock.left : 'auto',
@@ -132,26 +141,29 @@ export default function WorldCoverLegend() {
     boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
     padding: ui.padding,
     width: availableWidth,
-    height: dock.useLeft && dock.height != null ? dock.height : 'auto',
+    // Let content determine height, but constrain it if we suggested a dock height
+    height: dock.useLeft && dock.height != null && dock.height > 0 ? 'auto' : 'auto',
+    maxHeight: dock.useLeft && dock.height != null ? dock.height : 'none',
+    overflow: 'auto',
     fontSize: ui.fontSize,
     color: '#374151',
     zIndex: 500,
     pointerEvents: 'auto',
   };
 
-  const rowStyle = { display: 'flex', alignItems: 'center', gap: Math.max(2, ui.gap - 2), marginBottom: 1 };
-  const swatchStyle = (c, b) => ({ width: ui.swatch.w, height: ui.swatch.h, background: c, border: b ? `1px solid ${b}` : '1px solid transparent', borderRadius: 0 });
+  const rowStyle = { display: 'flex', alignItems: 'center', gap: Math.max(2, ui.gap - 3), marginBottom: 2 };
+  const swatchStyle = (c, b) => ({ width: ui.swatch.w, height: ui.swatch.h, background: c, border: b ? `1px solid ${b}` : '1px solid transparent', borderRadius: 0, display: 'inline-block' });
 
   // Desktop: fixed 5-column, 2-row grid; Mobile/Tablet: single column
   const isMobileTablet = (window.innerWidth || 0) < 1024;
   if (isMobileTablet) {
     return (
-      <div style={boxStyle} className="worldcover-legend" aria-label="ESA WorldCover Legend">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr', rowGap: 4 }}>
+      <div style={{ ...boxStyle, padding: '6px 8px', width: 'auto', maxWidth: Math.min(availableWidth, 260), maxHeight: 'none' }} className="worldcover-legend" aria-label="ESA WorldCover Legend">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: Math.max(3, ui.gap - 2) }}>
           {items.map((it) => (
-            <div key={it.label} style={rowStyle}>
+            <div key={it.label} style={{ display: 'flex', alignItems: 'center', gap: Math.max(6, ui.gap) }}>
               <span style={swatchStyle(it.color, it.border)} />
-              <span style={{ color: '#6b7280', fontSize: Math.max(9, ui.fontSize - 2) }}>{it.label}</span>
+              <span style={{ color: '#6b7280', fontSize: Math.max(10, ui.fontSize - 2), lineHeight: '18px', display: 'inline-block' }}>{it.label}</span>
             </div>
           ))}
         </div>
@@ -171,7 +183,7 @@ export default function WorldCoverLegend() {
     height: '100%',
   };
   const cellStyle = { display: 'flex', flexDirection: 'column', alignItems: 'center' };
-  const labelStyle = { color: '#6b7280', marginTop: 1, textAlign: 'center', lineHeight: 1.1, fontSize: Math.max(10, ui.fontSize - 2) };
+  const labelStyle = { color: '#6b7280', marginTop: 1, textAlign: 'center', lineHeight: 1.1, fontSize: Math.max(10, ui.fontSize - 2), marginBottom: 0 };
 
   return (
     <div style={boxStyle} className="worldcover-legend" aria-label="ESA WorldCover Legend">
