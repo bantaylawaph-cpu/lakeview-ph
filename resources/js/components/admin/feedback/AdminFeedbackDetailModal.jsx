@@ -7,7 +7,7 @@ import api from '../../../lib/api';
 import { invalidateHttpCache } from '../../../lib/httpCache';
 
 // Modal for viewing & moderating a single feedback item
-export default function FeedbackDetailModal({ open, onClose, item, onSave }) {
+export default function AdminFeedbackDetailModal({ open, onClose, item, onSave }) {
   const [status, setStatus] = useState(item?.status || 'open');
   const [adminResponse, setAdminResponse] = useState(item?.admin_response || '');
   const [saving, setSaving] = useState(false);
@@ -73,26 +73,26 @@ export default function FeedbackDetailModal({ open, onClose, item, onSave }) {
         <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 24 }}>
           {/* Left: content + preview */}
           <div className="lv-settings-panel" style={{ gap: 16, background: '#ffffff', padding: '24px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', border: '1px solid #cbd5e1' }}>
-          <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 600, color: '#1e293b', letterSpacing: '-0.01em' }}>{item.title}</h3>
+          <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 600, color: '#000000', letterSpacing: '-0.01em' }}>{item.title}</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '16px', background: '#ffffff', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#cbd5e1', minWidth: '90px' }}>Status:</span> <StatusPill status={status} />
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#000000', minWidth: '90px' }}>Status:</span> <StatusPill status={status} />
             </div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#475569', minWidth: '90px' }}>Category:</span> {item.category ? <span className="feedback-category-badge">{item.category}</span> : <span style={{ fontSize: 13, color: '#94a3b8' }}>—</span>}
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#000000', minWidth: '90px' }}>Category:</span> {item.category ? <span className="feedback-category-badge">{item.category}</span> : <span style={{ fontSize: 13, color: '#94a3b8' }}>—</span>}
             </div>
             {item.lake?.name && (
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: '#475569', minWidth: '90px' }}>Lake:</span> <span style={{ fontSize: 13, color: '#334155' }}>{item.lake.name}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#000000', minWidth: '90px' }}>Lake:</span> <span style={{ fontSize: 13, color: '#000000' }}>{item.lake.name}</span>
               </div>
             )}
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#475569', minWidth: '90px' }}>Submitted By:</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#000000', minWidth: '90px' }}>Submitted:</span>
               {item.is_guest ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span className="badge" style={{ background:'#fef3c7', color:'#92400e', padding:'3px 8px', borderRadius:6, fontSize:11, fontWeight: 600 }}>Guest</span>
-                    <span style={{ fontSize: 13, color: '#334155' }}>{item.guest_name || <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>No name provided</span>}</span>
+                    <span style={{ fontSize: 13, color: '#000000' }}>{item.guest_name || <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>No name provided</span>}</span>
                   </div>
                   {item.guest_email ? (
                     <span style={{ fontSize: 12, color: '#64748b', marginLeft: '4px' }}>{item.guest_email}</span>
@@ -101,25 +101,25 @@ export default function FeedbackDetailModal({ open, onClose, item, onSave }) {
                   )}
                 </div>
               ) : (
-                <span style={{ fontSize: 13, color: '#334155' }}>{item.user?.name || '—'}</span>
+                <span style={{ fontSize: 13, color: '#000000' }}>{item.user?.name || '—'}</span>
               )}
             </div>
             {!item.is_guest && item.tenant?.name && (
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: '#475569', minWidth: '90px' }}>Organization:</span>
-                <span style={{ fontSize: 13, color: '#334155' }}>{item.tenant.name}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#000000', minWidth: '90px' }}>Organization:</span>
+                <span style={{ fontSize: 13, color: '#000000' }}>{item.tenant.name}</span>
               </div>
             )}
             <div style={{ fontSize: 12, color: '#64748b', paddingTop: '8px', borderTop: '1px solid #cbd5e1', marginTop: '6px' }}>Submitted: {new Date(item.created_at).toLocaleString()}</div>
           </div>
           <div style={{ background: '#ffffff', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#475569', padding: '14px 16px', borderBottom: '1px solid #cbd5e1' }}>Message</div>
-            <div style={{ fontSize: 14, lineHeight: 1.6, whiteSpace: 'pre-wrap', color: '#334155', padding: '16px' }}>{item.message}</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#000000', padding: '14px 16px', borderBottom: '1px solid #cbd5e1' }}>Message</div>
+            <div style={{ fontSize: 14, lineHeight: 1.6, whiteSpace: 'pre-wrap', color: '#000000', padding: '16px' }}>{item.message}</div>
           </div>
 
           {imgs.length > 0 && (
             <div style={{ display: 'grid', gap: 12 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#475569' }}>Attachments ({count})</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#000000' }}>Attachments ({count})</div>
               <div style={{ position: 'relative', background: '#f8fafb', border: '1px solid #cbd5e1', borderRadius: 10, padding: 12 }}>
                 {!currentIsPdf ? (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 240 }}>
@@ -173,15 +173,15 @@ export default function FeedbackDetailModal({ open, onClose, item, onSave }) {
 
         {/* Right: moderation */}
         <div className="lv-settings-panel" style={{ gap: 16, background: '#ffffff', padding: '24px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', border: '1px solid #cbd5e1' }}>
-          <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600, color: '#1e293b', letterSpacing: '-0.01em' }}>Moderation</h3>
+          <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600, color: '#000000', letterSpacing: '-0.01em' }}>Moderation</h3>
           <div className="lv-field-row">
-            <label htmlFor="fb-detail-status" style={{ fontSize: 13, fontWeight: 600, color: '#475569' }}>Status</label>
+            <label htmlFor="fb-detail-status" style={{ fontSize: 13, fontWeight: 600, color: '#000000' }}>Status</label>
             <select
               id="fb-detail-status"
               value={status}
               onChange={(e) => setStatus(e.target.value)}
               disabled={isLocked}
-              style={{ border: '1px solid #cbd5e1', borderRadius: 8, padding: '8px 12px', background: isLocked ? '#f8fafb' : '#fff', fontSize: 14, height: 38, cursor: isLocked ? 'not-allowed' : 'pointer', color: '#334155' }}
+              style={{ border: '1px solid #cbd5e1', borderRadius: 8, padding: '8px 12px', background: isLocked ? '#f8fafb' : '#fff', fontSize: 14, height: 38, cursor: isLocked ? 'not-allowed' : 'pointer', color: '#000000' }}
             >
               {STATUS_ORDER.map((s) => (
                 <option key={s} value={s}>{STATUS_LABEL[s]}</option>
@@ -189,7 +189,7 @@ export default function FeedbackDetailModal({ open, onClose, item, onSave }) {
             </select>
           </div>
           <div className="lv-field-row">
-            <label htmlFor="fb-detail-response" style={{ fontSize: 13, fontWeight: 600, color: '#475569' }}>Admin Response</label>
+            <label htmlFor="fb-detail-response" style={{ fontSize: 13, fontWeight: 600, color: '#000000' }}>Admin Response</label>
             <textarea
               id="fb-detail-response"
               value={adminResponse}
@@ -198,7 +198,7 @@ export default function FeedbackDetailModal({ open, onClose, item, onSave }) {
               rows={6}
               maxLength={4000}
               placeholder={isLocked ? "This feedback is locked and cannot be edited." : "Provide context, resolution notes, or rationale."}
-              style={{ resize: 'vertical', border: '1px solid #cbd5e1', borderRadius: 8, padding: '10px 12px', fontSize: 14, lineHeight: 1.6, background: isLocked ? '#f8fafb' : '#fff', cursor: isLocked ? 'not-allowed' : 'text', color: '#334155' }}
+              style={{ resize: 'vertical', border: '1px solid #cbd5e1', borderRadius: 8, padding: '10px 12px', fontSize: 14, lineHeight: 1.6, background: isLocked ? '#f8fafb' : '#fff', cursor: isLocked ? 'not-allowed' : 'text', color: '#000000' }}
             />
           </div>
           {isLocked && (

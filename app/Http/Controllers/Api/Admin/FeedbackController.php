@@ -128,6 +128,15 @@ class FeedbackController extends Controller
             $q->where('category', $category);
         }
 
+        // Filter by source (lake vs system)
+        if ($source = $request->query('source')) {
+            if ($source === 'lake') {
+                $q->whereNotNull('lake_id');
+            } elseif ($source === 'system') {
+                $q->whereNull('lake_id');
+            }
+        }
+
         // Filter by role
         $roleParam = $request->query('role');
         if ($roleParam) {

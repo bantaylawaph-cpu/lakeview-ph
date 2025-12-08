@@ -5,6 +5,7 @@ import api from '../../lib/api';
 import { getCurrentUser } from '../../lib/authState';
 import LoadingSpinner from '../LoadingSpinner';
 import DataPrivacyDisclaimer from '../../pages/PublicInterface/DataPrivacyDisclaimer';
+import UserFeedbackDetailModal from './UserFeedbackDetailModal';
 
 // Status pill uses feedback-status classes from feedback.css
 function StatusPill({ status }) {
@@ -36,6 +37,8 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
   const formRef = useRef(null);
   const triggerRef = useRef(null);
   const [privacyOpen, setPrivacyOpen] = useState(false);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [selectedFeedback, setSelectedFeedback] = useState(null);
 
   // no file preview needed for "My Submissions"
 
@@ -103,8 +106,10 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
   const resetForm = () => { 
     setTitle(''); setCategory(''); setMessage(''); setGuestName(''); setGuestEmail(''); setFiles([]); 
     if (honeypotRef.current) honeypotRef.current.value=''; 
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    setPreviews([]);
     setTTitle(false); setTMessage(false); setTCategory(false); // clear touched validation states
-    setError(''); // clear any error messages
+    setError(''); setSuccess(''); // clear any error/success messages
   };
 
   // File selection and previews (screenshots only)
@@ -189,7 +194,7 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
         // Close loading dialog before showing the result
         try { Swal.close(); } catch {}
         const text = user
-          ? 'Feedback submitted. We will email updates; you can also track it in the list below.'
+          ? 'Feedback submitted. You can track your Feedback updates below.'
           : 'Feedback submitted.';
         await Swal.fire({
           title: 'Thank you!',
@@ -203,7 +208,7 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
         // Close loading dialog before showing the result
         try { Swal.close(); } catch {}
         const text = user
-          ? 'Feedback submitted. We will email updates; you can also track it in the list below.'
+          ? 'Feedback submitted. You can track your Feedback updates below.'
           : 'Feedback submitted.';
         await Swal.fire({
           title: 'Thank you!',
@@ -397,25 +402,25 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
             <div className="feedback-list">
             {list.length === 0 && !loadingList && (<div className="insight-card" style={{ textAlign:'center' }}>No feedback yet.</div>)}
             {list.map(item => (
-              <div key={item.id} className="insight-card" style={{ display:'grid', gap:6, padding:'14px 16px' }}>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, flexWrap:'wrap' }}>
-                  <strong style={{ fontSize:15 }}>{item.title}</strong>
-                  <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-                    <StatusPill status={item.status} />
-                  </div>
+              <div 
+                key={item.id} 
+                className="insight-card" 
+                style={{ display:'grid', gap:8, padding:'12px 14px', cursor:'pointer' }}
+                onClick={() => { setSelectedFeedback(item); setDetailModalOpen(true); }}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedFeedback(item); setDetailModalOpen(true); } }}
+              >
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
+                  <strong style={{ fontSize:14 }}>{item.title}</strong>
+                  <StatusPill status={item.status} />
                 </div>
-                {item.category && (
-                  <div style={{ marginTop:2 }}>
-                    <span className="feedback-category-badge">{item.category}</span>
-                  </div>
-                )}
-                <div style={{ whiteSpace:'pre-wrap', fontSize:13, lineHeight:1.45 }}>{item.message}</div>
-                {item.admin_response && (
-                  <div className="admin-reply-box"><strong>Admin Response:</strong><br />{item.admin_response}</div>
-                )}
-                <div className="meta-row">
-                  <span>Created: {item.created_at ? new Date(item.created_at).toLocaleString() : '—'}</span>
-                  {item.resolved_at && <span>Resolved: {new Date(item.resolved_at).toLocaleString()}</span>}
+                <div style={{ display:'flex', gap:8, alignItems:'center', fontSize:12, color:'#94a3b8', flexWrap:'wrap' }}>
+                  {item.category && <span className="feedback-category-badge">{item.category}</span>}
+                  {item.category && <span>•</span>}
+                  <span>{item.lake?.name || (item.lake_id ? 'Lake Feedback' : 'System Feedback')}</span>
+                  <span>•</span>
+                  <span>{item.created_at ? new Date(item.created_at).toLocaleDateString() : '—'}</span>
                 </div>
               </div>
             ))}
@@ -430,6 +435,12 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
         )}
       </div>
       <DataPrivacyDisclaimer open={privacyOpen} onClose={() => setPrivacyOpen(false)} />
+      <UserFeedbackDetailModal 
+        open={detailModalOpen} 
+        onClose={() => { setDetailModalOpen(false); setSelectedFeedback(null); }} 
+        feedback={selectedFeedback}
+        onCloseAll={() => { setDetailModalOpen(false); setSelectedFeedback(null); onClose(); }}
+      />
     </Modal>
   );
 }

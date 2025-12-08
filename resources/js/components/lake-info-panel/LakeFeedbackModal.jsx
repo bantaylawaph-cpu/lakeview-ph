@@ -3,6 +3,7 @@ import Modal from '../../components/Modal';
 import api from '../../lib/api';
 import { getToken } from '../../lib/api';
 import DataPrivacyDisclaimer from '../../pages/PublicInterface/DataPrivacyDisclaimer';
+import UserFeedbackDetailModal from '../../components/feedback/UserFeedbackDetailModal';
 import { FiFileText } from 'react-icons/fi';
 import Swal from 'sweetalert2';
 import LoadingSpinner from '../../components/LoadingSpinner';
@@ -34,6 +35,8 @@ export default function LakeFeedbackModal({ open, onClose, lake }) {
   const [loadingList, setLoadingList] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [selectedFeedback, setSelectedFeedback] = useState(null);
   const getFileName = (item, src) => {
     try {
       const files = item?.metadata?.files;
@@ -63,8 +66,10 @@ export default function LakeFeedbackModal({ open, onClose, lake }) {
 
   const reset = () => {
     setType(''); setTitle(''); setDescription(''); setFiles([]); setGuestName(''); setGuestEmail(''); if (hpRef.current) hpRef.current.value = '';
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    setPreviews([]);
     setTDesc(false); // clear touched validation state
-    setError(''); // clear any error messages
+    setError(''); setSuccess(''); // clear any error/success messages
   };
 
   const fetchMine = useCallback(async (opts={}) => {
@@ -144,9 +149,11 @@ export default function LakeFeedbackModal({ open, onClose, lake }) {
     setSubmitting(true);
     try {
       const fd = new FormData();
-  if (type) fd.append('type', type);
-  if (title && title.trim()) fd.append('title', title.trim());
-      fd.append('description', description.trim());
+      // Map frontend fields to backend API fields
+      if (type) fd.append('category', type.toLowerCase().replace(/ /g, '_')); // Convert "Missing information" to "missing_information"
+      if (title && title.trim()) fd.append('title', title.trim());
+      else fd.append('title', type || 'Lake Feedback'); // Title is required, use type as fallback
+      fd.append('message', description.trim());
       if (lake?.id) fd.append('lake_id', String(lake.id));
       const hasToken = !!getToken();
       if (!hasToken) {
@@ -165,7 +172,7 @@ export default function LakeFeedbackModal({ open, onClose, lake }) {
         setTDesc(false); // clear touched state
         const hasToken = !!getToken();
         const text = hasToken
-          ? 'Feedback submitted. We will email updates; you can also track it under My Submissions.'
+          ? 'Feedback submitted. You can track your feedback below!'
           : 'Feedback submitted.';
         await Swal.fire({
           title: 'Thank you!',
@@ -333,22 +340,25 @@ export default function LakeFeedbackModal({ open, onClose, lake }) {
             <div className="feedback-list">
               {list.length === 0 && !loadingList && (<div className="insight-card" style={{ textAlign:'center' }}>No feedback yet.</div>)}
               {list.map(item => (
-                <div key={item.id} className="insight-card" style={{ display:'grid', gap:6, padding:'14px 16px' }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, flexWrap:'wrap' }}>
-                    <strong style={{ fontSize:15 }}>{item.title || item.type || 'Feedback'}</strong>
-                    <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-                      {item.status && <span className={`feedback-status ${item.status}`}>{item.status}</span>}
-                    </div>
+                <div 
+                  key={item.id} 
+                  className="insight-card" 
+                  style={{ display:'grid', gap:8, padding:'12px 14px', cursor:'pointer' }}
+                  onClick={() => { setSelectedFeedback(item); setDetailModalOpen(true); }}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedFeedback(item); setDetailModalOpen(true); } }}
+                >
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
+                    <strong style={{ fontSize:14 }}>{item.title || item.type || 'Feedback'}</strong>
+                    {item.status && <span className={`feedback-status ${item.status}`}>{item.status}</span>}
                   </div>
-                  {item.category && (
-                    <div style={{ marginTop:2 }}>
-                      <span className="feedback-category-badge">{item.category}</span>
-                    </div>
-                  )}
-                  {item.message && <div style={{ whiteSpace:'pre-wrap', fontSize:13, lineHeight:1.45 }}>{item.message}</div>}
-                  {item.description && <div style={{ whiteSpace:'pre-wrap', fontSize:13, lineHeight:1.45 }}>{item.description}</div>}
-                  <div className="meta-row">
-                    <span>Created: {item.created_at ? new Date(item.created_at).toLocaleString() : '—'}</span>
+                  <div style={{ display:'flex', gap:8, alignItems:'center', fontSize:12, color:'#94a3b8', flexWrap:'wrap' }}>
+                    {item.category && <span className="feedback-category-badge">{item.category}</span>}
+                    {item.category && <span>•</span>}
+                    <span>{item.lake?.name || (item.lake_id ? 'Lake Feedback' : 'System Feedback')}</span>
+                    <span>•</span>
+                    <span>{item.created_at ? new Date(item.created_at).toLocaleDateString() : '—'}</span>
                   </div>
                 </div>
               ))}
@@ -364,6 +374,13 @@ export default function LakeFeedbackModal({ open, onClose, lake }) {
       </div>
       {/* Privacy Notice modal */}
       <DataPrivacyDisclaimer open={privacyOpen} onClose={() => setPrivacyOpen(false)} />
+      {/* Feedback Detail modal */}
+      <UserFeedbackDetailModal 
+        open={detailModalOpen} 
+        onClose={() => { setDetailModalOpen(false); setSelectedFeedback(null); }} 
+        feedback={selectedFeedback}
+        onCloseAll={() => { setDetailModalOpen(false); setSelectedFeedback(null); onClose(); }}
+      />
     </Modal>
   );
 }

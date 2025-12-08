@@ -5,10 +5,11 @@ import api from '../../lib/api';
 import { cachedGet, invalidateHttpCache } from '../../lib/httpCache';
 import TableToolbar from '../../components/table/TableToolbar';
 import TableLayout from '../../layouts/TableLayout';
+import FilterPanel from '../../components/table/FilterPanel';
 import { STATUS_ORDER, STATUS_LABEL, SEARCH_SCOPE_MAP } from '../../components/admin/feedback/feedbackConstants';
 import StatusPill from '../../components/admin/feedback/StatusPill';
 import AttachmentsModal from '../../components/admin/feedback/AttachmentsModal';
-import FeedbackDetailModal from '../../components/admin/feedback/FeedbackDetailModal';
+import AdminFeedbackDetailModal from '../../components/admin/feedback/AdminFeedbackDetailModal';
 
 
 export default function AdminFeedback() {
@@ -22,6 +23,7 @@ export default function AdminFeedback() {
   const [status, setStatus] = useState('open'); // Default to 'open' status
   const [category, setCategory] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
+  const [sourceFilter, setSourceFilter] = useState('');
   // searchScope options: name | title | message | name_title | name_message | title_message | all
   const [searchScope, setSearchScope] = useState('all');
   const [selected, setSelected] = useState(null);
@@ -49,7 +51,7 @@ export default function AdminFeedback() {
         if (parsed && parsed.id && (parsed.dir === 'asc' || parsed.dir === 'desc')) return parsed;
       }
     } catch {}
-    return { id: null, dir: 'asc' };
+    return { id: 'created', dir: 'desc' };
   });
   useEffect(() => { try { localStorage.setItem(SORT_KEY, JSON.stringify(sort)); } catch {} }, [sort]);
 
@@ -60,7 +62,6 @@ export default function AdminFeedback() {
     { id: 'source', header: 'Source' },
     { id: 'lake', header: 'Lake' },
     { id: 'category', header: 'Category' },
-    { id: 'docs', header: 'Documents' },
     { id: 'status', header: 'Status' },
     { id: 'org', header: 'Org' },
     { id: 'created', header: 'Created' },
@@ -71,7 +72,6 @@ export default function AdminFeedback() {
     source: true,
     lake: false,
     category: false,
-    docs: true,
     status: true,
     org: false,
     created: false,
@@ -146,6 +146,7 @@ export default function AdminFeedback() {
     if (status) params.set('status', status);
     if (category) params.set('category', category);
     if (roleFilter) params.set('role', roleFilter);
+    if (sourceFilter) params.set('source', sourceFilter);
     
     const cacheKey = params.toString();
     
@@ -201,7 +202,7 @@ export default function AdminFeedback() {
     
     pendingRequestRef.current = { key: cacheKey, promise: fetchPromise };
     return fetchPromise;
-  }, [page, search, searchScope, status, category, roleFilter, sort?.id, sort?.dir]);
+  }, [page, search, searchScope, status, category, roleFilter, sourceFilter, sort?.id, sort?.dir]);
 
   // Initial data fetch on mount
   useEffect(() => {
@@ -220,7 +221,7 @@ export default function AdminFeedback() {
   }, [search]);
 
   // Filter changes (instant, no debounce)
-  useEffect(() => { fetchData(1, false); }, [status, category, roleFilter, sort?.id, sort?.dir]);
+  useEffect(() => { fetchData(1, false); }, [status, category, roleFilter, sourceFilter, sort?.id, sort?.dir]);
 
   // Real-time updates via Server-Sent Events (SSE) with graceful fallback to polling
   const [sseEnabled, setSseEnabled] = useState(true);
@@ -396,34 +397,6 @@ export default function AdminFeedback() {
       render: (r) => (<span style={{ fontSize:12 }}>{r.category ? <span className="feedback-category-badge">{r.category}</span> : '—'}</span>)
     },
     {
-      id: 'docs', header: 'Documents',
-      render: (r) => {
-        const toCanonical = (raw) => {
-          if (!raw || typeof raw !== 'string') return '';
-          try { if (raw.startsWith('http')) { const u = new URL(raw); return u.pathname.replace(/^\//,''); } } catch {}
-          return raw.replace(/^\//,'');
-        };
-        const baseImgs = Array.isArray(r.images) ? r.images.filter(x => typeof x === 'string') : [];
-        const metaFiles = Array.isArray(r?.metadata?.files) ? r.metadata.files : [];
-        const metaPaths = metaFiles.map(f => (typeof f?.url === 'string' ? f.url : (typeof f?.path === 'string' ? f.path : null))).filter(Boolean);
-        const combined = [...baseImgs, ...metaPaths];
-        const seen = new Set();
-        const unique = [];
-        for (const c of combined) { const key = toCanonical(c); if (!key || seen.has(key)) continue; seen.add(key); unique.push(c); }
-        const total = unique.length;
-        if (total <= 0) return (<span style={{ fontSize:12 }}>—</span>);
-        return (
-          <button
-            className="pill-btn ghost sm"
-            onClick={() => { setDocsItem(r); setDocsOpen(true); }}
-            title={`View attachments (${total})`}
-          >
-            <FiFileText /> View ({total})
-          </button>
-        );
-      }
-    },
-    {
       id: 'status', header: 'Status',
       render: (r) => (<span style={{ fontSize:12 }}><StatusPill status={r.status} /></span>)
     },
@@ -461,47 +434,50 @@ export default function AdminFeedback() {
         onRefresh={() => { try { invalidateHttpCache('/admin/feedback'); } catch {} fetchData(1, false); }}
       />
 
-      {showFilters && (
-      <div className="advanced-filters" style={{ marginTop:16 }}>
-        <div className="advanced-filters-header" style={{ marginBottom:10 }}>
-          <strong>Filters</strong>
-          <div style={{ display:'flex', gap:8 }}>
-            <button className="pill-btn ghost sm" onClick={() => { setSearch(''); setStatus('open'); setCategory(''); setRoleFilter(''); setSearchScope('all'); fetchData(1); }} disabled={loading}>Reset</button>
-          </div>
-        </div>
-        {/* Removed duplicate search bar from Filters panel (toolbar search remains) */}
-        {/* Remaining filters grid */}
-        <div className="advanced-filters-grid">
-          <div className="org-filter">
-            <select value={status} onChange={e=>setStatus(e.target.value)} style={{ height: 32 }}>
-              <option value="">All Statuses</option>
-              {STATUS_ORDER.map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
-            </select>
-          </div>
-          <div className="org-filter">
-            <select value={category} onChange={e=>setCategory(e.target.value)} style={{ height: 32 }}>
-              <option value="">Category (all)</option>
-              <option value="bug">Bug</option>
-              <option value="suggestion">Suggestion</option>
-              <option value="data">Data</option>
-              <option value="ui">UI/UX</option>
-              <option value="org_petition">Petition a New Organization</option>
-              <option value="other">Other</option>
-            </select>
-          </div>
-          <div className="org-filter">
-            <select value={roleFilter} onChange={e=>setRoleFilter(e.target.value)} style={{ height: 32 }}>
-              <option value="">Role (all)</option>
-              <option value="superadmin">Superadmin</option>
-              <option value="org_admin">Org Admin</option>
-              <option value="contributor">Contributor</option>
-              <option value="public">Public</option>
-              <option value="guest">Guest</option>
-            </select>
-          </div>
-        </div>
-  </div>
-  )}
+      <FilterPanel 
+        open={showFilters} 
+        fields={[
+          {
+            id: 'status',
+            label: 'Status',
+            type: 'select',
+            value: status,
+            onChange: setStatus,
+            options: [
+              { value: '', label: 'All Statuses' },
+              ...STATUS_ORDER.map(s => ({ value: s, label: STATUS_LABEL[s] }))
+            ]
+          },
+          {
+            id: 'role',
+            label: 'Role',
+            type: 'select',
+            value: roleFilter,
+            onChange: setRoleFilter,
+            options: [
+              { value: '', label: 'All Roles' },
+              { value: 'superadmin', label: 'Superadmin' },
+              { value: 'org_admin', label: 'Org Admin' },
+              { value: 'contributor', label: 'Contributor' },
+              { value: 'public', label: 'Public' },
+              { value: 'guest', label: 'Guest' }
+            ]
+          },
+          {
+            id: 'source',
+            label: 'Source',
+            type: 'select',
+            value: sourceFilter,
+            onChange: setSourceFilter,
+            options: [
+              { value: '', label: 'All Sources' },
+              { value: 'lake', label: 'Lake Panel' },
+              { value: 'system', label: 'System' }
+            ]
+          }
+        ]}
+        onClearAll={() => { setSearch(''); setStatus('open'); setCategory(''); setRoleFilter(''); setSourceFilter(''); setSearchScope('all'); fetchData(1); }}
+      />
 
       <div className="table-wrapper" style={{ marginTop:18 }}>
         {/* TEMP: debug pagination meta to investigate "no next" issue */}
@@ -534,7 +510,7 @@ export default function AdminFeedback() {
         />
       </div>
 
-      <FeedbackDetailModal
+      <AdminFeedbackDetailModal
         open={detailOpen}
         onClose={() => setDetailOpen(false)}
         item={selected}

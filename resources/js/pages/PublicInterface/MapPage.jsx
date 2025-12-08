@@ -229,6 +229,47 @@ function MapPage() {
 
   const searchApi = usePublicSearch({ mapRef, publicFC, selectLakeFeature, setLakePanelOpen });
 
+  // Listen for lake navigation events from feedback modals
+  useEffect(() => {
+    const handleNavigateToLake = (event) => {
+      const { lakeId, latitude, longitude } = event.detail || {};
+      if (!lakeId || !mapRef?.current || !publicFC) return;
+      
+      // Find the lake feature in publicFC
+      const getLakeIdFromFeature = (feat) => {
+        const p = feat?.properties || {};
+        return feat?.id ?? p.id ?? p.lake_id ?? p.lakeId ?? p.lakeID ?? null;
+      };
+      
+      const lakeFeature = publicFC.features?.find(ft => {
+        const id = getLakeIdFromFeature(ft);
+        return id != null && String(id) === String(lakeId);
+      });
+      
+      if (lakeFeature) {
+        // Select the lake feature
+        try { selectLakeFeature(lakeFeature); } catch {}
+        setLakePanelOpen(true);
+        
+        // Fly to lake coordinates if available, otherwise use feature bounds
+        if (latitude && longitude && Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude))) {
+          mapRef.current.flyTo([Number(latitude), Number(longitude)], 13, { duration: 0.8 });
+        } else {
+          try {
+            const gj = L.geoJSON(lakeFeature);
+            const b = gj.getBounds();
+            if (b?.isValid?.()) {
+              mapRef.current.flyToBounds(b, { padding: [24, 24], maxZoom: 13, duration: 0.8 });
+            }
+          } catch {}
+        }
+      }
+    };
+    
+    window.addEventListener('lv-navigate-to-lake', handleNavigateToLake);
+    return () => window.removeEventListener('lv-navigate-to-lake', handleNavigateToLake);
+  }, [publicFC, selectLakeFeature, setLakePanelOpen]);
+
   const selectedLakeBounds = useMemo(() => {
     try {
       if (lakeOverlayFeature) {
