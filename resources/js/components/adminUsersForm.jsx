@@ -358,6 +358,9 @@ export default function AdminUsersForm({
         <select
           value={form.occupation || ""}
           onChange={(e) => setForm((f) => ({ ...f, occupation: e.target.value }))}
+          disabled
+          title="Occupation cannot be edited"
+          onClick={(e) => { e.preventDefault(); alert('Occupation cannot be edited'); }}
         >
           <option value="" disabled>Select occupation</option>
           <option value="student">Student</option>
@@ -375,12 +378,15 @@ export default function AdminUsersForm({
 
       {form.occupation === "other" && (
         <label className="lv-field full">
-          <span>Please specify your occupation</span>
+          <span>Specified Occupation</span>
           <input
             type="text"
             placeholder="Enter your occupation"
             value={form.occupation_other || ""}
             onChange={(e) => setForm((f) => ({ ...f, occupation_other: e.target.value }))}
+            disabled
+            title="Occupation cannot be edited"
+            onClick={(e) => { e.preventDefault(); alert('Occupation cannot be edited'); }}
           />
         </label>
       )}

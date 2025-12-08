@@ -276,7 +276,16 @@ export default function OrgMembers() {
       setSaving(false);
     }
   }, [tenantId]);
-  const closeModal = () => { if (saving) return; setOpen(false); setInitial(emptyContributor); setEditingId(null); setMode('create'); };
+  const closeModal = () => { 
+    if (saving) return; 
+    setOpen(false); 
+    // Delay state reset to avoid flashing password fields during modal close animation
+    setTimeout(() => {
+      setInitial(emptyContributor); 
+      setEditingId(null); 
+      setMode('create');
+    }, 250);
+  };
 
   // Submit
   const submitForm = async (payload) => {
@@ -607,6 +616,9 @@ export default function OrgMembers() {
             <select
               value={initial.occupation || ""}
               onChange={(e)=>setInitial(i=>({...i,occupation:e.target.value}))}
+              disabled
+              title="Occupation cannot be edited"
+              onClick={(e) => { e.preventDefault(); alert('Occupation cannot be edited'); }}
             >
               <option value="" disabled>Select occupation</option>
               <option value="student">Student</option>
@@ -624,12 +636,15 @@ export default function OrgMembers() {
 
           {initial.occupation === "other" && (
             <label className="lv-field" style={{ gridColumn: '1/-1' }}>
-              <span>Please specify your occupation</span>
+              <span>Specified Occupation</span>
               <input
                 type="text"
                 placeholder="Enter your occupation"
                 value={initial.occupation_other || ""}
                 onChange={(e)=>setInitial(i=>({...i,occupation_other:e.target.value}))}
+                disabled
+                title="Occupation cannot be edited"
+                onClick={(e) => { e.preventDefault(); alert('Occupation cannot be edited'); }}
               />
             </label>
           )}

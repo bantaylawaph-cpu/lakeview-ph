@@ -222,7 +222,16 @@ export default function AdminUsersPage() {
     } finally { setSaving(false); }
   };
 
-  const closeModal = () => { if (saving) return; setOpen(false); setInitial(emptyInitial); setEditingId(null); setMode("create"); };
+  const closeModal = () => { 
+    if (saving) return; 
+    setOpen(false); 
+    // Delay state reset to avoid flashing password fields during modal close animation
+    setTimeout(() => {
+      setInitial(emptyInitial); 
+      setEditingId(null); 
+      setMode("create");
+    }, 250);
+  };
 
   const submitForm = async (payload) => {
     if (payload.global_role) { payload.role = payload.global_role; delete payload.global_role; }
