@@ -757,9 +757,17 @@ export default function OrgWQTestModal({
                         {editable ? (
                           <div className="form-group" style={{ margin: 0, minWidth: 0 }}>
                             <input
-                              type="number"
-                              value={r.value ?? ""}
-                              onChange={(e) => updateRow(i, { value: e.target.value })}
+                                type="number"
+                                inputMode="decimal"
+                                min={0}
+                                step="any"
+                                value={r.value ?? ""}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  if (v === '' || /^\d*\.?\d*$/.test(v)) {
+                                    updateRow(i, { value: v });
+                                  }
+                                }}
                             />
                           </div>
                         ) : (
@@ -773,9 +781,17 @@ export default function OrgWQTestModal({
                         {editable ? (
                           <div className="form-group" style={{ margin: 0, minWidth: 0 }}>
                             <input
-                              type="number"
-                              value={r.depth_m ?? 0}
-                              onChange={(e) => updateRow(i, { depth_m: e.target.value })}
+                                type="number"
+                                inputMode="decimal"
+                                min={0}
+                                step="any"
+                                value={r.depth_m ?? 0}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  if (v === '' || /^\d*\.?\d*$/.test(v)) {
+                                    updateRow(i, { depth_m: v });
+                                  }
+                                }}
                             />
                           </div>
                         ) : (
