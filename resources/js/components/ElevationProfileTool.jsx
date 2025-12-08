@@ -11,9 +11,10 @@ import {
   LineElement,
   Tooltip,
   Legend,
+  Filler,
 } from "chart.js";
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, Filler);
 
 // A lightweight tool to draw a path and request an elevation profile from the backend
 export default function ElevationProfileTool({ active, onClose, initialPoints }) {
@@ -197,7 +198,17 @@ export default function ElevationProfileTool({ active, onClose, initialPoints })
           data,
           // Match WaterQualityTab primary series coloring
           borderColor: "rgba(59,130,246,1)",
-          backgroundColor: "rgba(59,130,246,0.2)",
+          // Fill the area under the line with a vertical gradient
+          fill: 'start',
+          backgroundColor: (ctx) => {
+            const { chart } = ctx;
+            const { ctx: cctx, chartArea } = chart || {};
+            if (!chartArea) return "rgba(59,130,246,0.2)"; // Fallback during init
+            const gradient = cctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+            gradient.addColorStop(0, "rgba(59,130,246,0.35)");
+            gradient.addColorStop(1, "rgba(59,130,246,0.05)");
+            return gradient;
+          },
           spanGaps: false,
           pointRadius: 0,
           borderWidth: 2,
