@@ -164,7 +164,7 @@ export default function AdminFeedbackDetailModal({ open, onClose, item, onSave }
           {imgs.length > 0 && (
             <div style={{ display: 'grid', gap: 12 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: '#000000' }}>Attachments ({count})</div>
-              <div style={{ position: 'relative', background: '#f8fafb', border: '1px solid #cbd5e1', borderRadius: 10, padding: 12 }}>
+              <div style={{ background: '#f8fafb', border: '1px solid #cbd5e1', borderRadius: 10, padding: 12 }}>
                 {!currentIsPdf && !currentIsGeo ? (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 240 }}>
                     <img src={currentUrl} alt={`Preview ${sel + 1}`} style={{ maxWidth: '100%', maxHeight: '280px', objectFit: 'contain', borderRadius: 6 }} />
@@ -178,7 +178,7 @@ export default function AdminFeedbackDetailModal({ open, onClose, item, onSave }
                     {geoGeom ? (
                       <div style={{ border:'1px solid #cbd5e1', borderRadius:12, overflow:'hidden' }}>
                         <div style={{ height: 320 }}>
-                          <PreviewMap geometry={geoGeom} />
+                          <PreviewMap geometry={geoGeom} height={320} />
                         </div>
                       </div>
                     ) : (
@@ -189,28 +189,40 @@ export default function AdminFeedbackDetailModal({ open, onClose, item, onSave }
                   </div>
                 )}
                 {currentIsPdf && (
-                  <div className="muted" style={{ position: 'absolute', left: 12, bottom: 10, fontSize: 12, background: '#ffffffcc', padding: '2px 6px', borderRadius: 6, border: '1px solid #e5e7eb' }}>
+                  <div className="muted" style={{ fontSize: 12, background: '#ffffffcc', padding: '2px 6px', borderRadius: 6, border: '1px solid #e5e7eb', display: 'inline-block', marginTop: 8 }}>
                     {getFileName(currentSrc)}
                   </div>
                 )}
                 {count > 1 && (
-                  <>
-                    <button className="pill-btn ghost sm" onClick={goPrev} style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)' }} title="Previous">
-                      <FiChevronLeft />
-                    </button>
-                    <button className="pill-btn ghost sm" onClick={goNext} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)' }} title="Next">
-                      <FiChevronRight />
-                    </button>
-                  </>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button className="pill-btn ghost sm" onClick={goPrev} title="Previous">
+                        <FiChevronLeft />
+                      </button>
+                      <button className="pill-btn ghost sm" onClick={goNext} title="Next">
+                        <FiChevronRight />
+                      </button>
+                    </div>
+                    <div style={{ display:'flex', gap:8 }}>
+                      <a className="pill-btn ghost sm" href={currentUrl} target="_blank" rel="noreferrer" title="Open in new tab">
+                        <FiExternalLink /> Open
+                      </a>
+                      <a className="pill-btn ghost sm" href={currentUrl} download={getFileName(currentSrc)} title="Download file">
+                        Download
+                      </a>
+                    </div>
+                  </div>
                 )}
-                <div style={{ position: 'absolute', right: 8, bottom: 8, display:'flex', gap:8 }}>
-                  <a className="pill-btn ghost sm" href={currentUrl} target="_blank" rel="noreferrer" title="Open in new tab">
-                    <FiExternalLink /> Open
-                  </a>
-                  <a className="pill-btn ghost sm" href={currentUrl} download title="Download file">
-                    Download
-                  </a>
-                </div>
+                {count <= 1 && (
+                  <div style={{ display:'flex', justifyContent: 'flex-end', gap:8, marginTop: 12 }}>
+                    <a className="pill-btn ghost sm" href={currentUrl} target="_blank" rel="noreferrer" title="Open in new tab">
+                      <FiExternalLink /> Open
+                    </a>
+                    <a className="pill-btn ghost sm" href={currentUrl} download={getFileName(currentSrc)} title="Download file">
+                      Download
+                    </a>
+                  </div>
+                )}
               </div>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 {imgs.map((raw, idx) => {

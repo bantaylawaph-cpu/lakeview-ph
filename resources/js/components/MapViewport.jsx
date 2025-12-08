@@ -45,13 +45,24 @@ export default function MapViewport({
       try {
         const mapMaxZoom = typeof maxZoom === 'number' ? maxZoom : map.getMaxZoom();
         const effectivePadding = Array.isArray(padding) ? padding : [24, 24];
-        map.stop();
-        map.invalidateSize();
-        map.fitBounds(padded, {
-          padding: effectivePadding,
-          maxZoom: mapMaxZoom,
-          animate: false,
-        });
+        const run = () => {
+          try {
+            map.stop();
+            map.invalidateSize();
+            map.fitBounds(padded, {
+              padding: effectivePadding,
+              maxZoom: mapMaxZoom,
+              animate: false,
+            });
+          } catch (err) {
+            console.error('[MapViewport] Failed to fit bounds', err);
+          }
+        };
+        // Attempt immediately, then retry after layout settles
+        run();
+        // microtask and raf retries to catch late layout
+        setTimeout(run, 0);
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => run());
       } catch (err) {
         console.error('[MapViewport] Failed to apply map view', err);
       }

@@ -5,7 +5,7 @@ import MapViewport from "../../components/MapViewport";
 import { boundsFromGeom } from "../../utils/geo";
 import L from "leaflet";
 
-export default function PreviewMap({ geometry, color = "#2563eb", viewport, viewportVersion = 0, whenCreated }) {
+export default function PreviewMap({ geometry, color = "#2563eb", viewport, viewportVersion = 0, whenCreated, height = 420 }) {
   const mapRef = useRef(null);
   const boundsProp = useMemo(() => {
     // Prefer explicit viewport if provided and valid
@@ -31,7 +31,7 @@ export default function PreviewMap({ geometry, color = "#2563eb", viewport, view
     return null;
   }, [viewport, geometry]);
   return (
-    <div className="map-preview" style={{ borderRadius: 12, overflow: "hidden", border: "1px solid #e5e7eb" }}>
+    <div className="map-preview" style={{ borderRadius: 12, overflow: "hidden", border: "1px solid #e5e7eb", height }}>
       <AppMap
         view="osm"
         style={{ height: "100%", width: "100%" }}
