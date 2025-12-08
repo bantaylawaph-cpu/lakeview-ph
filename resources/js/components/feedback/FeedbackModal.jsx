@@ -349,7 +349,7 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
                 </div>
                 <div className="lv-field-row">
                   <label htmlFor="fb-files">Attachments (optional)</label>
-                  <div className="muted" style={{ fontSize:12, marginTop:-6, marginBottom:6 }}>Screenshots only (PNG, JPG), up to 6 files, 25MB each.</div>
+                  <div className="muted" style={{ fontSize:12, marginTop:-6, marginBottom:6 }}>Images only (PNG, JPG), up to 6 files, 25MB each.</div>
                   <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
                     <input
                       ref={fileInputRef}

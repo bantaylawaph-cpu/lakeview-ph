@@ -55,11 +55,59 @@ class FeedbackController extends Controller
             'guest_email' => ['nullable', 'email', 'max:255'],
             'title' => ['required', 'string', 'max:255'],
             'message' => ['required', 'string', 'max:4000'],
-            'category' => ['nullable', 'string', 'in:bug,suggestion,data,ui,org_petition,other,missing_information,incorrect_data'],
+            'category' => ['nullable', 'string', 'in:bug,suggestion,data,ui,org_petition,other,missing_information,incorrect_data,submit_lake_layer'],
             'lake_id' => ['nullable', 'integer', 'exists:lakes,id'],
             'images' => ['nullable', 'array', 'max:6'],
-            'images.*' => ['image', 'max:25600'], // 25MB max per image
+            // Accept common attachments (images/pdf/geojson). 25MB per file
+            'images.*' => ['file', 'max:25600', 'mimetypes:image/png,image/jpeg,application/pdf,application/geo+json,application/json'],
         ]);
+
+        // Conditional rules for submit_lake_layer
+        $validator->after(function ($v) use ($request) {
+            $category = (string) $request->input('category', '');
+            if ($category === 'submit_lake_layer') {
+                $files = $request->file('images', []);
+                if (!is_array($files) || count($files) !== 1) {
+                    $v->errors()->add('images', 'Exactly one GeoJSON file is required.');
+                    return;
+                }
+                $f = $files[0];
+                $name = strtolower($f->getClientOriginalName() ?? '');
+                $mime = strtolower($f->getClientMimeType() ?? '');
+                $okMime = str_contains($mime, 'geo+json') || $mime === 'application/json' || str_ends_with($name, '.geojson') || str_ends_with($name, '.json');
+                if (!$okMime) {
+                    $v->errors()->add('images.0', 'Only GeoJSON (.geojson or .json) is allowed for Submit Lake Layer.');
+                    return;
+                }
+                try {
+                    $raw = @file_get_contents($f->getRealPath());
+                    $json = json_decode($raw ?: '', true);
+                    if (!is_array($json)) {
+                        $v->errors()->add('images.0', 'Invalid GeoJSON file.');
+                        return;
+                    }
+                    $type = $json['type'] ?? null;
+                    $single = false;
+                    if ($type === 'FeatureCollection') {
+                        $features = $json['features'] ?? null;
+                        $single = is_array($features) && count($features) === 1 && !empty($features[0]['geometry']);
+                    } elseif ($type === 'Feature') {
+                        $single = !empty($json['geometry']);
+                    } elseif (in_array($type, ['Point','MultiPoint','LineString','MultiLineString','Polygon','MultiPolygon'], true)) {
+                        $single = true;
+                    } elseif ($type === 'GeometryCollection') {
+                        $geoms = $json['geometries'] ?? [];
+                        $single = is_array($geoms) && count($geoms) === 1;
+                    }
+                    if (!$single) {
+                        $v->errors()->add('images.0', 'GeoJSON must contain exactly one geometry.');
+                        return;
+                    }
+                } catch (\Throwable $e) {
+                    $v->errors()->add('images.0', 'Could not read GeoJSON file.');
+                }
+            }
+        });
 
         if ($validator->fails()) {
             return response()->json([
@@ -72,6 +120,7 @@ class FeedbackController extends Controller
         
         // Handle image uploads
         $uploadedPaths = [];
+        $uploadedMeta = [];
         if (isset($data['images']) && is_array($data['images'])) {
             $disk = env('FEEDBACK_IMAGES_DISK', config('filesystems.default', 'public'));
             foreach ($data['images'] as $image) {
@@ -79,6 +128,11 @@ class FeedbackController extends Controller
                     $path = $image->store('feedback', $disk);
                     if ($path) {
                         $uploadedPaths[] = $path;
+                        $uploadedMeta[] = [
+                            'path' => $path,
+                            'original' => $image->getClientOriginalName(),
+                            'mime' => $image->getClientMimeType(),
+                        ];
                     }
                 }
             }
@@ -97,6 +151,7 @@ class FeedbackController extends Controller
             'metadata' => [
                 'ip' => $request->ip(),
                 'user_agent' => $request->userAgent(),
+                'files' => $uploadedMeta,
             ],
         ]);
 
@@ -115,11 +170,58 @@ class FeedbackController extends Controller
         $validator = Validator::make($request->all(), [
             'title' => ['required', 'string', 'max:255'],
             'message' => ['required', 'string', 'max:4000'],
-            'category' => ['nullable', 'string', 'in:bug,suggestion,data,ui,org_petition,other,missing_information,incorrect_data'],
+            'category' => ['nullable', 'string', 'in:bug,suggestion,data,ui,org_petition,other,missing_information,incorrect_data,submit_lake_layer'],
             'lake_id' => ['nullable', 'integer', 'exists:lakes,id'],
             'images' => ['nullable', 'array', 'max:6'],
-            'images.*' => ['image', 'max:25600'],
+            'images.*' => ['file', 'max:25600', 'mimetypes:image/png,image/jpeg,application/pdf,application/geo+json,application/json'],
         ]);
+
+        // Conditional rules for submit_lake_layer
+        $validator->after(function ($v) use ($request) {
+            $category = (string) $request->input('category', '');
+            if ($category === 'submit_lake_layer') {
+                $files = $request->file('images', []);
+                if (!is_array($files) || count($files) !== 1) {
+                    $v->errors()->add('images', 'Exactly one GeoJSON file is required.');
+                    return;
+                }
+                $f = $files[0];
+                $name = strtolower($f->getClientOriginalName() ?? '');
+                $mime = strtolower($f->getClientMimeType() ?? '');
+                $okMime = str_contains($mime, 'geo+json') || $mime === 'application/json' || str_ends_with($name, '.geojson') || str_ends_with($name, '.json');
+                if (!$okMime) {
+                    $v->errors()->add('images.0', 'Only GeoJSON (.geojson or .json) is allowed for Submit Lake Layer.');
+                    return;
+                }
+                try {
+                    $raw = @file_get_contents($f->getRealPath());
+                    $json = json_decode($raw ?: '', true);
+                    if (!is_array($json)) {
+                        $v->errors()->add('images.0', 'Invalid GeoJSON file.');
+                        return;
+                    }
+                    $type = $json['type'] ?? null;
+                    $single = false;
+                    if ($type === 'FeatureCollection') {
+                        $features = $json['features'] ?? null;
+                        $single = is_array($features) && count($features) === 1 && !empty($features[0]['geometry']);
+                    } elseif ($type === 'Feature') {
+                        $single = !empty($json['geometry']);
+                    } elseif (in_array($type, ['Point','MultiPoint','LineString','MultiLineString','Polygon','MultiPolygon'], true)) {
+                        $single = true;
+                    } elseif ($type === 'GeometryCollection') {
+                        $geoms = $json['geometries'] ?? [];
+                        $single = is_array($geoms) && count($geoms) === 1;
+                    }
+                    if (!$single) {
+                        $v->errors()->add('images.0', 'GeoJSON must contain exactly one geometry.');
+                        return;
+                    }
+                } catch (\Throwable $e) {
+                    $v->errors()->add('images.0', 'Could not read GeoJSON file.');
+                }
+            }
+        });
 
         if ($validator->fails()) {
             return response()->json([
@@ -131,8 +233,9 @@ class FeedbackController extends Controller
         $data = $validator->validated();
         $user = $request->user();
         
-        // Handle image uploads
+        // Handle attachments uploads (images/pdf/geojson)
         $uploadedPaths = [];
+        $uploadedMeta = [];
         if (isset($data['images']) && is_array($data['images'])) {
             $disk = env('FEEDBACK_IMAGES_DISK', config('filesystems.default', 'public'));
             foreach ($data['images'] as $image) {
@@ -140,6 +243,11 @@ class FeedbackController extends Controller
                     $path = $image->store('feedback', $disk);
                     if ($path) {
                         $uploadedPaths[] = $path;
+                        $uploadedMeta[] = [
+                            'path' => $path,
+                            'original' => $image->getClientOriginalName(),
+                            'mime' => $image->getClientMimeType(),
+                        ];
                     }
                 }
             }
@@ -158,6 +266,7 @@ class FeedbackController extends Controller
             'metadata' => [
                 'ip' => $request->ip(),
                 'user_agent' => $request->userAgent(),
+                'files' => $uploadedMeta,
             ],
         ]);
 
