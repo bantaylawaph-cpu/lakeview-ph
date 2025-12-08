@@ -5,6 +5,8 @@ import StatusPill from './StatusPill';
 import { STATUS_ORDER, STATUS_LABEL } from './feedbackConstants';
 import api from '../../../lib/api';
 import { invalidateHttpCache } from '../../../lib/httpCache';
+import { alertSuccess } from '../../../lib/alerts';
+import PreviewMap from '../../layers/PreviewMap';
 
 // Modal for viewing & moderating a single feedback item
 export default function AdminFeedbackDetailModal({ open, onClose, item, onSave }) {
@@ -12,6 +14,9 @@ export default function AdminFeedbackDetailModal({ open, onClose, item, onSave }
   const [adminResponse, setAdminResponse] = useState(item?.admin_response || '');
   const [saving, setSaving] = useState(false);
   const [sel, setSel] = useState(0);
+  // GeoJSON preview state must be declared before any early returns
+  const [geoGeom, setGeoGeom] = useState(null);
+  const [geoErr, setGeoErr] = useState('');
 
   useEffect(() => {
     if (open) {
@@ -21,16 +26,56 @@ export default function AdminFeedbackDetailModal({ open, onClose, item, onSave }
     }
   }, [open, item]);
 
+  // Define helpers and GeoJSON loader effect BEFORE any early returns to keep hook order stable
+  const getUrl = (src) => (src && typeof src === 'string' && src.startsWith('http') ? src : `/storage/${src || ''}`);
+  const isPdfSrc = (src) => /\.pdf($|\?)/i.test(src || '');
+  const isGeoSrc = (src) => /\.(geojson|json)($|\?)/i.test(src || '');
+
+  useEffect(() => {
+    setGeoGeom(null); setGeoErr('');
+    if (!open || !item) return;
+    const imgs = Array.isArray(item.images) ? item.images : [];
+    const src = imgs[sel] || '';
+    const url = getUrl(src);
+    if (!isGeoSrc(src) || !url) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(url, { cache: 'no-store' });
+        const json = await res.json();
+        const t = json?.type;
+        let geom = null;
+        if (t === 'FeatureCollection') {
+          const feats = Array.isArray(json.features) ? json.features : [];
+          if (feats.length === 1 && feats[0]?.geometry) geom = feats[0].geometry; else throw new Error('Invalid GeoJSON');
+        } else if (t === 'Feature') {
+          if (!json.geometry) throw new Error('Invalid GeoJSON');
+          geom = json.geometry;
+        } else if (['Point','MultiPoint','LineString','MultiLineString','Polygon','MultiPolygon'].includes(t)) {
+          geom = json;
+        } else if (t === 'GeometryCollection') {
+          const geoms = Array.isArray(json.geometries) ? json.geometries : [];
+          if (geoms.length === 1) geom = geoms[0]; else throw new Error('Invalid GeoJSON');
+        } else {
+          throw new Error('Invalid GeoJSON');
+        }
+        if (!cancelled) setGeoGeom(geom);
+      } catch (e) {
+        if (!cancelled) setGeoErr('Could not render GeoJSON');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [open, item, sel]);
+
   if (!open || !item) return null;
 
   const isLocked = item.status === 'resolved' || item.status === 'wont_fix';
   const imgs = Array.isArray(item.images) ? item.images : [];
   const count = imgs.length;
-  const getUrl = (src) => (src && typeof src === 'string' && src.startsWith('http') ? src : `/storage/${src || ''}`);
-  const isPdfSrc = (src) => /\.pdf($|\?)/i.test(src || '');
   const currentSrc = imgs[sel] || '';
   const currentUrl = getUrl(currentSrc);
   const currentIsPdf = isPdfSrc(currentSrc);
+  const currentIsGeo = isGeoSrc(currentSrc);
   const goPrev = () => setSel((p) => (count === 0 ? 0 : (p - 1 + count) % count));
   const goNext = () => setSel((p) => (count === 0 ? 0 : (p + 1) % count));
   const getFileName = (src) => {
@@ -50,6 +95,7 @@ export default function AdminFeedbackDetailModal({ open, onClose, item, onSave }
     try {
       const res = await api.patch(`/admin/feedback/${item.id}`, { status, admin_response: adminResponse });
       try { invalidateHttpCache('/admin/feedback'); } catch {}
+      try { await alertSuccess('Status Updated', `"${item.title || `Feedback #${item.id}`}" marked as ${STATUS_LABEL[status]}.`); } catch {}
       onSave?.(res?.data?.data || res?.data || res);
       onClose?.();
     } catch {
@@ -120,43 +166,69 @@ export default function AdminFeedbackDetailModal({ open, onClose, item, onSave }
           {imgs.length > 0 && (
             <div style={{ display: 'grid', gap: 12 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: '#000000' }}>Attachments ({count})</div>
-              <div style={{ position: 'relative', background: '#f8fafb', border: '1px solid #cbd5e1', borderRadius: 10, padding: 12 }}>
-                {!currentIsPdf ? (
+              <div style={{ background: '#f8fafb', border: '1px solid #cbd5e1', borderRadius: 10, padding: 12 }}>
+                {!currentIsPdf && !currentIsGeo ? (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 240 }}>
                     <img src={currentUrl} alt={`Preview ${sel + 1}`} style={{ maxWidth: '100%', maxHeight: '280px', objectFit: 'contain', borderRadius: 6 }} />
                   </div>
-                ) : (
+                ) : currentIsPdf ? (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 240 }}>
                     <iframe title={`PDF ${sel + 1}`} src={currentUrl} style={{ width: '100%', height: '320px', border: 'none', background: '#fff', borderRadius: 6 }} />
                   </div>
+                ) : (
+                  <div style={{ minHeight: 240 }}>
+                    {geoGeom ? (
+                      <div style={{ border:'1px solid #cbd5e1', borderRadius:12, overflow:'hidden' }}>
+                        <div style={{ height: 320 }}>
+                          <PreviewMap geometry={geoGeom} height={320} />
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:240, color:'#64748b', fontSize:12 }}>
+                        {geoErr || 'Loading GeoJSON…'}
+                      </div>
+                    )}
+                  </div>
                 )}
                 {currentIsPdf && (
-                  <div className="muted" style={{ position: 'absolute', left: 12, bottom: 10, fontSize: 12, background: '#ffffffcc', padding: '2px 6px', borderRadius: 6, border: '1px solid #e5e7eb' }}>
+                  <div className="muted" style={{ fontSize: 12, background: '#ffffffcc', padding: '2px 6px', borderRadius: 6, border: '1px solid #e5e7eb', display: 'inline-block', marginTop: 8 }}>
                     {getFileName(currentSrc)}
                   </div>
                 )}
                 {count > 1 && (
-                  <>
-                    <button className="pill-btn ghost sm" onClick={goPrev} style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)' }} title="Previous">
-                      <FiChevronLeft />
-                    </button>
-                    <button className="pill-btn ghost sm" onClick={goNext} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)' }} title="Next">
-                      <FiChevronRight />
-                    </button>
-                  </>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button className="pill-btn ghost sm" onClick={goPrev} title="Previous">
+                        <FiChevronLeft />
+                      </button>
+                      <button className="pill-btn ghost sm" onClick={goNext} title="Next">
+                        <FiChevronRight />
+                      </button>
+                    </div>
+                    <div style={{ display:'flex', gap:8 }}>
+                      <a className="pill-btn ghost sm" href={currentUrl} target="_blank" rel="noreferrer" title="Open in new tab">
+                        <FiExternalLink /> Open
+                      </a>
+                    </div>
+                  </div>
                 )}
-                <a className="pill-btn ghost sm" href={currentUrl} target="_blank" rel="noreferrer" style={{ position: 'absolute', right: 8, bottom: 8 }} title="Open in new tab">
-                  <FiExternalLink /> Open
-                </a>
+                {count <= 1 && (
+                  <div style={{ display:'flex', justifyContent: 'flex-end', gap:8, marginTop: 12 }}>
+                    <a className="pill-btn ghost sm" href={currentUrl} target="_blank" rel="noreferrer" title="Open in new tab">
+                      <FiExternalLink /> Open
+                    </a>
+                  </div>
+                )}
               </div>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 {imgs.map((raw, idx) => {
                   const src = raw && typeof raw === 'string' ? raw : '';
                   const url = getUrl(src);
                   const isPdf = isPdfSrc(src);
+                  const isGeo = isGeoSrc(src);
                   const isActive = idx === sel;
                   const commonStyle = { borderRadius: 8, border: isActive ? '2px solid #3b82f6' : '1px solid #e8ecef', background: '#fff', cursor: 'pointer', transition: 'all 0.2s', boxShadow: isActive ? '0 2px 8px rgba(59,130,246,0.2)' : '0 1px 2px rgba(0,0,0,0.05)' };
-                  return isPdf ? (
+                  return isPdf || isGeo ? (
                     <button key={idx} type="button" onClick={() => setSel(idx)} title={getFileName(src)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 8px', ...commonStyle }}>
                       <FiFileText /> <span style={{ fontSize: 12, maxWidth: 160, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{getFileName(src)}</span>
                     </button>

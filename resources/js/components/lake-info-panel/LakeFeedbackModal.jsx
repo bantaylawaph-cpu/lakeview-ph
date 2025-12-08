@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import Modal from '../../components/Modal';
 import api from '../../lib/api';
 import { getToken } from '../../lib/api';
@@ -7,10 +7,12 @@ import UserFeedbackDetailModal from '../../components/feedback/UserFeedbackDetai
 import { FiFileText } from 'react-icons/fi';
 import Swal from 'sweetalert2';
 import LoadingSpinner from '../../components/LoadingSpinner';
+import PreviewMap from '../layers/PreviewMap';
 
 const TYPES = [
   'Missing information',
   'Incorrect data',
+  'Submit Lake Layer',
   'Other',
 ];
 
@@ -30,6 +32,7 @@ export default function LakeFeedbackModal({ open, onClose, lake }) {
   const fileInputRef = useRef(null);
   const [privacyOpen, setPrivacyOpen] = useState(false);
   const [previews, setPreviews] = useState([]);
+  const [geoPreview, setGeoPreview] = useState(null);
   // My submissions
   const [list, setList] = useState([]);
   const [loadingList, setLoadingList] = useState(false);
@@ -92,6 +95,13 @@ export default function LakeFeedbackModal({ open, onClose, lake }) {
     try { fileInputRef.current?.click(); } catch {}
   };
 
+  const allowedHint = useMemo(() => {
+    if (type === 'Submit Lake Layer') {
+      return 'GeoJSON only (.geojson). One file only. Max 25MB.';
+    }
+    return 'Image files (PNG, JPG) and PDF. Up to 6 files, 25MB each.';
+  }, [type]);
+
   const ALLOWED_MIME = ['image/png','image/jpeg','application/pdf'];
   const isAllowedFile = (f) => {
     const maxSize = 25 * 1024 * 1024; // 25MB
@@ -103,8 +113,59 @@ export default function LakeFeedbackModal({ open, onClose, lake }) {
     return false;
   };
 
-  const onFilesSelected = (evt) => {
+  const onFilesSelected = async (evt) => {
     const picked = Array.from(evt.target.files || []);
+    const isSubmitLayer = type === 'Submit Lake Layer';
+    setError('');
+    setGeoPreview(null);
+
+    if (isSubmitLayer) {
+      if (picked.length < 1) return;
+      const f = picked[0];
+      const name = (f.name || '').toLowerCase();
+      const mime = (f.type || '').toLowerCase();
+      const isGeo = mime.includes('geo+json') || mime === 'application/json' || name.endsWith('.geojson');
+      if (!isGeo) {
+        setFiles([]);
+        try { evt.target.value = ''; } catch {}
+        setError('Only one GeoJSON (.geojson) is allowed for Submit Lake Layer.');
+        return;
+      }
+      try {
+        const text = await f.text();
+        const json = JSON.parse(text);
+        const t = json?.type;
+        let geom = null;
+        if (t === 'FeatureCollection') {
+          const feats = Array.isArray(json.features) ? json.features : [];
+          if (feats.length !== 1 || !feats[0]?.geometry) throw new Error('GeoJSON must contain exactly one geometry.');
+          geom = feats[0].geometry;
+        } else if (t === 'Feature') {
+          if (!json.geometry) throw new Error('Feature has no geometry.');
+          geom = json.geometry;
+        } else if (['Point','MultiPoint','LineString','MultiLineString','Polygon','MultiPolygon','GeometryCollection'].includes(t)) {
+          if (t === 'GeometryCollection') {
+            const geoms = Array.isArray(json.geometries) ? json.geometries : [];
+            if (geoms.length !== 1) throw new Error('GeometryCollection must contain exactly one geometry.');
+            geom = geoms[0];
+          } else {
+            geom = json;
+          }
+        } else {
+          throw new Error('Invalid GeoJSON.');
+        }
+        setFiles([f]);
+        setGeoPreview(geom);
+      } catch (e) {
+        setFiles([]);
+        setGeoPreview(null);
+        setError(e?.message || 'Invalid GeoJSON file.');
+      } finally {
+        try { evt.target.value = ''; } catch {}
+      }
+      return;
+    }
+
     const validPicked = picked.filter(isAllowedFile);
     const invalidCount = picked.length - validPicked.length;
 
@@ -121,7 +182,6 @@ export default function LakeFeedbackModal({ open, onClose, lake }) {
     else if (overLimit) setError('You can upload up to 6 files.');
 
     setFiles(trimmed);
-    // Reset input value so the same file can be re-selected if removed
     try { evt.target.value = ''; } catch {}
   };
 
@@ -259,8 +319,8 @@ export default function LakeFeedbackModal({ open, onClose, lake }) {
                         ref={fileInputRef}
                         id="fb-files"
                         type="file"
-                        accept="image/png,image/jpeg,application/pdf"
-                        multiple
+                        accept={type === 'Submit Lake Layer' ? 'application/geo+json,application/json,.geojson' : 'image/png,image/jpeg,application/pdf'}
+                        multiple={type !== 'Submit Lake Layer'}
                         onChange={onFilesSelected}
                         style={{ display:'none' }}
                       />
@@ -271,7 +331,29 @@ export default function LakeFeedbackModal({ open, onClose, lake }) {
                         </div>
                       )}
                     </div>
-                    {files && files.length > 0 && (
+                    <div className="muted" style={{ fontSize:11, marginTop:6 }}>{allowedHint}</div>
+                    {type === 'Submit Lake Layer' && geoPreview && (
+                      <div className="insight-card" style={{ marginTop: 10, padding: 10 }}>
+                        <div className="muted" style={{ fontSize:12, marginBottom:8 }}>GeoJSON Preview</div>
+                        <div style={{ border:'1px solid #cbd5e1', borderRadius:12, overflow:'hidden' }}>
+                          <div style={{ height: 260 }}>
+                            <PreviewMap geometry={geoPreview} />
+                          </div>
+                        </div>
+                        <div className="muted" style={{ fontSize:11, marginTop:8, wordBreak:'break-all' }}>{files[0]?.name}</div>
+                        <div style={{ marginTop:6 }}>
+                          <button
+                            type="button"
+                            onClick={() => { setFiles([]); setGeoPreview(null); if (fileInputRef.current) fileInputRef.current.value=''; }}
+                            className="pill-btn ghost sm"
+                            title="Delete this file"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {type !== 'Submit Lake Layer' && files && files.length > 0 && (
                       <div className="preview-grid" style={{ marginTop: 10 }}>
                         {files.map((f, idx) => (
                           f.type && f.type.startsWith('image/') ? (

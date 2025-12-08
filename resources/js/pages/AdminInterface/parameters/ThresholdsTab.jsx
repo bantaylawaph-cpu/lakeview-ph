@@ -339,7 +339,7 @@ function ThresholdsTab() {
               { label: "Save", type: "edit", icon: <FiSave />, onClick: (row) => saveGridRow(row) },
               { label: "Delete", type: "delete", icon: <FiTrash2 />, onClick: (row) => deleteGridRow(row) },
             ]}
-            columnPicker={{ label: "Columns", locked: ["class_code"] }}
+            columnPicker={false}
             loading={loading}
             loadingLabel="Loading thresholds…"
             hidePager={true}

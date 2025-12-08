@@ -817,13 +817,32 @@ export default function WQTestWizard({
       onInvalid: ({ data }) => {
         const rows = data.results || [];
         if (!rows.length) return alertError('No parameters', 'Add at least one parameter row before continuing.');
-        const bad = rows.find((r, i) => !r.parameter_id || r.value === "" || r.value === null);
-        if (bad) return alertError('Missing parameter value', 'Each row must have a selected parameter and a value.');
+        const bad = rows.find((r) => {
+          if (!r.parameter_id || r.value === "" || r.value === null) return true;
+          const v = Number(r.value);
+          if (!Number.isFinite(v) || v < 0) return true;
+          if (r.depth_m !== "" && r.depth_m !== null && r.depth_m !== undefined) {
+            const d = Number(r.depth_m);
+            if (!Number.isFinite(d) || d < 0) return true;
+          }
+          return false;
+        });
+        if (bad) return alertError('Invalid parameter row', 'Value and Depth (m) must be positive numbers.');
         return null;
       },
       canNext: (d) =>
         (d.results || []).length > 0 &&
-        (d.results || []).every((r) => r.parameter_id && r.value !== ""),
+        (d.results || []).every((r) => {
+          if (!r.parameter_id) return false;
+          if (r.value === "" || r.value === null) return false;
+          const v = Number(r.value);
+          if (!Number.isFinite(v) || v < 0) return false;
+          if (r.depth_m !== "" && r.depth_m !== null && r.depth_m !== undefined) {
+            const dnum = Number(r.depth_m);
+            if (!Number.isFinite(dnum) || dnum < 0) return false;
+          }
+          return true;
+        }),
       onBeforeNext: ({ data }) => {
         // Prevent multiple rows of the same parameter at the identical depth when user clicks Next
         const rows = Array.isArray(data?.results) ? data.results : [];
@@ -894,8 +913,16 @@ export default function WQTestWizard({
                       <div className="form-group" style={{ margin: 0, minWidth: 0 }}>
                         <input
                           type="number"
-                          value={r.value}
-                          onChange={(e) => patchRow(data, setData, r.tempId, { value: e.target.value })}
+                          inputMode="decimal"
+                          min={0}
+                          step="any"
+                          value={r.value ?? ""}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            if (v === '' || /^\d*\.?\d*$/.test(v)) {
+                              patchRow(data, setData, r.tempId, { value: v });
+                            }
+                          }}
                         />
                       </div>
                     </td>
@@ -908,8 +935,16 @@ export default function WQTestWizard({
                       <div className="form-group" style={{ margin: 0, minWidth: 0 }}>
                         <input
                           type="number"
-                          value={r.depth_m}
-                          onChange={(e) => patchRow(data, setData, r.tempId, { depth_m: e.target.value })}
+                          inputMode="decimal"
+                          min={0}
+                          step="any"
+                          value={r.depth_m ?? 0}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            if (v === '' || /^\d*\.?\d*$/.test(v)) {
+                              patchRow(data, setData, r.tempId, { depth_m: v });
+                            }
+                          }}
                         />
                       </div>
                     </td>
@@ -1015,8 +1050,17 @@ export default function WQTestWizard({
         if (!data.weather) { alertError('Missing weather', 'Please select the weather during sampling.'); return false; }
         const rows = data.results || [];
         if (!rows.length) { alertError('No parameters', 'Add at least one parameter row before submitting.'); return false; }
-        const bad = rows.find((r) => !r.parameter_id || r.value === "" || r.value === null);
-        if (bad) { alertError('Missing parameter value', 'Each row must have a selected parameter and a value.'); return false; }
+        const bad = rows.find((r) => {
+          if (!r.parameter_id || r.value === "" || r.value === null) return true;
+          const v = Number(r.value);
+          if (!Number.isFinite(v) || v < 0) return true;
+          if (r.depth_m !== "" && r.depth_m !== null && r.depth_m !== undefined) {
+            const d = Number(r.depth_m);
+            if (!Number.isFinite(d) || d < 0) return true;
+          }
+          return false;
+        });
+        if (bad) { alertError('Invalid parameter row', 'Value and Depth (m) must be positive numbers.'); return false; }
         const okStd = !!(data.applied_standard_id || standardsList.find(s => s.is_current)?.id);
         if (!okStd) { alertError('Missing standard', 'Please select an applied standard (DAO) before submitting.'); return false; }
 
