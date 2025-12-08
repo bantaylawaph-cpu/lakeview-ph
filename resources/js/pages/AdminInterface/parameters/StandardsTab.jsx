@@ -300,7 +300,7 @@ function StandardsTab() {
             { label: "Save", type: "edit", icon: <FiSave />, onClick: (row) => saveGridRow(row) },
             { label: "Delete", type: "delete", icon: <FiTrash2 />, onClick: (row) => deleteGridRow(row) },
           ]}
-          columnPicker={{ label: "Columns", locked: ["code"], defaultHidden: ["notes"] }}
+          columnPicker={false}
           toolbar={{
             right: (
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'flex-end', minWidth: 0 }}>

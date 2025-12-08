@@ -10,6 +10,7 @@ import { STATUS_ORDER, STATUS_LABEL, SEARCH_SCOPE_MAP } from '../../components/a
 import StatusPill from '../../components/admin/feedback/StatusPill';
 import AttachmentsModal from '../../components/admin/feedback/AttachmentsModal';
 import AdminFeedbackDetailModal from '../../components/admin/feedback/AdminFeedbackDetailModal';
+import { alertSuccess } from '../../lib/alerts';
 
 
 export default function AdminFeedback() {
@@ -350,6 +351,7 @@ export default function AdminFeedback() {
       setBulkStatus('');
       cacheRef.current.clear();
       try { invalidateHttpCache('/admin/feedback'); } catch {}
+      try { await alertSuccess('Statuses Updated', `Updated ${updated.length} feedback item(s) to ${STATUS_LABEL[bulkStatus]}.`); } catch {}
     } catch (e) { /* ignore */ } finally { setBulkApplying(false); }
   };
 

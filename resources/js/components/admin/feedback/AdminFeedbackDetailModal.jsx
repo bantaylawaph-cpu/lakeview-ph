@@ -5,6 +5,7 @@ import StatusPill from './StatusPill';
 import { STATUS_ORDER, STATUS_LABEL } from './feedbackConstants';
 import api from '../../../lib/api';
 import { invalidateHttpCache } from '../../../lib/httpCache';
+import { alertSuccess } from '../../../lib/alerts';
 import PreviewMap from '../../layers/PreviewMap';
 
 // Modal for viewing & moderating a single feedback item
@@ -94,6 +95,7 @@ export default function AdminFeedbackDetailModal({ open, onClose, item, onSave }
     try {
       const res = await api.patch(`/admin/feedback/${item.id}`, { status, admin_response: adminResponse });
       try { invalidateHttpCache('/admin/feedback'); } catch {}
+      try { await alertSuccess('Status Updated', `"${item.title || `Feedback #${item.id}`}" marked as ${STATUS_LABEL[status]}.`); } catch {}
       onSave?.(res?.data?.data || res?.data || res);
       onClose?.();
     } catch {
@@ -207,9 +209,6 @@ export default function AdminFeedbackDetailModal({ open, onClose, item, onSave }
                       <a className="pill-btn ghost sm" href={currentUrl} target="_blank" rel="noreferrer" title="Open in new tab">
                         <FiExternalLink /> Open
                       </a>
-                      <a className="pill-btn ghost sm" href={currentUrl} download={getFileName(currentSrc)} title="Download file">
-                        Download
-                      </a>
                     </div>
                   </div>
                 )}
@@ -217,9 +216,6 @@ export default function AdminFeedbackDetailModal({ open, onClose, item, onSave }
                   <div style={{ display:'flex', justifyContent: 'flex-end', gap:8, marginTop: 12 }}>
                     <a className="pill-btn ghost sm" href={currentUrl} target="_blank" rel="noreferrer" title="Open in new tab">
                       <FiExternalLink /> Open
-                    </a>
-                    <a className="pill-btn ghost sm" href={currentUrl} download={getFileName(currentSrc)} title="Download file">
-                      Download
                     </a>
                   </div>
                 )}
