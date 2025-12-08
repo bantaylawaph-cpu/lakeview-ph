@@ -101,8 +101,12 @@ class LayerController extends Controller
             $yes = ['1','true','yes'];
             $no  = ['0','false','no'];
             $val = strtolower(trim((string)$dl));
-            if (in_array($val, $yes, true))      $query->where('layers.is_downloadable', true);
-            elseif (in_array($val, $no, true))   $query->where('layers.is_downloadable', false);
+            // Use Postgres-safe boolean comparisons
+            if (in_array($val, $yes, true)) {
+                $query->whereRaw('layers.is_downloadable IS TRUE');
+            } elseif (in_array($val, $no, true)) {
+                $query->whereRaw('layers.is_downloadable IS FALSE');
+            }
         }
         $createdBy = $request->query('created_by');
         if ($createdBy !== null && $createdBy !== '') {
