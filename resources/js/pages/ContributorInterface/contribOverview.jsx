@@ -59,7 +59,7 @@ export default function ContribOverview({ tenantId: propTenantId }) {
     setStats(prev => ({ ...prev, [key]: { ...prev[key], ...payload } }));
   }, []);
 
-  const fetchAll = useCallback(async () => {
+  const fetchAll = useCallback(async (forceRefresh = false) => {
     if (!tenantId) return;
     publish('myDraft', { loading: true });
     publish('myPublished', { loading: true });
@@ -67,11 +67,14 @@ export default function ContribOverview({ tenantId: propTenantId }) {
     // Prefer unified endpoint once user+tenant are known
     try {
       const cacheKey = `contrib:${tenantId}:kpis:v2`;
-      const cached = kpiCache.getKpi(cacheKey);
-      if (cached) {
-        publish('myDraft', { value: cached.myDraft ?? 0, loading: false });
-        publish('myPublished', { value: cached.myPublished ?? 0, loading: false });
-        publish('orgPublished', { value: cached.orgPublished ?? 0, loading: false });
+      // If forcing refresh, skip cache entirely
+      if (!forceRefresh) {
+        const cached = kpiCache.getKpi(cacheKey);
+        if (cached) {
+          publish('myDraft', { value: cached.myDraft ?? 0, loading: false });
+          publish('myPublished', { value: cached.myPublished ?? 0, loading: false });
+          publish('orgPublished', { value: cached.orgPublished ?? 0, loading: false });
+        }
       }
       const unified = await api.get('/kpis');
       const d = unified?.data?.data || unified?.data || unified;
@@ -80,7 +83,7 @@ export default function ContribOverview({ tenantId: propTenantId }) {
       const publishedMine = contrib?.my_tests?.published ?? null;
       const orgPub = contrib?.org_tests?.published ?? null;
       const payload = { myDraft: draft, myPublished: publishedMine, orgPublished: orgPub };
-      kpiCache.setKpi(cacheKey, payload, 60 * 1000);
+      kpiCache.setKpi(cacheKey, payload, 30 * 1000);
       if (draft != null) publish('myDraft', { value: draft, loading: false });
       if (publishedMine != null) publish('myPublished', { value: publishedMine, loading: false });
       if (orgPub != null) publish('orgPublished', { value: orgPub, loading: false });
@@ -151,9 +154,35 @@ export default function ContribOverview({ tenantId: propTenantId }) {
 
   useEffect(() => {
     if (!tenantId) return;
-    fetchAll();
-    const interval = setInterval(fetchAll, 60 * 1000);
-    return () => clearInterval(interval);
+    // Clear cache and force refresh on initial mount
+    const cacheKey = `contrib:${tenantId}:kpis:v2`;
+    kpiCache.clearKpi(cacheKey);
+    fetchAll(true);
+    
+    // Refresh every 60 seconds
+    const interval = setInterval(() => fetchAll(false), 60 * 1000);
+    
+    // Refresh when tab becomes visible again
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        kpiCache.clearKpi(cacheKey);
+        fetchAll(true);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Listen for custom events that indicate data changes
+    const handleDataChange = () => {
+      kpiCache.clearKpi(cacheKey);
+      fetchAll(true);
+    };
+    window.addEventListener('lv-contrib-data-changed', handleDataChange);
+    
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('lv-contrib-data-changed', handleDataChange);
+    };
   }, [tenantId, fetchAll]);
 
   // Cached tenant name (memory + localStorage)

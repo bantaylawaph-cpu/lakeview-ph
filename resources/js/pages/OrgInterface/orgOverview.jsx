@@ -85,17 +85,20 @@ export default function OrgOverview({ tenantId: propTenantId }) {
     setStats(prev => ({ ...prev, [key]: { ...prev[key], ...payload } }));
   }, []);
 
-  const fetchAll = useCallback(async () => {
+  const fetchAll = useCallback(async (forceRefresh = false) => {
     if (!tenantId) return;
     publish('members', { loading: true });
     publish('tests', { loading: true });
     publish('pending', { loading: true });
     const cacheKey = `org:${tenantId}:kpis:v2`;
-    const cached = kpiCache.getKpi(cacheKey);
-    if (cached) {
-      if (cached.members != null) publish('members', { value: cached.members, loading: false });
-      if (cached.tests != null) publish('tests', { value: cached.tests, loading: false });
-      if (cached.pending != null) publish('pending', { value: cached.pending, loading: false });
+    // If forcing refresh, skip cache entirely
+    if (!forceRefresh) {
+      const cached = kpiCache.getKpi(cacheKey);
+      if (cached) {
+        if (cached.members != null) publish('members', { value: cached.members, loading: false });
+        if (cached.tests != null) publish('tests', { value: cached.tests, loading: false });
+        if (cached.pending != null) publish('pending', { value: cached.pending, loading: false });
+      }
     }
     // Prefer unified endpoint
     try {
@@ -106,7 +109,7 @@ export default function OrgOverview({ tenantId: propTenantId }) {
       const tests = org?.tests?.count ?? null;
       const pending = org?.tests_draft?.count ?? null;
       const payload = { members, tests, pending };
-      kpiCache.setKpi(cacheKey, payload, 60 * 1000);
+      kpiCache.setKpi(cacheKey, payload, 30 * 1000);
       if (members != null) publish('members', { value: members, loading: false });
       if (tests != null) publish('tests', { value: tests, loading: false });
       if (pending != null) publish('pending', { value: pending, loading: false });
@@ -181,9 +184,35 @@ export default function OrgOverview({ tenantId: propTenantId }) {
 
   useEffect(() => {
     if (!tenantId) return; // wait for tenant id
-    fetchAll();
-    const interval = setInterval(fetchAll, 60 * 1000);
-    return () => clearInterval(interval);
+    // Clear cache and force refresh on initial mount
+    const cacheKey = `org:${tenantId}:kpis:v2`;
+    kpiCache.clearKpi(cacheKey);
+    fetchAll(true);
+    
+    // Refresh every 60 seconds
+    const interval = setInterval(() => fetchAll(false), 60 * 1000);
+    
+    // Refresh when tab becomes visible again
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        kpiCache.clearKpi(cacheKey);
+        fetchAll(true);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Listen for custom events that indicate data changes
+    const handleDataChange = () => {
+      kpiCache.clearKpi(cacheKey);
+      fetchAll(true);
+    };
+    window.addEventListener('lv-org-data-changed', handleDataChange);
+    
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('lv-org-data-changed', handleDataChange);
+    };
   }, [tenantId, fetchAll]);
 
   // Cached tenant name (memory + localStorage)
