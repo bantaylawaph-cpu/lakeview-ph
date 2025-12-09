@@ -25,14 +25,39 @@ export function getName(tenantId) {
   return '';
 }
 
-export async function fetchAndCache(tenantId) {
+export function clearTenantName(tenantId) {
+  if (!tenantId) return;
+  const idStr = String(tenantId);
+  delete memory.names[idStr];
+  try {
+    localStorage.removeItem(LS_PREFIX + idStr);
+  } catch {}
+}
+
+export function clearAllTenantNames() {
+  memory.names = {};
+  memory.lastFetchTs = 0;
+  delete memory._lastRows;
+  try {
+    const keys = Object.keys(localStorage);
+    keys.forEach(key => {
+      if (key.startsWith(LS_PREFIX)) {
+        localStorage.removeItem(key);
+      }
+    });
+  } catch {}
+}
+
+export async function fetchAndCache(tenantId, forceRefresh = false) {
   if (!tenantId) return '';
-  const existing = getName(tenantId);
-  if (existing) return existing;
-  // Throttle full list fetches to at most once per 30s
+  if (!forceRefresh) {
+    const existing = getName(tenantId);
+    if (existing) return existing;
+  }
+  // Throttle full list fetches to at most once per 10s (unless forcing refresh)
   const now = Date.now();
   let rows = [];
-  if (now - memory.lastFetchTs < 30_000 && memory._lastRows) {
+  if (!forceRefresh && now - memory.lastFetchTs < 10_000 && memory._lastRows) {
     rows = memory._lastRows;
   } else {
     try {
@@ -56,8 +81,7 @@ export async function fetchAndCache(tenantId) {
 
 export async function ensureTenantName(tenantId, setter) {
   if (!tenantId) return;
-  const cached = getName(tenantId);
-  if (cached) { setter(cached); return; }
-  const fresh = await fetchAndCache(tenantId);
+  // Always fetch fresh to ensure we get updated names
+  const fresh = await fetchAndCache(tenantId, true);
   if (fresh) setter(fresh);
 }

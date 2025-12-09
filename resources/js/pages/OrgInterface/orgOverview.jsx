@@ -219,8 +219,26 @@ export default function OrgOverview({ tenantId: propTenantId }) {
   useEffect(() => {
     let cancelled = false;
     if (!tenantId) return;
-    ensureTenantName(tenantId, (name) => { if (!cancelled) setTenantName(name); });
-    return () => { cancelled = true; };
+    
+    const refreshName = () => {
+      ensureTenantName(tenantId, (name) => { if (!cancelled) setTenantName(name); });
+    };
+    
+    // Initial fetch
+    refreshName();
+    
+    // Listen for tenant name changes
+    const handleNameChange = (e) => {
+      if (e.detail?.tenantId === tenantId || !e.detail?.tenantId) {
+        refreshName();
+      }
+    };
+    window.addEventListener('lv-tenant-name-changed', handleNameChange);
+    
+    return () => {
+      cancelled = true;
+      window.removeEventListener('lv-tenant-name-changed', handleNameChange);
+    };
   }, [tenantId]);
 
   return (

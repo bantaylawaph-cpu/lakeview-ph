@@ -1,5 +1,6 @@
 // resources/js/lib/dashboardEvents.js
 // Helper utilities to notify dashboards about data changes
+import { clearTenantName } from './tenantCache';
 
 /**
  * Notify organization dashboard that data has changed
@@ -10,6 +11,22 @@ export function notifyOrgDataChanged() {
     window.dispatchEvent(new Event('lv-org-data-changed'));
   } catch (e) {
     console.warn('[dashboardEvents] Failed to dispatch lv-org-data-changed', e);
+  }
+}
+
+/**
+ * Notify that tenant/org name has been updated
+ * Call this after updating organization name
+ * @param {number} tenantId - The ID of the tenant whose name changed
+ */
+export function notifyTenantNameChanged(tenantId) {
+  try {
+    if (tenantId) {
+      clearTenantName(tenantId);
+    }
+    window.dispatchEvent(new CustomEvent('lv-tenant-name-changed', { detail: { tenantId } }));
+  } catch (e) {
+    console.warn('[dashboardEvents] Failed to dispatch lv-tenant-name-changed', e);
   }
 }
 
@@ -38,4 +55,5 @@ export default {
   notifyOrgDataChanged,
   notifyContribDataChanged,
   notifyAllDashboards,
+  notifyTenantNameChanged,
 };
