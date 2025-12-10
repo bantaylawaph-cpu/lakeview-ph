@@ -119,7 +119,7 @@ function MapControls({ defaultCenter = [12.8797, 121.7740], defaultZoom = 6, def
           >
             <FiTrash2 className="icon-layer" />
           </button>
-          <span className="map-control-label">Erase</span>
+          <span className="map-control-label">Clear Overlays</span>
         </div>
       </div>
 

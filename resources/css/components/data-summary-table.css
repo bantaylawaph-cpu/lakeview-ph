@@ -91,6 +91,15 @@
 /* Reuse table system defaults; when present, lv-table styles take over */
 .ds-table { width: 100%; border-collapse: collapse; table-layout: auto; font-size: 13px; }
 .ds-table thead th { padding: 6px 8px; font-weight: 700; font-size: 12px; text-align: left; border-bottom: 1px solid rgba(0,0,0,0.06); }
+.ds-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3; /* above table cells but below modal chrome */
+  background: #fff; /* match table row background */
+  color: #111827;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
 .ds-table tbody td { padding: 6px 8px; border-bottom: 1px solid rgba(0,0,0,0.03); vertical-align: top; }
 
 /* Parameter column layout aligns with LakeInfoPanel typography */

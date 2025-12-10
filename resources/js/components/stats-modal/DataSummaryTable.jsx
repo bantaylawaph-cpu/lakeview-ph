@@ -554,7 +554,7 @@ export default function DataSummaryTable({ open, onClose, initialLake = '', init
                   ))}
                   <th>Year Average</th>
                   <th>Median</th>
-                  <th>% Compliance</th>
+                  <th>Annual Compliance Rate (%)</th>
                 </tr>
               </thead>
               <tbody>
