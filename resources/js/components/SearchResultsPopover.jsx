@@ -18,7 +18,7 @@ export default function SearchResultsPopover({ open, results, loading, error, on
   } catch {}
   const availableH = (typeof window !== 'undefined') ? Math.max(160, window.innerHeight - top - 24) : 420;
   return (
-    <div className="modern-scrollbar" style={{ position: 'fixed', top, left, zIndex: 1300, background: '#fff', color: '#111827', borderRadius: 10, boxShadow: '0 6px 24px rgba(0,0,0,0.18)', width, maxHeight: Math.min(420, availableH), overflowY: 'auto' }}>
+    <div className="modern-scrollbar" style={{ position: 'fixed', top, left, zIndex: 1100, background: '#fff', color: '#111827', borderRadius: 10, boxShadow: '0 6px 24px rgba(0,0,0,0.18)', width, maxHeight: Math.min(420, availableH), overflowY: 'auto' }}>
       <div style={{ padding: '10px 14px', borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 8 }}>
         <FiSearch size={14} style={{ color: '#374151' }} />
         <strong style={{ fontSize: 12, letterSpacing: 0.3, color: '#374151' }}>Search results</strong>

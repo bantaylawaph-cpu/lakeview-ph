@@ -19,6 +19,7 @@ const bluePinIcon = new L.DivIcon({
 const ContextMenu = ({ map, onMeasureDistance, onMeasureArea, onElevationProfile }) => {
   const [position, setPosition] = useState(null);
   const [latlng, setLatlng] = useState(null);
+  const [menuMounted, setMenuMounted] = useState(false);
   const [pins, setPins] = useState([]);
   const menuRef = useRef();
 
@@ -64,6 +65,28 @@ const ContextMenu = ({ map, onMeasureDistance, onMeasureArea, onElevationProfile
       L.DomEvent.disableScrollPropagation(node);
     } catch {}
   }, [position]);
+
+  // Keep menu mounted briefly for CSS fade-out animation
+  useEffect(() => {
+    let t;
+    if (position) {
+      setMenuMounted(true);
+    } else {
+      t = setTimeout(() => setMenuMounted(false), 200);
+    }
+    return () => t && clearTimeout(t);
+  }, [position]);
+
+  // Clear pins on global erase
+  useEffect(() => {
+    const onErase = () => {
+      setPins([]);
+      setPosition(null);
+      setLatlng(null);
+    };
+    window.addEventListener('lv-erase-overlays', onErase);
+    return () => window.removeEventListener('lv-erase-overlays', onErase);
+  }, []);
 
   const handleCopyCoords = () => {
     if (latlng) {
@@ -123,10 +146,10 @@ const ContextMenu = ({ map, onMeasureDistance, onMeasureArea, onElevationProfile
   return (
     <>
       {/* Context Menu */}
-      {position && (
+      {menuMounted && (
         <ul
-          className="context-menu"
-          style={{ top: position.y, left: position.x, position: "absolute" }}
+          className={"context-menu " + (position ? 'fade-in' : 'fade-out')}
+          style={{ top: position ? position.y : -9999, left: position ? position.x : -9999, position: "absolute" }}
           ref={menuRef}
           // Ensure interactions within the menu don't bubble to the map
           onMouseDown={(e) => { e.stopPropagation(); }}

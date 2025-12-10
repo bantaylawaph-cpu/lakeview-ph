@@ -15,6 +15,10 @@
   border: 1px solid #e5e7eb;
   border-radius: 8px;
 }
+
+/* Fade animations for context menu */
+.context-menu.fade-in { animation-name: lv-fade-in; animation-duration: var(--lv-panel-anim, 180ms); animation-timing-function: ease-out; animation-fill-mode: both; }
+.context-menu.fade-out { animation-name: lv-fade-out; animation-duration: var(--lv-panel-anim, 130ms); animation-timing-function: ease-in; animation-fill-mode: both; }
 .context-item {
   padding: 6px 10px;
   display: flex;

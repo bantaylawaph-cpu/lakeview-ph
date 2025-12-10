@@ -56,6 +56,15 @@ function MapControls({ defaultCenter = [12.8797, 121.7740], defaultZoom = 6, def
     }
   };
 
+  const handleErase = () => {
+    try { typeof onErase === 'function' && onErase(); } catch {}
+    try {
+      window.dispatchEvent(new CustomEvent('lv-erase-overlays'));
+    } catch {}
+    setPosition(null);
+    setGeolocated(false);
+  };
+
   return (
     <>
       {/* Floating Controls */}
@@ -104,7 +113,7 @@ function MapControls({ defaultCenter = [12.8797, 121.7740], defaultZoom = 6, def
         <div className="map-control-tile glass-panel">
           <button
             className="btn-floating"
-            onClick={() => { try { typeof onErase === 'function' && onErase(); } catch {} }}
+            onClick={handleErase}
             title="Erase overlays"
             aria-label="Erase overlays"
           >

@@ -507,7 +507,7 @@ function MapPage() {
         appBadgeCount={appBadgeCount}
       />
       <SearchResultsPopover
-        open={searchApi.searchOpen}
+        open={searchApi.searchOpen && !sidebarOpen && !filterTrayOpen}
         results={searchApi.searchResults}
         loading={searchApi.searchLoading}
         error={searchApi.searchError}

@@ -4,6 +4,7 @@ import { FiLayers } from "react-icons/fi";
 
 function LayerControl({ selectedView, setSelectedView, showContours, setShowContours, showContourLabels, setShowContourLabels }) {
   const [open, setOpen] = useState(false);
+  const [showPanel, setShowPanel] = useState(false);
 
   // Initialize from global default if parent hasn't set one yet
   useEffect(() => {
@@ -24,6 +25,27 @@ function LayerControl({ selectedView, setSelectedView, showContours, setShowCont
     return () => window.removeEventListener('lv-default-basemap', onDefaultBasemap);
   }, [setSelectedView]);
 
+  // Clear overlays when global erase event is dispatched
+  useEffect(() => {
+    const onErase = () => {
+      try { setShowContours && setShowContours(false); } catch {}
+      try { setShowContourLabels && setShowContourLabels(false); } catch {}
+    };
+    window.addEventListener('lv-erase-overlays', onErase);
+    return () => window.removeEventListener('lv-erase-overlays', onErase);
+  }, [setShowContours, setShowContourLabels]);
+
+  useEffect(() => {
+    let t;
+    if (open) {
+      setShowPanel(true);
+    } else {
+      // Delay unmount until fade-out completes
+      t = setTimeout(() => setShowPanel(false), 220);
+    }
+    return () => t && clearTimeout(t);
+  }, [open]);
+
   return (
     <div className="layer-control">
       {/* Floating Button in liquid-glass tile with label */}
@@ -40,8 +62,8 @@ function LayerControl({ selectedView, setSelectedView, showContours, setShowCont
       </div>
 
       {/* Dropdown Panel */}
-      {open && (
-        <div className="layer-panel glass-panel">
+      {showPanel && (
+        <div className={"layer-panel " + (open ? 'fade-in' : 'fade-out')}>
           <h6 className="layer-title">Basemap style</h6>
           <label>
             <input
