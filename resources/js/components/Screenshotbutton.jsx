@@ -54,9 +54,12 @@ function ScreenshotButton() {
 
   return (
     <div className="screenshot-btn">
-      <button className="btn-floating" onClick={handleScreenshot} aria-label="Take screenshot" title="Take screenshot">
-        <FiCamera className="icon-layer" />
-      </button>
+      <div className="map-control-tile glass-panel">
+        <button className="btn-floating" onClick={handleScreenshot} aria-label="Take screenshot" title="Take screenshot">
+          <FiCamera className="icon-layer" />
+        </button>
+        <span className="map-control-label">Screenshot</span>
+      </div>
     </div>
   );
 }

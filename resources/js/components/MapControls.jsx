@@ -60,35 +60,58 @@ function MapControls({ defaultCenter = [12.8797, 121.7740], defaultZoom = 6, def
     <>
       {/* Floating Controls */}
       <div className="map-controls">
-        <button className="btn-floating stats-btn" onClick={() => setStatsOpen(true)} title="Open stats" aria-label="Open stats">
-          <FiBarChart2 className="icon-layer" />
-        </button>
-        <button className="btn-floating table-btn" onClick={() => setTableOpen(true)} title="Open table" aria-label="Open table">
-          <FaTable className="icon-layer" />
-        </button>
-        <button
-          className="btn-floating"
-          onClick={handleGeolocation}
-          title={geolocated ? "Reset view" : "Go to my location"}
-          aria-pressed={geolocated}
-          aria-label={geolocated ? "Reset view" : "Go to my location"}
-        >
-          <FiCrosshair className="icon-layer" />
-        </button>
-        <button className="btn-floating" onClick={handleZoomIn} aria-label="Zoom in">
-          <FiPlus className="icon-layer" />
-        </button>
-        <button className="btn-floating" onClick={handleZoomOut} aria-label="Zoom out">
-          <FiMinus className="icon-layer" />
-        </button>
-                <button
-          className="btn-floating"
-          onClick={() => { try { typeof onErase === 'function' && onErase(); } catch {} }}
-          title="Erase overlays"
-          aria-label="Erase overlays"
-        >
-          <FiTrash2 className="icon-layer" />
-        </button>
+        <div className="map-control-tile glass-panel stats-tile">
+          <button className="btn-floating stats-btn" onClick={() => setStatsOpen(true)} title="Open stats" aria-label="Open stats">
+            <FiBarChart2 className="icon-layer" />
+          </button>
+          <span className="map-control-label">Statistics</span>
+        </div>
+
+        <div className="map-control-tile glass-panel table-tile">
+          <button className="btn-floating table-btn" onClick={() => setTableOpen(true)} title="Open table" aria-label="Open table">
+            <FaTable className="icon-layer" />
+          </button>
+          <span className="map-control-label">Data Summary</span>
+        </div>
+
+        <div className="map-control-tile glass-panel">
+          <button
+            className="btn-floating"
+            onClick={handleGeolocation}
+            title={geolocated ? "Reset view" : "Go to my location"}
+            aria-pressed={geolocated}
+            aria-label={geolocated ? "Reset view" : "Go to my location"}
+          >
+            <FiCrosshair className="icon-layer" />
+          </button>
+          <span className="map-control-label">{geolocated ? "Reset" : "My location"}</span>
+        </div>
+
+        <div className="map-control-tile glass-panel">
+          <button className="btn-floating" onClick={handleZoomIn} aria-label="Zoom in">
+            <FiPlus className="icon-layer" />
+          </button>
+          <span className="map-control-label">Zoom in</span>
+        </div>
+
+        <div className="map-control-tile glass-panel">
+          <button className="btn-floating" onClick={handleZoomOut} aria-label="Zoom out">
+            <FiMinus className="icon-layer" />
+          </button>
+          <span className="map-control-label">Zoom out</span>
+        </div>
+
+        <div className="map-control-tile glass-panel">
+          <button
+            className="btn-floating"
+            onClick={() => { try { typeof onErase === 'function' && onErase(); } catch {} }}
+            title="Erase overlays"
+            aria-label="Erase overlays"
+          >
+            <FiTrash2 className="icon-layer" />
+          </button>
+          <span className="map-control-label">Erase</span>
+        </div>
       </div>
 
       {/* Location Marker with liquid-glass tooltip */}

@@ -13,18 +13,16 @@
   position: absolute;
   top: 60px;
   right: 0;
-  background: #fff;
-  border-radius: 12px;
+  /* Use liquid-glass style via .glass-panel class from globals */
+  border-radius: 12px; /* keep radius consistent */
   padding: 12px 16px;
   width: 200px;
-  border: 1px solid #ccc;
 }
 
 .layer-title {
   font-weight: bold;
   font-size: 14px;
   margin: 4px 0 8px 0;
-  color: #000;
 }
 
 .layer-panel label {
@@ -32,7 +30,6 @@
   align-items: center;
   font-size: 14px;
   margin: 6px 0;
-  color: #000;
 }
 
 .layer-panel input[type="radio"] {

@@ -26,19 +26,22 @@ function LayerControl({ selectedView, setSelectedView, showContours, setShowCont
 
   return (
     <div className="layer-control">
-      {/* Floating Button */}
-      <button
-        className="btn-floating"
-        onClick={() => setOpen(!open)}
-        aria-expanded={open}
-        aria-label={open ? "Close layer controls" : "Open layer controls"}
-      >
-        <FiLayers className="icon-layer" />
-      </button>
+      {/* Floating Button in liquid-glass tile with label */}
+      <div className="map-control-tile glass-panel">
+        <button
+          className="btn-floating"
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+          aria-label={open ? "Close layer controls" : "Open layer controls"}
+        >
+          <FiLayers className="icon-layer" />
+        </button>
+        <span className="map-control-label">Basemap</span>
+      </div>
 
       {/* Dropdown Panel */}
       {open && (
-        <div className="layer-panel">
+        <div className="layer-panel glass-panel">
           <h6 className="layer-title">Basemap style</h6>
           <label>
             <input
