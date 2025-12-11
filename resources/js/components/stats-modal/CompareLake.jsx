@@ -10,15 +10,13 @@ import { buildGraphExplanation } from "../utils/graphExplain";
 import { lakeName, yearLabelPlugin } from "./utils/shared";
 ChartJS.register(yearLabelPlugin);
 import LoadingSpinner from '../LoadingSpinner';
-import useStationsCache from "./hooks/useStationsCache";
 import GraphInfoButton from "./ui/GraphInfoButton";
-import useSampleEvents from "./hooks/useSampleEvents";
-import useCompareBarData from "./hooks/useCompareBarData";
-import LakeSelect from './ui/LakeSelect';
-import OrgSelect from './ui/OrgSelect';
+// Multi-lake comparison hook
+import useCompareBarDataMulti from "./hooks/useCompareBarDataMulti";
 import ParamSelect from './ui/ParamSelect';
 import useCurrentStandard from './hooks/useCurrentStandard';
 import { fetchParamThresholds } from './hooks/useParamThresholds';
+import LakeSelectorCard from './ui/LakeSelectorCard';
 
 function CompareLake({
   lakeOptions = [],
@@ -40,39 +38,49 @@ function CompareLake({
   const toggleSidebar = () => {
     setSidebarOpen((v) => !v);
   };
-  const [lakeA, setLakeA] = useState("");
-  const [lakeB, setLakeB] = useState("");
-  const [selectedOrgA, setSelectedOrgA] = useState("");
-  const [selectedOrgB, setSelectedOrgB] = useState("");
+  // Multi-lake selections (up to 5)
+  const [selections, setSelections] = useState([
+    { key: 'lk-1', lakeId: '', orgId: '', collapsed: false },
+  ]);
+  // Events per selection key
+  const [eventsByKey, setEventsByKey] = useState({});
+  // Stable color assignment per lakeId
+  const [colorMap, setColorMap] = useState({}); // lakeId -> color string
+  const palette = ['#0ea5e9', '#ef4444', '#10b981', '#f59e0b', '#a78bfa'];
+  const assignColorIfNeeded = (lakeId) => {
+    if (!lakeId) return;
+    setColorMap((prev) => {
+      if (prev[String(lakeId)]) return prev;
+      const used = new Set(Object.values(prev));
+      const color = palette.find((c) => !used.has(c)) || palette[0];
+      return { ...prev, [String(lakeId)]: color };
+    });
+  };
   const [selectedParam, setSelectedParam] = useState("");
-  const { events: eventsA, loading: loadingA } = useSampleEvents(lakeA, selectedOrgA, timeRange, dateFrom, dateTo);
-  const { events: eventsB, loading: loadingB } = useSampleEvents(lakeB, selectedOrgB, timeRange, dateFrom, dateTo);
-  const { events: eventsAAll } = useSampleEvents(lakeA, selectedOrgA, 'all', '', '');
-  const { events: eventsBAll } = useSampleEvents(lakeB, selectedOrgB, 'all', '', '');
-  const loading = loadingA || loadingB;
+  // Combined loading state from cards
+  const loading = useMemo(() => {
+    try {
+      return Object.values(eventsByKey).some((v) => v?.loadingFiltered);
+    } catch { return false; }
+  }, [eventsByKey]);
   const [localParams, setLocalParams] = useState([]);
   const [selectedYears, setSelectedYears] = useState([]);
   const [depthSelection, setDepthSelection] = useState('0');
   const [infoOpen, setInfoOpen] = useState(false);
   const [infoContent, setInfoContent] = useState({ title: '', sections: [] });
-
   const nameForLake = (lk) => lakeName(lakeOptions, lk);
-
-  const paletteA = ['#0369a1', '#0284c7', '#60a5fa', '#7dd3fc'];
-  const paletteB = ['#b91c1c', '#ef4444', '#f97316', '#fb923c'];
-
   const colorizeDatasets = (datasets) => {
     if (!Array.isArray(datasets)) return datasets;
-    const lakeNameA = nameForLake(lakeA) || String(lakeA || '');
-    const lakeNameB = nameForLake(lakeB) || String(lakeB || '');
-    const counters = { a: 0, b: 0, other: 0 };
+    // map dataset label (lake name) to color from colorMap
+    const nameToColor = selections.reduce((acc, s) => {
+      const nm = nameForLake(s.lakeId) || String(s.lakeId || '');
+      if (nm) acc[nm] = colorMap[String(s.lakeId)] || '#9ca3af';
+      return acc;
+    }, {});
     return datasets.map((d) => {
+      if (d && d.type === 'line') return d; // keep threshold lines as-is
       const label = String(d?.label || '');
-      let set = 'other';
-      if (lakeNameA && label.includes(lakeNameA)) set = 'a';
-      else if (lakeNameB && label.includes(lakeNameB)) set = 'b';
-      const idx = counters[set]++;
-      const color = set === 'a' ? paletteA[idx % paletteA.length] : set === 'b' ? paletteB[idx % paletteB.length] : (d.borderColor || '#9ca3af');
+      const color = nameToColor[label] || d.borderColor || '#9ca3af';
       const bg = d.backgroundColor || (color + '33');
       return { ...d, borderColor: color, backgroundColor: bg };
     });
@@ -98,70 +106,37 @@ function CompareLake({
     });
   }, [paramList, currentStd?.id]);
 
-  const { orgOptions: orgOptionsA, stationsByOrg: stationsByOrgA, allStations: allStationsA, loading: loadingStationsA } = useStationsCache(lakeA);
-  const { orgOptions: orgOptionsB, stationsByOrg: stationsByOrgB, allStations: allStationsB, loading: loadingStationsB } = useStationsCache(lakeB);
-  const stationsA = useMemo(() => (!selectedOrgA ? (allStationsA || []) : (stationsByOrgA?.[String(selectedOrgA)] || [])), [selectedOrgA, allStationsA, stationsByOrgA]);
-  const stationsB = useMemo(() => (!selectedOrgB ? (allStationsB || []) : (stationsByOrgB?.[String(selectedOrgB)] || [])), [selectedOrgB, allStationsB, stationsByOrgB]);
-
-  const derivedOrgOptionsA = useMemo(() => {
-    if (Array.isArray(orgOptionsA) && orgOptionsA.length) return orgOptionsA;
-    const map = new Map();
-    (Array.isArray(eventsA) ? eventsA : []).forEach((ev) => {
-      const oid = ev.organization_id ?? ev.organization?.id ?? null;
-      const oname = ev.organization_name ?? ev.organization?.name ?? null;
-      if (oid && oname && !map.has(String(oid))) map.set(String(oid), { id: oid, name: oname });
+  // helpers for LakeSelectorCard events lifting
+  const selectedLakeIds = useMemo(() => selections.map((s) => s.lakeId).filter(Boolean), [selections]);
+  const handleCardChange = (key, partial) => {
+    setSelections((prev) => prev.map((s) => (s.key === key ? { ...s, ...partial } : s)));
+    if (partial.lakeId) assignColorIfNeeded(partial.lakeId);
+  };
+  const handleEventsUpdate = (key, lakeId, payload) => {
+    setEventsByKey((prev) => ({ ...prev, [key]: { lakeId, ...payload } }));
+  };
+  const addCard = () => {
+    setSelections((prev) => {
+      if (prev.length >= 5) return prev;
+      const nextKey = `lk-${prev.length + 1}-${Date.now()}`;
+      return [...prev, { key: nextKey, lakeId: '', orgId: '', collapsed: false }];
     });
-    return Array.from(map.values());
-  }, [orgOptionsA, eventsA]);
-
-  const derivedOrgOptionsB = useMemo(() => {
-    if (Array.isArray(orgOptionsB) && orgOptionsB.length) return orgOptionsB;
-    const map = new Map();
-    (Array.isArray(eventsB) ? eventsB : []).forEach((ev) => {
-      const oid = ev.organization_id ?? ev.organization?.id ?? null;
-      const oname = ev.organization_name ?? ev.organization?.name ?? null;
-      if (oid && oname && !map.has(String(oid))) map.set(String(oid), { id: oid, name: oname });
+  };
+  const removeCard = (key) => {
+    setSelections((prev) => prev.filter((s) => s.key !== key));
+    setEventsByKey((prev) => {
+      const cp = { ...prev }; delete cp[key]; return cp;
     });
-    return Array.from(map.values());
-  }, [orgOptionsB, eventsB]);
-
-  const lakeOptionsForA = useMemo(() => lakeOptions.filter(l => String(l.id) !== String(lakeB)), [lakeOptions, lakeB]);
-  const lakeOptionsForB = useMemo(() => lakeOptions.filter(l => String(l.id) !== String(lakeA)), [lakeOptions, lakeA]);
-  useEffect(() => {
-    if (lakeA && lakeB && String(lakeA) === String(lakeB)) {
-      setLakeB('');
-    }
-  }, [lakeA, lakeB]);
-
-  useEffect(() => {
-    try {
-      if (!lakeA) return;
-      const opts = Array.isArray(derivedOrgOptionsA) ? derivedOrgOptionsA : [];
-      if (selectedOrgA && !opts.some(o => String(o.value) === String(selectedOrgA))) {
-        setSelectedOrgA('');
-      }
-    } catch {}
-  }, [lakeA, derivedOrgOptionsA]);
-
-  useEffect(() => {
-    try {
-      if (!lakeB) return;
-      const opts = Array.isArray(derivedOrgOptionsB) ? derivedOrgOptionsB : [];
-      if (selectedOrgB && !opts.some(o => String(o.value) === String(selectedOrgB))) {
-        setSelectedOrgB('');
-      }
-    } catch {}
-  }, [lakeB, derivedOrgOptionsB]);
+  };
 
 
   const isSelectionIncomplete = useMemo(() => {
-    if (!lakeA && !lakeB) return true;
-    if (lakeA && !selectedOrgA) return true;
-    if (lakeB && !selectedOrgB) return true;
+    const active = selections.filter((s) => s.lakeId && s.orgId);
+    if (active.length === 0) return true;
     if (!selectedParam) return true;
     if (!selectedYears || selectedYears.length === 0) return true;
     return false;
-  }, [lakeA, lakeB, selectedOrgA, selectedOrgB, selectedParam, selectedYears]);
+  }, [selections, selectedParam, selectedYears]);
 
   useEffect(() => {
     setDepthSelection('0');
@@ -181,18 +156,14 @@ function CompareLake({
       });
       return s;
     };
-    const setA = toYearSet(eventsAAll);
-    const setB = toYearSet(eventsBAll);
-    const listA = Array.from(setA).sort((a,b)=>b-a);
-    const listB = Array.from(setB).sort((a,b)=>b-a);
-    const both = Boolean(lakeA && selectedOrgA && lakeB && selectedOrgB);
-    if (both) {
-      return listA.filter((y) => setB.has(y));
-    }
-    if (lakeA && selectedOrgA) return listA;
-    if (lakeB && selectedOrgB) return listB;
-    return [];
-  }, [eventsAAll, eventsBAll, lakeA, lakeB, selectedOrgA, selectedOrgB]);
+    const sets = selections.map((s) => {
+      const evAll = eventsByKey[s.key]?.eventsAll || [];
+      return toYearSet(evAll);
+    });
+    const union = new Set();
+    sets.forEach((set) => set?.forEach?.((y) => union.add(y)));
+    return Array.from(union).sort((a,b)=>b-a);
+  }, [selections, eventsByKey]);
 
   useEffect(() => {
     setSelectedYears((prev) => prev.filter((y) => availableYears.includes(y)));
@@ -200,7 +171,6 @@ function CompareLake({
 
   const depthOptions = useMemo(() => {
     const depths = new Set();
-
     const matchParam = (r) => {
       if (!r) return false;
       const sel = String(selectedParam || '');
@@ -218,7 +188,6 @@ function CompareLake({
       if (r.parameter_id && sel === String(r.parameter_id)) return true;
       return false;
     };
-
     const pushDepths = (arr) => {
       if (!Array.isArray(arr)) return;
       arr.forEach((ev) => {
@@ -230,21 +199,20 @@ function CompareLake({
         });
       });
     };
-
-    pushDepths(eventsAAll);
-    pushDepths(eventsBAll);
+    selections.forEach((s) => {
+      pushDepths(eventsByKey[s.key]?.eventsAll || []);
+    });
     const arr = Array.from(depths).sort((a,b)=>Number(a)-Number(b));
     if (!arr.includes('0')) arr.unshift('0');
     return arr;
-  }, [eventsAAll, eventsBAll, selectedParam]);
+  }, [selections, eventsByKey, selectedParam]);
 
 
   useImperativeHandle(ref, () => ({
     clearAll: () => {
-      setLakeA('');
-      setLakeB('');
-      setSelectedOrgA('');
-      setSelectedOrgB('');
+      setSelections([{ key: 'lk-1', lakeId: '', orgId: '', collapsed: false }]);
+      setEventsByKey({});
+      setColorMap({});
       setSelectedParam('');
       setSelectedYears([]);
       setDepthSelection('0');
@@ -252,8 +220,14 @@ function CompareLake({
     }
   }));
 
+  // Build lakes list with events for comparison
+  const lakesForCompare = useMemo(() => {
+    return selections
+      .filter((s) => s.lakeId && s.orgId)
+      .map((s) => ({ id: s.lakeId, events: eventsByKey[s.key]?.eventsFiltered || [] }));
+  }, [selections, eventsByKey, timeRange, dateFrom, dateTo]);
 
-  const { barData, loadingThresholds: compareThrLoading } = useCompareBarData({ eventsA: eventsAAll, eventsB: eventsBAll, bucket, selectedYears, depth: depthSelection, selectedParam, lakeA, lakeB, lakeOptions });
+  const { barData, loadingThresholds: compareThrLoading, lakeHasDataMap } = useCompareBarDataMulti({ lakes: lakesForCompare, bucket, selectedYears, depth: depthSelection, selectedParam, lakeOptions });
 
   // Ensure default bucket is 'year' whenever modal opens or on initial mount
   useEffect(() => {
@@ -328,12 +302,11 @@ function CompareLake({
               bucket,
               standards,
               compareMode: true,
-              lakeLabels: { a: nameForLake(lakeA) || 'Lake A', b: nameForLake(lakeB) || 'Lake B' },
+              lakeLabels: selections.filter(s=>s.lakeId).map((s)=>nameForLake(s.lakeId)),
               summary: null,
               inferredType: inferred,
             };
             const content = buildGraphExplanation(ctx);
-            const fmt = (v) => (Number.isFinite(v) ? v.toFixed(2) : 'N/A');
             setInfoContent(content);
             setInfoOpen(true);
           }}
@@ -341,21 +314,46 @@ function CompareLake({
       </div>
   <div style={{ display: 'flex', gap: 16 }}>
   <StatsSidebar isOpen={sidebarOpen && isModalOpen} width={sidebarWidth} usePortal top={72} side="left" zIndex={10000} onToggle={toggleSidebar}>
-          <div style={{ fontSize: 12, opacity: 0.85 }}>Lake A</div>
-          <div style={{ display: 'grid', gap: 6 }}>
-            <LakeSelect lakes={lakeOptionsForA} value={lakeA} onChange={(e) => { setLakeA(e.target.value); setSelectedYears([]); }} />
-            <OrgSelect options={derivedOrgOptionsA} value={selectedOrgA} onChange={(e) => { setSelectedOrgA(e.target.value); /* keep param */ }} required={false} placeholder="Select a dataset source" style={{ width:'100%' }} loading={!!lakeA && loadingStationsA} disabled={!lakeA} />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div style={{ fontSize: 12, opacity: 0.85 }}>Lakes selected: {selections.filter(s=>s.lakeId).length} / 5</div>
+            <button className="pill-btn" aria-label="Add lake" onClick={addCard} disabled={selections.length >= 5}>
+              Add Lake
+            </button>
           </div>
-
-          <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '8px 0' }} />
-
-          <div style={{ fontSize: 12, opacity: 0.85 }}>Lake B</div>
-          <div style={{ display: 'grid', gap: 6 }}>
-            <LakeSelect lakes={lakeOptionsForB} value={lakeB} onChange={(e) => { setLakeB(e.target.value); setSelectedYears([]); }} />
-            <OrgSelect options={derivedOrgOptionsB} value={selectedOrgB} onChange={(e) => { setSelectedOrgB(e.target.value); /* keep param */ }} required={false} placeholder="Select a dataset source" style={{ width:'100%' }} loading={!!lakeB && loadingStationsB} disabled={!lakeB} />
+          <div style={{ display: 'grid', gap: 8 }}>
+            {selections.map((s, idx) => (
+              <LakeSelectorCard
+                key={s.key}
+                idx={idx}
+                selection={s}
+                lakeOptions={lakeOptions}
+                selectedLakeIds={selectedLakeIds}
+                timeRange={timeRange}
+                dateFrom={dateFrom}
+                dateTo={dateTo}
+                hasData={(() => {
+                  const lid = s.lakeId;
+                  if (!lid || !s.orgId) return null;
+                  const map = barData?.meta?.lakeHasDataMap || lakeHasDataMap || {};
+                  return map[String(lid)] ?? null;
+                })()}
+                onChange={(partial) => {
+                  const next = { ...s, ...partial };
+                  // if lake changed, clear years (to avoid stale filter)
+                  if (partial.lakeId !== undefined) setSelectedYears([]);
+                  // update selection
+                  handleCardChange(s.key, partial);
+                }}
+                onRemove={() => removeCard(s.key)}
+                onEventsUpdate={(lakeIdArg, orgIdArg, payload) => {
+                  // persist lake/org selection (org may be set later than lake)
+                  if (lakeIdArg && lakeIdArg !== s.lakeId) handleCardChange(s.key, { lakeId: lakeIdArg });
+                  if (orgIdArg && orgIdArg !== s.orgId) handleCardChange(s.key, { orgId: orgIdArg });
+                  handleEventsUpdate(s.key, lakeIdArg, payload);
+                }}
+              />
+            ))}
           </div>
-
-          <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '8px 0' }} />
 
           <div>
             <TimeBucketRange
@@ -374,11 +372,6 @@ function CompareLake({
               setSelectedYears={setSelectedYears}
               includeCustom={false}
             />
-            {(lakeA && selectedOrgA && lakeB && selectedOrgB && availableYears.length === 0) ? (
-              <div style={{ marginTop: 6, fontSize: 12, opacity: 0.9 }}>
-                No overlapping years between the selected datasets.
-              </div>
-            ) : null}
           </div>
 
           <div>
@@ -387,34 +380,29 @@ function CompareLake({
           </div>
 
 
-          {(
-            <div>
-              <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Depth</div>
-              <select
-                className="pill-btn"
-                value={depthSelection}
-                onChange={(e) => setDepthSelection(e.target.value)}
-                disabled={!selectedParam || !(depthOptions && depthOptions.length)}
-                style={{ width: '100%' }}
-              >
-                {(depthOptions && depthOptions.length ? depthOptions : ['0']).map((d) => {
-                  const label = d === '0' ? 'Surface (0 m)' : `${d} m`;
-                  return (<option key={String(d)} value={String(d)}>{label}</option>);
-                })}
-              </select>
-            </div>
-          )}
+          <div>
+            <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Depth</div>
+            <select
+              aria-label="Select depth"
+              className="pill-btn"
+              value={depthSelection}
+              onChange={(e) => setDepthSelection(e.target.value)}
+              disabled={!selectedParam || !(depthOptions && depthOptions.length)}
+              style={{ width: '100%' }}
+            >
+              {(depthOptions && depthOptions.length ? depthOptions : ['0']).map((d) => {
+                const label = d === '0' ? 'Surface (0 m)' : `${d} m`;
+                return (<option key={String(d)} value={String(d)}>{label}</option>);
+              })}
+            </select>
+          </div>
 
   </StatsSidebar>
         
         <div style={{ flex: 1, minWidth: 0 }}>
 
   <div className="wq-chart" style={{ height: 300, borderRadius: 8, background: 'transparent', border: '1px solid rgba(255,255,255,0.06)', padding: 8 }}>
-  {(lakeA && selectedOrgA && lakeB && selectedOrgB) && availableYears.length === 0 ? (
-          <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ opacity: 0.9 }}>No overlapping years between the selected datasets.</span>
-          </div>
-        ) : isSelectionIncomplete ? (
+  {isSelectionIncomplete ? (
           <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <span style={{ opacity: 0.9 }}>Select lakes, dataset sources, parameter, and years to view chart.</span>
           </div>
@@ -447,7 +435,6 @@ function CompareLake({
             const paramMeta = (paramList || []).find(p => String(p.key || p.id || p.code) === String(selectedParam));
             const unit = paramMeta?.unit || '';
             const title = paramMeta ? `${paramMeta.label || paramMeta.name || paramMeta.code}` : 'Value';
-            const hasThresholdLines = Array.isArray(bd?.datasets) && bd.datasets.some((d) => d && d.type === 'line');
             // Enforce legend label format for threshold lines: Min/Max (<Standard Code>: <value> <unit>)
             try {
               const stdCode = bd?.meta?.standards?.[0]?.code || '';
@@ -480,7 +467,8 @@ function CompareLake({
                 y: { stacked: false, ticks: { color: '#fff' }, title: { display: true, text: `${title}${unit ? ` (${unit})` : ''}`, color: '#fff' }, grid: { color: 'rgba(255,255,255,0.08)' } },
               },
             };
-            return <Bar key={`bar-${selectedParam}-${lakeA}-${lakeB}`} ref={chartRef} data={bd} options={options} />;
+            const lakesKey = selections.map(s=>s.lakeId).filter(Boolean).join('-');
+            return <Bar key={`bar-${selectedParam}-${selectedYears.join('-')}-${lakesKey}`} ref={chartRef} data={bd} options={options} />;
           })()
         ) : compareThrLoading ? (
           <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
