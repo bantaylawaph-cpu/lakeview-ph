@@ -36,6 +36,8 @@ use App\Http\Controllers\Api\Admin\WqStandardController as AdminWqStandardContro
 use App\Http\Controllers\Api\Admin\WaterQualityClassController as AdminWaterQualityClassController;
 use App\Http\Controllers\Api\Admin\StationController as AdminStationController;
 use App\Http\Controllers\Api\Admin\SamplingEventController as AdminSamplingEventController;
+use App\Http\Controllers\Api\Admin\BulkImportController as AdminBulkImportController;
+use App\Http\Controllers\BulkDatasetController;
 use App\Http\Controllers\Api\StatsController;
 use App\Http\Controllers\PopulationController;
 use App\Http\Controllers\Api\Admin\PopulationRasterController;
@@ -209,7 +211,27 @@ Route::middleware(['auth:sanctum','tenant.scoped','role:org_admin,superadmin'])
     Route::put   ('/sample-events/{samplingEvent}',              [AdminSamplingEventController::class, 'updateOrg'])->whereNumber('samplingEvent');
     Route::delete('/sample-events/{samplingEvent}',              [AdminSamplingEventController::class, 'destroyOrg'])->whereNumber('samplingEvent');
     Route::post  ('/sample-events/{samplingEvent}/toggle-publish',[AdminSamplingEventController::class, 'togglePublishOrg'])->whereNumber('samplingEvent');
+    });
 
+    // Bulk Import (org_admin + contributor) - outside tenant scope
+    Route::middleware(['auth:sanctum','role:org_admin,contributor'])
+        ->prefix('org')
+        ->group(function () {
+            Route::get ('/bulk-import/template',                     [AdminBulkImportController::class, 'downloadTemplate']);
+            Route::post('/bulk-import/validate',                     [AdminBulkImportController::class, 'validateImport']);
+            Route::post('/bulk-import/error-log',                    [AdminBulkImportController::class, 'downloadErrorLog']);
+            
+            // Bulk Dataset Import (full dataset with multiple tests)
+            Route::get ('/bulk-dataset/template',                    [BulkDatasetController::class, 'downloadTemplate']);
+            Route::post('/bulk-dataset/validate',                    [BulkDatasetController::class, 'validateFile']);
+            Route::post('/bulk-dataset/import',                      [BulkDatasetController::class, 'import']);
+            Route::post('/bulk-dataset/error-log',                   [BulkDatasetController::class, 'downloadErrorLog']);
+        });
+
+    Route::middleware(['auth:sanctum','tenant.scoped','role:org_admin'])
+    ->prefix('org/{tenant}')
+    ->whereNumber('tenant')
+    ->group(function () {
         // Org Applications (org_admin) - manage applications to this tenant
         Route::get('/applications', [OrgApplicationController::class, 'indexOrg']);
         Route::post('/applications/{id}/decision', [OrgApplicationController::class, 'decideOrg'])->whereNumber('id');
@@ -239,7 +261,27 @@ Route::middleware(['auth:sanctum','tenant.scoped','role:contributor'])
     Route::put   ('/sample-events/{samplingEvent}',              [AdminSamplingEventController::class, 'updateOrg'])->whereNumber('samplingEvent');
     Route::delete('/sample-events/{samplingEvent}',              [AdminSamplingEventController::class, 'destroyOrg'])->whereNumber('samplingEvent');
     Route::post  ('/sample-events/{samplingEvent}/toggle-publish',[AdminSamplingEventController::class, 'togglePublishOrg'])->whereNumber('samplingEvent');
+    });
 
+    // Bulk Import (contributor access) - outside tenant scope
+    Route::middleware(['auth:sanctum','role:contributor,org_admin'])
+        ->prefix('contrib')
+        ->group(function () {
+            Route::get ('/bulk-import/template',                     [AdminBulkImportController::class, 'downloadTemplate']);
+            Route::post('/bulk-import/validate',                     [AdminBulkImportController::class, 'validateImport']);
+            Route::post('/bulk-import/error-log',                    [AdminBulkImportController::class, 'downloadErrorLog']);
+            
+            // Bulk Dataset Import (full dataset with multiple tests)
+            Route::get ('/bulk-dataset/template',                    [BulkDatasetController::class, 'downloadTemplate']);
+            Route::post('/bulk-dataset/validate',                    [BulkDatasetController::class, 'validateFile']);
+            Route::post('/bulk-dataset/import',                      [BulkDatasetController::class, 'import']);
+            Route::post('/bulk-dataset/error-log',                   [BulkDatasetController::class, 'downloadErrorLog']);
+        });
+
+    Route::middleware(['auth:sanctum','tenant.scoped','role:contributor'])
+    ->prefix('contrib/{tenant}')
+    ->whereNumber('tenant')
+    ->group(function () {
     // Contributor KPIs (duplicated under contrib prefix for frontend dashboard)
     Route::get('/kpis/my-tests', [\App\Http\Controllers\Api\Contrib\KpiController::class, 'myTests']);
     Route::get('/kpis/org-tests', [\App\Http\Controllers\Api\Contrib\KpiController::class, 'orgTests']);
@@ -253,8 +295,10 @@ Route::middleware(['auth:sanctum','tenant.scoped','role:contributor'])
 Route::get('/lakes',            [LakeController::class, 'index']);
 Route::get('/lakes/count',      [LakeController::class, 'count']);
 Route::get('/lakes/{lake}',     [LakeController::class, 'show'])->whereNumber('lake');
+Route::get('/public/lakes',     [LakeController::class, 'index']); // Public lakes list
 Route::get('/public/lakes-geo', [LakeController::class, 'publicGeo']);
 Route::get('/public/lakes/{lake}', [LakeController::class, 'publicShow']);
+Route::get('/public/lakes/{lake}/stations', [\App\Http\Controllers\Api\Admin\StationController::class, 'index']); // Stations for a lake
 // Faceted filter options for lakes (public)
 Route::get('/filters/lakes', [LakeFiltersController::class, 'index']);
 // Public lake flows

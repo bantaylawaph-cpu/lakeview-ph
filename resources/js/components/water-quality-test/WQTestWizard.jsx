@@ -1,16 +1,18 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { useParams } from "react-router-dom";
 import { api, getToken, me as fetchMe } from "../../lib/api";
 import { alertError, alertSuccess, confirm } from "../../lib/alerts";
 import { fetchLakeOptions } from "../../lib/layers";
 import {
   FiMapPin, FiThermometer,
-  FiPlus, FiTrash2, FiEdit2, FiClipboard
+  FiPlus, FiTrash2, FiEdit2, FiClipboard, FiUpload
 } from "react-icons/fi";
 import Wizard from "../Wizard";
 import { useWindowSize } from '../../hooks/useWindowSize';
 import AppMap from "../AppMap";
 import MapViewport from "../MapViewport";
 import StationModal from "../../components/modals/StationModal";
+import BulkImportUploader from "./BulkImportUploader";
 import { GeoJSON, Marker, Popup, CircleMarker } from "react-leaflet";
 import L from "leaflet";
 
@@ -125,7 +127,11 @@ export default function WQTestWizard({
   currentUserRole = null, 
   onSubmit,
 }) {
+  const { tenant } = useParams(); // Get tenant ID from URL params
   const [resolvedUserRole, setResolvedUserRole] = useState(currentUserRole);
+
+  // Determine tenant ID from URL params or organization prop
+  const tenantId = tenant || organization?.id;
 
   const formatDepth = (d) => {
     const n = Number(d);
@@ -160,6 +166,7 @@ export default function WQTestWizard({
   const [stationEdit, setStationEdit] = useState(null);
   const [parametersList, setParametersList] = useState(parameters || []);
   const [standardsList, setStandardsList] = useState(standards || []);
+  const [parameterEntryMode, setParameterEntryMode] = useState('manual'); // 'manual' or 'bulk'
 
   useEffect(() => {
     let mounted = true;
@@ -875,6 +882,74 @@ export default function WQTestWizard({
       },
       render: ({ data, setData }) => (
         <div className="wizard-pane">
+          {/* Entry Mode Selection */}
+          <div style={{
+            marginBottom: 20,
+            padding: 16,
+            background: '#f8fafc',
+            border: '1px solid #e2e8f0',
+            borderRadius: 8
+          }}>
+            <div style={{ marginBottom: 12, fontWeight: 600, fontSize: 15 }}>
+              Choose how to enter parameter data:
+            </div>
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+              <label style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                cursor: 'pointer',
+                padding: '12px 16px',
+                border: parameterEntryMode === 'manual' ? '2px solid #3b82f6' : '2px solid #cbd5e1',
+                borderRadius: 8,
+                background: parameterEntryMode === 'manual' ? '#eff6ff' : '#fff',
+                transition: 'all 0.2s ease',
+                flex: '1 1 200px'
+              }}>
+                <input
+                  type="radio"
+                  name="entryMode"
+                  value="manual"
+                  checked={parameterEntryMode === 'manual'}
+                  onChange={(e) => setParameterEntryMode(e.target.value)}
+                  style={{ cursor: 'pointer' }}
+                />
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>Manual Entry</div>
+                  <div style={{ fontSize: 12, color: '#64748b' }}>Add parameters row by row</div>
+                </div>
+              </label>
+              <label style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                cursor: 'pointer',
+                padding: '12px 16px',
+                border: parameterEntryMode === 'bulk' ? '2px solid #3b82f6' : '2px solid #cbd5e1',
+                borderRadius: 8,
+                background: parameterEntryMode === 'bulk' ? '#eff6ff' : '#fff',
+                transition: 'all 0.2s ease',
+                flex: '1 1 200px'
+              }}>
+                <input
+                  type="radio"
+                  name="entryMode"
+                  value="bulk"
+                  checked={parameterEntryMode === 'bulk'}
+                  onChange={(e) => setParameterEntryMode(e.target.value)}
+                  style={{ cursor: 'pointer' }}
+                />
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}><FiUpload style={{ display: 'inline', marginRight: 4 }} /> Bulk Import</div>
+                  <div style={{ fontSize: 12, color: '#64748b' }}>Upload from template</div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          {/* Manual Entry Interface */}
+          {parameterEntryMode === 'manual' && (
+            <>
           <div className="wizard-nav" style={{ justifyContent: "flex-end", marginBottom: 8 }}>
             <button className="pill-btn primary" onClick={() => addRow(data, setData)}>
               <FiPlus /> Add Row
@@ -973,6 +1048,43 @@ export default function WQTestWizard({
           <div className="alert-note" style={{ marginTop: 12 }}>
             Multiple parameter values at different depths? Add several parameter rows with different Depth (m) values.
           </div>
+            </>
+          )}
+tenantI
+          {/* Bulk Import Interface */}
+          {parameterEntryMode === 'bulk' && (
+            <BulkImportUploader
+              tenantId={tenantId}
+              userRole={resolvedUserRole}
+              onImportSuccess={(importedParameters) => {
+                // Convert imported parameters to wizard format
+                const newResults = importedParameters.map((param) => {
+                  // Find parameter ID by matching parameter name/code
+                  const matchedParam = parameterOptions.find((p) => 
+                    p.name === param.parameter || p.code === param.parameter
+                  );
+                  
+                  return {
+                    tempId: `param-${Date.now()}-${Math.random()}`,
+                    parameter_id: matchedParam?.id || '',
+                    value: param.value,
+                    unit: param.unit || matchedParam?.unit || '',
+                    depth_m: param.depth_m ?? 0,
+                    remarks: param.remarks || ''
+                  };
+                });
+
+                setData({ ...data, results: newResults });
+                setParameterEntryMode('manual'); // Switch to manual mode to show imported data
+                
+                // Show success message
+                try {
+                  alertSuccess('Import successful', `${newResults.length} parameters loaded. You can edit them below before proceeding.`);
+                } catch (e) {}
+              }}
+              onCancel={() => setParameterEntryMode('manual')}
+            />
+          )}
         </div>
       ),
     },

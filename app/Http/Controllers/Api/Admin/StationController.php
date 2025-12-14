@@ -16,6 +16,17 @@ class StationController extends Controller
 
     public function index(Request $request)
     {
+        // Allow public access when filtering by lake_id only (for template downloads)
+        if ($request->filled('lake_id') && !$request->filled('organization_id')) {
+            $query = $this->stationQuery()
+                ->where('stations.lake_id', (int) $request->input('lake_id'))
+                ->with('lake:id,name');
+            
+            $stations = $query->orderBy('name')->get();
+            return response()->json(['data' => $stations]);
+        }
+        
+        // Otherwise require organization membership
         $context = $this->resolveTenantMembership(
             $request,
             ['org_admin', 'contributor'],

@@ -1,7 +1,7 @@
 // resources/js/pages/ContributorInterface/contribOverview.jsx
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { FiClipboard, FiDatabase, FiUsers } from 'react-icons/fi';
+import { FiClipboard, FiDatabase, FiUsers, FiDownload, FiFileText, FiUpload } from 'react-icons/fi';
 
 import api, { me as fetchMe } from '../../lib/api';
 import { listTenantsOptions } from '../../lib/api'; // retained for possible future fallback
@@ -9,6 +9,8 @@ import { ensureTenantName } from '../../lib/tenantCache';
 import kpiCache from '../../lib/kpiCache';
 import DashboardHeader from '../../components/DashboardHeader';
 import { FiHome } from 'react-icons/fi';
+import { alertSuccess, alertError } from '../../lib/alerts';
+import ImportChoiceModal from '../../components/water-quality-test/ImportChoiceModal';
 
 function KpiCard({ title, value, loading, error, icon, to }) {
   const display = loading ? '…' : (error ? '—' : (value ?? '0'));
@@ -54,6 +56,7 @@ export default function ContribOverview({ tenantId: propTenantId }) {
   });
   const [readySignaled, setReadySignaled] = useState(false);
   const [tenantName, setTenantName] = useState('');
+  const [showImportModal, setShowImportModal] = useState(false);
 
   const publish = useCallback((key, payload) => {
     setStats(prev => ({ ...prev, [key]: { ...prev[key], ...payload } }));
@@ -211,6 +214,55 @@ export default function ContribOverview({ tenantId: propTenantId }) {
     };
   }, [tenantId]);
 
+  const handleTemplateDownload = async (format) => {
+    try {
+      const token = getToken();
+      if (!token) {
+        alertError('Not Authenticated', 'Please log in to download the template.');
+        return;
+      }
+
+      const response = await fetch(`/api/contrib/bulk-import/template?format=${format}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, text/csv, application/octet-stream'
+        }
+      });
+
+      if (!response.ok) {
+        let errorMessage = 'Download failed';
+        try {
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const error = await response.json();
+            errorMessage = error.error || error.message || errorMessage;
+          } else {
+            errorMessage = await response.text() || errorMessage;
+          }
+        } catch (e) {
+          console.error('Error parsing error response:', e);
+        }
+        throw new Error(errorMessage);
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `WaterQuality_Import_Template_${tenantName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0].replace(/-/g, '')}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      alertSuccess('Download Complete', `Template file (${format.toUpperCase()}) downloaded successfully.`);
+    } catch (error) {
+      console.error('Download error:', error);
+      alertError('Download Failed', error.message || 'Failed to download template');
+    }
+  };
+
   return (
     <>
       {tenantName && (
@@ -222,6 +274,54 @@ export default function ContribOverview({ tenantId: propTenantId }) {
         description="Quick summary of your tests and organization-level published tests. Use the links to view or manage your water quality tests."
       />
       <KPIGrid stats={stats} tenantId={tenantId} userId={userId} />
+
+      {/* Import Data Section */}
+      <div style={{
+        marginTop: 32,
+        padding: 24,
+        background: '#f8fafc',
+        border: '1px solid #e2e8f0',
+        borderRadius: 12,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
+          <div style={{
+            width: 48,
+            height: 48,
+            borderRadius: 12,
+            background: '#eff6ff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#3b82f6',
+            fontSize: 24,
+            flexShrink: 0
+          }}>
+            <FiUpload />
+          </div>
+          <div style={{ flex: 1 }}>
+            <h3 style={{ margin: 0, marginBottom: 8, fontSize: 18, fontWeight: 600 }}>
+              Import Data
+            </h3>
+            <p style={{ margin: 0, marginBottom: 16, fontSize: 14, color: '#64748b', lineHeight: 1.6 }}>
+              Import water quality test data - choose between single test wizard or bulk dataset import from Excel/CSV templates.
+            </p>
+            <button
+              className="pill-btn primary"
+              onClick={() => setShowImportModal(true)}
+            >
+              <FiUpload /> Start Import
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Modals */}
+      <ImportChoiceModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        userRole="contrib"
+        tenantId={tenantId}
+      />
     </>
   );
 }
