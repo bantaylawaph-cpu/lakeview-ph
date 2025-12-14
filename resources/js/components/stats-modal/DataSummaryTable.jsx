@@ -260,6 +260,113 @@ export default function DataSummaryTable({ open, onClose, initialLake = '', init
     setTimeout(() => { w.print(); }, 250);
   }
 
+  async function fetchAllLakeData() {
+    if (!lakeId || !orgId) return null;
+    try {
+      const { apiPublic, buildQuery } = await import('../../lib/api');
+      const qs = buildQuery({ lake_id: lakeId, organization_id: orgId, limit: 10000 });
+      const res = await apiPublic(`/public/sample-events${qs}`);
+      return Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+    } catch (e) {
+      console.error('Failed to fetch all lake data:', e);
+      return null;
+    }
+  }
+
+  function generateAllDataPdfHtml(allEvents) {
+    if (!Array.isArray(allEvents) || allEvents.length === 0) {
+      return '<p>No data available to export.</p>';
+    }
+
+    // Group data by station and year
+    const groupedData = new Map();
+    
+    for (const ev of allEvents) {
+      const stationName = ev.station?.name || ev.station_name || 'Unknown Station';
+      const year = ev.sampled_at ? new Date(ev.sampled_at).getFullYear() : 'Unknown Year';
+      const key = `${stationName}::${year}`;
+      
+      if (!groupedData.has(key)) {
+        groupedData.set(key, {
+          station: stationName,
+          year: year,
+          events: []
+        });
+      }
+      groupedData.get(key).events.push(ev);
+    }
+
+    // Sort groups by station name then year (descending)
+    const sortedGroups = Array.from(groupedData.values()).sort((a, b) => {
+      if (a.station !== b.station) return a.station.localeCompare(b.station);
+      return Number(b.year) - Number(a.year);
+    });
+
+    let html = '<div style="page-break-before: always;">';
+    
+    sortedGroups.forEach((group, groupIndex) => {
+      if (groupIndex > 0) {
+        html += '<div style="page-break-before: always; margin-top: 20px;"></div>';
+      }
+      
+      html += `<h3 style="margin: 16px 0 8px 0; color: #1e3c78; font-size: 14px;">Station: ${group.station} — Year: ${group.year}</h3>`;
+      html += '<table style="width: 100%; border-collapse: collapse; border: 1px solid #ddd; margin-bottom: 16px; font-size: 11px;">';
+      html += '<thead><tr>';
+      html += '<th style="padding: 6px 8px; border: 1px solid #ddd; background: #f3f4f6; font-weight: 700;">Date</th>';
+      html += '<th style="padding: 6px 8px; border: 1px solid #ddd; background: #f3f4f6; font-weight: 700;">Parameter</th>';
+      html += '<th style="padding: 6px 8px; border: 1px solid #ddd; background: #f3f4f6; font-weight: 700;">Value</th>';
+      html += '<th style="padding: 6px 8px; border: 1px solid #ddd; background: #f3f4f6; font-weight: 700;">Unit</th>';
+      html += '<th style="padding: 6px 8px; border: 1px solid #ddd; background: #f3f4f6; font-weight: 700;">Threshold</th>';
+      html += '</tr></thead><tbody>';
+
+      // Process events for this group
+      for (const ev of group.events) {
+        const sampled = ev.sampled_at ? new Date(ev.sampled_at).toISOString().slice(0, 10) : '—';
+        const results = Array.isArray(ev.results) ? ev.results : [];
+        
+        for (const r of results) {
+          const p = r.parameter || {};
+          const paramName = p.name || p.code || String(r.parameter_id || '');
+          const value = Number.isFinite(Number(r.value)) ? Number(r.value).toFixed(2) : (r.value ?? '—');
+          const unit = p.unit || r.unit || '';
+          const threshold = r.threshold || null;
+          
+          let thresholdText = '—';
+          let cellClass = '';
+          
+          if (threshold && (threshold.min_value != null || threshold.max_value != null)) {
+            const parts = [];
+            if (threshold.min_value != null) parts.push(`≥ ${threshold.min_value}`);
+            if (threshold.max_value != null) parts.push(`≤ ${threshold.max_value}`);
+            thresholdText = parts.join(', ');
+            
+            // Check if value exceeds threshold
+            const numVal = Number(r.value);
+            if (Number.isFinite(numVal)) {
+              const min = threshold.min_value != null ? Number(threshold.min_value) : null;
+              const max = threshold.max_value != null ? Number(threshold.max_value) : null;
+              const fails = (min != null && numVal < min) || (max != null && numVal > max);
+              cellClass = fails ? 'ds-cell-exceed' : 'ds-cell-ok';
+            }
+          }
+          
+          html += '<tr>';
+          html += `<td style="padding: 6px 8px; border: 1px solid #ddd;">${sampled}</td>`;
+          html += `<td style="padding: 6px 8px; border: 1px solid #ddd;">${paramName}</td>`;
+          html += `<td style="padding: 6px 8px; border: 1px solid #ddd;" class="${cellClass}">${value}</td>`;
+          html += `<td style="padding: 6px 8px; border: 1px solid #ddd;">${unit}</td>`;
+          html += `<td style="padding: 6px 8px; border: 1px solid #ddd;">${thresholdText}</td>`;
+          html += '</tr>';
+        }
+      }
+
+      html += '</tbody></table>';
+    });
+    
+    html += '</div>';
+    return html;
+  }
+
   async function handleExportPdfViaSweetAlert() {
     const signed = await isSignedIn();
     if (!signed) {
@@ -270,29 +377,143 @@ export default function DataSummaryTable({ open, onClose, initialLake = '', init
       }
       return;
     }
-    const wrapper = tableRef.current || document.querySelector('.modal');
-    if (!wrapper) {
-      if (Swal && typeof Swal.fire === 'function') Swal.fire({ icon: 'info', title: 'No table', text: 'No table to export' }); else window.alert('No table to export');
+
+    // Check if lake and dataset are selected
+    if (!lakeId || !orgId) {
+      if (Swal && typeof Swal.fire === 'function') {
+        Swal.fire({ 
+          icon: 'warning', 
+          title: 'Selection Required', 
+          text: 'Please select both a Lake and Dataset Source to export data.' 
+        });
+      } else {
+        window.alert('Please select both a Lake and Dataset Source to export data.');
+      }
       return;
     }
-    const confirm = await confirmAlert({
-      title: 'Export PDF',
-      text: 'Do you want to download this summary as a PDF?',
-      confirmButtonText: 'Download PDF',
+
+    // Show choice dialog
+    const result = await Swal.fire({
+      title: 'Export PDF Options',
+      html: `
+        <div style="text-align: left; padding: 12px;">
+          <p style="margin-bottom: 16px; color: #374151;">Choose what data to export:</p>
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <button id="exportCurrent" class="swal2-confirm swal2-styled" style="width: 100%; margin: 0;">
+              <strong>Export Current View</strong>
+              <div style="font-size: 12px; font-weight: normal; margin-top: 4px;">
+                ${selectedStation && selectedYear ? `Export data for ${stationOptions.find(s => String(s.id) === String(selectedStation))?.name || 'selected station'} (${selectedYear})` : 'Export filtered data (requires station & year selection)'}
+              </div>
+            </button>
+            <button id="exportAll" class="swal2-confirm swal2-styled" style="width: 100%; margin: 0; background-color: #059669;">
+              <strong>Export All Lake Data</strong>
+              <div style="font-size: 12px; font-weight: normal; margin-top: 4px;">
+                Export ALL stations and years from this dataset
+              </div>
+            </button>
+          </div>
+        </div>
+      `,
+      showConfirmButton: false,
+      showCancelButton: true,
       cancelButtonText: 'Cancel',
-      icon: 'info',
+      didOpen: () => {
+        const currentBtn = document.getElementById('exportCurrent');
+        const allBtn = document.getElementById('exportAll');
+        
+        // Disable current view button if station/year not selected
+        if (!selectedStation || !selectedYear) {
+          currentBtn.disabled = true;
+          currentBtn.style.opacity = '0.5';
+          currentBtn.style.cursor = 'not-allowed';
+        }
+        
+        currentBtn.addEventListener('click', () => {
+          Swal.close();
+          exportCurrentView();
+        });
+        
+        allBtn.addEventListener('click', () => {
+          Swal.close();
+          exportAllData();
+        });
+      }
     });
-    if (!confirm) return;
+  }
+
+  async function exportCurrentView() {
+    const wrapper = tableRef.current || document.querySelector('.modal');
+    if (!wrapper) {
+      if (Swal && typeof Swal.fire === 'function') {
+        Swal.fire({ icon: 'info', title: 'No table', text: 'No table to export' });
+      } else {
+        window.alert('No table to export');
+      }
+      return;
+    }
+
     const tbl = wrapper.querySelector ? (wrapper.querySelector('table') || wrapper) : wrapper;
     const htmlToPrint = tbl.outerHTML || tbl.innerHTML || '';
     const lakeName = (lakeOptions.find(l => String(l.id) === String(lakeId)) || {}).name || '';
     const datasetName = (orgOptions || []).find(o => String(o.id) === String(orgId))?.name || '';
     const stationName = (stationOptions || []).find(s => String(s.id) === String(selectedStation))?.name || (stationsList.find(s => String(s) === String(selectedStation)) || '') || '';
     const meta = { lakeName, datasetName, year: selectedYear, stationName };
+    
     try {
       exportPdfHtml(htmlToPrint, meta);
     } catch (e) {
-      if (Swal && typeof Swal.fire === 'function') Swal.fire({ icon: 'error', title: 'Export failed', text: 'Unable to open print window' }); else window.alert('Unable to open print window');
+      if (Swal && typeof Swal.fire === 'function') {
+        Swal.fire({ icon: 'error', title: 'Export failed', text: 'Unable to open print window' });
+      } else {
+        window.alert('Unable to open print window');
+      }
+    }
+  }
+
+  async function exportAllData() {
+    // Show loading
+    Swal.fire({
+      title: 'Preparing Export',
+      html: 'Fetching all lake data...',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      didOpen: () => {
+        Swal.showLoading();
+      }
+    });
+
+    const allEvents = await fetchAllLakeData();
+    
+    if (!allEvents || allEvents.length === 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'No Data',
+        text: 'No data available for this lake and dataset.'
+      });
+      return;
+    }
+
+    const lakeName = (lakeOptions.find(l => String(l.id) === String(lakeId)) || {}).name || '';
+    const datasetName = (orgOptions || []).find(o => String(o.id) === String(orgId))?.name || '';
+    
+    const htmlContent = generateAllDataPdfHtml(allEvents);
+    const meta = { 
+      lakeName, 
+      datasetName, 
+      year: 'All Years',
+      stationName: 'All Stations'
+    };
+
+    Swal.close();
+
+    try {
+      exportPdfHtml(htmlContent, meta);
+    } catch (e) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Export Failed',
+        text: 'Unable to open print window'
+      });
     }
   }
 
