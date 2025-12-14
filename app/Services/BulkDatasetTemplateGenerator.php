@@ -33,21 +33,26 @@ class BulkDatasetTemplateGenerator
     /**
      * Generate bulk dataset import template
      *
-     * @param int $lakeId
-     * @param int $stationId
+     * @param int|null $lakeId
+     * @param int|null $stationId
      * @param string $format ('xlsx' or 'csv')
      * @return \PhpOffice\PhpSpreadsheet\Spreadsheet
      */
-    public function generate(int $lakeId, int $stationId, string $format = 'xlsx')
+    public function generate(?int $lakeId, ?int $stationId, string $format = 'xlsx')
     {
         $spreadsheet = new Spreadsheet();
         
-        // Get lake and station info
-        $lake = DB::table('lakes')->where('id', $lakeId)->first();
-        $station = DB::table('stations')->where('id', $stationId)->first();
+        // Get lake and station info if IDs provided
+        $lake = null;
+        $station = null;
         
-        if (!$lake || !$station) {
-            throw new \Exception('Invalid lake or station ID');
+        if ($lakeId && $stationId) {
+            $lake = DB::table('lakes')->where('id', $lakeId)->first();
+            $station = DB::table('stations')->where('id', $stationId)->first();
+            
+            if (!$lake || !$station) {
+                throw new \Exception('Invalid lake or station ID');
+            }
         }
 
         // Get all available parameters
@@ -85,18 +90,25 @@ class BulkDatasetTemplateGenerator
         $sheet->getStyle('A1')->getFont()->getColor()->setRGB('2563EB');
         
         // Lake and Station Info
-        $sheet->setCellValue('A3', 'Lake:');
-        $sheet->setCellValue('B3', $lake->name);
-        $sheet->setCellValue('A4', 'Station:');
-        $sheet->setCellValue('B4', $station->name);
-        $sheet->getStyle('A3:A4')->getFont()->setBold(true);
-        
-        // Hidden metadata for validation (white text to make invisible)
-        $sheet->setCellValue('D3', $lake->id);
-        $sheet->setCellValue('D4', $station->id);
-        $sheet->setCellValue('C3', 'lake_id:');
-        $sheet->setCellValue('C4', 'station_id:');
-        $sheet->getStyle('C3:D4')->getFont()->setSize(1)->getColor()->setRGB('FFFFFF'); // White text
+        if ($lake && $station) {
+            $sheet->setCellValue('A3', 'Lake:');
+            $sheet->setCellValue('B3', $lake->name);
+            $sheet->setCellValue('A4', 'Station:');
+            $sheet->setCellValue('B4', $station->name);
+            $sheet->getStyle('A3:A4')->getFont()->setBold(true);
+            
+            // Hidden metadata for validation (white text to make invisible)
+            $sheet->setCellValue('D3', $lake->id);
+            $sheet->setCellValue('D4', $station->id);
+            $sheet->setCellValue('C3', 'lake_id:');
+            $sheet->setCellValue('C4', 'station_id:');
+            $sheet->getStyle('C3:D4')->getFont()->setSize(1)->getColor()->setRGB('FFFFFF'); // White text
+        } else {
+            $sheet->setCellValue('A3', 'Type:');
+            $sheet->setCellValue('B3', 'Generic Template (Please specify lake and station in your submission)');
+            $sheet->getStyle('A3')->getFont()->setBold(true);
+            $sheet->getStyle('B3')->getFont()->getColor()->setRGB('DC2626');
+        }
         
         // Instructions
         $row = 6;
@@ -497,8 +509,13 @@ class BulkDatasetTemplateGenerator
     /**
      * Get filename for download
      */
-    public function getFilename(int $lakeId, int $stationId, string $format = 'xlsx'): string
+    public function getFilename(?int $lakeId, ?int $stationId, string $format = 'xlsx'): string
     {
+        if (!$lakeId || !$stationId) {
+            $date = date('Y-m-d');
+            return "LakeView_Dataset_Template_{$date}.{$format}";
+        }
+        
         $lake = DB::table('lakes')->where('id', $lakeId)->first();
         $station = DB::table('stations')->where('id', $stationId)->first();
         

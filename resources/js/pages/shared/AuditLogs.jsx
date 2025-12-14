@@ -80,6 +80,9 @@ export default function AuditLogs({ scope = 'admin' }) {
   const [catalogsLoaded, setCatalogsLoaded] = useState(false);
   // Cache for resolving threshold-specific metadata when payload lacks IDs
   const [thresholdMap, setThresholdMap] = useState(() => new Map()); // id -> { parameter_id, paramName, standard_id, stdLabel }
+  
+  // Entity lookup maps for resolving IDs to names
+  const [entityLookupMap, setEntityLookupMap] = useState(() => new Map()); // type_id -> name
 
   // Detail modal state
   const [detailRow, setDetailRow] = useState(null);
@@ -294,9 +297,41 @@ export default function AuditLogs({ scope = 'admin' }) {
       'KycProfile': 'KYC Profile',
       'Tenant': 'Organization',
     };
+    
+    const getRoleDisplay = (r) => {
+      const raw = r.actor_role || r.actor?.role || '';
+      const v = String(raw).toLowerCase().replace(/\s+/g,' ').trim();
+      if (v === 'superadmin' || v === 'super_admin' || v === 'super administrator') return 'Super Admin';
+      if (v === 'org_admin' || v === 'orgadmin' || v === 'organization administrator' || v === 'organization_admin') return 'Org Admin';
+      if (v === 'contributor') return 'Contributor';
+      return humanize(raw) || 'User';
+    };
+    
+    const getRoleColor = (r) => {
+      const raw = r.actor_role || r.actor?.role || '';
+      const v = String(raw).toLowerCase().replace(/\s+/g,' ').trim();
+      if (v === 'superadmin' || v === 'super_admin' || v === 'super administrator') return '#ef4444';
+      if (v === 'org_admin' || v === 'orgadmin' || v === 'organization administrator' || v === 'organization_admin') return '#3b82f6';
+      if (v === 'contributor') return '#10b981';
+      return '#6b7280';
+    };
+    
     return [
-      { id: 'summary', header: 'Summary', render: r => {
-          const actor = r.actor_name || (isAdminScope ? 'System Admin' : 'User');
+      { id: 'who', header: 'Who', render: r => {
+          const actor = r.actor_name || (isAdminScope ? 'System' : 'User');
+          const role = getRoleDisplay(r);
+          const roleColor = getRoleColor(r);
+          return (
+            <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+              <div style={{ fontWeight:500 }}>{actor}</div>
+              <div style={{ fontSize:12, color:'#64748b', display:'flex', alignItems:'center', gap:4 }}>
+                <span style={{ color:roleColor, fontSize:14 }}>●</span>
+                <span>{role}</span>
+              </div>
+            </div>
+          );
+        }, width: 180 },
+      { id: 'what', header: 'What', render: r => {
           const modelBase = r.model_type ? r.model_type.split('\\').pop() : 'Record';
           let verb;
           switch (r.action) {
@@ -307,18 +342,23 @@ export default function AuditLogs({ scope = 'admin' }) {
             case 'restored': verb = 'Restored'; break;
             default: verb = (r.action || 'Did').replace(/\b\w/g, c=>c.toUpperCase());
           }
-          const ts = r.event_at ? ` at ${fmt(r.event_at)}` : '';
           const base = modelBase;
+          
           if (base === 'User' && r.action === 'created') {
             const after = r.after || {};
             const userName = after.name || r.entity_name || after.email || 'New User';
-            return `${truncate(userName)} Registered${ts}`;
+            return (
+              <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+                <div>{truncate(userName)} Registered</div>
+                {after.email && <div style={{ fontSize:12, color:'#64748b' }}>{after.email}</div>}
+              </div>
+            );
           }
+          
           if (base === 'ParameterThreshold') {
             const after = r.after || {};
             const before = r.before || {};
             const any = { ...before, ...after };
-            // Try nested relation names first if present in payload
             const paramId = any.parameter_id != null ? String(any.parameter_id) : null;
             const paramFromMap = paramId && paramMap.get(paramId);
             const thMeta = thresholdMap.get(String(r.model_id));
@@ -340,7 +380,6 @@ export default function AuditLogs({ scope = 'admin' }) {
               if (stdFromMap && (stdFromMap.code || stdFromMap.name)) return stdFromMap.code || stdFromMap.name;
               if (thStd) return thStd;
               if (any.standard_id == null) {
-                // Try to show current standard code if available from catalog
                 let currentStd = null;
                 for (const v of stdMap.values()) { if (v && v.is_current) { currentStd = v; break; } }
                 if (currentStd && (currentStd.code || currentStd.name)) return currentStd.code || currentStd.name;
@@ -348,8 +387,24 @@ export default function AuditLogs({ scope = 'admin' }) {
               }
               return `Standard #${any.standard_id}`;
             })();
-            return `${actor} ${verb} the threshold for ${truncate(String(paramName))} in ${truncate(String(stdLabel))}${ts}`;
+            
+            // Extract changed values for threshold
+            let detail = null;
+            if (r.action === 'updated' && before && after) {
+              const changes = [];
+              if (before.min_value !== after.min_value) changes.push(`Min: ${before.min_value ?? 'NULL'} → ${after.min_value ?? 'NULL'}`);
+              if (before.max_value !== after.max_value) changes.push(`Max: ${before.max_value ?? 'NULL'} → ${after.max_value ?? 'NULL'}`);
+              if (changes.length > 0) detail = changes.join(', ');
+            }
+            
+            return (
+              <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+                <div>{verb} threshold for <strong>{truncate(String(paramName))}</strong> in <strong>{truncate(String(stdLabel))}</strong></div>
+                {detail && <div style={{ fontSize:12, color:'#64748b' }}>{detail}</div>}
+              </div>
+            );
           }
+          
           if (base === 'SamplingEvent') {
             const lakeNm = r.entity_name || extractLakeName(r);
             const lakeLabel = lakeNm ? truncate(lakeNm) : null;
@@ -357,11 +412,27 @@ export default function AuditLogs({ scope = 'admin' }) {
               const raw = (r.after && r.after.sampled_at) || (r.before && r.before.sampled_at) || null;
               if (!raw) return null; try { return new Date(raw).toLocaleDateString(); } catch { return raw; }
             })();
-            let core = `${actor} ${verb} Sampling Event`;
+            
+            // Extract status change
+            let detail = null;
+            if (r.action === 'updated' && r.before && r.after) {
+              if (r.before.status !== r.after.status) {
+                detail = `Status: ${humanize(r.before.status || 'none')} → ${humanize(r.after.status || 'none')}`;
+              }
+            }
+            
+            let core = `${verb} Sampling Event`;
             if (sampledDate) core += ` (${sampledDate})`;
-            if (lakeLabel) core += ` for ${lakeLabel}`;
-            return `${core}${ts}`;
+            if (lakeLabel) core += ` for <strong>${lakeLabel}</strong>`;
+            
+            return (
+              <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+                <div dangerouslySetInnerHTML={{ __html: core }} />
+                {detail && <div style={{ fontSize:12, color:'#64748b' }}>{detail}</div>}
+              </div>
+            );
           }
+          
           if (base === 'Layer') {
             const layerName = r.entity_name || (r.after && r.after.name) || (r.before && r.before.name) || 'Layer';
             const scanLake = (obj) => {
@@ -374,19 +445,35 @@ export default function AuditLogs({ scope = 'admin' }) {
               return null;
             };
             const lakeNm = scanLake(r.after) || scanLake(r.before) || null;
-            let core = `${actor} ${verb} ${truncate(layerName)} layer`;
-            if (lakeNm) core += ` for ${truncate(lakeNm)}`;
-            return `${core}${ts}`;
+            let core = `${verb} <strong>${truncate(layerName)}</strong> layer`;
+            if (lakeNm) core += ` for <strong>${truncate(lakeNm)}</strong>`;
+            return <div dangerouslySetInnerHTML={{ __html: core }} />;
           }
-          if (r.entity_name) return `${actor} ${verb} ${truncate(r.entity_name)}${ts}`;
-          const idTag = r.model_id ? `${modelBase}#${r.model_id}` : modelBase;
-          return `${actor} ${verb} ${idTag}${ts}`;
-        }, width: 560 },
-      { id: 'target', header: 'Target', render: r => {
-        const base = r.model_type ? r.model_type.split('\\').pop() : 'Record';
-        return modelNameMap[base] || base;
-      }, width: 140 },
-      { id: 'actions', header: 'Action', width: 80, render: r => (
+          
+          if (r.entity_name) {
+            return (
+              <div>
+                {verb} <strong>{truncate(r.entity_name)}</strong>
+              </div>
+            );
+          }
+          
+          const idTag = r.model_id ? `${modelBase} #${r.model_id}` : modelBase;
+          return <div>{verb} {idTag}</div>;
+        }, width: 420 },
+      { id: 'when', header: 'When', render: r => {
+          if (!r.event_at) return '—';
+          const d = new Date(r.event_at);
+          const date = d.toLocaleDateString();
+          const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          return (
+            <div style={{ display:'flex', flexDirection:'column', gap:2, fontSize:13 }}>
+              <div>{date}</div>
+              <div style={{ color:'#64748b' }}>{time}</div>
+            </div>
+          );
+        }, width: 120 },
+      { id: 'actions', header: '', width: 80, render: r => (
         <button className="pill-btn ghost sm" title="View Details" onClick={() => openDetail(r)} style={{ display:'flex', alignItems:'center', gap:4 }}>
           <FiEye />
         </button>
@@ -398,6 +485,77 @@ export default function AuditLogs({ scope = 'admin' }) {
 
   const actions = [];
 
+  // Resolve entity IDs to names
+  const resolveEntityName = async (key, id) => {
+    if (!id || id === null) return null;
+    const cacheKey = `${key}_${id}`;
+    
+    // Check cache first
+    if (entityLookupMap.has(cacheKey)) {
+      return entityLookupMap.get(cacheKey);
+    }
+    
+    try {
+      let endpoint = null;
+      let nameField = 'name';
+      
+      // Map fields to endpoints
+      if (key === 'user_id' || key === 'actor_id' || key === 'created_by' || key === 'updated_by') {
+        endpoint = `/admin/users/${id}`;
+      } else if (key === 'lake_id') {
+        endpoint = `/admin/lakes/${id}`;
+      } else if (key === 'organization_id' || key === 'tenant_id') {
+        endpoint = `/admin/organizations/${id}`;
+      } else if (key === 'parameter_id') {
+        if (paramMap.has(String(id))) {
+          return paramMap.get(String(id)).name;
+        }
+        endpoint = `/admin/parameters/${id}`;
+      } else if (key === 'standard_id') {
+        if (stdMap.has(String(id))) {
+          return stdMap.get(String(id)).code || stdMap.get(String(id)).name;
+        }
+        endpoint = `/admin/wq-standards/${id}`;
+      }
+      
+      if (!endpoint) return null;
+      
+      const res = await cachedGet(endpoint, { ttlMs: 5 * 60 * 1000 });
+      const data = res?.data?.data || res?.data || res;
+      const name = data?.name || data?.code || data?.email || null;
+      
+      if (name) {
+        setEntityLookupMap(prev => {
+          const next = new Map(prev);
+          next.set(cacheKey, name);
+          return next;
+        });
+      }
+      
+      return name;
+    } catch (err) {
+      return null;
+    }
+  };
+  
+  // Get relative time
+  const getRelativeTime = (dateStr) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffSecs = Math.floor(diffMs / 1000);
+    const diffMins = Math.floor(diffSecs / 60);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+    
+    if (diffSecs < 60) return 'Just now';
+    if (diffMins < 60) return `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+    if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+    return date.toLocaleDateString();
+  };
+
   // Build structured changes for modal table
   const buildChanges = (row) => {
     if (!row || !row.before || !row.after) return [];
@@ -405,9 +563,116 @@ export default function AuditLogs({ scope = 'admin' }) {
       ? row.diff_keys
       : Array.from(new Set([...(row.before?Object.keys(row.before):[]), ...(row.after?Object.keys(row.after):[])]));
     const prettify = (k)=>k.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
-    const normalize = (v)=> { if (v===null||v===undefined||v==='') return 'NULL'; if (typeof v==='object'){ try{return JSON.stringify(v);}catch{return String(v);} } return String(v); };
-    const out=[]; for (const k of keys){ const b=row.before[k]; const a=row.after[k]; if (JSON.stringify(b)===JSON.stringify(a)) continue; out.push({ fieldLabel: prettify(k), fromVal: normalize(b), toVal: normalize(a) }); }
+    
+    // Smart value formatter - context aware
+    const normalize = (v, key, context = 'before') => {
+      // Handle null
+      if (v === null) {
+        return <span style={{color:'#94a3b8',fontStyle:'italic'}}>NULL</span>;
+      }
+      
+      // Handle undefined - context matters
+      if (v === undefined) {
+        if (context === 'after') {
+          // Field was removed
+          return <span style={{color:'#dc2626',fontStyle:'italic',display:'flex',alignItems:'center',gap:4}}>🗑️ Removed</span>;
+        } else {
+          // Field didn't exist before
+          return <span style={{color:'#94a3b8',fontStyle:'italic'}}>—</span>;
+        }
+      }
+      
+      // Handle empty string
+      if (v === '') {
+        return <span style={{color:'#94a3b8',fontStyle:'italic'}}>(empty)</span>;
+      }
+      
+      // Date fields
+      if (key && /_at$|_date$|date_|sampled_at/.test(key) && typeof v === 'string') {
+        try {
+          const d = new Date(v);
+          if (!isNaN(d.getTime())) {
+            return d.toLocaleString();
+          }
+        } catch {}
+      }
+      
+      // Boolean
+      if (typeof v === 'boolean') {
+        return v ? <span style={{color:'#10b981',fontWeight:500}}>✓ True</span> : <span style={{color:'#ef4444',fontWeight:500}}>✗ False</span>;
+      }
+      
+      // Numbers
+      if (typeof v === 'number') {
+        return <span style={{color:'#0891b2',fontFamily:'monospace'}}>{v}</span>;
+      }
+      
+      // Objects/Arrays - pretty print
+      if (typeof v==='object'){ 
+        try{
+          const json = JSON.stringify(v, null, 2);
+          return <pre style={{margin:0,fontSize:12,background:'#f1f5f9',padding:'6px 8px',borderRadius:4,maxHeight:120,overflow:'auto',fontFamily:'monospace'}}>{json}</pre>;
+        }catch{
+          return String(v);
+        } 
+      }
+      
+      return String(v); 
+    };
+    
+    const out=[];
+    for (const k of keys){
+      const b=row.before[k];
+      const a=row.after[k];
+      if (JSON.stringify(b)===JSON.stringify(a)) continue;
+      
+      // Skip ID fields that should be hidden
+      if (/_id$/.test(k) && !['id'].includes(k)) {
+        continue; // Skip foreign key IDs, they're redundant with name fields
+      }
+      
+      out.push({ 
+        fieldLabel: prettify(k), 
+        fromVal: normalize(b, k, 'before'), 
+        toVal: normalize(a, k, 'after'),
+        isImportant: /status|role|permission|deleted|active|enabled/.test(k)
+      }); 
+    }
     return out;
+  };
+  
+  // Build modal title
+  const getModalTitle = (row) => {
+    if (!row) return 'Audit Log Details';
+    const action = formatAction(row.action);
+    const base = row.model_type ? row.model_type.split('\\').pop() : 'Record';
+    const entityName = row.entity_name || `${base} #${row.model_id || '?'}`;
+    return `${action} ${entityName}`;
+  };
+  
+  // Copy details to clipboard
+  const copyDetails = (row) => {
+    if (!row) return;
+    const text = `
+Audit Log #${row.id || '?'}
+User: ${row.actor_name || 'System'}
+Role: ${row.actor_role || 'N/A'}
+Action: ${formatAction(row.action)}
+Entity: ${row.entity_name || 'N/A'}
+Timestamp: ${fmt(row.event_at)}
+IP Address: ${row.ip_address || 'N/A'}
+${row.tenant_name ? `Organization: ${row.tenant_name}` : ''}
+
+Changes:
+${buildChanges(row).map(ch => `  ${ch.fieldLabel}: ${ch.fromVal} → ${ch.toVal}`).join('\n')}
+    `.trim();
+    
+    navigator.clipboard.writeText(text).then(() => {
+      // Could add a toast notification here
+      console.log('Details copied to clipboard');
+    }).catch(err => {
+      console.error('Failed to copy:', err);
+    });
   };
 
   const goPage = (p) => fetchLogs(buildParams({ page: p }));
@@ -496,30 +761,104 @@ export default function AuditLogs({ scope = 'admin' }) {
         <Modal
           open={!!detailRow}
           onClose={closeDetail}
-          title={`Audit Log #${detailRow.id || ''}`}
-          width={720}
+          title={getModalTitle(detailRow)}
+          width={800}
           ariaLabel={isAdminScope ? 'Audit log detail dialog' : 'Organization audit log detail dialog'}
           bodyClassName="audit-log-detail-body"
           footer={(
-            <div style={{ display:'flex', justifyContent:'flex-end', gap:8 }}>
-              <button className="pill-btn ghost" onClick={closeDetail}>Close</button>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}>
+              <div style={{ fontSize:12, color:'#64748b' }}>
+                Log ID: #{detailRow.id || '?'}
+              </div>
+              <div style={{ display:'flex', gap:8 }}>
+                <button 
+                  className="pill-btn ghost sm" 
+                  onClick={() => copyDetails(detailRow)}
+                  title="Copy details to clipboard"
+                >
+                  📋 Copy
+                </button>
+                <button className="pill-btn ghost" onClick={closeDetail}>Close</button>
+              </div>
             </div>
           )}
         >
-          <div className="lv-settings-panel" style={{ gap: 14 }}>
-            <h3 style={{ margin: 0, fontSize: '1rem' }}>Event</h3>
-            <div style={{ display:'grid', rowGap:6, fontSize:13.5 }}>
-              <div><strong style={{ width:110, display:'inline-block' }}>User:</strong> {detailRow.actor_name || (isAdminScope ? 'System Admin' : 'User')}</div>
-              <div><strong style={{ width:110, display:'inline-block' }}>Role:</strong> {(() => {
-                const raw = detailRow.actor_role || detailRow.actor?.role || '';
-                const v = String(raw).toLowerCase().replace(/\s+/g,' ').trim();
-                if (v === 'superadmin' || v === 'super_admin' || v === 'super administrator') return 'Super Administrator';
-                if (v === 'org_admin' || v === 'orgadmin' || v === 'organization administrator' || v === 'organization_admin') return 'Organization Administrator';
-                if (v === 'contributor') return 'Contributor';
-                return humanize(raw) || '—';
-              })()}</div>
-              <div><strong style={{ width:110, display:'inline-block' }}>Action:</strong> {formatAction(detailRow.action)}</div>
-              <div><strong style={{ width:110, display:'inline-block' }}>Entity:</strong>{' '}
+          {/* Header Summary Card */}
+          <div style={{ 
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
+            color: 'white', 
+            padding: '16px 20px', 
+            borderRadius: 12, 
+            marginBottom: 20,
+            boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+          }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:16 }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:13, opacity:0.9, marginBottom:4 }}>
+                  {getRelativeTime(detailRow.event_at)}
+                </div>
+                <div style={{ fontSize:15, fontWeight:500 }}>
+                  {detailRow.actor_name || 'System'}
+                  <span style={{ 
+                    marginLeft:8, 
+                    fontSize:11, 
+                    background:'rgba(255,255,255,0.2)', 
+                    padding:'2px 8px', 
+                    borderRadius:12,
+                    textTransform:'uppercase',
+                    letterSpacing:0.5
+                  }}>
+                    {(() => {
+                      const raw = detailRow.actor_role || detailRow.actor?.role || '';
+                      const v = String(raw).toLowerCase().replace(/\s+/g,' ').trim();
+                      if (v === 'superadmin' || v === 'super_admin' || v === 'super administrator') return 'Super Admin';
+                      if (v === 'org_admin' || v === 'orgadmin' || v === 'organization administrator' || v === 'organization_admin') return 'Org Admin';
+                      if (v === 'contributor') return 'Contributor';
+                      return humanize(raw) || 'User';
+                    })()}
+                  </span>
+                </div>
+              </div>
+              <div style={{ textAlign:'right', fontSize:13 }}>
+                <div style={{ opacity:0.9 }}>{fmt(detailRow.event_at)}</div>
+                {detailRow.ip_address && (
+                  <div style={{ fontSize:12, opacity:0.8, marginTop:4 }}>
+                    📍 {detailRow.ip_address}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Event Details */}
+          <div className="lv-settings-panel" style={{ gap: 14, background:'#f9fafb', padding:16, borderRadius:8 }}>
+            <h3 style={{ margin: 0, fontSize: '0.95rem', color:'#334155' }}>Event Details</h3>
+            <div style={{ display:'grid', gridTemplateColumns:'140px 1fr', rowGap:10, fontSize:13.5 }}>
+              <div style={{ color:'#64748b', fontWeight:500 }}>Action Type</div>
+              <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                <span style={{
+                  padding:'2px 10px',
+                  borderRadius:6,
+                  fontSize:12,
+                  fontWeight:500,
+                  background: detailRow.action === 'created' ? '#dcfce7' : 
+                             detailRow.action === 'updated' ? '#dbeafe' :
+                             detailRow.action === 'deleted' ? '#fee2e2' : 
+                             detailRow.action === 'restored' ? '#fef3c7' : '#f3f4f6',
+                  color: detailRow.action === 'created' ? '#166534' : 
+                        detailRow.action === 'updated' ? '#1e40af' :
+                        detailRow.action === 'deleted' ? '#991b1b' : 
+                        detailRow.action === 'restored' ? '#854d0e' : '#475569'
+                }}>
+                  {formatAction(detailRow.action)}
+                </span>
+              </div>
+              
+              <div style={{ color:'#64748b', fontWeight:500 }}>Entity Type</div>
+              <div>{detailRow.model_type ? detailRow.model_type.split('\\').pop() : 'Record'}</div>
+              
+              <div style={{ color:'#64748b', fontWeight:500 }}>Entity</div>
+              <div style={{ fontWeight:500 }}>
                 {(() => {
                   const base = detailRow.model_type ? detailRow.model_type.split('\\').pop() : 'Record';
                   if (base === 'SamplingEvent') {
@@ -551,40 +890,64 @@ export default function AuditLogs({ scope = 'admin' }) {
                   return String(raw).replace(/\s+#\d+$/, '');
                 })()}
               </div>
+              
               {detailRow.tenant_id && (
-                <div><strong style={{ width:110, display:'inline-block' }}>Organization:</strong> {detailRow.tenant_name || detailRow.tenant_id}</div>
+                <>
+                  <div style={{ color:'#64748b', fontWeight:500 }}>Organization</div>
+                  <div>{detailRow.tenant_name || detailRow.tenant_id}</div>
+                </>
               )}
-              {detailRow.ip_address && (
-                <div><strong style={{ width:110, display:'inline-block' }}>IP:</strong> {detailRow.ip_address}</div>
-              )}
-              <div><strong style={{ width:110, display:'inline-block' }}>Timestamp:</strong> {fmt(detailRow.event_at)}</div>
             </div>
           </div>
 
-          <div className="lv-settings-panel" style={{ gap: 12 }}>
-            <h3 style={{ margin: 0, fontSize: '1rem' }}>Changes</h3>
+          {/* Changes Section */}
+          <div className="lv-settings-panel" style={{ gap: 12, marginTop:20 }}>
+            <h3 style={{ margin: 0, fontSize: '0.95rem', color:'#334155', display:'flex', alignItems:'center', gap:8 }}>
+              <span>Field Changes</span>
+              {detailRow.before && detailRow.after && buildChanges(detailRow).length > 0 && (
+                <span style={{ 
+                  fontSize:11, 
+                  background:'#3b82f6', 
+                  color:'white', 
+                  padding:'2px 8px', 
+                  borderRadius:12,
+                  fontWeight:500
+                }}>
+                  {buildChanges(detailRow).length}
+                </span>
+              )}
+            </h3>
             {detailRow.before && detailRow.after ? (
               (() => {
                 const changes = buildChanges(detailRow);
                 if (changes.length === 0) {
-                  return <div style={{ fontStyle:'italic', fontSize:13, color:'#64748b' }}>No field differences detected.</div>;
+                  return <div style={{ fontStyle:'italic', fontSize:13, color:'#64748b', padding:12, background:'#f9fafb', borderRadius:8, textAlign:'center' }}>
+                    No field differences detected.
+                  </div>;
                 }
                 return (
                   <div style={{ border:'1px solid #e5e7eb', borderRadius:8, overflow:'hidden' }}>
                     <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13.5 }}>
-                      <thead style={{ background:'#f3f4f6' }}>
+                      <thead style={{ background:'linear-gradient(to bottom, #f8fafc, #f1f5f9)' }}>
                         <tr>
-                          <th style={{ textAlign:'left', padding:'8px 10px', fontSize:12, textTransform:'uppercase', letterSpacing:0.5 }}>Field</th>
-                          <th style={{ textAlign:'left', padding:'8px 10px', fontSize:12, textTransform:'uppercase', letterSpacing:0.5 }}>From</th>
-                          <th style={{ textAlign:'left', padding:'8px 10px', fontSize:12, textTransform:'uppercase', letterSpacing:0.5 }}>To</th>
+                          <th style={{ textAlign:'left', padding:'10px 12px', fontSize:11, textTransform:'uppercase', letterSpacing:0.5, color:'#475569', fontWeight:600, width:'25%' }}>Field</th>
+                          <th style={{ textAlign:'left', padding:'10px 12px', fontSize:11, textTransform:'uppercase', letterSpacing:0.5, color:'#475569', fontWeight:600, width:'37.5%' }}>Before</th>
+                          <th style={{ textAlign:'left', padding:'10px 12px', fontSize:11, textTransform:'uppercase', letterSpacing:0.5, color:'#475569', fontWeight:600, width:'37.5%' }}>After</th>
                         </tr>
                       </thead>
                       <tbody>
                         {changes.map((ch,i) => (
-                          <tr key={i} style={{ background: i % 2 ? '#f9fafb' : 'white' }}>
-                            <td style={{ padding:'6px 10px', fontWeight:500 }}>{ch.fieldLabel}</td>
-                            <td style={{ padding:'6px 10px', color:'#b91c1c', whiteSpace:'pre-wrap', wordBreak:'break-word' }}>{ch.fromVal}</td>
-                            <td style={{ padding:'6px 10px', color:'#065f46', whiteSpace:'pre-wrap', wordBreak:'break-word' }}>{ch.toVal}</td>
+                          <tr key={i} style={{ 
+                            background: i % 2 ? '#fafbfc' : 'white',
+                            borderTop: i > 0 ? '1px solid #f1f5f9' : 'none',
+                            ...(ch.isImportant ? { borderLeft:'3px solid #f59e0b' } : {})
+                          }}>
+                            <td style={{ padding:'10px 12px', fontWeight:ch.isImportant ? 600 : 500, color:'#1e293b' }}>
+                              {ch.fieldLabel}
+                              {ch.isImportant && <span style={{ marginLeft:6, fontSize:10, color:'#f59e0b' }}>★</span>}
+                            </td>
+                            <td style={{ padding:'10px 12px', color:'#dc2626', whiteSpace:'pre-wrap', wordBreak:'break-word' }}>{ch.fromVal}</td>
+                            <td style={{ padding:'10px 12px', color:'#059669', whiteSpace:'pre-wrap', wordBreak:'break-word' }}>{ch.toVal}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -593,7 +956,11 @@ export default function AuditLogs({ scope = 'admin' }) {
                 );
               })()
             ) : (
-              <div style={{ fontStyle:'italic', fontSize:13, color:'#64748b' }}>No before/after payload to diff.</div>
+              <div style={{ fontStyle:'italic', fontSize:13, color:'#64748b', padding:12, background:'#f9fafb', borderRadius:8, textAlign:'center' }}>
+                {detailRow.action === 'created' ? 'New record created - no previous values to compare.' : 
+                 detailRow.action === 'deleted' ? 'Record deleted - no subsequent values.' : 
+                 'No before/after payload available for comparison.'}
+              </div>
             )}
           </div>
         </Modal>

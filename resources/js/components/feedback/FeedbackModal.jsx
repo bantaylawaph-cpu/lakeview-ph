@@ -6,11 +6,24 @@ import { getCurrentUser } from '../../lib/authState';
 import LoadingSpinner from '../LoadingSpinner';
 import DataPrivacyDisclaimer from '../../pages/PublicInterface/DataPrivacyDisclaimer';
 import UserFeedbackDetailModal from './UserFeedbackDetailModal';
+import { FiAlertCircle, FiCheckCircle, FiClock, FiXCircle, FiSearch, FiFilter, FiDownload } from 'react-icons/fi';
+import { getToken } from '../../lib/api';
 
 // Status pill uses feedback-status classes from feedback.css
 function StatusPill({ status }) {
   const labelMap = { open: 'Open', in_progress: 'In Progress', resolved: 'Resolved', wont_fix: "Won't Fix" };
-  return <span className={`feedback-status ${status}`}>{labelMap[status] || status}</span>;
+  const iconMap = { 
+    open: <FiAlertCircle size={14} style={{ marginRight: 4 }} />, 
+    in_progress: <FiClock size={14} style={{ marginRight: 4 }} />, 
+    resolved: <FiCheckCircle size={14} style={{ marginRight: 4 }} />, 
+    wont_fix: <FiXCircle size={14} style={{ marginRight: 4 }} /> 
+  };
+  return (
+    <span className={`feedback-status ${status}`} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+      {iconMap[status]}
+      {labelMap[status] || status}
+    </span>
+  );
 }
 
 export default function FeedbackModal({ open, onClose, width = 640 }) {
@@ -39,6 +52,33 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
   const [privacyOpen, setPrivacyOpen] = useState(false);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [selectedFeedback, setSelectedFeedback] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterStatus, setFilterStatus] = useState('all');
+
+  // Draft auto-save
+  const DRAFT_KEY = 'feedback_draft';
+  useEffect(() => {
+    if (open && !user) {
+      try {
+        const saved = localStorage.getItem(DRAFT_KEY);
+        if (saved) {
+          const draft = JSON.parse(saved);
+          if (draft.title) setTitle(draft.title);
+          if (draft.category) setCategory(draft.category);
+          if (draft.message) setMessage(draft.message);
+          if (draft.guestName) setGuestName(draft.guestName);
+          if (draft.guestEmail) setGuestEmail(draft.guestEmail);
+        }
+      } catch {}
+    }
+  }, [open, user]);
+
+  useEffect(() => {
+    if (!user && (title || message || category || guestName || guestEmail)) {
+      const draft = { title, category, message, guestName, guestEmail };
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    }
+  }, [title, category, message, guestName, guestEmail, user]);
 
   // no file preview needed for "My Submissions"
 
@@ -60,7 +100,10 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
     const nextPage = opts.page || 1;
     setLoadingList(true);
     try {
-      const res = await api.get('/feedback/mine', { params: { page: nextPage } });
+      const params = { page: nextPage };
+      if (searchQuery) params.search = searchQuery;
+      if (filterStatus && filterStatus !== 'all') params.status = filterStatus;
+      const res = await api.get('/feedback/mine', { params });
       const data = Array.isArray(res?.data) ? res.data : (res?.data?.data ? res.data.data : res?.data || []);
       const meta = res?.meta || res;
       setList(nextPage === 1 ? data : prev => ([...(prev||[]), ...data]));
@@ -69,7 +112,7 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
     } catch (e) {
       // swallow list errors
     } finally { if (mountedRef.current) setLoadingList(false); }
-  }, [user]);
+  }, [user, searchQuery, filterStatus]);
 
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
 
@@ -84,7 +127,8 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
   useEffect(() => {
     if (!open) return;
     const handleKey = (e) => {
-      if (e.key === 'Escape') { onClose?.(); }
+      // Don't handle ESC if detail modal is open (let it handle it)
+      if (e.key === 'Escape' && !detailModalOpen) { onClose?.(); }
       if (e.key === 'Tab') {
         const focusables = formRef.current?.closest('.lv-modal-card')?.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
         if (!focusables || !focusables.length) return;
@@ -101,15 +145,30 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
     };
     window.addEventListener('keydown', handleKey, true);
     return () => window.removeEventListener('keydown', handleKey, true);
-  }, [open, onClose]);
+  }, [open, onClose, detailModalOpen]);
 
-  const resetForm = () => { 
+  const resetForm = async () => {
+    const hasContent = title || message || category || guestName || guestEmail || files.length > 0;
+    if (hasContent) {
+      const result = await Swal.fire({
+        title: 'Clear form?',
+        text: 'This will remove all your entered data.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Yes, clear it',
+        cancelButtonText: 'Cancel',
+        confirmButtonColor: '#dc2626',
+        cancelButtonColor: '#64748b'
+      });
+      if (!result.isConfirmed) return;
+    }
     setTitle(''); setCategory(''); setMessage(''); setGuestName(''); setGuestEmail(''); setFiles([]); 
     if (honeypotRef.current) honeypotRef.current.value=''; 
     if (fileInputRef.current) fileInputRef.current.value = '';
     setPreviews([]);
-    setTTitle(false); setTMessage(false); setTCategory(false); // clear touched validation states
-    setError(''); setSuccess(''); // clear any error/success messages
+    setTTitle(false); setTMessage(false); setTCategory(false);
+    setError(''); setSuccess('');
+    if (!user) localStorage.removeItem(DRAFT_KEY);
   };
 
   // File selection and previews (screenshots only)
@@ -140,6 +199,75 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
     setPreviews(urls);
     return () => { urls.forEach(u => { if (u) try { URL.revokeObjectURL(u); } catch {} }); };
   }, [files]);
+
+  const handleTemplateDownload = async (format) => {
+    try {
+      const token = getToken();
+      if (!token) {
+        await Swal.fire({
+          title: 'Authentication Required',
+          text: 'Please log in to download the bulk import template.',
+          icon: 'warning',
+          confirmButtonText: 'OK',
+          confirmButtonColor: '#2563eb'
+        });
+        return;
+      }
+
+      // Determine user role from token or user object
+      const apiPrefix = user?.role === 'contributor' ? 'contrib' : 'org';
+      const response = await fetch(`/api/${apiPrefix}/bulk-dataset/template?format=${format}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, text/csv, application/octet-stream'
+        }
+      });
+
+      if (!response.ok) {
+        let errorMessage = 'Download failed';
+        try {
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const error = await response.json();
+            errorMessage = error.error || error.message || errorMessage;
+          } else {
+            errorMessage = await response.text() || errorMessage;
+          }
+        } catch (e) {
+          console.error('Error parsing error response:', e);
+        }
+        throw new Error(errorMessage);
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `bulk_dataset_template.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      await Swal.fire({
+        title: 'Download Started',
+        text: `Template downloaded as ${format.toUpperCase()} file.`,
+        icon: 'success',
+        timer: 2000,
+        showConfirmButton: false
+      });
+    } catch (error) {
+      console.error('Template download error:', error);
+      await Swal.fire({
+        title: 'Download Failed',
+        text: error.message || 'Failed to download template.',
+        icon: 'error',
+        confirmButtonText: 'OK',
+        confirmButtonColor: '#dc2626'
+      });
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -190,7 +318,10 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
         // Clear touched/error states before showing popup
         setTTitle(false); setTMessage(false); setTCategory(false);
         resetForm();
-        if (user) { setList(prev => [created, ...(prev||[])]); }
+        if (user) { 
+          setList(prev => [created, ...(prev||[])]); 
+          if (!user) localStorage.removeItem(DRAFT_KEY);
+        }
         // Close loading dialog before showing the result
         try { Swal.close(); } catch {}
         const text = user
@@ -236,6 +367,13 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
       });
     } finally { if (mountedRef.current) setSubmitting(false); }
   };
+
+  // Refetch when search or filter changes
+  useEffect(() => {
+    if (open && user) {
+      fetchMine({ page: 1 });
+    }
+  }, [searchQuery, filterStatus, open, user, fetchMine]);
 
   return (
     <Modal
@@ -324,9 +462,26 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
                     <option value="data">Data</option>
                     <option value="ui">UI/UX</option>
                     <option value="org_petition">Petition a New Organization</option>
+                    <option value="data_contribution">I want to Contribute my Data!</option>
                     <option value="other">Other</option>
                   </select>
                   {categoryError && <div id="fb-category-err" className="field-error" style={{ color:'var(--danger, #dc2626)', fontSize:12, marginTop:4 }}>{categoryError}</div>}
+                  {category === 'data_contribution' && (
+                    <div className="lv-status-info" style={{ marginTop: 12, padding: 12, borderRadius: 8 }}>
+                      <strong style={{ display: 'block', marginBottom: 8, fontSize: 14 }}>Bulk Import Template</strong>
+                      <p style={{ fontSize: 13, marginBottom: 12, lineHeight: 1.5 }}>Download our template to prepare your water quality data for bulk upload:</p>
+                      <button
+                        type="button"
+                        className="pill-btn primary sm"
+                        onClick={() => handleTemplateDownload('xlsx')}
+                        style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                      >
+                        <FiDownload size={14} />
+                        Download Template (XLSX)
+                      </button>
+                      <p style={{ fontSize: 12, marginTop: 10, color: '#64748b' }}>After filling the template, please attach it below and submit your feedback.</p>
+                    </div>
+                  )}
                 </div>
                 <div className={`lv-field-row ${messageError ? 'has-error' : ''}`}>
                   <label htmlFor="fb-message">Message <span className="req">*</span></label>
@@ -398,25 +553,88 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
         </div>
         {user && (
           <div className="feedback-submissions">
-            <h3 style={{ margin:'0 0 12px' }}>My Submissions</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 12, flexWrap: 'wrap' }}>
+              <h3 style={{ margin: 0 }}>My Submissions</h3>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center', flex: 1, maxWidth: 500 }}>
+                <div style={{ position: 'relative', flex: 1 }}>
+                  <FiSearch size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                  <input
+                    type="text"
+                    placeholder="Search feedback..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    style={{ paddingLeft: 42, paddingRight: 16, paddingTop: 10, paddingBottom: 10, fontSize: 14, width: '100%', borderRadius: 12 }}
+                    className="pill-input"
+                  />
+                </div>
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  style={{ fontSize: 14, color: '#ffffff', padding: '10px 14px', borderRadius: 12, minWidth: 140 }}
+                  title="Filter by status"
+                >
+                  <option value="all" style={{ color: '#000000' }}>All Status</option>
+                  <option value="open" style={{ color: '#000000' }}>Open</option>
+                  <option value="in_progress" style={{ color: '#000000' }}>In Progress</option>
+                  <option value="resolved" style={{ color: '#000000' }}>Resolved</option>
+                  <option value="wont_fix" style={{ color: '#000000' }}>Won't Fix</option>
+                </select>
+              </div>
+            </div>
             <div className="feedback-list">
-            {list.length === 0 && !loadingList && (<div className="insight-card" style={{ textAlign:'center' }}>No feedback yet.</div>)}
+            {list.length === 0 && !loadingList && (
+              <div className="insight-card" style={{ textAlign:'center', padding: 32 }}>
+                {searchQuery || filterStatus !== 'all' ? (
+                  <div>
+                    <FiSearch size={32} style={{ color: '#cbd5e1', marginBottom: 12 }} />
+                    <div style={{ fontSize: 14, color: '#64748b' }}>No matching feedback found.</div>
+                    <button 
+                      className="pill-btn ghost sm" 
+                      style={{ marginTop: 12 }}
+                      onClick={() => { setSearchQuery(''); setFilterStatus('all'); }}
+                    >
+                      Clear filters
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <div style={{ fontSize: 14, color: '#64748b' }}>No feedback yet.</div>
+                    <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 6 }}>Submit your first feedback above!</div>
+                  </div>
+                )}
+              </div>
+            )}
             {list.map(item => (
               <div 
                 key={item.id} 
                 className="insight-card" 
-                style={{ display:'grid', gap:8, padding:'12px 14px', cursor:'pointer' }}
+                style={{ 
+                  display:'grid', 
+                  gap:8, 
+                  padding:'12px 14px', 
+                  cursor:'pointer',
+                  transition: 'all 0.2s ease',
+                  borderLeft: '3px solid transparent'
+                }}
                 onClick={() => { setSelectedFeedback(item); setDetailModalOpen(true); }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateX(4px)';
+                  e.currentTarget.style.borderLeftColor = item.status === 'resolved' ? '#10b981' : item.status === 'in_progress' ? '#f59e0b' : '#3b82f6';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateX(0)';
+                  e.currentTarget.style.borderLeftColor = 'transparent';
+                }}
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedFeedback(item); setDetailModalOpen(true); } }}
               >
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
-                  <strong style={{ fontSize:14 }}>{item.title}</strong>
+                  <strong style={{ fontSize:14, lineHeight: 1.4 }}>{item.title}</strong>
                   <StatusPill status={item.status} />
                 </div>
                 <div style={{ display:'flex', gap:8, alignItems:'center', fontSize:12, color:'#94a3b8', flexWrap:'wrap' }}>
-                  {item.category && <span className="feedback-category-badge">{item.category}</span>}
+                  {item.category && <span className="feedback-category-badge" style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: 12, fontSize: 11 }}>{item.category}</span>}
                   {item.category && <span>•</span>}
                   <span>{item.lake?.name || (item.lake_id ? 'Lake Feedback' : 'System Feedback')}</span>
                   <span>•</span>
@@ -435,12 +653,15 @@ export default function FeedbackModal({ open, onClose, width = 640 }) {
         )}
       </div>
       <DataPrivacyDisclaimer open={privacyOpen} onClose={() => setPrivacyOpen(false)} />
-      <UserFeedbackDetailModal 
-        open={detailModalOpen} 
-        onClose={() => { setDetailModalOpen(false); setSelectedFeedback(null); }} 
-        feedback={selectedFeedback}
-        onCloseAll={() => { setDetailModalOpen(false); setSelectedFeedback(null); onClose(); }}
-      />
+      {detailModalOpen && (
+        <UserFeedbackDetailModal 
+          open={detailModalOpen} 
+          onClose={() => { setDetailModalOpen(false); setSelectedFeedback(null); }} 
+          feedback={selectedFeedback}
+          onCloseAll={() => { setDetailModalOpen(false); setSelectedFeedback(null); onClose(); }}
+          overlayZIndex={10001}
+        />
+      )}
     </Modal>
   );
 }

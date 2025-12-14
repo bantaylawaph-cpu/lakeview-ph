@@ -4,7 +4,7 @@ import api from '../../lib/api';
 import { getToken } from '../../lib/api';
 import DataPrivacyDisclaimer from '../../pages/PublicInterface/DataPrivacyDisclaimer';
 import UserFeedbackDetailModal from '../../components/feedback/UserFeedbackDetailModal';
-import { FiFileText } from 'react-icons/fi';
+import { FiFileText, FiAlertCircle, FiCheckCircle, FiClock, FiXCircle, FiSearch, FiImage, FiMapPin, FiDownload } from 'react-icons/fi';
 import Swal from 'sweetalert2';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import PreviewMap from '../layers/PreviewMap';
@@ -13,6 +13,7 @@ const TYPES = [
   'Missing information',
   'Incorrect data',
   'Submit Lake Layer',
+  'I want to Contribute my Data!',
   'Other',
 ];
 
@@ -40,6 +41,34 @@ export default function LakeFeedbackModal({ open, onClose, lake }) {
   const [hasMore, setHasMore] = useState(false);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [selectedFeedback, setSelectedFeedback] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterStatus, setFilterStatus] = useState('all');
+  
+  // Draft auto-save for guests
+  const DRAFT_KEY = `lake_feedback_draft_${lake?.id || 'temp'}`;
+  useEffect(() => {
+    if (open && !getToken()) {
+      try {
+        const saved = localStorage.getItem(DRAFT_KEY);
+        if (saved) {
+          const draft = JSON.parse(saved);
+          if (draft.type) setType(draft.type);
+          if (draft.title) setTitle(draft.title);
+          if (draft.description) setDescription(draft.description);
+          if (draft.guestName) setGuestName(draft.guestName);
+          if (draft.guestEmail) setGuestEmail(draft.guestEmail);
+        }
+      } catch {}
+    }
+  }, [open, lake]);
+
+  useEffect(() => {
+    if (!getToken() && (type || title || description || guestName || guestEmail)) {
+      const draft = { type, title, description, guestName, guestEmail };
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    }
+  }, [type, title, description, guestName, guestEmail, lake]);
+
   const getFileName = (item, src) => {
     try {
       const files = item?.metadata?.files;
@@ -67,12 +96,29 @@ export default function LakeFeedbackModal({ open, onClose, lake }) {
     }
   }, [open]);
 
-  const reset = () => {
-    setType(''); setTitle(''); setDescription(''); setFiles([]); setGuestName(''); setGuestEmail(''); if (hpRef.current) hpRef.current.value = '';
+  const reset = async () => {
+    const hasContent = type || title || description || guestName || guestEmail || files.length > 0;
+    if (hasContent) {
+      const result = await Swal.fire({
+        title: 'Clear form?',
+        text: 'This will remove all your entered data.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Yes, clear it',
+        cancelButtonText: 'Cancel',
+        confirmButtonColor: '#dc2626',
+        cancelButtonColor: '#64748b'
+      });
+      if (!result.isConfirmed) return;
+    }
+    setType(''); setTitle(''); setDescription(''); setFiles([]); setGuestName(''); setGuestEmail(''); 
+    if (hpRef.current) hpRef.current.value = '';
     if (fileInputRef.current) fileInputRef.current.value = '';
     setPreviews([]);
-    setTDesc(false); // clear touched validation state
-    setError(''); setSuccess(''); // clear any error/success messages
+    setGeoPreview(null);
+    setTDesc(false);
+    setError(''); setSuccess('');
+    if (!getToken()) localStorage.removeItem(DRAFT_KEY);
   };
 
   const fetchMine = useCallback(async (opts={}) => {
@@ -82,6 +128,8 @@ export default function LakeFeedbackModal({ open, onClose, lake }) {
     try {
       // Prefer lake-specific endpoint if available; otherwise fallback to general mine
       const params = lake?.id ? { page: nextPage, lake_id: lake.id } : { page: nextPage };
+      if (searchQuery) params.search = searchQuery;
+      if (filterStatus && filterStatus !== 'all') params.status = filterStatus;
       const res = await api.get('/feedback/mine', { params });
       const data = Array.isArray(res?.data) ? res.data : (res?.data?.data ? res.data.data : res?.data || []);
       const meta = res?.meta || res;
@@ -89,7 +137,7 @@ export default function LakeFeedbackModal({ open, onClose, lake }) {
       setPage(meta.current_page || nextPage);
       setHasMore((meta.current_page || nextPage) < (meta.last_page || 1));
     } catch (e) { /* swallow */ } finally { setLoadingList(false); }
-  }, [lake]);
+  }, [lake, searchQuery, filterStatus]);
 
   const handleChooseFiles = () => {
     try { fileInputRef.current?.click(); } catch {}
@@ -192,6 +240,74 @@ export default function LakeFeedbackModal({ open, onClose, lake }) {
     return () => { urls.forEach(u => { if (u) try { URL.revokeObjectURL(u); } catch {} }); };
   }, [files]);
 
+  const handleTemplateDownload = async (format) => {
+    try {
+      const token = getToken();
+      if (!token) {
+        await Swal.fire({
+          title: 'Authentication Required',
+          text: 'Please log in to download the bulk import template.',
+          icon: 'warning',
+          confirmButtonText: 'OK',
+          confirmButtonColor: '#2563eb'
+        });
+        return;
+      }
+
+      // Use org endpoint - blank template doesn't require lake_id/station_id
+      const response = await fetch(`/api/org/bulk-dataset/template?format=${format}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, text/csv, application/octet-stream'
+        }
+      });
+
+      if (!response.ok) {
+        let errorMessage = 'Download failed';
+        try {
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const error = await response.json();
+            errorMessage = error.error || error.message || errorMessage;
+          } else {
+            errorMessage = await response.text() || errorMessage;
+          }
+        } catch (e) {
+          console.error('Error parsing error response:', e);
+        }
+        throw new Error(errorMessage);
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `bulk_dataset_template.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      await Swal.fire({
+        title: 'Download Started',
+        text: `Template downloaded as ${format.toUpperCase()} file.`,
+        icon: 'success',
+        timer: 2000,
+        showConfirmButton: false
+      });
+    } catch (error) {
+      console.error('Template download error:', error);
+      await Swal.fire({
+        title: 'Download Failed',
+        text: error.message || 'Failed to download template.',
+        icon: 'error',
+        confirmButtonText: 'OK',
+        confirmButtonColor: '#dc2626'
+      });
+    }
+  };
+
   const onSubmit = async (e) => {
     e.preventDefault();
     setError(''); setSuccess('');
@@ -254,6 +370,13 @@ export default function LakeFeedbackModal({ open, onClose, lake }) {
     } finally { setSubmitting(false); }
   };
 
+  // Refetch when search or filter changes
+  useEffect(() => {
+    if (open && getToken()) {
+      fetchMine({ page: 1 });
+    }
+  }, [searchQuery, filterStatus, open, fetchMine]);
+
   return (
     <Modal
       open={open}
@@ -284,11 +407,33 @@ export default function LakeFeedbackModal({ open, onClose, lake }) {
               <form id="lake-feedback-form" ref={formRef} onSubmit={onSubmit} noValidate>
                 <fieldset disabled={submitting} style={{ border:'none', padding:0, margin:0, display:'grid', gap:16 }}>
                   <div className="lv-field-row">
-                    {/* Removed feedback type label per requirement; keep accessible name */}
-                    <select id="fb-type" aria-label="Feedback type (optional)" value={type} onChange={(e)=>setType(e.target.value)}>
-                      <option value="">Select</option>
+                    <label htmlFor="fb-type">Feedback Type</label>
+                    <select id="fb-type" aria-label="Feedback type (optional)" value={type} onChange={(e)=>setType(e.target.value)} style={{ fontSize: 14 }}>
+                      <option value="">Select type...</option>
                       {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
+                    {type === 'Submit Lake Layer' && (
+                      <div className="lv-status-info" style={{ fontSize: 12, marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <FiMapPin size={14} />
+                        <span>Upload a GeoJSON file with the lake boundary or feature</span>
+                      </div>
+                    )}
+                    {type === 'I want to Contribute my Data!' && (
+                      <div className="lv-status-info" style={{ marginTop: 12, padding: 12, borderRadius: 8 }}>
+                        <strong style={{ display: 'block', marginBottom: 8, fontSize: 14 }}>Bulk Import Template</strong>
+                        <p style={{ fontSize: 13, marginBottom: 12, lineHeight: 1.5 }}>Download our template to prepare your water quality data for bulk upload:</p>
+                        <button
+                          type="button"
+                          className="pill-btn primary sm"
+                          onClick={() => handleTemplateDownload('xlsx')}
+                          style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                        >
+                          <FiDownload size={14} />
+                          Download Template (XLSX)
+                        </button>
+                        <p style={{ fontSize: 12, marginTop: 10, color: '#64748b' }}>After filling the template, please attach it below and submit your feedback.</p>
+                      </div>
+                    )}
                   </div>
                   <div className="lv-field-row">
                     <label htmlFor="fb-title">Title (optional)</label>
@@ -313,7 +458,12 @@ export default function LakeFeedbackModal({ open, onClose, lake }) {
                     {descError && <div id="fb-desc-err" className="field-error" style={{ color:'var(--danger, #dc2626)', fontSize:12, marginTop:4 }}>{descError}</div>}
                   </div>
                   <div className="lv-field-row">
-                    <label htmlFor="fb-files">Attachments (optional)</label>
+                    <label htmlFor="fb-files">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <FiImage size={16} />
+                        Attachments (optional)
+                      </div>
+                    </label>
                     <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
                       <input
                         ref={fileInputRef}
@@ -324,7 +474,10 @@ export default function LakeFeedbackModal({ open, onClose, lake }) {
                         onChange={onFilesSelected}
                         style={{ display:'none' }}
                       />
-                      <button type="button" className="pill-btn ghost sm" onClick={handleChooseFiles}>Add files</button>
+                      <button type="button" className="pill-btn ghost sm" onClick={handleChooseFiles} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <FiImage size={14} />
+                        Add files
+                      </button>
                       {files && files.length > 0 && (
                         <div className="muted" style={{ fontSize:12 }}>
                           {files.length} file{files.length>1?'s':''} selected
@@ -333,58 +486,72 @@ export default function LakeFeedbackModal({ open, onClose, lake }) {
                     </div>
                     <div className="muted" style={{ fontSize:11, marginTop:6 }}>{allowedHint}</div>
                     {type === 'Submit Lake Layer' && geoPreview && (
-                      <div className="insight-card" style={{ marginTop: 10, padding: 10 }}>
-                        <div className="muted" style={{ fontSize:12, marginBottom:8 }}>GeoJSON Preview</div>
-                        <div style={{ border:'1px solid #cbd5e1', borderRadius:12, overflow:'hidden' }}>
-                          <div style={{ height: 260 }}>
+                      <div className="insight-card" style={{ marginTop: 10, padding: 12, background: '#f8fafc' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                          <FiMapPin size={16} style={{ color: '#3b82f6' }} />
+                          <strong style={{ fontSize: 13 }}>GeoJSON Preview</strong>
+                        </div>
+                        <div style={{ border:'2px solid #e2e8f0', borderRadius:12, overflow:'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                          <div style={{ height: 280 }}>
                             <PreviewMap geometry={geoPreview} />
                           </div>
                         </div>
-                        <div className="muted" style={{ fontSize:11, marginTop:8, wordBreak:'break-all' }}>{files[0]?.name}</div>
-                        <div style={{ marginTop:6 }}>
+                        <div className="muted" style={{ fontSize:11, marginTop:10, wordBreak:'break-all', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <FiFileText size={12} />
+                          {files[0]?.name}
+                        </div>
+                        <div style={{ marginTop:8 }}>
                           <button
                             type="button"
                             onClick={() => { setFiles([]); setGeoPreview(null); if (fileInputRef.current) fileInputRef.current.value=''; }}
                             className="pill-btn ghost sm"
                             title="Delete this file"
                           >
-                            Delete
+                            Remove
                           </button>
                         </div>
                       </div>
                     )}
                     {type !== 'Submit Lake Layer' && files && files.length > 0 && (
-                      <div className="preview-grid" style={{ marginTop: 10 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12, marginTop: 12 }}>
                         {files.map((f, idx) => (
                           f.type && f.type.startsWith('image/') ? (
-                            <div key={idx} className="insight-card" style={{ padding:6, textAlign:'center' }}>
-                              <img src={previews[idx]} alt={f.name} style={{ width:'100%', height:110, objectFit:'cover', borderRadius:6 }} />
-                              <div className="muted" style={{ fontSize:10, marginTop:6, wordBreak:'break-all' }}>{f.name}</div>
-                              <div style={{ marginTop:6 }}>
-                                <button
-                                  type="button"
-                                  onClick={() => setFiles(prev => prev.filter((_, i) => i !== idx))}
-                                  className="pill-btn ghost sm"
-                                  title="Delete this file"
-                                >
-                                  Delete
-                                </button>
+                            <div key={idx} className="insight-card" style={{ padding:8, textAlign:'center', transition: 'transform 0.2s', cursor: 'pointer' }}
+                              onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
+                              onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                            >
+                              <div style={{ position: 'relative', marginBottom: 8 }}>
+                                <img src={previews[idx]} alt={f.name} style={{ width:'100%', height:120, objectFit:'cover', borderRadius:8 }} />
+                                <div style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.5)', borderRadius: 6, padding: 4 }}>
+                                  <FiImage size={12} color="white" />
+                                </div>
                               </div>
+                              <div className="muted" style={{ fontSize:10, marginBottom:8, wordBreak:'break-all', lineHeight: 1.3 }}>{f.name}</div>
+                              <button
+                                type="button"
+                                onClick={() => setFiles(prev => prev.filter((_, i) => i !== idx))}
+                                className="pill-btn ghost sm"
+                                title="Delete this file"
+                                style={{ fontSize: 11 }}
+                              >
+                                Remove
+                              </button>
                             </div>
                           ) : (
-                            <div key={idx} className="insight-card" style={{ padding:12, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:8, textAlign:'center' }}>
-                              <FiFileText size={24} />
-                              <div className="muted" style={{ fontSize:10, textAlign:'center', wordBreak:'break-all' }}>{f.name}</div>
-                              <div>
-                                <button
-                                  type="button"
-                                  onClick={() => setFiles(prev => prev.filter((_, i) => i !== idx))}
-                                  className="pill-btn ghost sm"
-                                  title="Delete this file"
-                                >
-                                  Delete
-                                </button>
+                            <div key={idx} className="insight-card" style={{ padding:12, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:8, textAlign:'center', minHeight: 160 }}>
+                              <div style={{ background: '#f1f5f9', borderRadius: 12, padding: 12 }}>
+                                <FiFileText size={28} color="#64748b" />
                               </div>
+                              <div className="muted" style={{ fontSize:10, textAlign:'center', wordBreak:'break-all', lineHeight: 1.3 }}>{f.name}</div>
+                              <button
+                                type="button"
+                                onClick={() => setFiles(prev => prev.filter((_, i) => i !== idx))}
+                                className="pill-btn ghost sm"
+                                title="Delete this file"
+                                style={{ fontSize: 11 }}
+                              >
+                                Remove
+                              </button>
                             </div>
                           )
                         ))}
@@ -417,33 +584,118 @@ export default function LakeFeedbackModal({ open, onClose, lake }) {
           </div>
         </div>
         {getToken() && (
-          <div className="feedback-submissions" style={{ marginTop: 16 }}>
-            <h3 style={{ margin:'0 0 12px' }}>My Submissions</h3>
-            <div className="feedback-list">
-              {list.length === 0 && !loadingList && (<div className="insight-card" style={{ textAlign:'center' }}>No feedback yet.</div>)}
-              {list.map(item => (
-                <div 
-                  key={item.id} 
-                  className="insight-card" 
-                  style={{ display:'grid', gap:8, padding:'12px 14px', cursor:'pointer' }}
-                  onClick={() => { setSelectedFeedback(item); setDetailModalOpen(true); }}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedFeedback(item); setDetailModalOpen(true); } }}
-                >
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
-                    <strong style={{ fontSize:14 }}>{item.title || item.type || 'Feedback'}</strong>
-                    {item.status && <span className={`feedback-status ${item.status}`}>{item.status}</span>}
-                  </div>
-                  <div style={{ display:'flex', gap:8, alignItems:'center', fontSize:12, color:'#94a3b8', flexWrap:'wrap' }}>
-                    {item.category && <span className="feedback-category-badge">{item.category}</span>}
-                    {item.category && <span>•</span>}
-                    <span>{item.lake?.name || (item.lake_id ? 'Lake Feedback' : 'System Feedback')}</span>
-                    <span>•</span>
-                    <span>{item.created_at ? new Date(item.created_at).toLocaleDateString() : '—'}</span>
-                  </div>
+          <div className="feedback-submissions" style={{ marginTop: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 12, flexWrap: 'wrap' }}>
+              <h3 style={{ margin: 0 }}>My Submissions</h3>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center', flex: 1, maxWidth: 500 }}>
+                <div style={{ position: 'relative', flex: 1 }}>
+                  <FiSearch size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    style={{ paddingLeft: 42, paddingRight: 16, paddingTop: 10, paddingBottom: 10, fontSize: 14, width: '100%', borderRadius: 12 }}
+                    className="pill-input"
+                  />
                 </div>
-              ))}
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  style={{ fontSize: 14, color: '#ffffff', padding: '10px 14px', borderRadius: 12, minWidth: 140 }}
+                  title="Filter by status"
+                >
+                  <option value="all" style={{ color: '#000000' }}>All</option>
+                  <option value="open" style={{ color: '#000000' }}>Open</option>
+                  <option value="in_progress" style={{ color: '#000000' }}>In Progress</option>
+                  <option value="resolved" style={{ color: '#000000' }}>Resolved</option>
+                  <option value="wont_fix" style={{ color: '#000000' }}>Won't Fix</option>
+                </select>
+              </div>
+            </div>
+            <div className="feedback-list">
+              {list.length === 0 && !loadingList && (
+                <div className="insight-card" style={{ textAlign:'center', padding: 32 }}>
+                  {searchQuery || filterStatus !== 'all' ? (
+                    <div>
+                      <FiSearch size={32} style={{ color: '#cbd5e1', marginBottom: 12 }} />
+                      <div style={{ fontSize: 14, color: '#64748b' }}>No matching feedback found.</div>
+                      <button 
+                        className="pill-btn ghost sm" 
+                        style={{ marginTop: 12 }}
+                        onClick={() => { setSearchQuery(''); setFilterStatus('all'); }}
+                      >
+                        Clear filters
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      <div style={{ fontSize: 14, color: '#64748b' }}>No feedback for this lake yet.</div>
+                      <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 6 }}>Submit your first feedback above!</div>
+                    </div>
+                  )}
+                </div>
+              )}
+              {list.map(item => {
+                const statusColors = { 
+                  open: '#3b82f6', 
+                  in_progress: '#f59e0b', 
+                  resolved: '#10b981', 
+                  wont_fix: '#94a3b8' 
+                };
+                const StatusIcon = { 
+                  open: FiAlertCircle, 
+                  in_progress: FiClock, 
+                  resolved: FiCheckCircle, 
+                  wont_fix: FiXCircle 
+                }[item.status] || FiAlertCircle;
+                
+                return (
+                  <div 
+                    key={item.id} 
+                    className="insight-card" 
+                    style={{ 
+                      display:'grid', 
+                      gap:10, 
+                      padding:'14px 16px', 
+                      cursor:'pointer',
+                      transition: 'all 0.2s ease',
+                      borderLeft: '3px solid transparent'
+                    }}
+                    onClick={() => { setSelectedFeedback(item); setDetailModalOpen(true); }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'translateX(4px)';
+                      e.currentTarget.style.borderLeftColor = statusColors[item.status] || '#3b82f6';
+                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'translateX(0)';
+                      e.currentTarget.style.borderLeftColor = 'transparent';
+                      e.currentTarget.style.boxShadow = '';
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedFeedback(item); setDetailModalOpen(true); } }}
+                  >
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
+                      <strong style={{ fontSize:14, lineHeight: 1.4, flex: 1 }}>{item.title || item.type || 'Feedback'}</strong>
+                      {item.status && (
+                        <span className={`feedback-status ${item.status}`} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
+                          <StatusIcon size={14} />
+                          {item.status.replace('_', ' ')}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display:'flex', gap:8, alignItems:'center', fontSize:12, color:'#94a3b8', flexWrap:'wrap' }}>
+                      {item.category && <span className="feedback-category-badge" style={{ background: '#f1f5f9', padding: '3px 10px', borderRadius: 12, fontSize: 11, color: '#475569' }}>{item.category}</span>}
+                      {item.category && <span>•</span>}
+                      <span>{item.lake?.name || (item.lake_id ? 'Lake Feedback' : 'System Feedback')}</span>
+                      <span>•</span>
+                      <span>{item.created_at ? new Date(item.created_at).toLocaleDateString() : '—'}</span>
+                    </div>
+                  </div>
+                );
+              })}
               {loadingList && <div className="muted" style={{ textAlign:'center' }}><LoadingSpinner label="Loading submissions…" /></div>}
               {hasMore && !loadingList && (
                 <div style={{ textAlign:'center' }}>
@@ -457,12 +709,15 @@ export default function LakeFeedbackModal({ open, onClose, lake }) {
       {/* Privacy Notice modal */}
       <DataPrivacyDisclaimer open={privacyOpen} onClose={() => setPrivacyOpen(false)} />
       {/* Feedback Detail modal */}
-      <UserFeedbackDetailModal 
-        open={detailModalOpen} 
-        onClose={() => { setDetailModalOpen(false); setSelectedFeedback(null); }} 
-        feedback={selectedFeedback}
-        onCloseAll={() => { setDetailModalOpen(false); setSelectedFeedback(null); onClose(); }}
-      />
+      {detailModalOpen && (
+        <UserFeedbackDetailModal 
+          open={detailModalOpen} 
+          onClose={() => { setDetailModalOpen(false); setSelectedFeedback(null); }} 
+          feedback={selectedFeedback}
+          onCloseAll={() => { setDetailModalOpen(false); setSelectedFeedback(null); onClose(); }}
+          overlayZIndex={10001}
+        />
+      )}
     </Modal>
   );
 }

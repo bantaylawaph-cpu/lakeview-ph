@@ -7,7 +7,7 @@ function StatusPill({ status }) {
   return <span className={`feedback-status ${status}`}>{labelMap[status] || status}</span>;
 }
 
-export default function UserFeedbackDetailModal({ open, onClose, feedback, onCloseAll }) {
+export default function UserFeedbackDetailModal({ open, onClose, feedback, onCloseAll, overlayZIndex }) {
   if (!feedback) return null;
 
   const handleLakeClick = (lakeId, lake) => {
@@ -49,6 +49,7 @@ export default function UserFeedbackDetailModal({ open, onClose, feedback, onClo
       ariaLabel="Feedback details dialog"
       cardClassName="auth-card"
       bodyClassName="content-page modern-scrollbar"
+      overlayZIndex={overlayZIndex}
     >
       <div style={{ background: 'rgba(255, 255, 255, 0.15)', padding: '24px', borderRadius: '12px' }}>
         <div style={{ display: 'grid', gap: 20 }}>

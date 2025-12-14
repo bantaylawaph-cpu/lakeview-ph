@@ -37,8 +37,8 @@ class BulkDatasetController extends Controller
         ]);
 
         $validator = Validator::make($request->all(), [
-            'lake_id' => 'required|integer|exists:lakes,id',
-            'station_id' => 'required|integer|exists:stations,id',
+            'lake_id' => 'sometimes|integer|exists:lakes,id',
+            'station_id' => 'sometimes|integer|exists:stations,id',
             'format' => 'sometimes|in:xlsx,csv'
         ]);
 
@@ -52,8 +52,8 @@ class BulkDatasetController extends Controller
             ], 422);
         }
 
-        $lakeId = $request->input('lake_id');
-        $stationId = $request->input('station_id');
+        $lakeId = $request->input('lake_id', null);
+        $stationId = $request->input('station_id', null);
         $format = $request->input('format', 'xlsx');
 
         \Log::info('BulkDatasetController::downloadTemplate - Generating template', [
