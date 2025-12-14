@@ -12,11 +12,12 @@ class BulkDatasetImporter
      * Import validated bulk dataset tests
      *
      * @param array $tests Grouped tests from validator
-     * @param int $organizationId
+     * @param int $tenantId
      * @param int $userId
+     * @param array $statuses Array of status values ('draft' or 'public') for each test
      * @return array Import result with counts
      */
-    public function import(array $tests, int $organizationId, int $userId): array
+    public function import(array $tests, int $tenantId, int $userId, array $statuses = []): array
     {
         $importedTests = 0;
         $importedResults = 0;
@@ -28,8 +29,11 @@ class BulkDatasetImporter
             // Get parameter mappings
             $parameters = $this->getParameterMappings();
 
-            foreach ($tests as $testData) {
+            foreach ($tests as $testIndex => $testData) {
                 try {
+                    // Get status for this test (default to 'draft' if not specified)
+                    $status = isset($statuses[$testIndex]) ? $statuses[$testIndex] : 'draft';
+                    
                     // Create sampling event (the "test")
                     $samplingEventId = $this->createSamplingEvent(
                         $testData['lake_id'],
@@ -39,8 +43,9 @@ class BulkDatasetImporter
                         $testData['sampler'],
                         $testData['method'] ?? null,
                         $testData['weather'] ?? null,
-                        $organizationId,
-                        $userId
+                        $tenantId,
+                        $userId,
+                        $status
                     );
 
                     // Create sample results (parameter measurements)
@@ -117,20 +122,21 @@ class BulkDatasetImporter
         string $sampler,
         ?string $method,
         ?string $weather,
-        int $organizationId,
-        int $userId
+        int $tenantId,
+        int $userId,
+        string $status = 'draft'
     ): int {
-        // Use current timestamp for sampled_at instead of the date from Excel
-        $dateTime = now();
+        // Use the date from Excel template
+        $dateTime = $date;
 
         $data = [
             'lake_id' => $lakeId,
             'station_id' => $stationId,
             'sampled_at' => $dateTime,
             'sampler_name' => $sampler,
-            'organization_id' => $organizationId,
+            'organization_id' => $tenantId,
             'created_by_user_id' => $userId,
-            'status' => 'draft',
+            'status' => $status,
             'created_at' => now(),
             'updated_at' => now(),
         ];
@@ -155,7 +161,7 @@ class BulkDatasetImporter
         int $samplingEventId,
         int $parameterId,
         string $value,
-        string $unit,
+        ?string $unit,
         ?string $depth,
         ?string $remarks
     ): int {
@@ -163,7 +169,7 @@ class BulkDatasetImporter
             'sampling_event_id' => $samplingEventId,
             'parameter_id' => $parameterId,
             'value' => floatval($value),
-            'unit' => $unit,
+            'unit' => !empty($unit) ? $unit : null,
         ];
 
         if (!empty($depth) && is_numeric($depth)) {

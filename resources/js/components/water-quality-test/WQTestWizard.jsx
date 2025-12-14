@@ -940,7 +940,7 @@ export default function WQTestWizard({
                   style={{ cursor: 'pointer' }}
                 />
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: 14 }}><FiUpload style={{ display: 'inline', marginRight: 4 }} /> Bulk Import</div>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}><FiUpload style={{ display: 'inline', marginRight: 4 }} /> Import from Excel File</div>
                   <div style={{ fontSize: 12, color: '#64748b' }}>Upload from template</div>
                 </div>
               </label>

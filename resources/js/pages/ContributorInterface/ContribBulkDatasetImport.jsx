@@ -1,14 +1,26 @@
-import React, { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { FiArrowLeft, FiDownload, FiUpload } from 'react-icons/fi';
 import BulkDatasetUploader from '../../components/water-quality-test/BulkDatasetUploader';
 import BulkDatasetDownloadModal from '../../components/water-quality-test/BulkDatasetDownloadModal';
 import { alertSuccess } from '../../lib/alerts';
+import { me as fetchMe } from '../../lib/api';
 
 export default function ContribBulkDatasetImport() {
-  const { tenant } = useParams();
   const navigate = useNavigate();
   const [showDownloadModal, setShowDownloadModal] = useState(false);
+  const [tenantId, setTenantId] = useState(null);
+
+  // Fetch user data to get tenant ID
+  useEffect(() => {
+    fetchMe().then(user => {
+      if (user && user.tenant_id) {
+        setTenantId(user.tenant_id);
+      }
+    }).catch(err => {
+      console.error('Failed to fetch user data:', err);
+    });
+  }, []);
 
   const handleImportSuccess = (result) => {
     alertSuccess(
@@ -18,7 +30,7 @@ export default function ContribBulkDatasetImport() {
     
     // Redirect to tests page after successful import
     setTimeout(() => {
-      navigate(`/contrib/${tenant}/wq-tests`);
+      navigate('/contrib-dashboard/wq-tests');
     }, 2000);
   };
 
@@ -96,7 +108,7 @@ export default function ContribBulkDatasetImport() {
 
         <BulkDatasetUploader
           userRole="contrib"
-          tenantId={tenant}
+          tenantId={tenantId}
           onUploadSuccess={handleImportSuccess}
         />
       </div>

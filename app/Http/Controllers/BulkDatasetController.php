@@ -211,6 +211,7 @@ class BulkDatasetController extends Controller
         
         $validator = Validator::make($request->all(), [
             'file' => 'required|file|mimes:xlsx,xls|max:10240',
+            'statuses' => 'sometimes|json',
         ]);
 
         if ($validator->fails()) {
@@ -249,22 +250,20 @@ class BulkDatasetController extends Controller
             
             $user = $request->user();
 
-            // Get organization ID from user's tenant_id
-            // This matches the frontend logic: me.organization_id || me.tenant_id
-            $organizationId = $user->organization_id ?? $user->tenant_id;
+            // Get tenant ID from user
+            $tenantId = $user->tenant_id;
             
-            \Log::info('BulkDatasetController::import - User and org info', [
+            \Log::info('BulkDatasetController::import - User and tenant info', [
                 'user_id' => $user->id,
-                'organization_id' => $organizationId,
-                'tenant_id' => $user->tenant_id ?? null
+                'tenant_id' => $tenantId
             ]);
 
-            if (!$organizationId) {
+            if (!$tenantId) {
                 Storage::delete($filePath);
-                \Log::error('BulkDatasetController::import - No organization found for user');
+                \Log::error('BulkDatasetController::import - No tenant found for user');
                 return response()->json([
                     'success' => false,
-                    'message' => 'Organization not found for user'
+                    'message' => 'Tenant not found for user'
                 ], 403);
             }
 
@@ -285,7 +284,22 @@ class BulkDatasetController extends Controller
             // Import data
             \Log::info('BulkDatasetController::import - Starting data import', ['test_count' => count($validationResult['tests'])]);
             $tests = $validationResult['tests'];
-            $importResult = $this->importer->import($tests, $organizationId, $user->id);
+            
+            // Get statuses from request (array of 'draft' or 'public' for each test)
+            $statusesJson = $request->input('statuses');
+            $statuses = [];
+            if ($statusesJson) {
+                $statuses = json_decode($statusesJson, true) ?? [];
+            }
+            
+            // Contributors can only import as draft
+            if ($user->role === 'contrib') {
+                $statuses = array_fill(0, count($tests), 'draft');
+            }
+            
+            \Log::info('BulkDatasetController::import - Statuses', ['statuses' => $statuses, 'user_role' => $user->role]);
+            
+            $importResult = $this->importer->import($tests, $tenantId, $user->id, $statuses);
             
             \Log::info('BulkDatasetController::import - Import completed', ['result' => $importResult]);
 

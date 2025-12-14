@@ -63,7 +63,7 @@ class BulkImportTemplateGenerator
         // User will fill in Value, Depth_m, and Remarks
         $row = 2;
         foreach ($parameters as $parameter) {
-            $sheet->setCellValue('A' . $row, $parameter->code ?? $parameter->name);
+            $sheet->setCellValue('A' . $row, $parameter->name);
             $sheet->setCellValue('B' . $row, ''); // Value - to be filled by user
             $sheet->setCellValue('C' . $row, $parameter->unit ?? '');
             $sheet->setCellValue('D' . $row, ''); // Depth_m - to be filled by user

@@ -117,7 +117,7 @@ class BulkDatasetTemplateGenerator
             '  D. sampler_name* - Name of person who collected sample (required for test header row)',
             '  E. parameter* - Parameter code/name (must match system parameters)',
             '  F. value* - Measured value (numeric)',
-            '  G. unit* - Unit of measurement (auto-filled when parameter is selected)',
+            '  G. unit - Unit of measurement (auto-filled; some parameters like pH have no unit)',
             '  H. depth_m - Depth in meters (default: 0 if blank)',
             '  I. remarks - Optional notes',
             '',
@@ -133,7 +133,7 @@ class BulkDatasetTemplateGenerator
             '  Leave columns A-D blank, but fill:',
             '    • parameter (required)',
             '    • value (required)',
-            '    • unit (required)',
+            '    • unit (auto-filled; leave empty for parameters without units like pH)',
             '    • depth_m (optional, defaults to 0)',
             '    • remarks (optional)',
             '',
@@ -151,7 +151,8 @@ class BulkDatasetTemplateGenerator
             'IMPORTANT RULES:',
             '  • A row with test_date filled = Start of new test',
             '  • All rows below belong to that test until next test_date',
-            '  • Each parameter must have: parameter name, value, and unit',
+            '  • Each parameter must have: parameter name and value',
+            '  • Unit is auto-filled (some parameters like pH have no unit)',
             '  • Depth defaults to 0 (surface) if left blank',
             '  • Use exact parameter names/codes from the system',
             '',
@@ -244,12 +245,12 @@ class BulkDatasetTemplateGenerator
         // Example data
         $exampleData = [
             // Test 1 - Header row with first parameter
-            ['2025-12-14', 'manual', 'sunny', 'Juan Cruz', 'pH', '7.2', '-', '0', 'Surface'],
+            ['2025-12-14', 'manual', 'sunny', 'Juan Cruz', 'pH', '7.2', '', '0', 'Surface'],
             // Test 1 - Additional parameters
             ['', '', '', '', 'Dissolved Oxygen', '6.5', 'mg/L', '0', ''],
             ['', '', '', '', 'BOD', '3.1', 'mg/L', '0', ''],
             // Test 2 - Header row with first parameter
-            ['2025-12-15', 'manual', 'cloudy', 'Maria Santos', 'pH', '7.0', '-', '0', ''],
+            ['2025-12-15', 'manual', 'cloudy', 'Maria Santos', 'pH', '7.0', '', '0', ''],
             // Test 2 - Additional parameter
             ['', '', '', '', 'Dissolved Oxygen', '5.8', 'mg/L', '0', ''],
         ];

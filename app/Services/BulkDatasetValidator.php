@@ -271,10 +271,19 @@ class BulkDatasetValidator
             return;
         }
         
-        // Validate unit
-        if (empty($unit)) {
+        // Validate unit - only required if parameter has a unit defined
+        $parameterInfo = $validParameters[$parameter];
+        $expectedUnit = $parameterInfo->unit ?? null;
+        
+        // If parameter has no unit defined (like pH), accept empty unit
+        if ($expectedUnit !== null && $expectedUnit !== '' && empty($unit)) {
             $this->addError($rowNumber, 'unit', 'Unit is required for parameter measurement');
             return;
+        }
+        
+        // If parameter has no unit, but user provided one, warn them
+        if (($expectedUnit === null || $expectedUnit === '') && !empty($unit)) {
+            $this->addWarning($rowNumber, 'unit', "Parameter '$parameter' typically has no unit, but '$unit' was provided");
         }
         
         // Validate depth (optional, defaults to 0)

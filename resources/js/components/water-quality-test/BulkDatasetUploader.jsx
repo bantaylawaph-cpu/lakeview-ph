@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { FiUploadCloud, FiX, FiAlertCircle, FiCheckCircle, FiDownload } from 'react-icons/fi';
 import { getToken } from '../../lib/api';
 
@@ -13,6 +13,10 @@ export default function BulkDatasetUploader({
   const [isImporting, setIsImporting] = useState(false);
   const [validationResults, setValidationResults] = useState(null);
   const [error, setError] = useState(null);
+  const fileInputRef = useRef(null);
+  const [defaultStatus, setDefaultStatus] = useState('draft');
+  const [testStatuses, setTestStatuses] = useState({});
+  const [showStatusOptions, setShowStatusOptions] = useState(false);
 
   // Debugging
   console.log('BulkDatasetUploader - Props:', { userRole, tenantId, onUploadSuccess: !!onUploadSuccess });
@@ -89,6 +93,13 @@ export default function BulkDatasetUploader({
     setSelectedFile(null);
     setValidationResults(null);
     setError(null);
+    setDefaultStatus('draft');
+    setTestStatuses({});
+    setShowStatusOptions(false);
+    // Reset the file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   // Validate file
@@ -164,6 +175,16 @@ export default function BulkDatasetUploader({
     try {
       const formData = new FormData();
       formData.append('file', selectedFile);
+      
+      // Build statuses array based on user selections
+      // Contributors always import as draft
+      const statuses = validationResults.tests.map((test, index) => {
+        if (userRole === 'contrib') {
+          return 'draft';
+        }
+        return testStatuses[index] !== undefined ? testStatuses[index] : defaultStatus;
+      });
+      formData.append('statuses', JSON.stringify(statuses));
 
       const token = getToken();
       const response = await fetch(`${apiBase}/bulk-dataset/import`, {
@@ -253,6 +274,7 @@ export default function BulkDatasetUploader({
           <label className="text-blue-600 hover:text-blue-700 cursor-pointer font-medium">
             browse
             <input
+              ref={fileInputRef}
               type="file"
               className="hidden"
               accept=".xlsx,.xls,.csv"
@@ -461,7 +483,7 @@ export default function BulkDatasetUploader({
                             <div className="space-y-0.5">
                               {test.results.slice(0, 3).map((result, idx) => (
                                 <div key={idx} className="text-xs">
-                                  <span className="font-medium">{result.parameter}:</span> {result.value} {result.unit}
+                                  <span className="font-medium">{result.parameter}:</span> {result.value}{result.unit ? ` ${result.unit}` : ''}
                                 </div>
                               ))}
                               {test.results.length > 3 && (
@@ -484,6 +506,90 @@ export default function BulkDatasetUploader({
                   <p className="text-xs text-gray-600">
                     Showing 5 of {validationResults.tests.length} tests. All data will be imported.
                   </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Status Selection (only show when validation is successful and user is org_admin) */}
+          {validationResults.valid && userRole === 'org' && (
+            <div className="bg-white border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-semibold text-gray-900">Publish Status</h4>
+                <button
+                  onClick={() => setShowStatusOptions(!showStatusOptions)}
+                  className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  {showStatusOptions ? 'Hide Options' : 'Customize Per Test'}
+                </button>
+              </div>
+              
+              {/* Default status for all tests */}
+              <div className="mb-3">
+                <label className="block text-xs font-medium text-gray-700 mb-2">
+                  Set status for all tests:
+                </label>
+                <div className="flex gap-3">
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="radio"
+                      value="draft"
+                      checked={defaultStatus === 'draft'}
+                      onChange={(e) => {
+                        setDefaultStatus(e.target.value);
+                        // Reset individual selections
+                        setTestStatuses({});
+                      }}
+                      className="mr-2"
+                    />
+                    <span className="text-sm text-gray-700">Draft (Not visible on map)</span>
+                  </label>
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="radio"
+                      value="public"
+                      checked={defaultStatus === 'public'}
+                      onChange={(e) => {
+                        setDefaultStatus(e.target.value);
+                        // Reset individual selections
+                        setTestStatuses({});
+                      }}
+                      className="mr-2"
+                    />
+                    <span className="text-sm text-gray-700">Published (Visible on map)</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Individual test status options */}
+              {showStatusOptions && (
+                <div className="border-t pt-3">
+                  <p className="text-xs text-gray-600 mb-2">Override status for individual tests:</p>
+                  <div className="max-h-48 overflow-y-auto space-y-2">
+                    {validationResults.tests.map((test, index) => (
+                      <div key={index} className="flex items-center justify-between text-xs bg-gray-50 p-2 rounded">
+                        <span className="text-gray-700 font-medium">
+                          Test {index + 1}: {test.date} - {test.sampler}
+                        </span>
+                        <select
+                          value={testStatuses[index] !== undefined ? testStatuses[index] : defaultStatus}
+                          onChange={(e) => {
+                            const newStatuses = { ...testStatuses };
+                            if (e.target.value === defaultStatus) {
+                              delete newStatuses[index];
+                            } else {
+                              newStatuses[index] = e.target.value;
+                            }
+                            setTestStatuses(newStatuses);
+                          }}
+                          className="text-xs border border-gray-300 rounded px-2 py-1"
+                        >
+                          <option value="draft">Draft</option>
+                          <option value="public">Published</option>
+                        </select>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
