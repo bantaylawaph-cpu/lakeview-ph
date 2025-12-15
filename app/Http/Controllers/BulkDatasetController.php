@@ -186,11 +186,24 @@ class BulkDatasetController extends Controller
         } catch (\Exception $e) {
             \Log::error('BulkDatasetController::validateFile - Exception', [
                 'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
                 'trace' => $e->getTraceAsString(),
+                'class' => get_class($e),
             ]);
+            
+            // Clean up temp file if it exists
+            if (isset($filePath)) {
+                try {
+                    Storage::delete($filePath);
+                } catch (\Exception $cleanupError) {
+                    \Log::warning('Failed to cleanup temp file', ['error' => $cleanupError->getMessage()]);
+                }
+            }
+            
             return response()->json([
                 'valid' => false,
-                'message' => 'Error validating file',
+                'message' => 'Error validating file: ' . $e->getMessage(),
                 'errors' => [
                     [
                         'row' => 0,
