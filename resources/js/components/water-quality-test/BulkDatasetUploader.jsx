@@ -384,17 +384,10 @@ export default function BulkDatasetUploader({
           {/* Errors List */}
           {validationResults.errors?.length > 0 && (
             <div className="bg-white border border-red-200 rounded-lg overflow-hidden">
-              <div className="bg-red-50 px-4 py-3 border-b border-red-200 flex items-center justify-between">
+              <div className="bg-red-50 px-4 py-3 border-b border-red-200">
                 <h4 className="text-sm font-semibold text-red-900">
                   Errors ({validationResults.errors.length})
                 </h4>
-                <button
-                  onClick={handleDownloadErrorLog}
-                  className="text-xs text-red-700 hover:text-red-800 flex items-center gap-1"
-                >
-                  <FiDownload className="h-3 w-3" />
-                  Download Error Log
-                </button>
               </div>
               <div className="max-h-60 overflow-y-auto">
                 <table className="min-w-full divide-y divide-gray-200">

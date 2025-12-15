@@ -422,8 +422,8 @@ class BulkDatasetValidator
     {
         $this->errors[] = [
             'row' => $row,
-            'field' => $field,
-            'message' => $message,
+            'column' => $field,
+            'description' => $message,
             'type' => 'error'
         ];
     }
@@ -435,8 +435,8 @@ class BulkDatasetValidator
     {
         $this->warnings[] = [
             'row' => $row,
-            'field' => $field,
-            'message' => $message,
+            'column' => $field,
+            'description' => $message,
             'type' => 'warning'
         ];
     }
