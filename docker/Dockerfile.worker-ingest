@@ -11,7 +11,11 @@ RUN apt-get update \
     postgresql-client \
     postgis \
     gdal-bin \
- && docker-php-ext-install pdo_pgsql pgsql \
+    libfreetype6-dev \
+    libjpeg62-turbo-dev \
+    libpng-dev \
+ && docker-php-ext-configure gd --with-freetype --with-jpeg \
+ && docker-php-ext-install pdo_pgsql pgsql gd \
  && docker-php-ext-enable opcache \
  && rm -rf /var/lib/apt/lists/*
 
