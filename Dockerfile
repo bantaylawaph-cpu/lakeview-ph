@@ -39,8 +39,9 @@ RUN apt-get update \
     libfreetype6-dev \
     libjpeg62-turbo-dev \
     libpng-dev \
+    libzip-dev \
  && docker-php-ext-configure gd --with-freetype --with-jpeg \
- && docker-php-ext-install pdo_pgsql pgsql gd \
+ && docker-php-ext-install pdo_pgsql pgsql gd zip \
  && docker-php-ext-enable opcache \
  && rm -rf /var/lib/apt/lists/*
 
