@@ -134,9 +134,9 @@ class BulkDatasetController extends Controller
                 'mime' => $file->getMimeType(),
             ]);
             
-            // Extract lake_id and station_id from the file's Instructions sheet
-            $filePath = $file->store('temp');
-            $fullPath = Storage::path($filePath);
+            // Store file temporarily using local disk (not supabase)
+            $filePath = $file->store('temp', 'local');
+            $fullPath = Storage::disk('local')->path($filePath);
             
             \Log::info('BulkDatasetController::validateFile - File stored', [
                 'path' => $fullPath,
@@ -147,7 +147,7 @@ class BulkDatasetController extends Controller
             $instructionsSheet = $spreadsheet->getSheetByName('Instructions');
             
             if (!$instructionsSheet) {
-                Storage::delete($filePath);
+                Storage::disk('local')->delete($filePath);
                 \Log::error('BulkDatasetController::validateFile - Instructions sheet not found');
                 throw new \Exception('Invalid template file. Instructions sheet not found.');
             }
@@ -161,7 +161,7 @@ class BulkDatasetController extends Controller
             ]);
             
             if (!$lakeId || !$stationId) {
-                Storage::delete($filePath);
+                Storage::disk('local')->delete($filePath);
                 \Log::error('BulkDatasetController::validateFile - Missing lake or station ID');
                 throw new \Exception('Invalid template file. Lake and Station information not found. Please download a new template.');
             }
@@ -177,9 +177,9 @@ class BulkDatasetController extends Controller
                 'result_count' => $validationResult['result_count'] ?? 0,
                 'tests_array_count' => count($validationResult['tests'] ?? []),
             ]);
-
+            
             // Clean up temp file
-            Storage::delete($filePath);
+            Storage::disk('local')->delete($filePath);
 
             return response()->json($validationResult);
 
@@ -195,7 +195,7 @@ class BulkDatasetController extends Controller
             // Clean up temp file if it exists
             if (isset($filePath)) {
                 try {
-                    Storage::delete($filePath);
+                    Storage::disk('local')->delete($filePath);
                 } catch (\Exception $cleanupError) {
                     \Log::warning('Failed to cleanup temp file', ['error' => $cleanupError->getMessage()]);
                 }
@@ -238,8 +238,10 @@ class BulkDatasetController extends Controller
         try {
             // Extract lake_id and station_id from file
             $file = $request->file('file');
-            $filePath = $file->store('temp');
-            $fullPath = Storage::path($filePath);
+            
+            // Store file temporarily using local disk (not supabase)
+            $filePath = $file->store('temp', 'local');
+            $fullPath = Storage::disk('local')->path($filePath);
             
             \Log::info('BulkDatasetController::import - File stored', ['path' => $fullPath]);
             
@@ -247,7 +249,7 @@ class BulkDatasetController extends Controller
             $instructionsSheet = $spreadsheet->getSheetByName('Instructions');
             
             if (!$instructionsSheet) {
-                Storage::delete($filePath);
+                Storage::disk('local')->delete($filePath);
                 throw new \Exception('Invalid template file. Instructions sheet not found.');
             }
             
@@ -257,7 +259,7 @@ class BulkDatasetController extends Controller
             \Log::info('BulkDatasetController::import - Metadata extracted', ['lake_id' => $lakeId, 'station_id' => $stationId]);
             
             if (!$lakeId || !$stationId) {
-                Storage::delete($filePath);
+                Storage::disk('local')->delete($filePath);
                 throw new \Exception('Invalid template file. Lake and Station information not found.');
             }
             
@@ -272,7 +274,7 @@ class BulkDatasetController extends Controller
             ]);
 
             if (!$tenantId) {
-                Storage::delete($filePath);
+                Storage::disk('local')->delete($filePath);
                 \Log::error('BulkDatasetController::import - No tenant found for user');
                 return response()->json([
                     'success' => false,
@@ -285,7 +287,7 @@ class BulkDatasetController extends Controller
             $validationResult = $this->validator->validate($fullPath, $lakeId, $stationId);
 
             if (!$validationResult['valid']) {
-                Storage::delete($filePath);
+                Storage::disk('local')->delete($filePath);
                 \Log::error('BulkDatasetController::import - Validation failed', ['errors' => $validationResult['errors']]);
                 return response()->json([
                     'success' => false,
@@ -317,7 +319,7 @@ class BulkDatasetController extends Controller
             \Log::info('BulkDatasetController::import - Import completed', ['result' => $importResult]);
 
             // Clean up temp file
-            Storage::delete($filePath);
+            Storage::disk('local')->delete($filePath);
 
             if ($importResult['success']) {
                 return response()->json($importResult, 200);
