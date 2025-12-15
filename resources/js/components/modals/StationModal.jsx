@@ -13,6 +13,7 @@ export default function StationModal({
   onCreate,
   onUpdate,
   canManage = true,
+  overlayZIndex = 10000,
 }) {
   const empty = { id: null, name: "", lat: "", lng: "", description: "" };
   const [form, setForm] = useState(editing ? { ...editing } : empty);
@@ -77,6 +78,7 @@ export default function StationModal({
       width={modalWidth}
       style={{ maxHeight: '85vh' }}
       bodyClassName="modern-scrollbar"
+      overlayZIndex={overlayZIndex}
       footer={
         <div className="lv-modal-actions" style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
           <button className="pill-btn ghost" onClick={onClose}><FiX /> Close</button>

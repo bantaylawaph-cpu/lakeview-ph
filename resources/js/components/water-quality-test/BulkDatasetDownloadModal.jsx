@@ -351,8 +351,9 @@ export default function BulkDatasetDownloadModal({ isOpen, onClose, userRole = '
         <StationModal
           open={stationModalOpen}
           onClose={() => setStationModalOpen(false)}
-          onSuccess={handleStationCreated}
-          preselectedLakeId={selectedLake}
+          onCreate={handleStationCreated}
+          lakeId={selectedLake}
+          overlayZIndex={10200}
         />
     </Modal>
   );

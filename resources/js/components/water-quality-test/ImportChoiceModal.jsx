@@ -70,6 +70,7 @@ export default function ImportChoiceModal({ isOpen, onClose, userRole, tenantId 
         title="Choose Import Type"
         width={600}
         closeOnEsc={!showDatasetModal}
+        overlayZIndex={10000}
       >
         <div className="p-6">
           <p className="text-sm text-gray-600 mb-6">
