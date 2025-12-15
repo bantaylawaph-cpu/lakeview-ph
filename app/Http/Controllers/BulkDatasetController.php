@@ -346,49 +346,66 @@ class BulkDatasetController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'errors' => 'required|array',
-            'errors.*.row' => 'required|integer',
-            'errors.*.column' => 'required|string',
-            'errors.*.description' => 'required|string',
         ]);
 
         if ($validator->fails()) {
+            \Log::error('BulkDatasetController::downloadErrorLog - Validation failed', [
+                'errors' => $validator->errors(),
+                'received' => $request->all()
+            ]);
             return response()->json([
-                'message' => 'Invalid error data'
+                'message' => 'Invalid error data',
+                'errors' => $validator->errors()
             ], 422);
         }
 
         try {
-            $errors = $request->input('errors');
+            $errors = $request->input('errors', []);
+            $warnings = $request->input('warnings', []);
             
             // Create spreadsheet for error log
             $spreadsheet = new Spreadsheet();
             $sheet = $spreadsheet->getActiveSheet();
-            $sheet->setTitle('Validation Errors');
+            $sheet->setTitle('Validation Issues');
 
             // Headers
-            $sheet->setCellValue('A1', 'Row');
-            $sheet->setCellValue('B1', 'Column');
-            $sheet->setCellValue('C1', 'Error Description');
+            $sheet->setCellValue('A1', 'Type');
+            $sheet->setCellValue('B1', 'Row');
+            $sheet->setCellValue('C1', 'Column');
+            $sheet->setCellValue('D1', 'Description');
             
-            $sheet->getStyle('A1:C1')->getFont()->setBold(true);
-            $sheet->getStyle('A1:C1')->getFill()
+            $sheet->getStyle('A1:D1')->getFont()->setBold(true);
+            $sheet->getStyle('A1:D1')->getFill()
                 ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
                 ->getStartColor()->setRGB('FF0000');
-            $sheet->getStyle('A1:C1')->getFont()->getColor()->setRGB('FFFFFF');
+            $sheet->getStyle('A1:D1')->getFont()->getColor()->setRGB('FFFFFF');
 
             // Add errors
             $row = 2;
             foreach ($errors as $error) {
-                $sheet->setCellValue('A' . $row, $error['row']);
-                $sheet->setCellValue('B' . $row, $error['column']);
-                $sheet->setCellValue('C' . $row, $error['description']);
+                $sheet->setCellValue('A' . $row, 'ERROR');
+                $sheet->setCellValue('B' . $row, $error['row'] ?? '');
+                $sheet->setCellValue('C' . $row, $error['column'] ?? '');
+                $sheet->setCellValue('D' . $row, $error['description'] ?? $error['message'] ?? '');
+                $sheet->getStyle('A' . $row)->getFont()->getColor()->setRGB('FF0000');
+                $row++;
+            }
+            
+            // Add warnings
+            foreach ($warnings as $warning) {
+                $sheet->setCellValue('A' . $row, 'WARNING');
+                $sheet->setCellValue('B' . $row, $warning['row'] ?? '');
+                $sheet->setCellValue('C' . $row, $warning['column'] ?? '');
+                $sheet->setCellValue('D' . $row, $warning['description'] ?? $warning['message'] ?? '');
+                $sheet->getStyle('A' . $row)->getFont()->getColor()->setRGB('FFA500');
                 $row++;
             }
 
             // Auto-size columns
             $sheet->getColumnDimension('A')->setWidth(10);
-            $sheet->getColumnDimension('B')->setWidth(15);
-            $sheet->getColumnDimension('C')->setWidth(80);
+            $sheet->getColumnDimension('B')->setWidth(10);
+            $sheet->getColumnDimension('C')->setWidth(15);
+            $sheet->getColumnDimension('D')->setWidth(80);
 
             // Create temporary file
             $tempFile = tempnam(sys_get_temp_dir(), 'error_log_');

@@ -368,7 +368,7 @@ export default function BulkDatasetUploader({
                   </p>
                   {validationResults.errors?.length > 0 && (
                     <p className="text-red-800">
-                      <span className="font-medium">Errors:</span> {validationResults.errors.length}
+                      <span className="font-medium">Errors:</span> {validationResults.errors.length} - <span className="text-xs">See details below</span>
                     </p>
                   )}
                   {validationResults.warnings?.length > 0 && (
