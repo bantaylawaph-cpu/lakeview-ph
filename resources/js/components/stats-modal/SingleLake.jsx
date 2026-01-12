@@ -9,6 +9,7 @@ import { lakeName, lakeClass, baseLineChartOptions, normalizeDepthDatasets } fro
 import useSampleEvents from "./hooks/useSampleEvents";
 import useStationsCache from "./hooks/useStationsCache";
 import useTimeSeriesData from "./hooks/useTimeSeriesData";
+import useAllParamsTimeSeriesData from "./hooks/useAllParamsTimeSeriesData";
 import useDepthProfileData from "./hooks/useDepthProfileData";
 import useDepthProfileChartData from "./hooks/useDepthProfileChartData";
 import useSeasonalMK from "./hooks/useSeasonalMK";
@@ -22,6 +23,7 @@ import OrgSelect from './ui/OrgSelect';
 import ParamSelect from './ui/ParamSelect';
 import LoadingSpinner from '../LoadingSpinner';
 import { fmt as fmtNum } from './formatters';
+import Popover from '../common/Popover';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
@@ -83,8 +85,8 @@ export default function SingleLake({
   selectedStations,
   onStationsChange,
   paramOptions,
-  selectedParam,
-  onParamChange,
+  selectedParams,
+  onParamsChange,
   selectedClass,
   bucket,
   chartRef,
@@ -98,9 +100,11 @@ export default function SingleLake({
   isModalOpen = true,
 }) {
   const [stationsOpen, setStationsOpen] = useState(false);
+  const [paramsOpen, setParamsOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const sidebarWidth = 320;
   const stationBtnRef = useRef(null);
+  const paramsBtnRef = useRef(null);
 
   const [chartType, setChartType] = useState('time');
   const prevTypeRef = useRef('time');
@@ -118,7 +122,33 @@ export default function SingleLake({
   const { events: eventsAll } = useSampleEvents(selectedLake, selectedOrg, 'all', '', '');
   const { stationsByOrg, allStations, loading: stationsLoading } = useStationsCache(selectedLake);
   const stationsList = useMemo(() => (!selectedOrg ? (allStations || []) : (stationsByOrg?.[String(selectedOrg)] || [])), [selectedOrg, allStations, stationsByOrg]);
-  useEffect(() => {}, [selectedLake, selectedOrg, selectedParam, JSON.stringify(selectedStations), timeRange, dateFrom, dateTo, bucket, chartType, selectedDepth]);
+
+  const selectedParamsArr = useMemo(() => {
+    if (Array.isArray(selectedParams)) return selectedParams.map((p) => String(p || '')).filter(Boolean);
+    const s = String(selectedParams || '');
+    return s ? [s] : [];
+  }, [selectedParams]);
+
+  const isMultiParamTime = useMemo(() => (chartType === 'time' && selectedParamsArr.length > 1), [chartType, selectedParamsArr]);
+  const singleSelectedParam = useMemo(() => (selectedParamsArr.length === 1 ? selectedParamsArr[0] : ''), [selectedParamsArr]);
+
+  // Enforce: depth profile requires exactly one parameter
+  useEffect(() => {
+    if (chartType !== 'depth') return;
+    if (selectedParamsArr.length <= 1) return;
+    try { onParamsChange?.([selectedParamsArr[0]]); } catch {}
+  }, [chartType, JSON.stringify(selectedParamsArr)]);
+
+  // Disable compliance/trend toggles when multiple parameters are selected
+  useEffect(() => {
+    if (!isMultiParamTime) return;
+    setTrendEnabled(false);
+    setShadeOutOfCompliance(false);
+    setToggleNonCompliantPoints(false);
+    try { setSeriesMode('avg'); } catch {}
+    try { setSelectedDepth('all'); } catch {}
+  }, [isMultiParamTime]);
+  useEffect(() => {}, [selectedLake, selectedOrg, JSON.stringify(selectedParamsArr), JSON.stringify(selectedStations), timeRange, dateFrom, dateTo, bucket, chartType, selectedDepth]);
 
   const availableYears = useMemo(() => {
     const years = new Set();
@@ -144,37 +174,53 @@ export default function SingleLake({
     });
   }, [paramOptions, currentStd?.id, classForSelectedLake]);
 
-  const { chartData, loadingThresholds: tsThresholdsLoading } = useTimeSeriesData({ events, selectedParam, selectedStations, bucket, timeRange, dateFrom, dateTo, seriesMode, classForSelectedLake, depthSelection: selectedDepth, appliedStandardId: currentStd?.id });
+  const { chartData: singleChartData, loadingThresholds: tsThresholdsLoading } = useTimeSeriesData({ events, selectedParam: singleSelectedParam, selectedStations, bucket, timeRange, dateFrom, dateTo, seriesMode, classForSelectedLake, depthSelection: selectedDepth, appliedStandardId: currentStd?.id });
+
+  const { chartData: multiChartData } = useAllParamsTimeSeriesData({
+    events,
+    paramOptions,
+    selectedParamCodes: selectedParamsArr,
+    selectedStations,
+    bucket,
+    timeRange,
+    dateFrom,
+    dateTo,
+    depthSelection: selectedDepth,
+  });
+
+  const chartData = useMemo(() => (isMultiParamTime ? multiChartData : singleChartData), [isMultiParamTime, multiChartData, singleChartData]);
+  const timeThresholdsLoading = useMemo(() => (!isMultiParamTime ? tsThresholdsLoading : false), [isMultiParamTime, tsThresholdsLoading]);
   // Parameter metadata (moved earlier to ensure selectedParamCode available before depth profile chart hook)
   const selectedParamMeta = useMemo(() => {
-    const sel = String(selectedParam || '');
+    const sel = String(singleSelectedParam || '');
     return (paramOptions || []).find(p => String(p.key || p.id || p.code) === sel) || null;
-  }, [paramOptions, selectedParam]);
+  }, [paramOptions, singleSelectedParam]);
   const selectedParamLabel = useMemo(() => (selectedParamMeta?.label || selectedParamMeta?.name || selectedParamMeta?.code || 'Value'), [selectedParamMeta]);
   const selectedParamUnit = useMemo(() => (selectedParamMeta?.unit || ''), [selectedParamMeta]);
-  const selectedParamCode = useMemo(() => (selectedParamMeta?.code || String(selectedParam || '')), [selectedParamMeta, selectedParam]);
-  const depthProfile = useDepthProfileData({ events, selectedParam, selectedStations, bucket });
+  const selectedParamCode = useMemo(() => (selectedParamMeta?.code || String(singleSelectedParam || '')), [selectedParamMeta, singleSelectedParam]);
+  const depthProfile = useDepthProfileData({ events, selectedParam: singleSelectedParam, selectedStations, bucket });
   const { chartData: depthChartData, loadingThresholds: depthThrLoading, unit: depthUnit, maxDepth: depthMax, hasMultipleDepths: depthHasMultiple, onlySurface: depthOnlySurface } = useDepthProfileChartData({ depthProfile, paramCode: selectedParamCode, appliedStandardId: currentStd?.id, classCode: classForSelectedLake || undefined });
   const depthOptions = useMemo(() => {
     const depths = new Set();
+    const selSet = new Set((selectedParamsArr || []).map((s) => String(s || '')).filter(Boolean));
+    if (!selSet.size) return ['0'];
     (Array.isArray(events) ? events : []).forEach((ev) => {
       (ev.results || []).forEach((r) => {
-        if (!selectedParam) return;
-        const sel = String(selectedParam || '');
+        const pSel = selSet;
         const p = r?.parameter;
         let match = false;
         if (p) {
-          if (typeof p === 'string' && sel === String(p)) match = true;
+          if (typeof p === 'string' && pSel.has(String(p))) match = true;
           else if (typeof p === 'object') {
-            if (p.code && sel === String(p.code)) match = true;
-            if (p.id && sel === String(p.id)) match = true;
-            if (p.key && sel === String(p.key)) match = true;
+            if (p.code && pSel.has(String(p.code))) match = true;
+            if (p.id && pSel.has(String(p.id))) match = true;
+            if (p.key && pSel.has(String(p.key))) match = true;
           }
         }
         if (!match) {
-          if (r.parameter_code && sel === String(r.parameter_code)) match = true;
-          if (r.parameter_id && sel === String(r.parameter_id)) match = true;
-          if (r.parameter_key && sel === String(r.parameter_key)) match = true;
+          if (r.parameter_code && pSel.has(String(r.parameter_code))) match = true;
+          if (r.parameter_id && pSel.has(String(r.parameter_id))) match = true;
+          if (r.parameter_key && pSel.has(String(r.parameter_key))) match = true;
         }
         if (!match) return;
         const d = r.depth_m == null ? '0' : String(r.depth_m);
@@ -184,7 +230,7 @@ export default function SingleLake({
     const arr = Array.from(depths).sort((a,b)=>Number(a)-Number(b));
     if (!arr.includes('0')) arr.unshift('0');
     return arr;
-  }, [events, selectedParam]);
+  }, [events, JSON.stringify(selectedParamsArr)]);
 
   useEffect(() => {
     try {
@@ -207,21 +253,42 @@ export default function SingleLake({
 
   const canShowInfo = useMemo(() => {
     try {
-      if (chartType === 'time') return Boolean(chartData?.datasets?.length);
+      if (chartType === 'time') return !isMultiParamTime && Boolean(chartData?.datasets?.length);
       if (chartType === 'depth') return Boolean(depthProfile?.datasets?.length);
       return false;
     } catch { return false; }
-  }, [chartType, chartData, depthProfile]);
+  }, [chartType, isMultiParamTime, chartData, depthProfile]);
 
   const canChooseParam = useMemo(() => {
     if (!selectedLake || !selectedOrg) return false;
     return Array.isArray(selectedStations) && selectedStations.length > 0;
   }, [selectedLake, selectedOrg, selectedStations]);
 
+  const paramLabelWithUnit = (p) => {
+    const label = String(p?.label || p?.name || p?.code || p?.key || p?.id || '').trim();
+    const unit = String(p?.unit || '').trim();
+    return unit ? `${label} (${unit})` : label;
+  };
+
+  const sortedParamOptions = useMemo(() => {
+    const list = Array.isArray(paramOptions) ? paramOptions.slice() : [];
+    list.sort((a, b) => paramLabelWithUnit(a).localeCompare(paramLabelWithUnit(b)));
+    return list;
+  }, [paramOptions]);
+
+  const allParamCodes = useMemo(() => {
+    const set = new Set();
+    (Array.isArray(paramOptions) ? paramOptions : []).forEach((p) => {
+      const code = String(p?.code || p?.key || p?.id || '').trim();
+      if (code) set.add(code);
+    });
+    return Array.from(set);
+  }, [paramOptions]);
+
   const chartLabels = chartData?.labels || [];
   const { result: smk, loading: smkLoading } = useSeasonalMK({
     events,
-    selectedParam,
+    selectedParam: singleSelectedParam,
     selectedStations,
     bucket,
     timeRange,
@@ -229,7 +296,7 @@ export default function SingleLake({
     dateTo,
     labels: chartLabels,
     alpha: trendAlpha,
-    enabled: trendEnabled && chartType === 'time' && !!selectedParam,
+    enabled: trendEnabled && chartType === 'time' && !isMultiParamTime && !!singleSelectedParam,
     depthSelection: selectedDepth,
   });
   
@@ -238,10 +305,10 @@ export default function SingleLake({
     if (!selectedLake) return true;
     if (!selectedOrg) return true;
     if (!selectedStations || selectedStations.length === 0) return true;
-    if (!selectedParam) return true;
+    if (!selectedParamsArr || selectedParamsArr.length === 0) return true;
     if (chartType === 'depth' && (!dateFrom || !dateTo)) return true;
     return false;
-  }, [selectedLake, selectedOrg, selectedStations, selectedParam, chartType, dateFrom, dateTo]);
+  }, [selectedLake, selectedOrg, selectedStations, JSON.stringify(selectedParamsArr), chartType, dateFrom, dateTo]);
 
   const toggleSidebar = () => {
     setSidebarOpen((v) => !v);
@@ -295,7 +362,7 @@ export default function SingleLake({
             const hasMax = standards.some(s => s.max != null);
             const inferred = hasMin && hasMax ? 'range' : hasMin ? 'min' : hasMax ? 'max' : null;
             const pMeta = (() => {
-              const sel = String(selectedParam || '');
+              const sel = String(singleSelectedParam || '');
               const opt = (paramOptions || []).find(p => String(p.key || p.id || p.code) === sel);
               return { code: opt?.code || sel, name: opt?.label || opt?.name || opt?.code || sel, unit: opt?.unit || '', desc: opt?.desc || '' };
             })();
@@ -421,7 +488,7 @@ export default function SingleLake({
             />
           )}
 
-          {(chartType === 'time') && (
+          {(chartType === 'time' && !isMultiParamTime) && (
             <div>
               <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Series Mode</div>
               <SeriesModeToggle mode={seriesMode} onChange={(next) => { setSeriesMode(next); }} />
@@ -431,11 +498,112 @@ export default function SingleLake({
           {/* Parameters */}
           <div>
             <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Parameter</div>
-            <ParamSelect options={paramOptions} value={selectedParam} onChange={(e) => { onParamChange(e.target.value); }} disabled={!canChooseParam} loading={!Array.isArray(paramOptions) || paramOptions.length === 0} placeholder="Select parameter" style={{ width: '100%' }} />
+            {chartType === 'time' ? (
+              <div style={{ position: 'relative' }}>
+                <button
+                  ref={paramsBtnRef}
+                  type="button"
+                  className="pill-btn"
+                  disabled={!canChooseParam || !sortedParamOptions?.length}
+                  title={!canChooseParam ? 'Choose lake, source, and locations first' : (!sortedParamOptions?.length ? 'No parameters available' : undefined)}
+                  onClick={() => setParamsOpen((v) => !v)}
+                  style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}
+                >
+                  <span>
+                    {selectedParamsArr.length
+                      ? `${selectedParamsArr.length} selected`
+                      : 'Select parameters'}
+                  </span>
+                  {(!Array.isArray(paramOptions) || paramOptions.length === 0) ? (
+                    <span style={{ marginLeft: 8 }}><LoadingSpinner inline size={16} label="" /></span>
+                  ) : null}
+                </button>
+
+                <Popover
+                  anchorRef={paramsBtnRef}
+                  open={paramsOpen}
+                  onClose={() => setParamsOpen(false)}
+                  minWidth={280}
+                  maxHeight={360}
+                  zIndex={31050}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {sortedParamOptions.map((p) => {
+                      const code = String(p?.code || p?.key || p?.id || '').trim();
+                      if (!code) return null;
+                      const checked = selectedParamsArr.includes(code);
+                      return (
+                        <label
+                          key={`param-${code}`}
+                          style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, cursor: 'pointer', userSelect: 'none', color: '#fff' }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              const nextChecked = e.target.checked;
+                              const next = nextChecked
+                                ? Array.from(new Set([...selectedParamsArr, code]))
+                                : selectedParamsArr.filter((c) => c !== code);
+                              onParamsChange(next);
+                            }}
+                          />
+                          <span style={{ lineHeight: 1.2, color: '#fff' }}>{paramLabelWithUnit(p)}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'flex-end',
+                      gap: 8,
+                      marginTop: 10,
+                      paddingTop: 10,
+                      borderTop: '1px solid rgba(255,255,255,0.12)',
+                      position: 'sticky',
+                      bottom: 0,
+                      background: 'rgba(20,40,80,0.98)',
+                      paddingBottom: 2,
+                    }}
+                  >
+                    <button
+                      type="button"
+                      className="pill-btn ghost"
+                      onClick={() => { onParamsChange(allParamCodes); }}
+                      disabled={!allParamCodes.length}
+                      style={{ padding: '6px 10px', height: 32 }}
+                    >
+                      Select all
+                    </button>
+                    <button
+                      type="button"
+                      className="pill-btn ghost"
+                      onClick={() => { onParamsChange([]); }}
+                      disabled={!selectedParamsArr.length}
+                      style={{ padding: '6px 10px', height: 32 }}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </Popover>
+              </div>
+            ) : (
+              <ParamSelect
+                options={paramOptions}
+                value={singleSelectedParam}
+                onChange={(e) => { onParamsChange([e.target.value]); }}
+                disabled={!canChooseParam}
+                loading={!Array.isArray(paramOptions) || paramOptions.length === 0}
+                placeholder="Select parameter"
+                style={{ width: '100%' }}
+              />
+            )}
             {chartType === 'time' && depthOptions && depthOptions.length >= 1 && (
               <div style={{ marginTop: 8 }}>
                 <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Depth</div>
-                <select className="pill-btn" value={selectedDepth} onChange={(e) => { setSelectedDepth(e.target.value); }} disabled={!selectedParam} style={{ width: '100%' }}>
+                <select className="pill-btn" value={selectedDepth} onChange={(e) => { setSelectedDepth(e.target.value); }} disabled={isMultiParamTime || !selectedParamsArr.length} style={{ width: '100%' }}>
                   {seriesMode !== 'per-station' ? <option value="all">All depths (separate lines)</option> : null}
                   {depthOptions.map((d) => {
                     const label = d === '0' ? 'Surface (0 m)' : `${d} m`;
@@ -522,7 +690,7 @@ export default function SingleLake({
                 const data = { datasets: ds };
                 return (
                   <Line
-                    key={`depth-${selectedParam}-${selectedLake}-${seriesMode}-${shadeOutOfCompliance}-${toggleNonCompliantPoints}`}
+                    key={`depth-${singleSelectedParam}-${selectedLake}-${seriesMode}-${shadeOutOfCompliance}-${toggleNonCompliantPoints}`}
                     ref={chartRef}
                     data={data}
                     options={chartOptions}
@@ -538,7 +706,7 @@ export default function SingleLake({
               </div>
             )
           ) : chartType === 'time' ? (
-            tsThresholdsLoading ? (
+            timeThresholdsLoading ? (
               <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <LoadingSpinner inline label="Loading thresholds…" color="#fff" />
               </div>
@@ -590,8 +758,15 @@ export default function SingleLake({
                 // Apply compliance visualization
                 let modifiedDatasets = datasets.slice();
                 let chartOptions = { ...singleChartOptions };
+                if (isMultiParamTime) {
+                  try {
+                    chartOptions = { ...chartOptions };
+                    chartOptions.scales = chartOptions.scales || {};
+                    chartOptions.scales.y = { ...(chartOptions.scales?.y || {}), title: { display: true, text: 'Value (mixed units)', color: '#fff' } };
+                  } catch {}
+                }
                 let chartPlugins = undefined;
-                if (toggleNonCompliantPoints || shadeOutOfCompliance) {
+                if (!isMultiParamTime && (toggleNonCompliantPoints || shadeOutOfCompliance)) {
                   const thr = depthThr;
                   const isOutOfCompliance = (v) => {
                     if (v == null || !Number.isFinite(v)) return false;
@@ -615,6 +790,7 @@ export default function SingleLake({
                 }
                 // Relabel threshold lines: Min/Max (<Standard Code>: <value> <unit>) for time series
                 try {
+                  if (isMultiParamTime) throw new Error('skip');
                   const stdCode = chartData?.meta?.standards?.[0]?.code || currentStd?.code || '';
                   modifiedDatasets = (Array.isArray(modifiedDatasets) ? modifiedDatasets : []).map((ds) => {
                     const lbl = String(ds?.label || '').toLowerCase();
@@ -634,7 +810,8 @@ export default function SingleLake({
                   });
                 } catch {}
                 const data = { labels: chartData.labels, datasets: modifiedDatasets };
-                return <Line key={`time-${selectedParam}-${selectedLake}-${seriesMode}-${trendEnabled}-${shadeOutOfCompliance}-${toggleNonCompliantPoints}`} ref={chartRef} data={data} options={chartOptions} plugins={chartPlugins} />;
+                const keySuffix = (selectedParamsArr && selectedParamsArr.length) ? selectedParamsArr.join('|') : 'none';
+                return <Line key={`time-${keySuffix}-${selectedLake}-${seriesMode}-${trendEnabled}-${shadeOutOfCompliance}-${toggleNonCompliantPoints}`} ref={chartRef} data={data} options={chartOptions} plugins={chartPlugins} />;
               })()
             ) : (
               <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -650,7 +827,7 @@ export default function SingleLake({
       </div>
       </div>
       </div>
-      {currentStd && (currentStd.name || currentStd.code) ? (
+      {currentStd && (currentStd.name || currentStd.code) && (!isMultiParamTime) ? (
         <div style={{ marginTop: 6, fontSize: 12, color: '#ddd', opacity: 0.9 }}>
           Parameter thresholds are based on {currentStd.name || currentStd.code} guidelines.
         </div>
@@ -658,23 +835,28 @@ export default function SingleLake({
       {/* Trend analysis and compliance toggles */}
       {(chartType === 'time' || chartType === 'depth') && (
         <div style={{ marginTop: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            {chartType === 'time' && (
+          {!(chartType === 'time' && isMultiParamTime) ? (
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              {chartType === 'time' && (
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <input type="checkbox" checked={trendEnabled} onChange={(e)=>{ setTrendEnabled(e.target.checked); }} />
+                  <span style={{ fontSize: 11, opacity: 0.9 }}>Enable Trend Analysis</span>
+                </label>
+              )}
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <input type="checkbox" checked={trendEnabled} onChange={(e)=>{ setTrendEnabled(e.target.checked); }} />
-                <span style={{ fontSize: 11, opacity: 0.9 }}>Enable Trend Analysis</span>
+                <input type="checkbox" checked={shadeOutOfCompliance} onChange={(e)=>{ setShadeOutOfCompliance(e.target.checked); }} />
+                <span style={{ fontSize: 11, opacity: 0.9 }}>Shade out-of-compliance region</span>
               </label>
-            )}
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <input type="checkbox" checked={shadeOutOfCompliance} onChange={(e)=>{ setShadeOutOfCompliance(e.target.checked); }} />
-              <span style={{ fontSize: 11, opacity: 0.9 }}>Shade out-of-compliance region</span>
-            </label>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <input type="checkbox" checked={toggleNonCompliantPoints} onChange={(e)=>{ setToggleNonCompliantPoints(e.target.checked); }} />
-              <span style={{ fontSize: 11, opacity: 0.9 }}>Toggle non-compliant points</span>
-            </label>
-          </div>
-          {chartType === 'time' && trendEnabled && !isSelectionIncomplete && smk && (
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <input type="checkbox" checked={toggleNonCompliantPoints} onChange={(e)=>{ setToggleNonCompliantPoints(e.target.checked); }} />
+                <span style={{ fontSize: 11, opacity: 0.9 }}>Toggle non-compliant points</span>
+              </label>
+            </div>
+          ) : (
+            <div />
+          )}
+
+          {chartType === 'time' && !isMultiParamTime && trendEnabled && !isSelectionIncomplete && smk && (
             <div style={{ fontSize: 11, opacity: 0.95 }}>
               {(() => {
                 const lakeLabel = nameForSelectedLake || 'this lake';

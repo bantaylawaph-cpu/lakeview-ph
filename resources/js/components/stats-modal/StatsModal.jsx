@@ -39,7 +39,7 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
   // Single tab selections
   const [selectedLake, setSelectedLake] = useState("");
   const [selectedStations, setSelectedStations] = useState([]);
-  const [selectedParam, setSelectedParam] = useState("");
+  const [selectedParams, setSelectedParams] = useState([]);
   const [selectedClass, setSelectedClass] = useState("C");
   const [selectedOrg, setSelectedOrg] = useState("");
 
@@ -100,7 +100,7 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
     setSelectedOrg("");
     setStations([]);
     setSelectedStations([]);
-    setSelectedParam("");
+    setSelectedParams([]);
     setEffectiveAllRecords([]);
   // CompareLake manages its own records; nothing to clear here
     if (activeTab === 'compare' && compareRef.current && typeof compareRef.current.clearAll === 'function') {
@@ -144,8 +144,8 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
       }).then((res) => {
         const lakeName = lakeOptions.find((l) => String(l.id) === String(selectedLake))?.name || "lake";
         const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-        const baseLabel = activeTab === "single"
-          ? `${lakeName}-${selectedParam || "param"}`
+            const baseLabel = activeTab === "single"
+              ? `${lakeName}-${(Array.isArray(selectedParams) ? (selectedParams.length === 1 ? selectedParams[0] : 'multi-params') : 'param')}`
           : `compare-${compareSelectedParam || "param"}`;
 
         if (res.isConfirmed) {
@@ -348,7 +348,7 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
               setSelectedLake(v);
               setSelectedOrg("");
               setSelectedStations([]);
-              setSelectedParam("");
+              setSelectedParams([]);
               setStations([]);
               setEffectiveAllRecords([]);
               const cls = lakeClassMap.get(String(v));
@@ -359,15 +359,15 @@ export default function StatsModal({ open, onClose, title = "Lake Statistics" })
             onOrgChange={(v) => {
               setSelectedOrg(v);
               setSelectedStations([]);
-              setSelectedParam("");
+              setSelectedParams([]);
               setEffectiveAllRecords([]);
             }}
             stations={stations}
             selectedStations={selectedStations}
             onStationsChange={setSelectedStations}
             paramOptions={paramOptions}
-            selectedParam={selectedParam}
-            onParamChange={setSelectedParam}
+            selectedParams={selectedParams}
+            onParamsChange={setSelectedParams}
             currentRecords={currentRecords}
             selectedClass={selectedClass}
             bucket={bucket}

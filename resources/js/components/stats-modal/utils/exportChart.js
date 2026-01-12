@@ -71,6 +71,21 @@ export function exportChartToDataUrl(inst, { format = 'image/png', scale = 1, ba
   off.height = pxH;
 
     const data = deepClone(inst.config?.data || inst.data || {});
+
+    // Respect user-toggled legend visibility: only export visible datasets
+    try {
+      const ds = Array.isArray(data?.datasets) ? data.datasets : [];
+      if (ds.length && typeof inst.getDatasetMeta === 'function') {
+        const visible = [];
+        for (let i = 0; i < ds.length; i++) {
+          const metaHidden = inst.getDatasetMeta(i)?.hidden;
+          const dataHidden = ds[i]?.hidden;
+          const hidden = (metaHidden === true) || (metaHidden == null && dataHidden === true);
+          if (!hidden) visible.push(ds[i]);
+        }
+        data.datasets = visible;
+      }
+    } catch {}
     const type = inst.config?.type || 'line';
     const lightOptions = buildLightOptions(inst.options || {});
 
@@ -146,6 +161,16 @@ export function exportCsvFromChart(chartRefOrInstance, filename = 'chart.csv') {
     const labels = Array.isArray(data?.labels) ? data.labels : [];
     const allDatasets = Array.isArray(data?.datasets) ? data.datasets : [];
 
+    const isHidden = (idx) => {
+      try {
+        const metaHidden = typeof inst?.getDatasetMeta === 'function' ? inst.getDatasetMeta(idx)?.hidden : undefined;
+        const dataHidden = allDatasets?.[idx]?.hidden;
+        return (metaHidden === true) || (metaHidden == null && dataHidden === true);
+      } catch {
+        return false;
+      }
+    };
+
     // Determine chart type shape: time series vs depth profile
     const isDepthProfile = (() => {
       if (labels && labels.length) return false;
@@ -165,12 +190,15 @@ export function exportCsvFromChart(chartRefOrInstance, filename = 'chart.csv') {
 
     if (!isDepthProfile) {
       // Time Series CSV: Bucket + one column per series (exclude Min/Max overlays)
-      let datasets = allDatasets.filter((ds) => {
+      let datasets = [];
+      for (let i = 0; i < allDatasets.length; i++) {
+        if (isHidden(i)) continue;
+        const ds = allDatasets[i];
         const lbl = String(ds?.label || '').toLowerCase();
-        if (lbl === 'min' || lbl === 'max') return false;
-        if (ds && ds.type === 'line' && (lbl.includes('min') || lbl.includes('max'))) return false;
-        return true;
-      });
+        if (lbl === 'min' || lbl === 'max') continue;
+        if (ds && ds.type === 'line' && (lbl.includes('min') || lbl.includes('max'))) continue;
+        datasets.push(ds);
+      }
 
       const header = ['Bucket', ...datasets.map((d) => String(d?.label || 'Series'))];
       rows.push(header.join(','));
@@ -197,7 +225,9 @@ export function exportCsvFromChart(chartRefOrInstance, filename = 'chart.csv') {
       const monthSet = new Set();
       const values = new Map(); // key: `${month}` -> Map(depth -> value)
 
-      for (const ds of allDatasets) {
+      for (let i = 0; i < allDatasets.length; i++) {
+        if (isHidden(i)) continue;
+        const ds = allDatasets[i];
         const lbl = String(ds?.label || '');
         const isThreshold = (ds && ds.type === 'line') || /\b(min|max)\b/i.test(lbl);
         if (isThreshold) continue;

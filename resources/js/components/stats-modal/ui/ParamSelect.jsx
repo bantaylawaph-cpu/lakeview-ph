@@ -1,8 +1,9 @@
 import React from 'react';
 import LoadingSpinner from '../../LoadingSpinner';
 
-export default function ParamSelect({ options = [], value = '', onChange = () => {}, placeholder = 'Select parameter', style = {}, required = false, loading = false, disabled = false }) {
+export default function ParamSelect({ options = [], value = '', onChange = () => {}, placeholder = 'Select parameter', style = {}, required = false, loading = false, disabled = false, multiple = false }) {
   const isDisabled = disabled || loading;
+  const normalizedValue = multiple ? (Array.isArray(value) ? value : (value ? [String(value)] : [])) : (Array.isArray(value) ? (value[0] || '') : value);
   return (
     // Ensure the wrapper fills the available column width so the inner <select>
     // (which already uses width: '100%') matches other selectors placed in the
@@ -12,12 +13,13 @@ export default function ParamSelect({ options = [], value = '', onChange = () =>
       <select
         required={required}
         className="pill-btn"
-        value={value}
+        value={normalizedValue}
         onChange={onChange}
         disabled={isDisabled}
-        style={{ width:'100%', minWidth:0, boxSizing:'border-box', padding:'10px 12px', height:40, lineHeight:'20px', paddingRight: loading ? 44 : 12, ...style }}
+        multiple={!!multiple}
+        style={{ width:'100%', minWidth:0, boxSizing:'border-box', padding:'10px 12px', height: multiple ? 120 : 40, lineHeight:'20px', paddingRight: loading ? 44 : 12, ...style }}
       >
-        <option value="">{placeholder}</option>
+        {!multiple ? <option value="">{placeholder}</option> : null}
         {Array.isArray(options) && options.length ? (
           options.map(p => (
             <option key={p.key || p.id || p.code} value={p.code}>
