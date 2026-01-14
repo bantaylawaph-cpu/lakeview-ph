@@ -156,8 +156,10 @@
   }
   .btn-floating,
   .icon-btn {
-    width: 36px;
-    height: 36px;
+    width: 44px; /* Touch target: 44x44px minimum */
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
   }
   .icon-layer {
     font-size: 16px;

@@ -2,7 +2,33 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { cachedGet } from "../lib/httpCache";
 
-function NumberInput({ label, value, onChange, placeholder }) {
+function NumberInput({ label, value, onChange, placeholder, mapRef = null }) {
+  const handleFocus = () => {
+    // Disable map interactions while typing
+    if (mapRef?.current) {
+      try {
+        const map = mapRef.current;
+        if (map.dragging) map.dragging.disable();
+        if (map.touchZoom) map.touchZoom.disable();
+        if (map.doubleClickZoom) map.doubleClickZoom.disable();
+        if (map.scrollWheelZoom) map.scrollWheelZoom.disable();
+      } catch {}
+    }
+  };
+  
+  const handleBlur = () => {
+    // Re-enable map interactions after typing
+    if (mapRef?.current) {
+      try {
+        const map = mapRef.current;
+        if (map.dragging) map.dragging.enable();
+        if (map.touchZoom) map.touchZoom.enable();
+        if (map.doubleClickZoom) map.doubleClickZoom.enable();
+        if (map.scrollWheelZoom) map.scrollWheelZoom.enable();
+      } catch {}
+    }
+  };
+  
   return (
     <div className="ft-row">
       <label>{label}</label>
@@ -12,6 +38,8 @@ function NumberInput({ label, value, onChange, placeholder }) {
         step="any"
         value={value == null ? "" : value}
         placeholder={placeholder}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
         onChange={(e) => {
           const v = e.target.value;
           if (v === "") onChange(null);
@@ -25,7 +53,7 @@ function NumberInput({ label, value, onChange, placeholder }) {
   );
 }
 
-export default function FilterTray({ open, onClose, onApply, initial = {} }) {
+export default function FilterTray({ open, onClose, onApply, initial = {}, mapRef = null }) {
   const trayRef = useRef(null);
   const [region, setRegion] = useState(initial.region || "");
   const [province, setProvince] = useState(initial.province || "");
@@ -263,7 +291,7 @@ export default function FilterTray({ open, onClose, onApply, initial = {} }) {
   };
 
   return (
-    <div ref={trayRef} className={`filter-tray ${open ? 'open' : ''}`} aria-hidden={!open} role="region" aria-label="Lake filters">
+    <div ref={trayRef} className={`filter-tray ${open ? 'open' : ''}`} aria-hidden={!open} role="region" aria-label="Lake filters" onTouchStart={(e) => e.stopPropagation()}>
       <div className="filter-tray-inner">
         <div className="ft-grid">
           <div className="ft-row">
@@ -306,12 +334,12 @@ export default function FilterTray({ open, onClose, onApply, initial = {} }) {
             </select>
           </div>
 
-          <NumberInput label="Surface area — min (km²)" value={surfaceMin} onChange={setSurfaceMin} />
-          <NumberInput label="Surface area — max (km²)" value={surfaceMax} onChange={setSurfaceMax} />
-          <NumberInput label="Surface Elev. — min (m)" value={elevationMin} onChange={setElevationMin} />
-          <NumberInput label="Surface Elev. — max (m)" value={elevationMax} onChange={setElevationMax} />
-          <NumberInput label="Average depth — min (m)" value={depthMin} onChange={setDepthMin} />
-          <NumberInput label="Average depth — max (m)" value={depthMax} onChange={setDepthMax} />
+          <NumberInput label="Surface area — min (km²)" value={surfaceMin} onChange={setSurfaceMin} mapRef={mapRef} />
+          <NumberInput label="Surface area — max (km²)" value={surfaceMax} onChange={setSurfaceMax} mapRef={mapRef} />
+          <NumberInput label="Surface Elev. — min (m)" value={elevationMin} onChange={setElevationMin} mapRef={mapRef} />
+          <NumberInput label="Surface Elev. — max (m)" value={elevationMax} onChange={setElevationMax} mapRef={mapRef} />
+          <NumberInput label="Average depth — min (m)" value={depthMin} onChange={setDepthMin} mapRef={mapRef} />
+          <NumberInput label="Average depth — max (m)" value={depthMax} onChange={setDepthMax} mapRef={mapRef} />
         </div>
 
         <div className="ft-actions" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>

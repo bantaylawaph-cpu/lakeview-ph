@@ -197,6 +197,20 @@
 /* Responsive adjustments */
 /* Mobile SML (< 640px) - default styles */
 
+/* Mobile (max-width: 639px) - Touch-friendly sizing */
+@media (max-width: 639px) {
+  .sidebar-menu li,
+  .sidebar-bottom li {
+    min-height: 48px; /* Touch target minimum */
+    padding: 14px 18px;
+    font-size: 15px;
+  }
+  
+  .sidebar-icon {
+    font-size: 20px;
+  }
+}
+
 /* Tablet (640px - 1023px) */
 @media (min-width: 640px) and (max-width: 1023px) {
   .sidebar {

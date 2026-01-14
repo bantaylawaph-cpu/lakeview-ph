@@ -91,6 +91,9 @@ function AppMap({
       whenCreated={whenCreated}
       style={{ height: "100%", width: "100%", ...(style || {}) }}
       className={className}
+      tapTolerance={15}
+      touchZoom={true}
+      tap={true}
     >
   { /* Map click handler: if parent passes onClick, attach it via a small component */ }
   {typeof onClick === 'function' ? <MapClickHandler onClick={onClick} /> : null}

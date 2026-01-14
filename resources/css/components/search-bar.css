@@ -116,7 +116,7 @@
   .search-bar .search-input-wrap { flex: 1 1 auto; min-width: 0; }
 
   .search-bar input {
-    font-size: 13px;
+    font-size: 16px !important; /* CRITICAL: 16px prevents mobile browser zoom on focus */
     padding: 4px 18px 4px 6px;
     /* make the input flexible so it grows/shrinks as needed and truncates
        rather than pushing/crushing surrounding button controls */
@@ -125,17 +125,26 @@
     box-sizing: border-box;
   }
   .search-bar .btn-floating {
-    width: 32px;
-    height: 32px;
+    width: 44px; /* Touch target: 44x44px minimum */
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
     margin-left: 4px;
   }
-    /* Keep inline search/filter buttons visible on mobile — make them smaller and compact */
+    /* Keep inline search/filter buttons visible on mobile — ensure touch-friendly size */
     .search-bar .btn-search,
-    .search-bar .btn-filter { display: inline-flex; width: 28px; height: 28px; margin-left: 6px; }
+    .search-bar .btn-filter { 
+      display: inline-flex; 
+      width: 36px; 
+      height: 36px; 
+      min-width: 36px;
+      min-height: 36px;
+      margin-left: 6px; 
+    }
   .search-bar .btn-clear {
-    width: 14px;
-    height: 14px;
-    font-size: 14px;
+    width: 18px; /* Slightly larger for easier tapping */
+    height: 18px;
+    font-size: 16px;
     right: 4px;
   }
 }

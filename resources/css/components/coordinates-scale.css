@@ -70,7 +70,17 @@
     font-size: 12px;
   }
 }
-
+/* Very small screens - reduce size further */
+@media (max-width: 374px) {
+  .coordinates-scale {
+    bottom: 8px;
+    left: 8px;
+    padding: 3px 6px;
+  }
+  .scale-label {
+    font-size: 10px;
+  }
+}
 /* Laptop (1024px - 1439px) - default styles */
 
 /* Laptop L (1440px - 1919px) */

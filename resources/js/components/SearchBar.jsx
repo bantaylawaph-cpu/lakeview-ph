@@ -4,7 +4,7 @@ import { FiMenu, FiSearch, FiFilter } from "react-icons/fi";
 import { MdLightbulbOutline } from "react-icons/md";
 // no dynamic suggestions; only static tips
 
-function SearchBar({ onMenuClick, onFilterClick, onSearch, onClear, onTyping, mode = 'suggest', appBadgeCount = 0 }) {
+function SearchBar({ onMenuClick, onFilterClick, onSearch, onClear, onTyping, mode = 'suggest', appBadgeCount = 0, mapRef = null }) {
   const [text, setText] = useState("");
   const inputRef = useRef(null);
   const containerRef = useRef(null);
@@ -85,6 +85,37 @@ function SearchBar({ onMenuClick, onFilterClick, onSearch, onClear, onTyping, mo
       setSuggestionsLoading(false);
     }
     setOpenSuggest(true);
+    
+    // Disable map interactions while typing to prevent conflicts
+    if (mapRef?.current) {
+      try {
+        const map = mapRef.current;
+        if (map.dragging) map.dragging.disable();
+        if (map.touchZoom) map.touchZoom.disable();
+        if (map.doubleClickZoom) map.doubleClickZoom.disable();
+        if (map.scrollWheelZoom) map.scrollWheelZoom.disable();
+      } catch {}
+    }
+  };
+  
+  const handleBlur = () => {
+    // Re-enable map interactions after typing
+    if (mapRef?.current) {
+      try {
+        const map = mapRef.current;
+        if (map.dragging) map.dragging.enable();
+        if (map.touchZoom) map.touchZoom.enable();
+        if (map.doubleClickZoom) map.doubleClickZoom.enable();
+        if (map.scrollWheelZoom) map.scrollWheelZoom.enable();
+      } catch {}
+    }
+    
+    // Delay to allow click selection in dropdown to register
+    setTimeout(() => { 
+      setOpenSuggest(false); 
+      setActiveIndex(-1); 
+      setIsFocused(false); 
+    }, 120);
   };
 
   // Track and update popover anchor to align with the search bar
@@ -154,7 +185,7 @@ function SearchBar({ onMenuClick, onFilterClick, onSearch, onClear, onTyping, mo
         )}
       </button>
 
-      <div className="search-input-wrap">
+      <div className="search-input-wrap" onTouchStart={(e) => e.stopPropagation()}>
         <input
           type="text"
           placeholder="Search LakeView"
@@ -162,10 +193,7 @@ function SearchBar({ onMenuClick, onFilterClick, onSearch, onClear, onTyping, mo
           onChange={(e) => { const v = e.target.value; setText(v); if (typeof onTyping === 'function') onTyping(v); }}
           onKeyDown={onKeyDown}
           ref={inputRef}
-          onBlur={(e) => {
-            // Delay to allow click selection in dropdown to register
-            setTimeout(() => { setOpenSuggest(false); setActiveIndex(-1); setIsFocused(false); }, 120);
-          }}
+          onBlur={handleBlur}
           onFocus={handleFocus}
               onClick={handleFocus}
         />

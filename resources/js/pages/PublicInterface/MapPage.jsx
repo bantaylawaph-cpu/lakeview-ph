@@ -498,6 +498,7 @@ function MapPage() {
   />
 
       <SearchBar
+        mapRef={mapRef}
         onMenuClick={() => setSidebarOpen(true)}
         onFilterClick={() => setFilterTrayOpen((v) => !v)}
         onSearch={searchApi.handleSearch}
@@ -515,6 +516,7 @@ function MapPage() {
         onSelect={searchApi.handleSelectResult}
       />
       <FilterTray
+        mapRef={mapRef}
         open={filterTrayOpen}
         onClose={() => setFilterTrayOpen(false)}
         onApply={(filters) => applyFilters(filters)}

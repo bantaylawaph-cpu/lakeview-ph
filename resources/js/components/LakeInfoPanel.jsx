@@ -57,6 +57,10 @@ function LakeInfoPanel({
   }, [isOpen]);
   const [selectedLayerId, setSelectedLayerId] = useState(activeLayerId ?? null);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  
+  // Touch gesture state for swipe-down to close on mobile
+  const [touchStart, setTouchStart] = useState(null);
+  const [touchDelta, setTouchDelta] = useState(0);
 
   useEffect(() => { if (isOpen) setClosing(false); }, [isOpen]);
 
@@ -148,9 +152,44 @@ function LakeInfoPanel({
     }
     return `lake-info-panel ${closing ? 'closing' : ''}`;
   })();
+  
+  // Swipe-down to close handler (mobile bottom sheet)
+  const handleTouchStart = (e) => {
+    // Only handle touches starting on the header/handle area
+    const target = e.target;
+    const isHeader = target.closest('.lake-info-header') || target.closest('.panel-handle');
+    if (isHeader) {
+      setTouchStart(e.touches[0].clientY);
+      setTouchDelta(0);
+    }
+  };
+  
+  const handleTouchMove = (e) => {
+    if (touchStart === null) return;
+    
+    const currentY = e.touches[0].clientY;
+    const delta = currentY - touchStart;
+    
+    // Only track downward swipes
+    if (delta > 0) {
+      setTouchDelta(delta);
+      
+      // Close if swiped down > 100px
+      if (delta > 100) {
+        handleClose();
+        setTouchStart(null);
+        setTouchDelta(0);
+      }
+    }
+  };
+  
+  const handleTouchEnd = () => {
+    setTouchStart(null);
+    setTouchDelta(0);
+  };
 
   return (
-    <div className={panelClass}>
+    <div className={panelClass} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
       {/* Header */}
       <div className="lake-info-header">
         {/* small visual handle for bottom-sheet affordance on mobile */}

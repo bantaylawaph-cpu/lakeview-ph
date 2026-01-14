@@ -414,7 +414,7 @@
   .auth-form input,
   .auth-form select {
     padding: 10px 12px;
-    font-size: 13px;
+    font-size: 16px !important; /* Critical: 16px prevents mobile browser zoom on focus */
   }
   .auth-btn {
     height: 40px;

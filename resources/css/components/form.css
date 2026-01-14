@@ -117,3 +117,22 @@ h4.subsection {
   font-weight: 600;
   color: #334155;
 }
+
+/* Mobile responsiveness */
+@media (max-width: 639px) {
+  .form-card input,
+  .form-card select,
+  .form-card textarea {
+    font-size: 16px !important; /* Critical: prevents mobile browser zoom on focus */
+    padding: 10px 12px;
+  }
+  
+  .form-card button {
+    font-size: 16px;
+    min-height: 44px; /* Touch-friendly height */
+  }
+  
+  .form-grid {
+    grid-template-columns: 1fr; /* Stack on mobile */
+  }
+}

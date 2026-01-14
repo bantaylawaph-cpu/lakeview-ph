@@ -74,6 +74,17 @@
 @media (max-width: 639px) {
   .info-modal-body--responsive { font-size: 0.95rem; }
   .info-modal-body--responsive h5 { font-size: 1rem; margin-bottom: 6px; }
+  
+  /* Prevent zoom on input focus - critical for mobile */
+  .lv-modal-card input[type="text"],
+  .lv-modal-card input[type="email"],
+  .lv-modal-card input[type="password"],
+  .lv-modal-card input[type="number"],
+  .lv-modal-card input[type="tel"],
+  .lv-modal-card textarea,
+  .lv-modal-card select {
+    font-size: 16px !important;
+  }
 }
 @media (min-width: 1440px) and (max-width: 1919px) {
   .info-modal-body--responsive { font-size: 1.05rem; }
