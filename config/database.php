@@ -99,13 +99,21 @@ return [
             'search_path' => 'public',
             // For Supabase/managed Postgres use 'require'.
             'sslmode' => env('DB_SSLMODE', 'require'),
-            // PDO options: prefer disabling persistent by default; enable emulate prepares when behind PgBouncer (txn mode)
+            // Connection timeout in seconds (default 30s, configurable via DB_CONNECT_TIMEOUT)
+            'connect_timeout' => env('DB_CONNECT_TIMEOUT', 30),
+            // Statement timeout in milliseconds (0 = disabled, configurable via DB_STATEMENT_TIMEOUT)
             'options' => extension_loaded('pdo_pgsql') ? array_filter([
                 // Persistent client connections to PgBouncer are optional; default off to avoid exhausting client slots
                 PDO::ATTR_PERSISTENT => env('DB_PERSISTENT', false),
                 // Transaction-pooling PgBouncer requires client-side (emulated) prepares to avoid "prepared statement does not exist"
                 PDO::ATTR_EMULATE_PREPARES => env('DB_EMULATE_PREPARES', env('DB_PGBOUNCER', false)) ? true : null,
+                // Connection timeout at PDO level (in seconds)
+                PDO::ATTR_TIMEOUT => env('DB_CONNECT_TIMEOUT', 30),
+                // Statement timeout (PostgreSQL-specific, in milliseconds via connection string)
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             ]) : [],
+            // PostgreSQL-specific statement timeout (format: '30s' or '30000ms')
+            'statement_timeout' => env('DB_STATEMENT_TIMEOUT', '60000'), // 60 seconds default
         ],
 
         'sqlsrv' => [

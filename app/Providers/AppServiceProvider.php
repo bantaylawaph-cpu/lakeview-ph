@@ -33,6 +33,25 @@ class AppServiceProvider extends ServiceProvider
             URL::forceScheme('https');
         }
 
+        // Configure PostgreSQL statement timeout for better connection handling
+        if (config('database.default') === 'pgsql') {
+            \Illuminate\Support\Facades\DB::listen(function ($query) {
+                // Log slow queries for debugging
+                if ($query->time > 5000) { // 5 seconds
+                    \Illuminate\Support\Facades\Log::warning('Slow query detected', [
+                        'sql' => $query->sql,
+                        'time' => $query->time,
+                        'bindings' => $query->bindings,
+                    ]);
+                }
+            });
+
+            // Set statement timeout on connection
+            \Illuminate\Support\Facades\DB::connection()->getPdo()->exec(
+                sprintf("SET statement_timeout = '%s'", config('database.connections.pgsql.statement_timeout', '60000'))
+            );
+        }
+
         Relation::enforceMorphMap([
         'lake'      => Lake::class,
         'watershed' => Watershed::class,
