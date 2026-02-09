@@ -221,18 +221,26 @@ class SamplingEventController extends Controller
         $data = $this->validatePayload($request, false);
         $explicitTenant = $data['organization_id'] ?? $request->route('tenant');
         $context = $this->resolveTenantMembership($request, ['org_admin', 'contributor'], $explicitTenant !== null ? (int)$explicitTenant : null);
-        $tenantId = (int) $context['tenant_id'];
+        $tenantId = $context['tenant_id'] !== null ? (int) $context['tenant_id'] : null;
 
         if (($context['role'] ?? null) === 'contributor' && ($data['status'] ?? 'draft') === 'public') {
             abort(403, 'Contributors cannot publish events.');
         }
 
-    $this->assertLakeExists($data['lake_id']);
-    $this->assertStationOwnership($tenantId, $data['station_id'] ?? null);
+        $this->assertLakeExists($data['lake_id']);
+        $stationTenantId = $this->assertStationOwnership($tenantId, $data['station_id'] ?? null);
 
-    $event = DB::transaction(function () use ($tenantId, $data, $request) {
-        // sampled_at is date-only (YYYY-MM-DD). No timezone handling needed.
-        $sampledAt = (string) ($data['sampled_at'] ?? '');
+        if ($tenantId === null) {
+            $tenantId = $stationTenantId;
+        }
+
+        if ($tenantId === null) {
+            abort(422, 'organization_id is required.');
+        }
+
+        $event = DB::transaction(function () use ($tenantId, $data, $request) {
+            // sampled_at is date-only (YYYY-MM-DD). No timezone handling needed.
+            $sampledAt = (string) ($data['sampled_at'] ?? '');
 
             $attributes = [
                 'organization_id' => $tenantId,
@@ -715,10 +723,10 @@ class SamplingEventController extends Controller
         }
     }
 
-    protected function assertStationOwnership(int $tenantId, ?int $stationId): void
+    protected function assertStationOwnership(?int $tenantId, ?int $stationId): ?int
     {
         if ($stationId === null) {
-            return;
+            return null;
         }
 
         $station = Station::select('id', 'organization_id')->find($stationId);
@@ -727,8 +735,16 @@ class SamplingEventController extends Controller
             abort(422, 'Invalid station_id.');
         }
 
-        if ((int) $station->organization_id !== $tenantId) {
+        $stationTenantId = $station->organization_id !== null ? (int) $station->organization_id : null;
+
+        if ($stationTenantId === null) {
             abort(422, 'station_id must reference a station owned by the tenant.');
         }
+
+        if ($tenantId !== null && $stationTenantId !== $tenantId) {
+            abort(422, 'station_id must reference a station owned by the tenant.');
+        }
+
+        return $stationTenantId;
     }
 }
