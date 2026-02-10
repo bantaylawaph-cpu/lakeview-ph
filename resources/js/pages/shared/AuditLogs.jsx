@@ -4,12 +4,27 @@ import api, { buildQuery, me as fetchMe } from '../../lib/api';
 import { cachedGet, invalidateHttpCache } from '../../lib/httpCache';
 import TableLayout from '../../layouts/TableLayout';
 import TableToolbar from '../../components/table/TableToolbar';
+import FilterPanel from '../../components/table/FilterPanel';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { FiEye } from 'react-icons/fi';
 import Modal from '../../components/Modal';
 
 // Utility to format ISO -> local string
 const fmt = (s) => (s ? new Date(s).toLocaleString() : '—');
+
+// Action filter options (dropdown)
+const ACTION_OPTIONS = [
+  { key: 'created', label: 'Created' },
+  { key: 'updated', label: 'Updated' },
+  { key: 'deleted', label: 'Deleted' },
+  { key: 'registered', label: 'Registered' },
+];
+
+const ROLE_OPTIONS = [
+  { key: 'superadmin', label: 'Super Admin' },
+  { key: 'org_admin', label: 'Org Admin' },
+  { key: 'contributor', label: 'Contributor' },
+];
 
 // Humanize helpers (shared)
 const humanize = (s) => {
@@ -24,8 +39,7 @@ const formatAction = (a) => {
     case 'created': return 'Created';
     case 'updated': return 'Updated';
     case 'deleted': return 'Deleted';
-    case 'force_deleted': return 'Force Deleted';
-    case 'restored': return 'Restored';
+    case 'registered': return 'Registered';
     default: return humanize(a);
   }
 };
@@ -73,6 +87,9 @@ export default function AuditLogs({ scope = 'admin' }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [q, setQ] = useState('');
+  const [actionFilter, setActionFilter] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
 
   // Lazy lookup maps for ParameterThreshold summaries
   const [paramMap, setParamMap] = useState(() => new Map()); // id -> { name, code }
@@ -111,6 +128,8 @@ export default function AuditLogs({ scope = 'admin' }) {
 
   const buildParams = (overrides = {}) => {
     const params = { page, per_page: perPage, ...overrides };
+    if (actionFilter) params.actions = actionFilter;
+    if (roleFilter) params.actor_role = roleFilter;
     return params;
   };
 
@@ -285,6 +304,12 @@ export default function AuditLogs({ scope = 'admin' }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effectiveBase]);
 
+  // Refetch when filters change
+  useEffect(() => {
+    fetchLogs(buildParams({ page: 1 }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [actionFilter, roleFilter]);
+
   // Columns
   const columns = useMemo(() => {
     const truncate = (s, max = 60) => (s && s.length > max ? s.slice(0, max) + '…' : s);
@@ -338,8 +363,7 @@ export default function AuditLogs({ scope = 'admin' }) {
             case 'created': verb = 'Created'; break;
             case 'updated': verb = 'Updated'; break;
             case 'deleted': verb = 'Deleted'; break;
-            case 'force_deleted': verb = 'Force Deleted'; break;
-            case 'restored': verb = 'Restored'; break;
+            case 'registered': verb = 'Registered'; break;
             default: verb = (r.action || 'Did').replace(/\b\w/g, c=>c.toUpperCase());
           }
           const base = modelBase;
@@ -726,6 +750,36 @@ ${buildChanges(row).map(ch => `  ${ch.fieldLabel}: ${ch.fromVal} → ${ch.toVal}
           tableId={TABLE_ID}
           search={{ value: q, onChange: (val) => setQ(val), placeholder: 'Search Logs...' }}
           onRefresh={() => { try { if (effectiveBase) invalidateHttpCache(effectiveBase); } catch {} fetchLogs(buildParams(), { force: true }); }}
+          onToggleFilters={() => setShowFilters(v => !v)}
+          filtersBadgeCount={(actionFilter ? 1 : 0) + (roleFilter ? 1 : 0)}
+        />
+        <FilterPanel
+          open={showFilters}
+          fields={[
+            {
+              id: 'actions',
+              label: 'Actions',
+              type: 'select',
+              value: actionFilter,
+              onChange: (val) => setActionFilter(val || ''),
+              options: [
+                { value: '', label: 'All Actions' },
+                ...ACTION_OPTIONS.map(o => ({ value: o.key, label: o.label })),
+              ],
+            },
+            {
+              id: 'roles',
+              label: 'Who (roles)',
+              type: 'select',
+              value: roleFilter,
+              onChange: (val) => setRoleFilter(val || ''),
+              options: [
+                { value: '', label: 'All Roles' },
+                ...ROLE_OPTIONS.map(o => ({ value: o.key, label: o.label })),
+              ],
+            },
+          ]}
+          onClearAll={() => { setActionFilter(''); setRoleFilter(''); fetchLogs(buildParams({ page:1 })); }}
         />
         {error && <div className="lv-error" style={{ padding: 8, color: 'var(--danger)' }}>{error}</div>}
       </div>

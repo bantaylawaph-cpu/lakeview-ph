@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\Role;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Arr;
 use Illuminate\Http\Request;
 
 class AuditLogController extends Controller
@@ -34,7 +35,10 @@ class AuditLogController extends Controller
 
         if ($mt = $request->query('model_type')) { $qb->where('model_type', $mt); }
         if ($mid = $request->query('model_id')) { $qb->where('model_id', $mid); }
-        if ($act = $request->query('action')) { $qb->where('action', $act); }
+
+        $actions = $this->normalizeList($request->query('actions') ?? $request->query('action'));
+        if (!empty($actions)) { $qb->whereIn('action', $actions); }
+
         if ($aid = $request->query('actor_id')) { $qb->where('actor_id', $aid); }
         // server-side name/role filters to match frontend inputs
         if ($an = $request->query('actor_name')) {
@@ -42,9 +46,10 @@ class AuditLogController extends Controller
                 $q->where('name', 'like', '%' . $an . '%');
             });
         }
-        if ($role = $request->query('role')) {
-            $qb->whereHas('actor.role', function ($q) use ($role) {
-                $q->where('name', $role);
+        $roles = $this->normalizeList($request->query('actor_role') ?? $request->query('role'));
+        if (!empty($roles)) {
+            $qb->whereHas('actor.role', function ($q) use ($roles) {
+                $q->whereIn('name', $roles);
             });
         }
         if ($user->isSuperAdmin() && ($tid = $request->query('tenant_id'))) { $qb->where('tenant_id', $tid); }
@@ -247,5 +252,26 @@ class AuditLogController extends Controller
             'before' => $log->before,
             'after' => $log->after,
         ]]);
+    }
+
+    /**
+     * Normalize a query input into a unique, trimmed list (supports comma-separated strings and arrays).
+     */
+    protected function normalizeList($input): array
+    {
+        if ($input === null) { return []; }
+        $items = collect(Arr::wrap($input))
+            ->flatMap(function ($v) {
+                if (is_string($v)) { return explode(',', $v); }
+                return [$v];
+            })
+            ->map(function ($v) {
+                return is_string($v) ? trim($v) : $v;
+            })
+            ->filter()
+            ->unique()
+            ->values();
+
+        return $items->all();
     }
 }
