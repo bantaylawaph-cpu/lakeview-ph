@@ -24,6 +24,7 @@ use App\Http\Controllers\Api\Admin\FeedbackController as AdminFeedbackController
 use App\Http\Controllers\Api\Admin\FeedbackStreamController as AdminFeedbackStreamController; // SSE stream for feedback
 use App\Http\Controllers\TileController;
 use App\Http\Controllers\ElevationController;
+use App\Http\Controllers\HealthController;
 
 /*
 |--------------------------------------------------------------------------
@@ -41,7 +42,21 @@ use App\Http\Controllers\BulkDatasetController;
 use App\Http\Controllers\Api\StatsController;
 use App\Http\Controllers\PopulationController;
 use App\Http\Controllers\Api\Admin\PopulationRasterController;
-Route::prefix('auth')->group(function () {
+
+/*
+|--------------------------------------------------------------------------
+| Health Check Endpoints
+|--------------------------------------------------------------------------
+*/
+Route::get('/health/live', [HealthController::class, 'live']);
+Route::get('/health/ready', [HealthController::class, 'ready']);
+Route::get('/health/db-pool', [HealthController::class, 'dbPool']);
+
+/*
+|--------------------------------------------------------------------------
+| Auth + OTP
+|--------------------------------------------------------------------------
+*/
     // Registration OTP
     Route::post('/register/request-otp', [EmailOtpController::class, 'registerRequestOtp'])->middleware('throttle:6,1');
     Route::post('/register/verify-otp',  [EmailOtpController::class, 'registerVerifyOtp'])->middleware('throttle:12,1');

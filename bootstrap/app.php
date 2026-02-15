@@ -17,6 +17,12 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Global middleware
         $middleware->append([\App\Http\Middleware\InitAuditContext::class]);
+        
+        // Retry transient database connection failures (before cleanup)
+        $middleware->append([\App\Http\Middleware\RetryDatabaseConnections::class]);
+        
+        // Cleanup database connections after each request to prevent pool exhaustion
+        $middleware->append([\App\Http\Middleware\CleanupDatabaseConnections::class]);
 
         // Enable lightweight SQL profiling in debug/local only (use env here; config may not be booted yet)
         if (env('APP_DEBUG', false)) {

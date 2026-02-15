@@ -99,21 +99,25 @@ return [
             'search_path' => 'public',
             // For Supabase/managed Postgres use 'require'.
             'sslmode' => env('DB_SSLMODE', 'require'),
-            // Connection timeout in seconds (default 30s, configurable via DB_CONNECT_TIMEOUT)
-            'connect_timeout' => env('DB_CONNECT_TIMEOUT', 30),
-            // Statement timeout in milliseconds (0 = disabled, configurable via DB_STATEMENT_TIMEOUT)
+            // Connection timeout: REDUCED to 5s for faster failure on connection issues
+            'connect_timeout' => env('DB_CONNECT_TIMEOUT', 5),
+            // Statement timeout in milliseconds: REDUCED to 10s to prevent query hangs
+            'statement_timeout' => env('DB_STATEMENT_TIMEOUT', '10000'),
             'options' => extension_loaded('pdo_pgsql') ? array_filter([
-                // Persistent client connections to PgBouncer are optional; default off to avoid exhausting client slots
+                // Persistent connections OFF for pgBouncer transaction pooling
                 PDO::ATTR_PERSISTENT => env('DB_PERSISTENT', false),
-                // Transaction-pooling PgBouncer requires client-side (emulated) prepares to avoid "prepared statement does not exist"
+                // Client-side emulated prepares required for transaction-pooling pgBouncer
                 PDO::ATTR_EMULATE_PREPARES => env('DB_EMULATE_PREPARES', env('DB_PGBOUNCER', false)) ? true : null,
-                // Connection timeout at PDO level (in seconds)
-                PDO::ATTR_TIMEOUT => env('DB_CONNECT_TIMEOUT', 30),
-                // Statement timeout (PostgreSQL-specific, in milliseconds via connection string)
+                // Connection timeout at PDO level: 5s for quick failure
+                PDO::ATTR_TIMEOUT => env('DB_CONNECT_TIMEOUT', 5),
+                // Throw exceptions on errors
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             ]) : [],
-            // PostgreSQL-specific statement timeout (format: '30s' or '30000ms')
-            'statement_timeout' => env('DB_STATEMENT_TIMEOUT', '60000'), // 60 seconds default
+            // Pool configuration (prevents connection leaks)
+            'pool' => [
+                'min' => env('DB_POOL_MIN', 2),
+                'max' => env('DB_POOL_MAX', 10),
+            ],
         ],
 
         'sqlsrv' => [
