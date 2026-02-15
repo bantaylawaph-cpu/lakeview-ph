@@ -77,7 +77,7 @@ Route::get('/health/db-pool', [HealthController::class, 'dbPool']);
         Route::get('/me',      [AuthController::class, 'me']);
         Route::post('/logout', [AuthController::class, 'logout']);
     });
-});
+// removed stray closing brace causing parse error
 
 /*
 |--------------------------------------------------------------------------
