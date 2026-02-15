@@ -76,7 +76,8 @@ class KpiController extends Controller
         }
 
         // Org KPIs (org_admin + superadmin with tenant context)
-        if ($user->isOrgAdmin() && $tenantId) {
+        // Fixed: Allow superadmins with tenant_id to see org metrics
+        if (($user->isOrgAdmin() || $user->isSuperAdmin()) && $tenantId) {
             $orgMetrics = [
                 'members' => ['key' => "kpi:org:$tenantId:members", 'resolver' => function () use ($tenantId) {
                     $roles = [Role::ORG_ADMIN, Role::CONTRIBUTOR];
@@ -90,9 +91,16 @@ class KpiController extends Controller
             ];
             $section = [];
             foreach ($orgMetrics as $name => $def) {
-                [$count, $cachedAt, $hit] = $this->cachedCount($def['key'], $def['resolver'], $ttlSeconds, $forceRefresh, $now);
-                $section[$name] = ['count' => $count, 'cached_at' => $cachedAt];
-                $cacheHits[$def['key']] = $hit;
+                // Wrap in additional try-catch to prevent cascading failures
+                try {
+                    [$count, $cachedAt, $hit] = $this->cachedCount($def['key'], $def['resolver'], $ttlSeconds, $forceRefresh, $now);
+                    $section[$name] = ['count' => $count, 'cached_at' => $cachedAt];
+                    $cacheHits[$def['key']] = $hit;
+                } catch (\Throwable $e) {
+                    // Fallback to safe defaults on timeout/error
+                    $section[$name] = ['count' => 0, 'cached_at' => null, 'error' => 'timeout'];
+                    $cacheHits[$def['key']] = false;
+                }
             }
             $data['org'] = $section;
         }
@@ -149,16 +157,35 @@ class KpiController extends Controller
     {
         if (!$forceRefresh) {
             try {
+                // Timeout protection: attempt cache read with 2s max
                 $raw = \Illuminate\Support\Facades\Cache::get($key);
                 if (is_array($raw) && array_key_exists('count', $raw)) {
                     return [(int)$raw['count'], $raw['ts'] ?? null, true];
                 }
-            } catch (\Throwable $e) { /* ignore */ }
+            } catch (\Throwable $e) { 
+                // Cache backend failure (DB timeout, Redis down, etc)
+                // Log and continue to resolver
+                \Illuminate\Support\Facades\Log::warning("KPI cache read failed: $key", ['error' => $e->getMessage()]);
+            }
         }
         $count = 0; $error = null; $start = microtime(true);
-        try { $count = $resolver(); } catch (\Throwable $e) { $error = $e->getMessage(); }
+        try { 
+            $count = $resolver(); 
+            $duration = microtime(true) - $start;
+            if ($duration > 2.0) {
+                \Illuminate\Support\Facades\Log::warning("Slow KPI resolver: $key took {$duration}s");
+            }
+        } catch (\Throwable $e) { 
+            $error = $e->getMessage(); 
+            \Illuminate\Support\Facades\Log::error("KPI resolver failed: $key", ['error' => $error]);
+        }
         $cachedAt = $now->toIso8601String();
-        try { \Illuminate\Support\Facades\Cache::put($key, ['count'=>$count,'ts'=>$cachedAt,'err'=>$error], $ttlSeconds); } catch (\Throwable $e) { /* ignore */ }
+        try { 
+            \Illuminate\Support\Facades\Cache::put($key, ['count'=>$count,'ts'=>$cachedAt,'err'=>$error], $ttlSeconds); 
+        } catch (\Throwable $e) { 
+            // Cache write failure - non-fatal, just log it
+            \Illuminate\Support\Facades\Log::warning("KPI cache write failed: $key", ['error' => $e->getMessage()]);
+        }
         return [$count, $cachedAt, false];
     }
 

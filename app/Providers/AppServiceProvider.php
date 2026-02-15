@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\URL;
 use App\Models\Lake;
 use App\Models\Watershed;
 use App\Models\User;
+use Laravel\Sanctum\Sanctum;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -27,6 +28,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Use custom PersonalAccessToken model with throttled updates to reduce lock contention
+        Sanctum::usePersonalAccessTokenModel(\App\Models\PersonalAccessToken::class);
         // Ensure generated URLs and asset() links use HTTPS in production behind a proxy (e.g., Render)
         // This prevents mixed-content issues when the app can't detect the forwarded scheme.
         if (config('app.env') === 'production' && filter_var(env('FORCE_HTTPS', true), FILTER_VALIDATE_BOOLEAN)) {
