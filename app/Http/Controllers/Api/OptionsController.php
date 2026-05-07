@@ -44,8 +44,8 @@ class OptionsController extends Controller
         $query = Lake::query()
             ->select(['lakes.id', 'lakes.name', 'lakes.class_code'])
             ->when($q !== '', function ($qb) use ($q) {
-                // Postgres: ILIKE for case-insensitive search
-                $qb->where('lakes.name', 'ILIKE', "%{$q}%");
+                $like = mb_strtolower($q);
+                $qb->whereRaw('LOWER(lakes.name) LIKE ?', ["%{$like}%"]);
             })
             ->when($hasData, function ($qb) {
                 // Only include lakes that have at least one sampling event
@@ -76,7 +76,8 @@ class OptionsController extends Controller
         $rows = Watershed::query()
             ->select(['id', 'name'])
             ->when($q !== '', function ($qb) use ($q) {
-                $qb->where('name', 'ILIKE', "%{$q}%");
+                $like = mb_strtolower($q);
+                $qb->whereRaw('LOWER(name) LIKE ?', ["%{$like}%"]);
             })
             ->orderBy('name')
             ->limit($limit)
@@ -98,10 +99,10 @@ class OptionsController extends Controller
         $rows = Parameter::query()
             ->select(['id', 'code', 'name', 'unit', 'evaluation_type', 'desc'])
             ->when($q !== '', function ($qb) use ($q) {
-                $like = "%{$q}%";
+                $like = mb_strtolower($q);
                 $qb->where(function ($inner) use ($like) {
-                    $inner->where('code', 'ILIKE', $like)
-                        ->orWhere('name', 'ILIKE', $like);
+                    $inner->whereRaw('LOWER(code) LIKE ?', ["%{$like}%"])
+                        ->orWhereRaw('LOWER(name) LIKE ?', ["%{$like}%"]);
                 });
             })
             ->orderBy('code')
@@ -205,9 +206,9 @@ class OptionsController extends Controller
         // Simplified: do not filter by status; return all tenants for selector.
         // If an exception occurs, log and return empty list gracefully.
         try {
-            $rows = Tenant::query()
+                $rows = Tenant::query()
                 ->select(['id','name'])
-                ->when($q !== '', function ($qb) use ($q) { $qb->where('name', 'ILIKE', "%{$q}%"); })
+                ->when($q !== '', function ($qb) use ($q) { $qb->whereRaw('LOWER(name) LIKE ?', ["%".mb_strtolower($q)."%"]); })
                 ->orderBy('name')
                 ->limit($limit)
                 ->get();

@@ -388,6 +388,43 @@ class SamplingEventController extends Controller
 
     protected function validatePayload(Request $request, bool $isUpdate): array
     {
+        // Clean empty measurement rows submitted from UI (allow single-parameter submissions)
+        $input = $request->all();
+        if (isset($input['measurements']) && is_array($input['measurements'])) {
+            $filtered = [];
+            foreach ($input['measurements'] as $m) {
+                // Normalize parameter: allow frontend to send 'parameter' (name or code)
+                if ((empty($m['parameter_id']) || $m['parameter_id'] === null) && !empty($m['parameter'])) {
+                    $paramVal = trim((string)$m['parameter']);
+                    // If numeric, treat as id
+                    if (is_numeric($paramVal)) {
+                        $m['parameter_id'] = (int)$paramVal;
+                    } else {
+                        $param = \App\Models\Parameter::where('name', $paramVal)
+                            ->orWhere('code', $paramVal)
+                            ->first();
+                        if ($param) {
+                            $m['parameter_id'] = $param->id;
+                        }
+                    }
+                }
+
+                $hasData = false;
+                foreach (['parameter_id', 'value', 'unit', 'depth_m', 'remarks'] as $k) {
+                    if (array_key_exists($k, $m) && $m[$k] !== null && $m[$k] !== '') {
+                        $hasData = true;
+                        break;
+                    }
+                }
+                if ($hasData) {
+                    $filtered[] = $m;
+                }
+            }
+            $input['measurements'] = array_values($filtered);
+            // Merge back to request so Laravel validator sees cleaned measurements
+            $request->merge($input);
+        }
+
         return $request->validate([
             'organization_id' => ['nullable', 'integer', 'exists:tenants,id'],
             'lake_id' => [$isUpdate ? 'sometimes' : 'required', 'integer', 'exists:lakes,id'],

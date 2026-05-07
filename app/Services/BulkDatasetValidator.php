@@ -238,14 +238,17 @@ class BulkDatasetValidator
      */
     private function addParameterToTest(array &$test, array $row, int $rowNumber, array $validParameters): void
     {
-        $parameter = trim($row[self::COLUMNS['parameter']] ?? '');
-        $value = trim($row[self::COLUMNS['value']] ?? '');
+        // Normalize cell values and strip invisible/unicode whitespace
+        $rawParam = $row[self::COLUMNS['parameter']] ?? '';
+        $rawValue = $row[self::COLUMNS['value']] ?? '';
+        $parameter = $this->normalizeCellString($rawParam);
+        $value = $this->normalizeCellString($rawValue);
         $unit = trim($row[self::COLUMNS['unit']] ?? '');
         $depthM = trim($row[self::COLUMNS['depth_m']] ?? '');
         $remarks = trim($row[self::COLUMNS['remarks']] ?? '');
         
-        // Skip if parameter is empty (allowed for parameter rows if they want to skip)
-        if (empty($parameter) && empty($value)) {
+        // Skip if parameter and value are both empty (allow empty rows)
+        if ($parameter === '' && $value === '') {
             return;
         }
         
@@ -260,8 +263,8 @@ class BulkDatasetValidator
             return;
         }
         
-        // Validate value
-        if (empty($value) && $value !== '0') {
+        // Validate value: treat empty string or null as missing, allow numeric 0
+        if ($value === '' || $value === null) {
             $this->addError($rowNumber, 'value', 'Value is required for parameter measurement');
             return;
         }
@@ -310,12 +313,27 @@ class BulkDatasetValidator
     }
 
     /**
+     * Normalize a cell value to string and strip unicode/nbsp and surrounding whitespace
+     */
+    private function normalizeCellString($cell): string
+    {
+        if ($cell === null) return '';
+        $s = (string)$cell;
+        // Remove common non-breaking spaces and unicode space separators
+        $s = preg_replace('/[\x{00A0}\x{2000}-\x{200B}\x{202F}\x{205F}\x{3000}]/u', '', $s);
+        // Trim normal whitespace
+        $s = trim($s);
+        return $s;
+    }
+
+    /**
      * Check if row is completely empty
      */
     private function isCompletelyEmptyRow(array $row): bool
     {
         foreach ($row as $cell) {
-            if (!empty(trim($cell))) {
+            $s = $this->normalizeCellString($cell);
+            if ($s !== '') {
                 return false;
             }
         }
@@ -453,6 +471,9 @@ class BulkDatasetValidator
             'tests' => $this->tests,
             'testCount' => count($this->tests),
             'resultCount' => $this->totalResults,
+            // Backwards-compatible keys (snake_case) used by some callers/logs
+            'test_count' => count($this->tests),
+            'result_count' => $this->totalResults,
         ];
     }
 

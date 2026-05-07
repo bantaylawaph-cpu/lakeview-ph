@@ -81,6 +81,10 @@ Route::get('/health/db-pool', [HealthController::class, 'dbPool']);
 
 // Backwards-compatible auth prefix so old clients can use /api/auth/*
 Route::prefix('auth')->group(function () {
+    // Backwards-compatible OTP endpoints (some clients call /api/auth/...)
+    Route::post('/register/request-otp', [EmailOtpController::class, 'registerRequestOtp'])->middleware('throttle:6,1');
+    Route::post('/register/verify-otp',  [EmailOtpController::class, 'registerVerifyOtp'])->middleware('throttle:12,1');
+
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/login',    [AuthController::class, 'login']);
 
